@@ -1,0 +1,11 @@
+{
+  "version": "26.1.0",
+  "notes": "First release.",
+  "pub_date": "2026-09-15T17:00:00Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.1.0/Heeler-26.1.0-macos.dmg",
+      "signature": ""
+    }
+  }
+}
