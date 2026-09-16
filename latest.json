@@ -1,14 +1,14 @@
 {
-  "version": "26.1.1",
-  "notes": "Depth Lighting no longer draws halos or dark bands along a subject's edge and renders the same at fit and at 1:1; Depth Lighting, Fog and Depth Map carry Levels on the depth map with falloff, and every Color Set has a Depth mask. Levels works on the picture as the screen shows it and keeps highlights above white. Linked photographs keep their chains when a section is overridden, Unlink removes overrides, and Reset all edits resets the link. One picker is armed at a time, a Free chip lists the free tier's sections, and a colored dark light shadows in its own color.",
-  "pub_date": "2026-09-14T01:21:46Z",
+  "version": "26.2.0",
+  "notes": "Black and white is a darkroom now: choose a film stock and a Wratten filter and the photograph is rendered as that film would have seen it, push or pull the development, then print on paper with a grade or a split grade, a paper black, a base tint and a toning bath. The Zone System places tones in two clicks and moves Exposure and Development for you. A Hue curve grades the conversion by colour, with a picker that shows which colours land on the same gray and a Separate tool that pulls them apart. A far filter grades a second filter along the depth map, and two infrared films and filters give the Wood effect as an artistic tool with dials for foliage, sky, water and skin. Grain follows the stock and the format and reads the same on screen and in the export. The picture browser shows ratings and flags on every thumbnail, keeps its filters in the header, and sorts with one button; pop-out windows open once and in place; the curves pop-out draws lighter; the Depth Lighting rig has a thickness control; and the radial mask moves and turns from wherever it is grabbed.",
+  "pub_date": "2026-09-16T03:08:31Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.1.1/Heeler-macos.dmg",
+      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.2.0/Heeler-26.2.0-macos.dmg",
       "signature": ""
     },
     "windows-x86_64": {
-      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.1.1/Heeler-windows.exe",
+      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.2.0/Heeler-26.2.0-windows.exe",
       "signature": ""
     }
   }
