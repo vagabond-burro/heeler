@@ -1,14 +1,14 @@
 {
-  "version": "26.2.0",
-  "notes": "Black and white is a darkroom now: choose a film stock and a Wratten filter and the photograph is rendered as that film would have seen it, push or pull the development, then print on paper with a grade or a split grade, a paper black, a base tint and a toning bath. The Zone System places tones in two clicks and moves Exposure and Development for you. A Hue curve grades the conversion by colour, with a picker that shows which colours land on the same gray and a Separate tool that pulls them apart. A far filter grades a second filter along the depth map, and two infrared films and filters give the Wood effect as an artistic tool with dials for foliage, sky, water and skin. Grain follows the stock and the format and reads the same on screen and in the export. The picture browser shows ratings and flags on every thumbnail, keeps its filters in the header, and sorts with one button; pop-out windows open once and in place; the curves pop-out draws lighter; the Depth Lighting rig has a thickness control; and the radial mask moves and turns from wherever it is grabbed.",
-  "pub_date": "2026-09-16T03:08:31Z",
+  "version": "26.2.1",
+  "notes": "Depth curves now read as the depth map does: the Depth row in Recolor and the Far filter's curve in Black and White run from NEAR to FAR, painted white at the near end and black at the far end, so a point over black works on what is black in the map. Recolor's picker drops a point on the curve where you click and holds it there, on every row. On the Depth row that is how you lock a subject: hover to see the ghost at its depth, click to drop the point, then shape the rest of the curve around it. The Depth and Mask rows show the ghost point while you hover the photograph, as the colour rows already did, and the Mask row now reads the chosen mask's coverage under the cursor rather than the picture's brightness. Depth Lighting draws less of a halo along a subject's edge. The Edges and Flatten dials in Depth Map no longer widen a subject's cliff where the photograph is flat, a colour edge counts as an edge, and a small step between a subject and its background no longer bevels its last pixels. Check for Updates reads its release list from the project's repository, the same file the website's download button reads. The picker chip in Depth of Field and on every Recolor row wears the eyedropper, matching the cursor it puts over the photograph, and says what it picks.",
+  "pub_date": "2026-09-16T20:58:34Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.2.0/Heeler-26.2.0-macos.dmg",
+      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.2.1/Heeler-26.2.1-macos.dmg",
       "signature": ""
     },
     "windows-x86_64": {
-      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.2.0/Heeler-26.2.0-windows.exe",
+      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.2.1/Heeler-26.2.1-windows.exe",
       "signature": ""
     }
   }
