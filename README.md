@@ -4,7 +4,7 @@ Downloads, release notes, and the update manifest for Heeler, the node-based RAW
 
 ## Download
 
-The current release is on the [Releases](https://github.com/vagabond-burro/heeler/releases/latest) page. Each release carries the installer for every platform and the `latest.json` manifest the app reads for **Help > Check for Updates**.
+The current release is on the [Releases](https://github.com/vagabond-burro/heeler/releases/latest) page. Each release carries the installer for every platform, and `latest.json` at the root of this repository names the current one: the app reads it for **Help > Check for Updates** and the website's download button reads it for its links.
 
 Heeler is bought inside the app. Documentation, pricing, and the user guide live at [www.heeler.app](https://www.heeler.app).
 

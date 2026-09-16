@@ -1,12 +1,12 @@
 # The update manifest
 
-Every release attaches a file named `latest.json` beside its installers. GitHub redirects
+The file `latest.json` at the root of this repository's `main` branch names the current release. The app (from 2026.2.1) and the website's download button both read it at one fixed URL:
 
 ```
-https://github.com/vagabond-burro/heeler/releases/latest/download/latest.json
+https://raw.githubusercontent.com/vagabond-burro/heeler/main/latest.json
 ```
 
-to the newest release's copy, so the app always reads one fixed URL. The manifest publishes with the installers in a single release, so the two can never disagree.
+It is written by a script in the source repository from the installers attached to the published release, staged on the `dev` branch, and merged into `main` to make the release live for both readers at once. Apps before 2026.2.1 read the copy attached to each release through GitHub's `releases/latest/download/latest.json` redirect, so every release still carries one.
 
 ## Format
 
