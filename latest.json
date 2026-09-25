@@ -1,18 +1,18 @@
 {
-  "version": "26.3.0",
-  "notes": "- OpenEXR opens with its passes: beauty, depth, Cryptomatte objects as masks, and normals for Depth Lighting. Finish layers take an Object mask on an EXR.\n- Finish layers export with the photograph, into the one EXR or as sibling TIFFs; the Export Layer node writes any wire. TIFF keeps its alpha and adds 32-bit float.\n- Layers from File brings a layered EXR or a multi-page TIFF into the Finish stack.\n- Color Checker calibrates the camera from a photographed chart.\n- Preferences > Interface > Adjustment sections hides or pins any section of the Adjustments panel.\n- An older catalog asks before it is updated, backups are verified, and Restore catalog from copy is the safe way back.\n- Thumbnails load as you scroll, so large folders stay responsive.\n- Fixed: HDR stacks merged too bright when the long exposure sorted first; renders and EXRs opened over a stop bright; EXR thumbnails and transparent edges; Depth Lighting halos on a file's depth pass; stacks failing over old catalog rows; the EULA showing as Markdown in the installers.",
-  "pub_date": "2026-09-21T03:10:02Z",
+  "version": "26.3.1",
+  "notes": "- Depth of Field, Fog and Depth Lighting stay on in the 1:1 view.\n- Sharpening and Skin Softening are groups of nodes you can open and edit, keep the picture's color, and match Affinity's High Pass strength.\n- Texture and Clarity are stronger at 100 and keep their scale from preview to export.\n- Detail tools and Sharpening stop at edges, with fewer dark rings and halos.\n- Depth Lighting no longer lights the background beside a subject.\n- A full-resolution settled preview, as a preference, with a choice of frame quality.\n- The settled preview follows the window size.\n- File and Catalog layers are sharp at 1:1 and sized right at Fit.\n- The 1:1 view answers while the graph cards update.\n- Inside an open group, delete, undo and reconnect work as they do on the main graph.\n- The GPU preview no longer shows a stale frame after an edit.\n- Selection Polish's brush refines the edge again, and closing the panel keeps the selection.\n- Feather can follow the picture's own edges.\n- Marching ants on a speckled selection no longer hold up the screen.\n- Filter photographs by the date they were taken.\n- The Metadata tab shows more of the file's metadata.\n- Pixel sizes follow the photograph's true dimensions, with a one-time catalog upgrade.\n- Depth maps and Model noise reduction are computed once more after this update.\n- The Custom Chart dialog is two columns, and the Color Checker section starts collapsed.",
+  "pub_date": "2026-09-25T04:55:49Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.3.0/Heeler-26.3.0-macos.dmg",
+      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.3.1/Heeler-26.3.1-macos.dmg",
       "signature": ""
     },
     "linux-x86_64": {
-      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.3.0/Heeler-26.3.0-linux.AppImage",
+      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.3.1/Heeler-26.3.1-linux.AppImage",
       "signature": ""
     },
     "windows-x86_64": {
-      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.3.0/Heeler-26.3.0-windows.exe",
+      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.3.1/Heeler-26.3.1-windows.exe",
       "signature": ""
     }
   }
