@@ -1,18 +1,18 @@
 {
-  "version": "26.4.1",
-  "notes": "- iPhone ProRAW photos open at the exposure the phone gave them, where bright scenes used to open up to two stops over and dark ones up to four stops under. Brightness and color can still differ a little from the phone's own preview.\n- Pixel and Samsung Expert RAW files follow the instructions their own files carry in the same way, and Samsung thumbnails use the phone's own preview.\n- Phone photos saved before this update catch up when opened, batch exported or baked, unless you had changed their Tone Profile.\n- Finish adjustment layers (Exposure, Curves, Levels, White Balance, Color, Color Balance, Black & White) correct the picture at its true brightness, as the same controls do in Develop. Existing ones keep their numbers and look different.\n- Adjustments inside a Finish group read the layers below them, clipped adjustments change only the layer they are clipped to, and grouping keeps a layer's blend mode and clipping.\n- Layer effects keep their size between Fit and the export, reach past a placed picture's edge, and are written into an exported layer. Large shadows render much faster.\n- Finish adjustments and layer effects have their full controls on their Graph nodes.\n- Depth Lighting: a directional light has Elevation, Depth and Reach sliders, so it can land on the background or light every plane alike. Existing lights look the same.\n- Adjustment layers have the Export box on their sections: the picture as a section leaves it on that layer writes into a TIFF or EXR export as a layer of its own.\n- A layer added after a section's Export box was ticked always lands on the picture; it could end up on the export's branch and change nothing.\n- The Export panel's progress line names the file being written, with the extension of the format you chose.\n- The line Thickness slider has its full width wherever it appears, and its number drags sideways.\n- The Develop panel holds still while you drag a Depth Map slider with Recolor open.\n- A script that is still sending when the scripting API refuses its request now reads the refusal; the connection could reset first.",
-  "pub_date": "2026-10-03T20:47:16Z",
+  "version": "26.4.2",
+  "notes": "- Exports declare a print resolution. JPEG, PNG, WebP and TIFF files carry the DPI set in Export, 300 unless you change it, so a layout program sizes the picture correctly. The quick export menu has the setting too, presets remember it, and TIFF layer and mask files written beside an export carry the same.\n- Stacks of a thousand frames or more merge in the background. The canvas shows which frame the merge has reached, how fast it is going and how long is left, and the rest of the app stays usable meanwhile.\n- **Cancel merge** stops a stack merge, and it stays stopped until you click **Merge again** on the canvas or change the stack's frames or method.\n- The Color Sets eyedropper shows a faint marker on the set's color bar at the hue under the cursor, so you can see where a click would land before you make it.\n- A range mask's node in the Graph has the same controls as its layer, eyedropper included.\n- The crop bar is easier to read: its ratio menu matches the other dropdowns, and a ratio of your own is two fields, width and height. The Split controls beside it match.\n- JPEG stacks keep their light and color: the preview no longer comes out darker than the merged picture, and an HDR merge reads each frame's exposure correctly.\n- A stack frame that could not be used (unreadable, a different size, or one that would not align) is reported as left out rather than unreadable.\n- Recolor's By Mask menu can clear a chosen mask again.\n- Deleting a range mask puts down the eyedropper it armed.\n- The eyedropper previews in Color Sets, Black & White and Recolor land on the hue where the cursor stops, not one move behind.",
+  "pub_date": "2026-10-08T00:18:49Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.4.1/Heeler-26.4.1-macos.dmg",
+      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.4.2/Heeler-26.4.2-macos.dmg",
       "signature": ""
     },
     "linux-x86_64": {
-      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.4.1/Heeler-26.4.1-linux.AppImage",
+      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.4.2/Heeler-26.4.2-linux.AppImage",
       "signature": ""
     },
     "windows-x86_64": {
-      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.4.1/Heeler-26.4.1-windows.exe",
+      "url": "https://github.com/vagabond-burro/heeler/releases/download/v26.4.2/Heeler-26.4.2-windows.exe",
       "signature": ""
     }
   }
