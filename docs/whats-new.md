@@ -10,6 +10,7 @@
 ### Fixes
 
 - **Color's Reset is one undo step.** Reset puts the black and white mix, its hue curve and the film back together, and one undo now takes all of it back; before, one undo took back only the film.
+- **Closing with no photograph open** (an empty collection or folder in view) no longer refuses with "Saved edits are still being read."
 
 ## 2026.4.3
 
