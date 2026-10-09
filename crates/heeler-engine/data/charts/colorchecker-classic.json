@@ -1,0 +1,213 @@
+{
+  "id": "colorchecker-classic",
+  "name": "X-Rite ColorChecker Classic (after Nov 2014)",
+  "rows": 4,
+  "cols": 6,
+  "source": "X-Rite (2016), 'New color specifications for ColorChecker SG and Classic Charts' (official CIE Lab D50 values), archived at https://zenodo.org/records/3245895; transcribed from the colour-science library dataset DATA_COLORCHECKER24_AFTER_NOV2014_CIE_LAB at https://colour.readthedocs.io/en/develop/_modules/colour/characterisation/datasets/colour_checkers/chromaticity_coordinates.html",
+  "neutrals": [
+    18,
+    19,
+    20,
+    21,
+    22,
+    23
+  ],
+  "skin": [
+    0,
+    1
+  ],
+  "patches": [
+    {
+      "name": "dark skin",
+      "lab": [
+        37.54,
+        14.37,
+        14.92
+      ]
+    },
+    {
+      "name": "light skin",
+      "lab": [
+        64.66,
+        19.27,
+        17.5
+      ]
+    },
+    {
+      "name": "blue sky",
+      "lab": [
+        49.32,
+        -3.82,
+        -22.54
+      ]
+    },
+    {
+      "name": "foliage",
+      "lab": [
+        43.46,
+        -12.74,
+        22.72
+      ]
+    },
+    {
+      "name": "blue flower",
+      "lab": [
+        54.94,
+        9.61,
+        -24.79
+      ]
+    },
+    {
+      "name": "bluish green",
+      "lab": [
+        70.48,
+        -32.26,
+        -0.37
+      ]
+    },
+    {
+      "name": "orange",
+      "lab": [
+        62.73,
+        35.83,
+        56.5
+      ]
+    },
+    {
+      "name": "purplish blue",
+      "lab": [
+        39.43,
+        10.75,
+        -45.17
+      ]
+    },
+    {
+      "name": "moderate red",
+      "lab": [
+        50.57,
+        48.64,
+        16.67
+      ]
+    },
+    {
+      "name": "purple",
+      "lab": [
+        30.1,
+        22.54,
+        -20.87
+      ]
+    },
+    {
+      "name": "yellow green",
+      "lab": [
+        71.77,
+        -24.13,
+        58.19
+      ]
+    },
+    {
+      "name": "orange yellow",
+      "lab": [
+        71.51,
+        18.24,
+        67.37
+      ]
+    },
+    {
+      "name": "blue",
+      "lab": [
+        28.37,
+        15.42,
+        -49.8
+      ]
+    },
+    {
+      "name": "green",
+      "lab": [
+        54.38,
+        -39.72,
+        32.27
+      ]
+    },
+    {
+      "name": "red",
+      "lab": [
+        42.43,
+        51.05,
+        28.62
+      ]
+    },
+    {
+      "name": "yellow",
+      "lab": [
+        81.8,
+        2.67,
+        80.41
+      ]
+    },
+    {
+      "name": "magenta",
+      "lab": [
+        50.63,
+        51.28,
+        -14.12
+      ]
+    },
+    {
+      "name": "cyan",
+      "lab": [
+        49.57,
+        -29.71,
+        -28.32
+      ]
+    },
+    {
+      "name": "white 9.5 (.05 D)",
+      "lab": [
+        95.19,
+        -1.03,
+        2.93
+      ]
+    },
+    {
+      "name": "neutral 8 (.23 D)",
+      "lab": [
+        81.29,
+        -0.57,
+        0.44
+      ]
+    },
+    {
+      "name": "neutral 6.5 (.44 D)",
+      "lab": [
+        66.89,
+        -0.75,
+        -0.06
+      ]
+    },
+    {
+      "name": "neutral 5 (.70 D)",
+      "lab": [
+        50.76,
+        -0.13,
+        0.14
+      ]
+    },
+    {
+      "name": "neutral 3.5 (1.05 D)",
+      "lab": [
+        35.63,
+        -0.46,
+        -0.48
+      ]
+    },
+    {
+      "name": "black 2 (1.5 D)",
+      "lab": [
+        20.64,
+        0.07,
+        -0.46
+      ]
+    }
+  ]
+}

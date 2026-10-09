@@ -1,0 +1,1235 @@
+/* Heeler dark theme: shared color and spacing tokens.*/
+:root {
+  /* Cool-neutral chrome. The grays run about 3 to 6 points of blue over
+     red, deliberately: warm gray plus an amber accent is another RAW editor's
+     identity, and Heeler had drifted into it (the old tokens ran +2 to
+     +10 the other way). The bias is a rule, not a mood, and a test in
+     __tests__/theme.test.ts holds every one of these to it. --bg-viewer
+     is the exception and stays strictly neutral, because it is the
+     surround the photograph is judged against. */
+  --bg-app: #111214;
+  --bg-panel: #17191c;
+  --bg-panel-head: #1c1f22;
+  --bg-row: #1a1c1f;
+  --bg-viewer: #0a0a0a;
+  --bg-graph: #0e0f11;
+  --bg-node: #1a1c1f;
+  --bg-node-sel: #1d2429;
+  --bg-seg-active: #2a2e33;
+  --line-hard: #000;
+  --line-1: #1f2226;
+  --line-2: #23262b;
+  --line-3: #282c31;
+  --line-4: #2d3137;
+  --node-border: #333941;
+  --text-hi: #eef1f4;
+  --text-strong: #e4e8ec;
+  --text-body: #d3d8dd;
+  --text-mid: #9ba2a9;
+  /* The floor is legibility, not taste. On a row of glyphs drawn in the
+old --text-ghost: "It is a dark font color over a dark background. No
+human can read that." He is right, and it was measurable all along:
+against the panel head the old --text-ghost ran 2.60:1 and
+--text-faint 3.20:1, where 4.5:1 is the point at which small text is
+readable at all. Four of the seven grays in this palette were being
+spent below that line, so a third of the chrome was decoration rather
+than writing. They are now packed into the narrow band above it,
+which is the honest consequence: a dark interface has room for about
+three dimness levels, not five. The rungs are subtle now instead of
+illegible, and a test holds every one of them to 4.5:1 against the
+lightest surface it can land on.*/
+  --text-dim: #969ba1;
+  --text-faint: #8c9197;
+  --text-ghost: #81868c;
+  /* An EMPTY slot in a control: the unlit stars in a rating row, the
+     unset flag. Not writing, so it is held to 3:1 rather than 4.5, the
+     bar for a graphic you have to be able to see and aim at. It ran at
+     1.57:1, which meant a photograph with no rating showed no star row
+     at all and there was nothing to tell you five of them were there
+     to click. */
+  --slot-empty: #61676d;
+  /* One accent, and it means "active" and nothing else. Sits 29 dE from
+     the nearest category color, where the amber it replaces sat 11.8
+     from Color and could be mistaken for it. */
+  --accent: #35b8e0;
+  --accent-hover: #5ccbee;
+  --accent-ink: #04141a;
+  --accent-dim: #1d5f74;
+  --accent-text: #b8e6f4;
+  /* Category hues carry meaning, so they are left alone. Group was
+     sharing a hex with the old accent while meaning something entirely
+     different; it now has its own name. */
+  --cat-source: #7a7a7a;
+  --cat-color: #d98a3d;
+  --cat-detail: #3fa39a;
+  --cat-masking: #8b6fc4;
+  --cat-masking-lt: #a992d8;
+  --cat-utility: #5b7fb0;
+  --cat-group: #c9a227;
+  --pick: #8fae76;
+  --reject: #b06a5c;
+  --wire: #464b52;
+  --slider-track: #24272b;
+  --slider-fill: #454b52;
+  --slider-handle: #dfe4ea;
+  /* Amber still means caution, here and in the console. That is not the
+     old accent coming back; it is the one place a warm hue is the
+     honest signal. */
+  --warn: #e0a247;
+
+  /* Corners. One number for every control in the app, so the whole
+     thing can be squared off or softened by editing this line rather
+     than sixty rules. Deliberately small: at 3px a button reads as
+     "slightly eased", and the panels, rails and node cards it sits
+     among stay square, which is what keeps the chrome looking drawn
+     rather than bubbly.
+
+     Groups whose buttons share an edge round only their outer ends.
+     A seam between two segments has to keep reading as a seam, so the
+     inner corners stay square; the inner radius is one pixel under the
+     outer one, which is what a border of 1px leaves behind. */
+  --radius-btn: 3px;
+  --radius-btn-inner: 2px;
+
+  /* Hover, and only hover. A desaturated, darkened accent: the same hue
+as "active", pulled down to about a third of its saturation and a
+quarter of its lightness. That distance is the whole point. Selected
+already wears rgba(accent, .13) over the panel, which lands near
+#1b2e35; hover stops short of it at #19282b, and selected carries an
+accent border and accent lettering on top, so the two never trade
+places under the pointer. Two earlier attempts sat either on top of
+the selected tint or so far under it that a hovered button looked
+dead, which is the whole difficulty with this idea and the reason the
+number is written down rather than eyeballed. --hover-line is the
+border-only variant the owner asked about, kept here so trying it is
+a one-line swap rather than a rewrite (see "Hover" below).*/
+  --hover-bg: #19282b;
+  --hover-line: #2a4550;
+  /* Hovering something that cannot be pressed.
+     A neutral lift, not the accent-tinted one: the pointer has to be
+     able to say "this row is the one the status line is describing"
+     without also saying "press me". Needed because the menus stopped
+     hiding what does not apply and started graying it, which put a
+     column of unpressable rows under the pointer for the first time. */
+  --hover-bg-off: #26272a;
+  /* And the lettering and glyphs lift with it. "Since the
+background is a bit brighter we want to make sure the font, or icon,
+luminance proportionally adjusts as well." Proportional here means a
+number rather than a taste: each of these is its base tone raised
+until it holds the same contrast RATIO against --hover-bg that the
+base holds against --bg-panel, so a hovered control reads exactly as
+legible as it did at rest instead of being quietly washed out by its
+own highlight. Worked out per tone, and the answers came back within
+two points of each other, +10 to +12, which is the same order as the
+lift the background itself took. A test holds every one of them to
+its base's ratio.*/
+  --hover-text-mid: #a7aeb5;
+  --hover-text-dim: #a2a7ad;
+  --hover-text-faint: #989da3;
+  --hover-text-ghost: #8c9197;
+  /* The accent tint that says "this control is on", and the half step
+     above it for when the pointer is on an already-on control. Written
+     as tokens because three files were spelling the first one out by
+     hand and a fourth would have got the alpha wrong. */
+  --accent-tint: rgba(53, 184, 224, 0.13);
+  --accent-tint-hi: rgba(53, 184, 224, 0.2);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; height: 100%; }
+body {
+  background: var(--bg-app);
+  color: #d1d5d8;
+  font-family: Archivo, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: 12px;
+  overflow: hidden;
+  /* Labels and chrome are UI, not document text: no I-beam, no
+     selection. WKWebView (the Tauri shell) only honors the prefixed
+     property, which is why the unprefixed one alone left labels
+     selectable in the app while the browser build behaved. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* The blanket none is for labels and chrome, not for typing: WebKit
+   otherwise makes fields under it unselectable (its long-standing
+   user-select quirk), so editable surfaces opt back in explicitly. */
+input, textarea, [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Photographs are for looking at, not dragging out: WebKit starts a
+   native image drag from any unprevented press-and-move, and that one
+   gesture then steals every held interaction over the viewer (the
+   curve eyedropper's hold-drag arrived dragging the photo instead). */
+img, svg { -webkit-user-drag: none; }
+
+.app { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+
+.kicker {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* Top bar */
+/* Minimal dark scrollbars everywhere; the webview default is a bright
+   white bar that fights the palette. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3a3735 transparent;
+}
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #3a3735;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #575c62;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.topbar {
+  height: 44px; flex: none; background: var(--bg-panel);
+  border-bottom: 1px solid var(--line-hard);
+  display: flex; align-items: center; padding: 0 12px; gap: 14px;
+  /* The centered title is positioned against the whole bar. */
+  position: relative;
+  /* The bar doubles as the window drag region; labels must not select. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+.topbar .brand { display: flex; align-items: center; gap: 9px; }
+.topbar .brand span {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.2em; color: var(--text-strong);
+}
+.topbar .vsep { width: 1px; height: 18px; background: var(--line-4); }
+.topbar .mode-label {
+  font-size: 11px; letter-spacing: 0.1em; color: var(--text-dim); text-transform: uppercase;
+}
+.topbar .center {
+  /* Centered in the BAR, not in the gap between the menus and the tabs:
+as a flex child it sat wherever the leftover space was
+("it seems to be centered in between the menu and the tab
+navigation"). Absolute against the bar itself, it holds the true
+middle whatever its neighbors weigh. pointer-events none so a
+narrow window's overlap never steals clicks from the menus; drags
+fall through to the bar, which is its own drag region.*/
+  position: absolute; left: 50%; top: 0; bottom: 0; transform: translateX(-50%);
+  pointer-events: none;
+  max-width: 38vw; white-space: nowrap;
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  font-size: 12px; color: var(--text-mid);
+}
+.topbar .center .file { font-weight: 600; color: var(--text-strong); }
+.seg { display: flex; border: 1px solid var(--line-4); background: var(--bg-app); border-radius: var(--radius-btn); }
+.seg button {
+  all: unset; cursor: pointer; padding: 5px 13px; font-size: 11px;
+  letter-spacing: 0.04em; color: var(--text-dim); font-family: inherit;
+}
+/* Connected edges: only the two ends round, and only outward. */
+.seg button:first-child { border-radius: var(--radius-btn-inner) 0 0 var(--radius-btn-inner); }
+.seg button:last-child { border-radius: 0 var(--radius-btn-inner) var(--radius-btn-inner) 0; }
+.seg button:only-child { border-radius: var(--radius-btn-inner); }
+/* The selected workspace, said the way the app says "selected"
+ * everywhere else.
+ *
+ * It was a plain gray box, which is the one thing in the top bar that
+ * did not speak the palette at all ("The
+ * Develop/Graph/Canvas are not following the color scheme").
+ *
+ * Not the full accent fill, though, and that is the interesting half.
+ * "I think it might be confusing for the selected mode to
+ * be the full highlight color because the quick export is that color.
+ * Maybe instead using the color scheme that the color channels in the
+ * histogram use with the accent on the border color and font, with the
+ * darker tone for the background." A solid block of accent is what the
+ * export button is, and export is a thing you DO; a mode is a thing you
+ * are IN. So this borrows the channel row's treatment instead: accent
+ * lettering, accent outline, the tint behind it.
+ *
+ * The outline is an inset shadow rather than a border, because these
+ * segments sit flush inside one box: a real border on the selected one
+ * would push its neighbors a pixel sideways every time the mode
+ * changed. */
+.seg button[aria-pressed="true"] {
+  font-weight: 600;
+  background: var(--accent-tint);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.seg button[aria-pressed="true"]:hover { background: var(--accent-tint-hi); }
+.btn-export {
+  all: unset; cursor: pointer; padding: 6px 15px; background: var(--accent);
+  border-radius: var(--radius-btn);
+  color: var(--accent-ink); font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  font-family: inherit;
+  /* The glyph is inline SVG: left to the baseline it rides higher than
+     the text beside it. Centered as flex items, icon and format agree. */
+  display: inline-flex; align-items: center;
+}
+/* The one thing a solid block of accent is for: the button that
+   actually writes files. Both doors onto it wear it, the top bar's
+   quick export and the panel's Export N, so the two read as the same
+   act rather than as two different ones. */
+.btn-export:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-export:disabled { opacity: 0.35; cursor: default; }
+
+.btn-assistant {
+  all: unset; cursor: pointer; display: flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border: 1px solid var(--line-4); font-size: 11px;
+  color: var(--text-mid); font-family: inherit;
+  border-radius: var(--radius-btn);
+}
+
+/* Left tab rail */
+/* The two rails that fold a panel away, Library on the left and Export
+on the right. The owner asked for one width across both: a pair of
+edges that do the same job should not be two different sizes.*/
+.railbar {
+  all: unset; cursor: pointer; box-sizing: border-box;
+  width: 24px; flex: none; background: var(--bg-panel);
+  display: flex; align-items: center; justify-content: center;
+  /* Both borders live inside the stated width, so "24" is 24 on either
+     side of the window rather than 24 plus whatever the container
+     drew. */
+  border-left: 2px solid transparent;
+  border-right: 1px solid var(--line-hard);
+}
+.railbar > span {
+  writing-mode: vertical-rl; font-size: 9px; letter-spacing: 0.2em; color: #787c7f;
+}
+/* Export's rail lives on the far right, so its accent goes on the
+   outer edge there too: both rails mark themselves against the window,
+   not against the panel they opened. */
+.railbar.right { border-left: 1px solid var(--line-hard); border-right: 2px solid transparent; }
+.railbar[aria-pressed="true"] { background: var(--line-1); border-left-color: var(--accent); }
+.railbar.right[aria-pressed="true"] { border-left-color: var(--line-1); border-right-color: var(--accent); }
+.railbar[aria-pressed="true"] > span { color: var(--text-hi); }
+/* An OPEN rail is still a button, and the one you press to shut it
+again. It had no hover of its own, so the pointer went dead over
+exactly the control that was showing (the owner noticed it against
+the closed rail on the other side of the window, which does
+answer). The accent tint rather than the gray one: this rail IS
+on, and the pointer should not suggest otherwise.*/
+.railbar[aria-pressed="true"]:hover { background: var(--accent-tint); }
+
+/* The bar at the foot of the thumbnail strip that folds it away.
+   The same bargain the two rails make, lying down, so it answers the
+   pointer the same way. It was an inline `all: unset` with no class,
+   which is how it ended up the one fold control in the window with no
+   hover at all. */
+.foldbar {
+  all: unset;
+  cursor: pointer;
+  box-sizing: border-box;
+  flex: none;
+  height: 26px;
+  border-top: 1px solid var(--line-1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #787c7f;
+  font-family: inherit;
+}
+.foldbar:hover { background: var(--hover-bg); color: var(--hover-text-dim); }
+
+.tabrail {
+  flex: none; background: var(--bg-panel);
+  display: flex; flex-direction: column; padding-top: 8px;
+}
+.tabrail .railbar { flex: 1; }
+
+/* Panels */
+.panel-col { background: var(--bg-panel); border-right: 1px solid var(--line-hard); display: flex; flex-direction: column; min-height: 0; flex: none; }
+/* border-box so the 1px left border is inside the stated width: without
+   it the panel is 321px wide and overhangs its container by a pixel,
+   which showed up as a sliver of the photo past the Canvas dock. */
+.panel-right { background: var(--bg-panel); border-left: 1px solid var(--line-hard); box-sizing: border-box; display: flex; flex-direction: column; min-height: 0; flex: none; width: 320px; }
+.panel-head {
+  height: 30px; flex: none; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 10px; border-bottom: 1px solid var(--line-hard); background: var(--bg-panel-head);
+}
+.panel-head .title { font-size: 10px; letter-spacing: 0.16em; color: var(--text-mid); text-transform: uppercase; }
+
+/* The right panel's tab strip: a row of glyphs, one of them live.
+ *
+ * "The icon of the tabs (Adjustments, Finish, etc) should
+ * be the accent color." It already carried the accent underneath and
+ * then drew the glyph itself in plain white, so the one part of the tab
+ * you actually look at was the part not saying anything.
+ *
+ * In the stylesheet rather than inline, which is also what gives the
+ * strip a hover: every one of these was an inline `all: unset` with an
+ * inline color, and no:hover rule can reach past either.*/
+.paneltab {
+  all: unset;
+  cursor: pointer;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  display: flex;
+  align-items: center;
+  color: var(--text-ghost);
+  border-bottom: 2px solid transparent;
+}
+.paneltab[data-active="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.paneltab:hover:not([data-active="true"]) {
+  background: var(--hover-bg);
+  color: var(--hover-text-ghost);
+}
+.paneltab[data-active="true"]:hover { background: var(--accent-tint); }
+
+/* Sliders */
+.srow { display: grid; grid-template-columns: 78px 1fr 42px; align-items: center; gap: 10px; height: 28px; }
+.srow .lbl { font-size: 11px; color: #8a8e91; white-space: nowrap; }
+/* A row label worded from a param name rather than fitted to the column
+   (the graph Inspector's generic rows): it stays inside its column,
+   ellipsized, with the whole name in its title, so "Max displacement"
+   no longer runs into the slider track at any app zoom (the column and
+   the text scale together under .ui-zoom, so the fit holds at all). */
+.srow .lbl.fit { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* A label outside a slider row takes the same size: never smaller. */
+.lbl { font-size: 11px; color: #8a8e91; white-space: nowrap; }
+/* Help text, lists and reports: the one shared class, never smaller
+(2026-09-19: "I don't know why all agents keep defaulting to this
+barely readable font size").*/
+.help { font-size: 12px; line-height: 1.5; color: var(--text-dim); }
+/* A row of a scrollable pick list (the Object panel's names): full
+   width, one line, a check for a chosen row. Eight rows show at once;
+   the list box scrolls past that. */
+.listrow {
+  all: unset; cursor: pointer; box-sizing: border-box; display: flex; align-items: center; gap: 8px;
+  width: 100%; height: 24px; padding: 0 8px; font-size: 12px; color: var(--text-body); font-family: inherit;
+}
+.listrow:hover { background: var(--hover-bg); }
+.listrow[data-active="true"] { color: var(--accent); background: var(--accent-tint); }
+.listrow .check { width: 12px; text-align: center; flex: none; }
+/* A row of the Finish tab's empty list (ui/finishnew.tsx): a picture,
+   a name and one line on what the layer is for; the whole row makes it.
+   Hover and keyboard focus both light it, the way a list row does. */
+.art-empty-row {
+  all: unset; cursor: pointer; box-sizing: border-box; display: flex; align-items: flex-start; gap: 8px;
+  padding: 4px; border-radius: var(--radius-btn); font-family: inherit;
+}
+.art-empty-row:hover, .art-empty-row:focus-visible { background: var(--hover-bg); }
+.listbox { border: 1px solid var(--line-4); border-radius: var(--radius-btn); overflow-y: auto; max-height: 192px; display: flex; flex-direction: column; }
+.srow .val { font-size: 11px; color: #c2c7cb; text-align: right; font-variant-numeric: tabular-nums; }
+.strack { position: relative; height: 12px; display: flex; align-items: center; cursor: ew-resize; }
+.strack .rail { position: absolute; left: 0; right: 0; height: 3px; background: var(--slider-track); }
+.strack .center { position: absolute; left: 50%; top: 0; width: 1px; height: 12px; background: #2f3538; }
+.strack .fill { position: absolute; height: 3px; background: var(--slider-fill); }
+/* A 3px sliver read as "a stray orange button" beside the section
+header's RESET on dense displays (tester report, via the owner).
+Wide enough to read as a HANDLE now, with a hairline inset so it
+reads as sitting ON the rail rather than floating near other
+chrome.*/
+.strack .handle { position: absolute; margin-left: -2.5px; width: 5px; height: 14px; border-radius: 1px; background: var(--slider-handle); box-shadow: 0 0 0 1px rgba(0,0,0,.45); }
+
+/* Preferences' numeric rows share ONE treatment so no slider row can
+   drift on its own: same columns, same alignment, and the track keeps
+   its 12px even inside a stack or a taller row (min-height blocks the
+   squeeze; align-self keeps it centered instead of stretched). */
+.pnum { display: grid; grid-template-columns: minmax(80px, 130px) minmax(70px, 1fr) 50px; align-items: center; gap: 10px; }
+.pnum .strack { min-height: 12px; align-self: center; }
+.pstack { display: grid; gap: 9px; }
+
+/* The track sizes itself from its container, and a bare track in a flex
+   bar has no width to size from: it collapses to the handle. ONE wrapper
+   for every track that lives outside the .srow/.pnum grids, so no flex
+   row can drift its own slider treatment again. A fixed width, where the
+   bar always had one, goes on the wrapper as an inline style. */
+.strack-flex { flex: 1 1 auto; min-width: 50px; align-self: center; }
+.strack-flex .strack { min-height: 12px; }
+.strack[data-disabled] { opacity: 0.4; cursor: default; }
+
+/* Buttons */
+.chip {
+  all: unset; cursor: pointer; padding: 3px 10px; border: 1px solid var(--line-4);
+  font-size: 10px; letter-spacing: 0.06em; color: var(--text-mid); font-family: inherit;
+  border-radius: var(--radius-btn);
+}
+/* The armed tool has to look armed. "The current tool
+should be highlighted in the toolbar." Every toolbar in the app marks
+its state with data-active, and .chip was ignoring it.*/
+.chip[data-active="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+.chip:disabled { opacity: 0.35; cursor: default; }
+/* The histogram's channel row sits dimmer than a normal chip when its
+   channel is off. That grayness used to be an inline style, which is
+   the one thing :hover cannot reach; here it can, and the :not(:hover)
+   says so rather than leaving it to source order. */
+.chip.channel:not([data-active="true"]):not(:hover) { color: var(--text-ghost); }
+/* One :not() more than the generic chip hover carries, so this wins on
+   specificity rather than on where it happens to sit in the file. The
+   lift is the ghost one because the resting tone is the ghost. */
+.chip.channel:not([data-active="true"]):hover:not(:disabled) { color: var(--hover-text-ghost); }
+/* The smart panel's dense rows: every chip there was hand-shrinking
+   itself with the same inline style. One modifier instead. */
+.chip.small { font-size: 9px; padding: 1px 8px; }
+/* Every pop-out button in the app, at one size. The owner asked for the
+spectrum picker to grow by 1.15x "including the pop out button. That
+also means scaling up all the pop out buttons": five of them, in four
+files, all previously carrying the same hand-written 9px/1px 6px. One
+class means the next one cannot be a different size by accident.
+
+   Borderless since 2026-08-27, and a size up again: "We need some
+   consistency here. Remove the border on the popout buttons so they
+   match the reset buttons. Scale up the icons by 1.25x." The two are
+   the same kind of control, a small glyph that acts on the section it
+   sits in, so they are drawn the same way. The active state keeps its
+   accent color and tint (.chip[data-active]) without the outline. */
+/* The small glyph buttons that act on the section they sit in: reset,
+and the pop-outs below. No outline, because a box around a nine pixel
+picture is most of what you see (2026-08-27: "We need some
+consistency here").*/
+.chip.bare { border: none; }
+.chip.popout {
+  font-size: 13px;
+  /* 3 rather than 2 top and bottom: without a border to add its own
+     pixel, a borderless chip came out two short beside the bordered
+     ones it shares a row with (measured in Color Bend, 19.55 against
+     21.55). */
+  padding: 3px 5px;
+  line-height: 1;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+}
+/* Hover.
+ *
+ * One treatment, every control: a desaturated, darkened accent behind
+ * whatever the pointer is over. Same hue as "active" so the app keeps
+ * speaking one color, far enough under it that the two cannot be
+ * confused. --hover-bg is #19282b; the accent tint that means ON lands
+ * near #1b2e35 over a panel and carries an accent border and accent
+ * lettering with it, and a control that is already on answers the
+ * pointer by going a half step brighter instead.
+ *
+ * Every rule here excludes the on-states rather than relying on source
+ * order, because most of these buttons carry `all: unset` inline and
+ * their state selectors are no more specific than this one.
+ *
+ * The border-only variant the owner asked about: swap `background` for
+ * `border-color: var(--hover-line)` in the rules below. It is a smaller
+ * change than it looks (the token is already sitting in:root), but it
+ * only reads on the controls that HAVE a border, which is .chip and the
+ * two group boxes, and says nothing on the borderless ones.
+ */
+.chip:hover:not(:disabled):not([data-active="true"]) {
+  background: var(--hover-bg);
+  color: var(--hover-text-mid);
+}
+/* Already on: the tint goes a half step up and the accent lettering
+   goes with it, rather than being overwritten by the gray above. */
+.chip[data-active="true"]:hover:not(:disabled) {
+  background: var(--accent-tint-hi);
+  color: var(--accent-hover);
+}
+.seg button:hover:not([aria-pressed="true"]):not(:disabled) {
+  background: var(--hover-bg);
+  color: var(--hover-text-dim);
+}
+.zoom-seg button:hover:not([data-active="true"]):not(:disabled) {
+  background: var(--hover-bg);
+  color: var(--hover-text-dim);
+}
+.hud button:hover:not([data-active="true"]):not(:disabled) {
+  background: var(--hover-bg);
+  color: var(--hover-text-dim);
+}
+.btn-assistant:hover { background: var(--hover-bg); color: var(--hover-text-mid); }
+.railbar:hover:not([aria-pressed="true"]) { background: var(--hover-bg); }
+/* The rail's label is a child, so the lift has to go to the child. */
+.railbar:hover:not([aria-pressed="true"]) > span { color: var(--hover-text-dim); }
+/* A bare glyph or character button living inside a row: the count's
+neighbors in a collection row, and anything else drawn as a picture
+with no box of its own. Every one of these was an inline `all: unset`
+and so had no hover at all ("The icon buttons on
+collections is not highlighting on mouse-hover"), which is exactly
+what a class is for: the next one cannot be forgotten the same way.
+The negative margin gives the highlight somewhere to sit without
+moving the glyphs apart, so the box grows into the gap rather than
+into the row.*/
+.rowbtn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Dim, but not to the point of reading as black. These went up from
+10px to 13 when the owner asked for the collection row to be
+legible, and a bigger glyph in the ghost gray turned out to be a
+bigger dark smudge rather than a clearer picture. --text-dim is
+where they stop looking switched off.*/
+  color: var(--text-dim);
+  font-family: inherit;
+  border-radius: var(--radius-btn);
+  padding: 3px;
+  margin: 0 -3px;
+}
+.rowbtn:hover { background: var(--hover-bg); color: var(--hover-text-dim); }
+.rowbtn:disabled { opacity: 0.35; cursor: default; }
+.rowbtn:disabled:hover { background: none; color: var(--text-dim); }
+/* flex: none, so a switch beside a long line of text keeps its 20 px
+   instead of being squeezed toward nothing (Preferences > Export at 150
+   percent drew Never overwrite's switch 6 to 12 px wide, 2026-09-30). */
+.toggle { width: 20px; height: 11px; flex: none; position: relative; cursor: pointer; background: #2b2927; border-radius: var(--radius-btn); }
+.toggle .dot { position: absolute; top: 1px; left: 1px; width: 9px; height: 9px; background: #575c62; border-radius: 1px; }
+.toggle[data-on="true"] { background: #254a5f; }
+.toggle[data-on="true"] .dot { left: 10px; background: var(--accent); }
+
+/* Node cards */
+.node {
+  position: absolute; width: 140px; height: 78px; background: var(--bg-node);
+  border: 1px solid var(--node-border); display: flex; flex-direction: column; cursor: grab;
+}
+.node[data-selected="true"] {
+  background: var(--bg-node-sel); border-color: var(--accent);
+  outline: 1px solid rgba(53, 184, 224, 0.35); outline-offset: 2px;
+}
+.node[data-disabled="true"] { opacity: 0.45; }
+/* A layer mask turned off reads as off on its card. */
+.node[data-mask-off="true"] { opacity: 0.45; }
+.node .cat { height: 3px; flex: none; }
+.node .head { height: 23px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 7px; }
+.node .head .nm {
+  flex: 1; font-size: 10px; color: var(--text-body);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.node .head .vv { font-size: 9px; color: var(--text-ghost); font-variant-numeric: tabular-nums; }
+.node .thumb { flex: 1; margin: 0 5px 5px; overflow: hidden; background: #000; }
+.node .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.node.group {
+  background: #141c1f; border-color: var(--accent-dim);
+  box-shadow: 4px 4px 0 0 #121619, 4px 4px 0 1px #223c4a;
+}
+.node.group .head .nm { color: var(--accent-text); }
+.port { position: absolute; width: 7px; height: 7px; border: 1px solid #1a1918; }
+.port.mask { transform: rotate(45deg); width: 8px; height: 8px; }
+
+/* Dialogs.
+ *
+ * "The 'Delete Take' prompt comes up in the bottom left
+ * corner of the window. That is really odd."
+ *
+ * It was: these two classes had never been written. Every element carrying
+ * them fell back to a plain block at the end of the layout, which is the
+ * bottom left. The dialogs that always looked right (Preferences, the
+ * stitch dialog) position themselves with inline styles and so never
+ * noticed. Nothing in the tests could notice either, since jsdom computes
+ * no layout: it is the one class of bug this app's testing cannot see, so
+ * there is now a test that every class name in the source has a rule
+ * behind it, which is the part that CAN be checked.
+ */
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(12, 11, 10, 0.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal {
+  box-sizing: border-box;
+  border-radius: var(--radius-btn);
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 14px 16px 15px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line-4);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+}
+
+/* The title bar of a popped-out window. Its layout is inline, since each
+ * window arranges its own; this is the surface under it. */
+.titlebar {
+  flex: none;
+  height: 34px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--line-hard);
+}
+
+/* 1.15x from the original 11px/9px, with the width breathing to
+match (the owner, from tester feedback rounds).*/
+.ctx-menu {
+  position: absolute; width: 240px; background: #1e1d1b; border: 1px solid #3a3735;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.6); padding: 4px 0; z-index: 40;
+  border-radius: var(--radius-btn);
+}
+.ctx-menu .hd { padding: 5px 12px 6px; font-size: 10.4px; letter-spacing: 0.14em; color: var(--text-ghost); }
+.ctx-menu .sep { height: 1px; background: var(--line-3); margin: 2px 0; }
+.ctx-menu button {
+  all: unset; cursor: pointer; display: flex; align-items: center; gap: 8px;
+  width: 100%; box-sizing: border-box; padding: 6px 12px; font-size: 12.6px; color: #abafb3;
+  font-family: inherit;
+}
+/* Disabled means disabled, and it has to LOOK it.
+ *
+ * Nothing here styled:disabled at all, so a grayed menu item was drawn
+ * exactly like a live one and took the hover with it: the pointer said
+ * "press me" about a row that could not be pressed. It went unnoticed
+ * while the menus hid what did not apply; the moment they started
+ * keeping those seats ("the preferred way to work, in a
+ * vast majority of apps, is to disable a menu item when it's out of
+ * context"), it became most of the menu.
+ *
+ * The two hovers are deliberately different colors. Live is the
+ * accent-tinted one every pressable control in the app wears; off is a
+ * plain gray lift that means "you are pointing at this, read the status
+ * line", which is where the item explains itself. */
+.ctx-menu button:hover:not(:disabled) { background: var(--hover-bg); color: var(--text-hi); }
+.ctx-menu button:disabled { color: var(--text-ghost); cursor: default; }
+.ctx-menu button:disabled:hover { background: var(--hover-bg-off); color: var(--text-faint); }
+/* The graph and canvas context menus sit outside every ui-zoom panel,
+while the menubar's menus (the same .ctx-menu) sit under the topbar's
+zoom, so the same 12.6px read 14.5px up there and 12.6px down here.
+Scaled through the variable rather than a zoom of their own, because
+these menus are placed by the click's coordinates and CSS zoom would
+move them ("The right click context menu in the Graph &
+Canvas should use the same font size as the menus").*/
+.ctx-menu.chrome-scale { width: calc(240px * var(--chrome-zoom)); }
+.ctx-menu.chrome-scale .hd {
+  font-size: calc(10.4px * var(--chrome-zoom));
+  padding: calc(5px * var(--chrome-zoom)) calc(12px * var(--chrome-zoom)) calc(6px * var(--chrome-zoom));
+}
+.ctx-menu.chrome-scale button {
+  font-size: calc(12.6px * var(--chrome-zoom));
+  padding: calc(6px * var(--chrome-zoom)) calc(12px * var(--chrome-zoom));
+  gap: calc(8px * var(--chrome-zoom));
+}
+
+/* Dialog */
+.dialog-backdrop {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55);
+  display: grid; place-items: center; z-index: 100;
+}
+.dialog { width: 440px; background: var(--bg-panel); border: 1px solid #3a3735; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7); border-radius: var(--radius-btn); }
+.dialog .dhead { display: flex; align-items: center; gap: 9px; padding: 13px 16px; border-bottom: 1px solid var(--line-2); }
+.dialog .dhead .t { flex: 1; font-size: 13px; font-weight: 600; color: var(--text-hi); }
+.dialog input[type="text"], .dialog textarea {
+  width: 100%; background: var(--bg-app); border: 1px solid var(--line-4);
+  color: var(--text-hi); font: inherit; font-size: 13px; padding: 8px 11px; outline: none;
+  border-radius: var(--radius-btn);
+}
+.dialog input[type="text"]:focus, .dialog textarea:focus { border-color: var(--accent); }
+
+.viewer-toolbar {
+  height: 34px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 12px;
+  background: #131211; border-bottom: 1px solid var(--line-hard);
+  /* The chrome scale the panels wear ("Scale up the size
+of the elements in the canvas header by 1.15x so its easier to
+read"). Zoom on the bar alone: the viewport below stays
+pixel-true.*/
+  zoom: var(--chrome-zoom);
+}
+/* The viewer's own header (not the floating sub-bar). Every control
+   keeps its whole width; the cursor readout's slot is the one thing
+   that gives (cursorreadout.ts), and it clips, so the readout can never
+   run under the Take menu. When even the controls alone do not fit on
+   one row (150% app zoom on a narrow window), the right-hand group
+   wraps to a second row, right-aligned, rather than running off the
+   bar. Each row keeps the bar's 34px. */
+.viewer-header { height: auto; min-height: 34px; flex-wrap: wrap; row-gap: 0; white-space: nowrap; }
+.viewer-header > * { flex-shrink: 0; }
+.viewer-header > .readout-slot {
+  flex: 1 1 0; min-width: 0; min-height: 34px; align-self: stretch;
+  position: relative; overflow: hidden;
+}
+.viewer-header-right {
+  display: flex; align-items: center; gap: 14px;
+  min-height: 34px; margin-left: auto;
+}
+.viewer-toolbar button {
+  all: unset; cursor: pointer; display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--text-faint); font-family: inherit;
+}
+/* The armed tool wears the app's one selected language (accent
+   lettering, accent outline, tint behind), same as the workspace
+   switcher and every chip. It used to brighten to text-mid, which read
+   as hover, not as armed. */
+.viewer-toolbar button[data-active="true"] {
+  color: var(--accent);
+  background: var(--accent-tint);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+/* The split MODE picker is a sub-choice riding behind the Split
+button, so it speaks quieter: accent lettering only
+("The selected split mode's font color should be the accent
+color").*/
+.viewer-toolbar button.split-mode[data-active="true"] {
+  background: none;
+  box-shadow: none;
+  color: var(--accent);
+}
+/* Borderless and padding-free, so the hover tint had nothing to sit in.
+   The padding is given back as negative margin, which keeps the 14px
+   gaps the toolbar was laid out with. Has to live below the `all: unset`
+   above rather than up with the other hover rules, which would flatten
+   it. */
+.viewer-toolbar button {
+  padding: 3px 6px;
+  margin: 0 -6px;
+  border-radius: var(--radius-btn);
+}
+.viewer-toolbar button:hover:not([data-active="true"]) {
+  background: var(--hover-bg);
+  color: var(--hover-text-faint);
+}
+.viewer-toolbar button[data-active="true"]:hover {
+  background: var(--accent-tint-hi);
+}
+.viewer-toolbar button.split-mode[data-active="true"]:hover {
+  background: var(--hover-bg);
+}
+/* The split's bar-color swatch: the whole button IS the color. The
+native picker draws its swatch inside padding and a border, which
+read as "a rectangle inside a button" (the owner's words: "The color
+swatch should take up the whole button area").*/
+.viewer-toolbar input[type="color"].swatch-full {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0;
+  border: 1px solid var(--line-4);
+  border-radius: var(--radius-btn);
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+}
+.viewer-toolbar input[type="color"].swatch-full::-webkit-color-swatch-wrapper { padding: 0; }
+.viewer-toolbar input[type="color"].swatch-full::-webkit-color-swatch { border: none; }
+/* The split seat's buttons keep their real margins: the toolbar's
+negative-margin hover trick assumes the row's own 14px gaps, and
+inside this tighter cluster it pressed the icons into each other
+("They are pushed right up to the edge on each
+other").*/
+.viewer-toolbar .split-seat button { margin: 0; }
+/* The sub-header: an armed tool's settings, floating centered over
+the stage's top edge ("a sub-header bar that holds the
+settings...", "centered horizontally", "Could the sub-header not
+move the canvas down?"). A pill over the canvas, like the Finish
+toolbar's at the bottom, so the viewport never reflows when a tool
+arms. Inherits the toolbar's face and chrome zoom.*/
+/* The sub-bar holds a tool's settings, so its menus are the panels'
+bordered fields, not the header's bare words: the header's button
+reset (all: unset, and a -6px margin that tucks bare words into the
+gaps) stripped the crop menu's border and pulled it into its
+neighbors (2026-10-07: "It's all crammed in").*/
+.viewer-subbar button.chip {
+  margin: 0;
+  border-width: 1px;
+  border-style: solid;
+}
+.viewer-subbar button.chip:not([data-active="true"]) {
+  border-color: var(--line-4);
+  color: var(--text-mid);
+}
+.viewer-subbar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  height: auto;
+  min-height: 0;
+  padding: 5px 12px;
+  /* Sized by its content up to the stage's width: an absolutely
+     positioned box anchored at 50% otherwise shrink-fits against the
+     right half only, and the pill folded into a column. */
+  width: max-content;
+  max-width: calc(100% - 24px);
+  flex-wrap: wrap;
+  justify-content: center;
+  background: rgba(19, 18, 17, 0.92);
+  border: 1px solid var(--line-4);
+  border-radius: var(--radius-btn);
+}
+/* "All fonts and icons could be scaled up by 1.15x." One
+token, applied as zoom on the chrome containers rather than a sweep
+through every inline px size: zoom scales text, icons, and their
+layout together, so the fixed grids inside the panels stay aligned.
+The image viewport is deliberately outside it and stays pixel-true.*/
+:root { --chrome-zoom: 1.15; }
+.ui-zoom { zoom: var(--chrome-zoom); }
+
+.zoom-seg { display: flex; align-items: center; gap: 2px; border-radius: var(--radius-btn); }
+.zoom-seg button { all: unset; cursor: pointer; padding: 3px 9px; font-size: 11px; color: var(--text-dim); font-family: inherit; }
+/* Most of these sit inside a 1px group border added at the call site, so
+   they are a connected control however wide the gap between them reads:
+   ends only, rounding outward. */
+.zoom-seg button:first-child { border-radius: var(--radius-btn-inner) 0 0 var(--radius-btn-inner); }
+.zoom-seg button:last-child { border-radius: 0 var(--radius-btn-inner) var(--radius-btn-inner) 0; }
+.zoom-seg button:only-child { border-radius: var(--radius-btn-inner); }
+/* The selected segment, in the one language the app uses for it.
+ *
+ * This was a solid block of accent with dark ink, which is byte for
+ * byte what the JPG export button is: measured side by side, "Fit" in
+ * the viewer toolbar and Export were both rgb(53,184,224) on
+ * rgb(4,20,26). The owner made the point about the workspace switcher
+ * first ("it might be confusing for the selected mode to be the full
+ * highlight color because the quick export is that color") and then
+ * asked for it everywhere, which is right: a solid block of accent
+ * should mean the one button that DOES something irreversible, and
+ * thirty-five toggles were quietly spending it on "this option is
+ * picked".
+ *
+ * So all of them now wear what the channel row and the workspace
+ * switcher wear: accent lettering, accent outline, the tint behind.
+ * The outline is an inset shadow rather than a border for the same
+ * reason it is there: a real one would resize the segment the moment
+ * it was chosen. */
+.zoom-seg button[data-active="true"] {
+  background: var(--accent-tint);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.zoom-seg button[data-active="true"]:hover { background: var(--accent-tint-hi); }
+/* A one-button group drawn at the segmented row's size: the smart
+mask's Refine, Remove and To Mask sit beside Click, Subject and Sky
+at exactly their height and lettering (2026-09-29: "should be the
+same size as click/subject/sky"). Unavailable reads as a quieter
+step down at full size (about 4.2:1 on the panel), not the 0.35
+see-through chip it replaced.*/
+.zoom-seg.act button:disabled { opacity: 0.75; cursor: default; }
+/* MenuField's list rows carry `all: unset` inline, so their hover and
+   the keyboard's focus land here with the weight to win. */
+.menufield-list > [role="option"]:hover,
+.menufield-list > [role="option"]:focus-visible,
+.menufield-list > [role="option"][data-highlight] { background: var(--hover-bg) !important; }
+
+.hud {
+  position: absolute; display: flex; align-items: stretch;
+  background: var(--bg-panel); border: 1px solid var(--line-3); z-index: 10;
+  border-radius: var(--radius-btn);
+}
+/* Its cells share edges, dividers and all, so the box rounds at the two
+   ends and nowhere else. */
+.hud > *:first-child { border-radius: var(--radius-btn-inner) 0 0 var(--radius-btn-inner); }
+.hud > *:last-child { border-radius: 0 var(--radius-btn-inner) var(--radius-btn-inner) 0; }
+.hud > *:only-child { border-radius: var(--radius-btn-inner); }
+.hud > * {
+  padding: 6px 11px; font-size: 10px; letter-spacing: 0.05em; color: var(--text-dim);
+  border-left: 1px solid var(--line-2); font-variant-numeric: tabular-nums;
+}
+.hud > *:first-child { border-left: none; }
+/* all:unset also strips the padding and divider that .hud > * gives every
+   child, and it wins on specificity, so the buttons ran flush into each
+   other: "BEFORE / AFTERSPLITMASKFIT". Put the box back after the reset. */
+.hud button {
+  all: unset; cursor: pointer; font-family: inherit;
+  padding: 6px 11px; font-size: 10px; letter-spacing: 0.05em; color: var(--text-dim);
+  border-left: 1px solid var(--line-2); font-variant-numeric: tabular-nums;
+}
+.hud button:first-child { border-left: none; }
+.hud button[data-active="true"] { background: var(--bg-seg-active); color: var(--text-hi); }
+
+/* Marching ants.
+ *
+ * Two coincident strokes, black under white, with the white one dashed
+ * and its offset animated. That is what makes the boundary readable over
+ * a bright sky and a dark shadow at the same time, which one color
+ * cannot do, and it is why every editor since the eighties draws a
+ * selection this way rather than as a plain outline. */
+@keyframes heeler-ants {
+  to {
+    stroke-dashoffset: -8px;
+  }
+}
+/* The status bar's ENGINE readout, blinking once per finished render.
+   The span is remounted per render (its key is the render count), so
+   this replays even when the new time equals the old one; without it a
+   run of identical times read as the readout having died. */
+@keyframes engine-tick {
+  from {
+    opacity: 0.25;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.engine-tick {
+  animation: engine-tick 0.45s ease-out;
+}
+/* A clear that is one statement and cannot be canceled (the thumbnail
+   sweep, Phase 6): the row says it is working, gently. */
+@keyframes op-pending-pulse {
+  from { opacity: 0.45; }
+  to { opacity: 1; }
+}
+.op-pending {
+  animation: op-pending-pulse 0.9s ease-in-out infinite alternate;
+}
+/* Plain screen-pixel widths: the svg these live in is laid out at
+   zoom size and scaled back down (ANTS_SURFACE in selection.tsx), so
+   its pixels are screen pixels at any zoom. The widths used to be
+   counter-scaled by 1/zoom instead, which held the SIZE but rasterized
+   the strokes sub-pixel before the stage transform enlarged them: the
+   ants held one screen width and blurred anyway. */
+.ants-under {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.85);
+  stroke-width: 1.4px;
+  vector-effect: non-scaling-stroke;
+}
+.ants-over {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.4px;
+  stroke-dasharray: 4px 4px;
+  vector-effect: non-scaling-stroke;
+  animation: heeler-ants 0.6s linear infinite;
+}
+/* Respect a system setting that asks for less movement: the boundary is
+   still legible standing still. */
+@media (prefers-reduced-motion: reduce) {
+  .ants-over {
+    animation: none;
+  }
+}
+
+/* The viewer while a photograph is still on its way: the Heeler mark
+   and a small indeterminate bar, instead of a browser's broken-image
+   alt text flashing through. */
+@keyframes viewer-loading-sweep {
+  0% { left: -35%; }
+  100% { left: 100%; }
+}
+.viewer-loading-bar {
+  position: relative;
+  width: 160px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--line-2);
+  overflow: hidden;
+}
+.viewer-loading-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -35%;
+  width: 35%;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: viewer-loading-sweep 1.1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .viewer-loading-bar::after {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.5;
+  }
+}
+
+/* A stack merging: the mark, what it is doing, a real bar, and a dog
+line. Floats over whatever the stage shows meanwhile and takes no
+clicks, so the photo can still be panned underneath.*/
+.stack-merge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 45;
+  pointer-events: none;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: max-content;
+  min-width: min(340px, calc(100% - 32px));
+  max-width: min(440px, calc(100% - 32px));
+  padding: 20px 28px 18px;
+  background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  text-align: center;
+}
+/* The loading view's version: no frame to float over, so no card. */
+.stack-merge.stack-merge-inline {
+  position: static;
+  transform: none;
+  background: none;
+  border: none;
+  padding: 0;
+  /* The loading view sizes itself to its content, so a percentage here
+has nothing to measure against and the lines wrapped at a third of
+the canvas ("could stand to be wider"). The window it
+has.*/
+  min-width: min(420px, calc(100vw - 64px));
+  max-width: min(560px, calc(100vw - 64px));
+}
+.stack-merge .chip {
+  pointer-events: auto;
+  font-size: 11px;
+  padding: 2px 10px;
+}
+.stack-merge-title {
+  font-size: 12px;
+  color: var(--text-body);
+  letter-spacing: 0.02em;
+}
+.stack-merge-bar {
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line-2);
+  overflow: hidden;
+}
+.stack-merge-bar > div {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease-out;
+}
+.stack-merge-detail {
+  font-size: 10px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.stack-merge-quote {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-faint);
+  min-height: 1.3em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .stack-merge-bar > div { transition: none; }
+}
+
+/* A tile whose thumbnail is still being developed: a faint mark and a
+   slow shimmer sweep, so a fresh folder reads as "working on it" rather
+   than a wall of dead gray boxes. The mark sits under the shimmer and
+   the thumbnail replaces the whole thing when it lands. */
+@keyframes thumb-pending-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.thumb-pending {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.thumb-pending > img {
+  opacity: 0.14;
+}
+.thumb-pending::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    105deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.045) 50%,
+    transparent 60%
+  );
+  animation: thumb-pending-sweep 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .thumb-pending::after {
+    animation: none;
+  }
+}
+
+/* Find in Thumbnails: a short golden pulse on the revealed thumbnail,
+   so the eye lands on it after the scroll. The class is added by the
+   menu action and removed when the pulse is done. */
+@keyframes thumb-reveal {
+  0% { outline-color: var(--accent); }
+  100% { outline-color: transparent; }
+}
+/* !important because the thumbnail button carries an inline
+   "all: unset", which would otherwise flatten these. */
+.thumb-reveal {
+  outline: 2px solid transparent !important;
+  outline-offset: 1px !important;
+  animation: thumb-reveal 1.6s ease-out forwards !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .thumb-reveal {
+    outline-color: var(--accent) !important;
+    animation: none !important;
+  }
+}
+
+/* An armed eyedropper needs the click to land on the photograph, and
+   the canvas graph layer blankets it. pointer-events on the wrapper
+   alone is not enough: node cards and wire hit zones re-enable their
+   own, so the guard flattens the whole subtree. */
+.pick-through, .pick-through * { pointer-events: none !important; }
+
+/* The console tooltip's arrival: held invisible for the animation's
+   delay, then a short fade, so mousing across a row of chips does not
+   strobe labels. */
+@keyframes tip-in { from { opacity: 0; } to { opacity: 1; } }
+
+.save-recovery {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line-3);
+  background: var(--bg-panel);
+  color: var(--text-body);
+  max-height: 28vh;
+  overflow: auto;
+}
+.save-recovery button { margin: 4px 8px 4px 0; }
+.save-recovery p { margin: 6px 0; }
+
+/* Find a Control's landing border: the keyboard navigator's own gold
+outline, held at full strength for two seconds so the eye can arrive,
+then four seconds fading out (2026-09-11: "Draw the border in full
+for 2 seconds, then fade it out for 4 seconds"). The navigator's
+outline does NOT wear this: while the movement keys are driving a
+control the outline has to stay put.*/
+@keyframes heeler-control-flash {
+  0%, 33.3% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.control-flash {
+  animation: heeler-control-flash 6s linear forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .control-flash {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* Fade only the landing border, never the section's controls. The
+   inset border coexists with an overridden section's dotted outline. */
+.section-control-flash { position: relative; }
+.section-control-flash::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  pointer-events: none;
+  animation: heeler-control-flash 6s linear forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .section-control-flash::after { animation: none; }
+}
+
+/* Photo selection and tags are sibling buttons, so Tab can reach each
+   action without nesting controls or changing what a photo click does. */
+.thumb-action { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: inherit; cursor: pointer; }
+.thumb-action:focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 1px !important; }

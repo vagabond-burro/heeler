@@ -4,4 +4,4 @@ Shareable looks as `.heelerpreset` files, exported from Heeler's Presets tab wit
 
 Each subfolder is a category. Its README lists the looks inside and what each is for.
 
-No presets yet. Released to the public domain under CC0; see [LICENSE](../LICENSE).
+No presets yet. Under the Mozilla Public License 2.0 with the rest of Heeler; see [LICENSE](../LICENSE).

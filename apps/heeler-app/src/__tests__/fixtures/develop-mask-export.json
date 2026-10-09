@@ -1,0 +1,555 @@
+{
+ "range_depth": {
+  "schema_version": 1,
+  "graph_id": "develop_mask_export_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {
+     "camera_wb": 1,
+     "camera_matrix": 1
+    },
+    "x": 24,
+    "y": 24
+   },
+   {
+    "id": "stdcolor",
+    "type": "heeler.standard_color",
+    "label": "Standard Color",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 0,
+     "vibrance": 0,
+     "texture": 0,
+     "clarity": 0,
+     "dehaze": 0,
+     "texture_shadows": 100,
+     "texture_midtones": 100,
+     "texture_highlights": 100,
+     "texture_red": 100,
+     "texture_green": 100,
+     "texture_blue": 100,
+     "clarity_shadows": 100,
+     "clarity_midtones": 100,
+     "clarity_highlights": 100,
+     "clarity_red": 100,
+     "clarity_green": 100,
+     "clarity_blue": 100,
+     "dehaze_shadows": 100,
+     "dehaze_midtones": 100,
+     "dehaze_highlights": 100,
+     "dehaze_red": 100,
+     "dehaze_green": 100,
+     "dehaze_blue": 100
+    },
+    "x": 224,
+    "y": 24
+   },
+   {
+    "id": "exposure",
+    "type": "heeler.exposure",
+    "label": "Exposure",
+    "enabled": true,
+    "params": {
+     "exposure": 0,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 424,
+    "y": 24
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 824,
+    "y": 24
+   },
+   {
+    "id": "profile",
+    "type": "heeler.tone_profile",
+    "label": "Tone Profile",
+    "enabled": true,
+    "params": {
+     "contrast": 100,
+     "colorfulness": 0,
+     "development": 0,
+     "baseline_ev": 1.3,
+     "shadow_toe": 50,
+     "highlight_rolloff": 25,
+     "mode": "standard",
+     "film": ""
+    },
+    "x": 624,
+    "y": 24
+   },
+   {
+    "id": "layer_1_adj",
+    "type": "heeler.exposure",
+    "label": "Range 1",
+    "enabled": true,
+    "params": {
+     "exposure": 2,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0,
+     "opacity": 70
+    },
+    "x": 199,
+    "y": 484
+   },
+   {
+    "id": "layer_1_mask",
+    "type": "heeler.range_mask",
+    "label": "Range Mask",
+    "enabled": true,
+    "params": {
+     "depth_on": true,
+     "depth_invert": false,
+     "depth_black": 0.4,
+     "depth_white": 0.6,
+     "depth_gamma": 1,
+     "depth_black_soft": 0,
+     "depth_white_soft": 0,
+     "luma_low": 0,
+     "luma_high": 1,
+     "sat_low": 0,
+     "sat_high": 1,
+     "hue_center": 0,
+     "hue_width": 180,
+     "softness": 0.15
+    },
+    "x": 199,
+    "y": 580
+   },
+   {
+    "id": "depthmap",
+    "type": "heeler.depth_map",
+    "label": "Depth Map",
+    "enabled": true,
+    "params": {
+     "edges": 50,
+     "flatten": 25,
+     "near_clip": 0,
+     "far_clip": 0,
+     "size": 518,
+     "depth_black": 0,
+     "depth_white": 1,
+     "depth_gamma": 1,
+     "depth_black_soft": 0,
+     "depth_white_soft": 0
+    },
+    "x": 24,
+    "y": 122
+   },
+   {
+    "id": "dev_xm_layer_1_adj",
+    "type": "heeler.export_layer",
+    "label": "Range 1 Mask Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "layermask:layer_1_adj",
+     "part": "alpha",
+     "name": "Range 1 mask"
+    },
+    "x": 239,
+    "y": 706
+   },
+   {
+    "id": "crop",
+    "type": "heeler.crop_rotate",
+    "label": "Crop & Rotate",
+    "enabled": true,
+    "params": {
+     "angle": 0,
+     "aspect": 0,
+     "crop_x": 0.2,
+     "crop_y": 0.2,
+     "crop_w": 0.6,
+     "crop_h": 0.6
+    },
+    "x": -176,
+    "y": 122
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "stdcolor",
+     "out"
+    ],
+    "to": [
+     "exposure",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "profile",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "exposure",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_adj",
+     "out"
+    ],
+    "to": [
+     "profile",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "crop",
+     "out"
+    ],
+    "to": [
+     "layer_1_mask",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "depthmap",
+     "out"
+    ],
+    "to": [
+     "stdcolor",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "depthmap",
+     "depth"
+    ],
+    "to": [
+     "layer_1_mask",
+     "depth"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "dev_xm_layer_1_adj",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "crop",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "crop",
+     "out"
+    ],
+    "to": [
+     "depthmap",
+     "in"
+    ]
+   }
+  ]
+ },
+ "brush": {
+  "schema_version": 1,
+  "graph_id": "develop_mask_export_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {
+     "camera_wb": 1,
+     "camera_matrix": 1
+    },
+    "x": 24,
+    "y": 24
+   },
+   {
+    "id": "stdcolor",
+    "type": "heeler.standard_color",
+    "label": "Standard Color",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 0,
+     "vibrance": 0,
+     "texture": 0,
+     "clarity": 0,
+     "dehaze": 0,
+     "texture_shadows": 100,
+     "texture_midtones": 100,
+     "texture_highlights": 100,
+     "texture_red": 100,
+     "texture_green": 100,
+     "texture_blue": 100,
+     "clarity_shadows": 100,
+     "clarity_midtones": 100,
+     "clarity_highlights": 100,
+     "clarity_red": 100,
+     "clarity_green": 100,
+     "clarity_blue": 100,
+     "dehaze_shadows": 100,
+     "dehaze_midtones": 100,
+     "dehaze_highlights": 100,
+     "dehaze_red": 100,
+     "dehaze_green": 100,
+     "dehaze_blue": 100
+    },
+    "x": 224,
+    "y": 24
+   },
+   {
+    "id": "exposure",
+    "type": "heeler.exposure",
+    "label": "Exposure",
+    "enabled": true,
+    "params": {
+     "exposure": 0,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 424,
+    "y": 24
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 824,
+    "y": 24
+   },
+   {
+    "id": "profile",
+    "type": "heeler.tone_profile",
+    "label": "Tone Profile",
+    "enabled": true,
+    "params": {
+     "contrast": 100,
+     "colorfulness": 0,
+     "development": 0,
+     "baseline_ev": 1.3,
+     "shadow_toe": 50,
+     "highlight_rolloff": 25,
+     "mode": "standard",
+     "film": ""
+    },
+    "x": 624,
+    "y": 24
+   },
+   {
+    "id": "layer_1_adj",
+    "type": "heeler.exposure",
+    "label": "Brush 1",
+    "enabled": true,
+    "params": {
+     "exposure": 2,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 199,
+    "y": 484
+   },
+   {
+    "id": "layer_1_mask",
+    "type": "heeler.brush_mask",
+    "label": "Brush Mask",
+    "enabled": true,
+    "params": {
+     "depth_on": false,
+     "depth_invert": false,
+     "depth_black": 0,
+     "depth_white": 1,
+     "depth_gamma": 1,
+     "depth_black_soft": 0,
+     "depth_white_soft": 0,
+     "strokes": "[{\"points\":[[0.5000000000000001,0.4999999999999999]],\"radius\":0.16666666666666669,\"hardness\":1,\"flow\":1}]"
+    },
+    "x": 199,
+    "y": 580
+   },
+   {
+    "id": "dev_xm_layer_1_adj",
+    "type": "heeler.export_layer",
+    "label": "Brush 1 Mask Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "layermask:layer_1_adj",
+     "part": "alpha",
+     "name": "Brush 1 mask"
+    },
+    "x": 239,
+    "y": 706
+   },
+   {
+    "id": "crop",
+    "type": "heeler.crop_rotate",
+    "label": "Crop & Rotate",
+    "enabled": true,
+    "params": {
+     "angle": 0,
+     "aspect": 0,
+     "crop_x": 0.2,
+     "crop_y": 0.2,
+     "crop_w": 0.6,
+     "crop_h": 0.6
+    },
+    "x": 24,
+    "y": 122
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "stdcolor",
+     "out"
+    ],
+    "to": [
+     "exposure",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "profile",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "exposure",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_adj",
+     "out"
+    ],
+    "to": [
+     "profile",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "crop",
+     "out"
+    ],
+    "to": [
+     "layer_1_mask",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "dev_xm_layer_1_adj",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "crop",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "crop",
+     "out"
+    ],
+    "to": [
+     "stdcolor",
+     "in"
+    ]
+   }
+  ]
+ }
+}

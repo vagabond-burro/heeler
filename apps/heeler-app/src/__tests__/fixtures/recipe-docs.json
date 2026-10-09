@@ -1,0 +1,2198 @@
+{
+ "frequency_separation": {
+  "heeler_recipe": 1,
+  "name": "Frequency Separation",
+  "description": "Retouch tone and texture apart: smooth color in the low branch, fix detail in the high, and they add back to the picture",
+  "keywords": "retouch skin low high blur detail",
+  "inputs": [
+   {
+    "port": "in",
+    "to": [
+     "picture.in"
+    ]
+   }
+  ],
+  "output": "result",
+  "nodes": [
+   {
+    "id": "picture",
+    "type": "heeler.merge",
+    "name": "Picture",
+    "at": [
+     0,
+     200
+    ]
+   },
+   {
+    "id": "blur",
+    "type": "heeler.blur",
+    "name": "Low (blur)",
+    "at": [
+     170,
+     0
+    ],
+    "params": {
+     "radius": 8,
+     "kind": "gaussian"
+    }
+   },
+   {
+    "id": "alpha",
+    "type": "heeler.measure",
+    "name": "Picture alpha",
+    "at": [
+     850,
+     500
+    ],
+    "params": {
+     "metric": "alpha"
+    }
+   },
+   {
+    "id": "pic_r",
+    "type": "heeler.measure",
+    "name": "Picture Red",
+    "at": [
+     170,
+     200
+    ],
+    "params": {
+     "metric": "red"
+    }
+   },
+   {
+    "id": "low_r",
+    "type": "heeler.measure",
+    "name": "Low Red",
+    "at": [
+     340,
+     200
+    ],
+    "params": {
+     "metric": "red"
+    }
+   },
+   {
+    "id": "high_r",
+    "type": "heeler.math",
+    "name": "High Red",
+    "at": [
+     510,
+     200
+    ],
+    "params": {
+     "op": "subtract"
+    }
+   },
+   {
+    "id": "back_low_r",
+    "type": "heeler.measure",
+    "name": "Edited low Red",
+    "at": [
+     1020,
+     0
+    ],
+    "params": {
+     "metric": "red"
+    }
+   },
+   {
+    "id": "back_high_r",
+    "type": "heeler.measure",
+    "name": "Edited high Red",
+    "at": [
+     1020,
+     300
+    ],
+    "params": {
+     "metric": "red"
+    }
+   },
+   {
+    "id": "sum_r",
+    "type": "heeler.math",
+    "name": "Red low plus high",
+    "at": [
+     1190,
+     100
+    ],
+    "params": {
+     "op": "add"
+    }
+   },
+   {
+    "id": "pic_g",
+    "type": "heeler.measure",
+    "name": "Picture Green",
+    "at": [
+     170,
+     300
+    ],
+    "params": {
+     "metric": "green"
+    }
+   },
+   {
+    "id": "low_g",
+    "type": "heeler.measure",
+    "name": "Low Green",
+    "at": [
+     340,
+     300
+    ],
+    "params": {
+     "metric": "green"
+    }
+   },
+   {
+    "id": "high_g",
+    "type": "heeler.math",
+    "name": "High Green",
+    "at": [
+     510,
+     300
+    ],
+    "params": {
+     "op": "subtract"
+    }
+   },
+   {
+    "id": "back_low_g",
+    "type": "heeler.measure",
+    "name": "Edited low Green",
+    "at": [
+     1020,
+     100
+    ],
+    "params": {
+     "metric": "green"
+    }
+   },
+   {
+    "id": "back_high_g",
+    "type": "heeler.measure",
+    "name": "Edited high Green",
+    "at": [
+     1020,
+     400
+    ],
+    "params": {
+     "metric": "green"
+    }
+   },
+   {
+    "id": "sum_g",
+    "type": "heeler.math",
+    "name": "Green low plus high",
+    "at": [
+     1190,
+     200
+    ],
+    "params": {
+     "op": "add"
+    }
+   },
+   {
+    "id": "pic_b",
+    "type": "heeler.measure",
+    "name": "Picture Blue",
+    "at": [
+     170,
+     400
+    ],
+    "params": {
+     "metric": "blue"
+    }
+   },
+   {
+    "id": "low_b",
+    "type": "heeler.measure",
+    "name": "Low Blue",
+    "at": [
+     340,
+     400
+    ],
+    "params": {
+     "metric": "blue"
+    }
+   },
+   {
+    "id": "high_b",
+    "type": "heeler.math",
+    "name": "High Blue",
+    "at": [
+     510,
+     400
+    ],
+    "params": {
+     "op": "subtract"
+    }
+   },
+   {
+    "id": "back_low_b",
+    "type": "heeler.measure",
+    "name": "Edited low Blue",
+    "at": [
+     1020,
+     200
+    ],
+    "params": {
+     "metric": "blue"
+    }
+   },
+   {
+    "id": "back_high_b",
+    "type": "heeler.measure",
+    "name": "Edited high Blue",
+    "at": [
+     1020,
+     500
+    ],
+    "params": {
+     "metric": "blue"
+    }
+   },
+   {
+    "id": "sum_b",
+    "type": "heeler.math",
+    "name": "Blue low plus high",
+    "at": [
+     1190,
+     300
+    ],
+    "params": {
+     "op": "add"
+    }
+   },
+   {
+    "id": "high",
+    "type": "heeler.channel_join",
+    "name": "High (detail)",
+    "at": [
+     680,
+     300
+    ]
+   },
+   {
+    "id": "edit_low",
+    "type": "heeler.merge",
+    "name": "Edit low here",
+    "note": "Splice tone and color edits after this node",
+    "at": [
+     680,
+     0
+    ]
+   },
+   {
+    "id": "edit_high",
+    "type": "heeler.merge",
+    "name": "Edit high here",
+    "note": "Splice detail edits after this node; values are signed around zero",
+    "at": [
+     850,
+     300
+    ]
+   },
+   {
+    "id": "result",
+    "type": "heeler.channel_join",
+    "name": "Low plus high",
+    "at": [
+     1360,
+     200
+    ]
+   }
+  ],
+  "wires": [
+   {
+    "from": "picture.out",
+    "to": "blur.in"
+   },
+   {
+    "from": "blur.out",
+    "to": "edit_low.in"
+   },
+   {
+    "from": "picture.out",
+    "to": "alpha.in"
+   },
+   {
+    "from": "picture.out",
+    "to": "pic_r.in"
+   },
+   {
+    "from": "blur.out",
+    "to": "low_r.in"
+   },
+   {
+    "from": "pic_r.out",
+    "to": "high_r.in"
+   },
+   {
+    "from": "low_r.out",
+    "to": "high_r.in2"
+   },
+   {
+    "from": "high_r.out",
+    "to": "high.in"
+   },
+   {
+    "from": "edit_low.out",
+    "to": "back_low_r.in"
+   },
+   {
+    "from": "edit_high.out",
+    "to": "back_high_r.in"
+   },
+   {
+    "from": "back_low_r.out",
+    "to": "sum_r.in"
+   },
+   {
+    "from": "back_high_r.out",
+    "to": "sum_r.in2"
+   },
+   {
+    "from": "sum_r.out",
+    "to": "result.in"
+   },
+   {
+    "from": "picture.out",
+    "to": "pic_g.in"
+   },
+   {
+    "from": "blur.out",
+    "to": "low_g.in"
+   },
+   {
+    "from": "pic_g.out",
+    "to": "high_g.in"
+   },
+   {
+    "from": "low_g.out",
+    "to": "high_g.in2"
+   },
+   {
+    "from": "high_g.out",
+    "to": "high.in2"
+   },
+   {
+    "from": "edit_low.out",
+    "to": "back_low_g.in"
+   },
+   {
+    "from": "edit_high.out",
+    "to": "back_high_g.in"
+   },
+   {
+    "from": "back_low_g.out",
+    "to": "sum_g.in"
+   },
+   {
+    "from": "back_high_g.out",
+    "to": "sum_g.in2"
+   },
+   {
+    "from": "sum_g.out",
+    "to": "result.in2"
+   },
+   {
+    "from": "picture.out",
+    "to": "pic_b.in"
+   },
+   {
+    "from": "blur.out",
+    "to": "low_b.in"
+   },
+   {
+    "from": "pic_b.out",
+    "to": "high_b.in"
+   },
+   {
+    "from": "low_b.out",
+    "to": "high_b.in2"
+   },
+   {
+    "from": "high_b.out",
+    "to": "high.in3"
+   },
+   {
+    "from": "edit_low.out",
+    "to": "back_low_b.in"
+   },
+   {
+    "from": "edit_high.out",
+    "to": "back_high_b.in"
+   },
+   {
+    "from": "back_low_b.out",
+    "to": "sum_b.in"
+   },
+   {
+    "from": "back_high_b.out",
+    "to": "sum_b.in2"
+   },
+   {
+    "from": "sum_b.out",
+    "to": "result.in3"
+   },
+   {
+    "from": "high.out",
+    "to": "edit_high.in"
+   },
+   {
+    "from": "alpha.out",
+    "to": "result.alpha"
+   }
+  ],
+  "controls": [
+   {
+    "label": "Radius",
+    "drives": [
+     "blur.radius"
+    ],
+    "range": [
+     0,
+     200
+    ]
+   },
+   {
+    "label": "High gain",
+    "drives": [
+     "high_r.scale",
+     "high_g.scale",
+     "high_b.scale"
+    ],
+    "range": [
+     0,
+     2
+    ]
+   }
+  ]
+ },
+ "image_arithmetic": {
+  "heeler_recipe": 1,
+  "name": "Image Arithmetic",
+  "description": "Two pictures combined by the numbers, channel by channel: add, subtract, multiply or divide, negatives kept, alpha from A",
+  "keywords": "add subtract multiply divide math difference",
+  "inputs": [
+   {
+    "port": "in",
+    "to": [
+     "a.in"
+    ]
+   },
+   {
+    "port": "in2",
+    "to": [
+     "b.in"
+    ]
+   }
+  ],
+  "output": "join",
+  "nodes": [
+   {
+    "id": "a",
+    "type": "heeler.merge",
+    "name": "A",
+    "at": [
+     0,
+     100
+    ]
+   },
+   {
+    "id": "b",
+    "type": "heeler.merge",
+    "name": "B",
+    "at": [
+     0,
+     300
+    ]
+   },
+   {
+    "id": "a_alpha",
+    "type": "heeler.measure",
+    "name": "A alpha",
+    "at": [
+     170,
+     0
+    ],
+    "params": {
+     "metric": "alpha"
+    }
+   },
+   {
+    "id": "a_r",
+    "type": "heeler.measure",
+    "name": "A Red",
+    "at": [
+     170,
+     100
+    ],
+    "params": {
+     "metric": "red"
+    }
+   },
+   {
+    "id": "b_r",
+    "type": "heeler.measure",
+    "name": "B Red",
+    "at": [
+     340,
+     200
+    ],
+    "params": {
+     "metric": "red"
+    }
+   },
+   {
+    "id": "op_r",
+    "type": "heeler.math",
+    "name": "Red A op B",
+    "at": [
+     510,
+     100
+    ],
+    "params": {
+     "op": "add"
+    }
+   },
+   {
+    "id": "a_g",
+    "type": "heeler.measure",
+    "name": "A Green",
+    "at": [
+     170,
+     200
+    ],
+    "params": {
+     "metric": "green"
+    }
+   },
+   {
+    "id": "b_g",
+    "type": "heeler.measure",
+    "name": "B Green",
+    "at": [
+     340,
+     300
+    ],
+    "params": {
+     "metric": "green"
+    }
+   },
+   {
+    "id": "op_g",
+    "type": "heeler.math",
+    "name": "Green A op B",
+    "at": [
+     510,
+     200
+    ],
+    "params": {
+     "op": "add"
+    }
+   },
+   {
+    "id": "a_b",
+    "type": "heeler.measure",
+    "name": "A Blue",
+    "at": [
+     170,
+     300
+    ],
+    "params": {
+     "metric": "blue"
+    }
+   },
+   {
+    "id": "b_b",
+    "type": "heeler.measure",
+    "name": "B Blue",
+    "at": [
+     340,
+     400
+    ],
+    "params": {
+     "metric": "blue"
+    }
+   },
+   {
+    "id": "op_b",
+    "type": "heeler.math",
+    "name": "Blue A op B",
+    "at": [
+     510,
+     300
+    ],
+    "params": {
+     "op": "add"
+    }
+   },
+   {
+    "id": "join",
+    "type": "heeler.channel_join",
+    "name": "Result",
+    "at": [
+     680,
+     200
+    ]
+   }
+  ],
+  "wires": [
+   {
+    "from": "a.out",
+    "to": "a_alpha.in"
+   },
+   {
+    "from": "a.out",
+    "to": "a_r.in"
+   },
+   {
+    "from": "b.out",
+    "to": "b_r.in"
+   },
+   {
+    "from": "a_r.out",
+    "to": "op_r.in"
+   },
+   {
+    "from": "b_r.out",
+    "to": "op_r.in2"
+   },
+   {
+    "from": "op_r.out",
+    "to": "join.in"
+   },
+   {
+    "from": "a.out",
+    "to": "a_g.in"
+   },
+   {
+    "from": "b.out",
+    "to": "b_g.in"
+   },
+   {
+    "from": "a_g.out",
+    "to": "op_g.in"
+   },
+   {
+    "from": "b_g.out",
+    "to": "op_g.in2"
+   },
+   {
+    "from": "op_g.out",
+    "to": "join.in2"
+   },
+   {
+    "from": "a.out",
+    "to": "a_b.in"
+   },
+   {
+    "from": "b.out",
+    "to": "b_b.in"
+   },
+   {
+    "from": "a_b.out",
+    "to": "op_b.in"
+   },
+   {
+    "from": "b_b.out",
+    "to": "op_b.in2"
+   },
+   {
+    "from": "op_b.out",
+    "to": "join.in3"
+   },
+   {
+    "from": "a_alpha.out",
+    "to": "join.alpha"
+   }
+  ],
+  "controls": [
+   {
+    "label": "Operation",
+    "options": [
+     {
+      "label": "Add",
+      "set": [
+       {
+        "target": "op_r.op",
+        "value": "add"
+       },
+       {
+        "target": "op_g.op",
+        "value": "add"
+       },
+       {
+        "target": "op_b.op",
+        "value": "add"
+       }
+      ]
+     },
+     {
+      "label": "Subtract",
+      "set": [
+       {
+        "target": "op_r.op",
+        "value": "subtract"
+       },
+       {
+        "target": "op_g.op",
+        "value": "subtract"
+       },
+       {
+        "target": "op_b.op",
+        "value": "subtract"
+       }
+      ]
+     },
+     {
+      "label": "Multiply",
+      "set": [
+       {
+        "target": "op_r.op",
+        "value": "multiply"
+       },
+       {
+        "target": "op_g.op",
+        "value": "multiply"
+       },
+       {
+        "target": "op_b.op",
+        "value": "multiply"
+       }
+      ]
+     },
+     {
+      "label": "Divide",
+      "set": [
+       {
+        "target": "op_r.op",
+        "value": "divide"
+       },
+       {
+        "target": "op_g.op",
+        "value": "divide"
+       },
+       {
+        "target": "op_b.op",
+        "value": "divide"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "difference_key": {
+  "heeler_recipe": 1,
+  "name": "Difference Key",
+  "description": "A mask of what changed: the foreground against a clean plate of the same scene, white where they differ",
+  "keywords": "matte clean plate keyer change",
+  "inputs": [
+   {
+    "port": "in",
+    "to": [
+     "fg.in"
+    ]
+   },
+   {
+    "port": "in2",
+    "to": [
+     "plate.in"
+    ]
+   }
+  ],
+  "output": "clean",
+  "nodes": [
+   {
+    "id": "fg",
+    "type": "heeler.merge",
+    "name": "Foreground",
+    "at": [
+     0,
+     100
+    ]
+   },
+   {
+    "id": "plate",
+    "type": "heeler.merge",
+    "name": "Clean plate",
+    "at": [
+     0,
+     300
+    ]
+   },
+   {
+    "id": "fg_r",
+    "type": "heeler.measure",
+    "name": "Foreground Red",
+    "at": [
+     170,
+     0
+    ],
+    "params": {
+     "metric": "red"
+    }
+   },
+   {
+    "id": "plate_r",
+    "type": "heeler.measure",
+    "name": "Plate Red",
+    "at": [
+     170,
+     300
+    ],
+    "params": {
+     "metric": "red"
+    }
+   },
+   {
+    "id": "diff_r",
+    "type": "heeler.math",
+    "name": "Red difference",
+    "at": [
+     340,
+     100
+    ],
+    "params": {
+     "op": "difference"
+    }
+   },
+   {
+    "id": "fg_g",
+    "type": "heeler.measure",
+    "name": "Foreground Green",
+    "at": [
+     170,
+     100
+    ],
+    "params": {
+     "metric": "green"
+    }
+   },
+   {
+    "id": "plate_g",
+    "type": "heeler.measure",
+    "name": "Plate Green",
+    "at": [
+     170,
+     400
+    ],
+    "params": {
+     "metric": "green"
+    }
+   },
+   {
+    "id": "diff_g",
+    "type": "heeler.math",
+    "name": "Green difference",
+    "at": [
+     340,
+     200
+    ],
+    "params": {
+     "op": "difference"
+    }
+   },
+   {
+    "id": "fg_b",
+    "type": "heeler.measure",
+    "name": "Foreground Blue",
+    "at": [
+     170,
+     200
+    ],
+    "params": {
+     "metric": "blue"
+    }
+   },
+   {
+    "id": "plate_b",
+    "type": "heeler.measure",
+    "name": "Plate Blue",
+    "at": [
+     170,
+     500
+    ],
+    "params": {
+     "metric": "blue"
+    }
+   },
+   {
+    "id": "diff_b",
+    "type": "heeler.math",
+    "name": "Blue difference",
+    "at": [
+     340,
+     300
+    ],
+    "params": {
+     "op": "difference"
+    }
+   },
+   {
+    "id": "max_rg",
+    "type": "heeler.math",
+    "name": "Larger of red, green",
+    "at": [
+     510,
+     100
+    ],
+    "params": {
+     "op": "max"
+    }
+   },
+   {
+    "id": "max",
+    "type": "heeler.math",
+    "name": "Largest difference",
+    "at": [
+     680,
+     200
+    ],
+    "params": {
+     "op": "max"
+    }
+   },
+   {
+    "id": "key",
+    "type": "heeler.compare",
+    "name": "Key",
+    "at": [
+     850,
+     200
+    ],
+    "params": {
+     "level": 0.05,
+     "softness": 0.02,
+     "op": "gt"
+    }
+   },
+   {
+    "id": "clean",
+    "type": "heeler.morphology",
+    "name": "Cleanup",
+    "note": "Open: specks narrower than the radius go",
+    "at": [
+     1020,
+     200
+    ],
+    "params": {
+     "radius": 0,
+     "mode": "open"
+    }
+   }
+  ],
+  "wires": [
+   {
+    "from": "fg.out",
+    "to": "fg_r.in"
+   },
+   {
+    "from": "plate.out",
+    "to": "plate_r.in"
+   },
+   {
+    "from": "fg_r.out",
+    "to": "diff_r.in"
+   },
+   {
+    "from": "plate_r.out",
+    "to": "diff_r.in2"
+   },
+   {
+    "from": "fg.out",
+    "to": "fg_g.in"
+   },
+   {
+    "from": "plate.out",
+    "to": "plate_g.in"
+   },
+   {
+    "from": "fg_g.out",
+    "to": "diff_g.in"
+   },
+   {
+    "from": "plate_g.out",
+    "to": "diff_g.in2"
+   },
+   {
+    "from": "fg.out",
+    "to": "fg_b.in"
+   },
+   {
+    "from": "plate.out",
+    "to": "plate_b.in"
+   },
+   {
+    "from": "fg_b.out",
+    "to": "diff_b.in"
+   },
+   {
+    "from": "plate_b.out",
+    "to": "diff_b.in2"
+   },
+   {
+    "from": "diff_r.out",
+    "to": "max_rg.in"
+   },
+   {
+    "from": "diff_g.out",
+    "to": "max_rg.in2"
+   },
+   {
+    "from": "max_rg.out",
+    "to": "max.in"
+   },
+   {
+    "from": "diff_b.out",
+    "to": "max.in2"
+   },
+   {
+    "from": "max.out",
+    "to": "key.in"
+   },
+   {
+    "from": "key.out",
+    "to": "clean.in"
+   }
+  ],
+  "controls": [
+   {
+    "label": "Threshold",
+    "drives": [
+     "key.level"
+    ],
+    "range": [
+     0,
+     1
+    ]
+   },
+   {
+    "label": "Softness",
+    "drives": [
+     "key.softness"
+    ],
+    "range": [
+     0,
+     1
+    ]
+   },
+   {
+    "label": "Cleanup",
+    "drives": [
+     "clean.radius"
+    ],
+    "range": [
+     0,
+     20
+    ]
+   }
+  ]
+ },
+ "depth_color_matte": {
+  "heeler_recipe": 1,
+  "name": "Depth and Color Matte",
+  "description": "A mask by distance and by color at once: a band of depth and a band of hue, where both hold or where either does",
+  "keywords": "mask matte hue depth range distance",
+  "inputs": [
+   {
+    "port": "in",
+    "to": [
+     "hue.in"
+    ]
+   },
+   {
+    "port": "depth",
+    "to": [
+     "depth.in"
+    ]
+   }
+  ],
+  "output": "combine",
+  "nodes": [
+   {
+    "id": "depth",
+    "type": "heeler.math",
+    "name": "Depth",
+    "at": [
+     0,
+     0
+    ],
+    "params": {
+     "op": "add"
+    }
+   },
+   {
+    "id": "near",
+    "type": "heeler.compare",
+    "name": "Near edge",
+    "at": [
+     170,
+     0
+    ],
+    "params": {
+     "level": 0,
+     "op": "ge"
+    }
+   },
+   {
+    "id": "far",
+    "type": "heeler.compare",
+    "name": "Far edge",
+    "at": [
+     170,
+     100
+    ],
+    "params": {
+     "softness": 0.05,
+     "op": "le"
+    }
+   },
+   {
+    "id": "window",
+    "type": "heeler.logic",
+    "name": "Depth window",
+    "at": [
+     340,
+     50
+    ],
+    "params": {
+     "op": "and"
+    }
+   },
+   {
+    "id": "hue",
+    "type": "heeler.hue_range_mask",
+    "name": "Hue band",
+    "at": [
+     340,
+     200
+    ]
+   },
+   {
+    "id": "combine",
+    "type": "heeler.logic",
+    "name": "Combine",
+    "at": [
+     510,
+     100
+    ],
+    "params": {
+     "op": "and"
+    }
+   }
+  ],
+  "wires": [
+   {
+    "from": "depth.out",
+    "to": "near.in"
+   },
+   {
+    "from": "depth.out",
+    "to": "far.in"
+   },
+   {
+    "from": "near.out",
+    "to": "window.in"
+   },
+   {
+    "from": "far.out",
+    "to": "window.in2"
+   },
+   {
+    "from": "window.out",
+    "to": "combine.in"
+   },
+   {
+    "from": "hue.out",
+    "to": "combine.in2"
+   }
+  ],
+  "controls": [
+   {
+    "label": "Near",
+    "drives": [
+     "near.level"
+    ],
+    "range": [
+     0,
+     1
+    ]
+   },
+   {
+    "label": "Near feather",
+    "drives": [
+     "near.softness"
+    ],
+    "range": [
+     0,
+     1
+    ]
+   },
+   {
+    "label": "Far",
+    "drives": [
+     "far.level"
+    ],
+    "range": [
+     0,
+     1
+    ]
+   },
+   {
+    "label": "Far feather",
+    "drives": [
+     "far.softness"
+    ],
+    "range": [
+     0,
+     1
+    ]
+   },
+   {
+    "label": "Hue",
+    "drives": [
+     "hue.band_center"
+    ],
+    "range": [
+     0,
+     360
+    ]
+   },
+   {
+    "label": "Hue width",
+    "drives": [
+     "hue.hue_range"
+    ],
+    "range": [
+     0,
+     180
+    ]
+   },
+   {
+    "label": "Hue feather",
+    "drives": [
+     "hue.hue_falloff"
+    ],
+    "range": [
+     0,
+     120
+    ]
+   },
+   {
+    "label": "Combine",
+    "options": [
+     {
+      "label": "Intersect",
+      "set": [
+       {
+        "target": "combine.op",
+        "value": "and"
+       }
+      ]
+     },
+     {
+      "label": "Union",
+      "set": [
+       {
+        "target": "combine.op",
+        "value": "or"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "channel_shuffle": {
+  "heeler_recipe": 1,
+  "name": "Channel Shuffle",
+  "description": "Rebuild a picture from channels: each of red, green and blue taken from either picture, or set to 0 or 1",
+  "keywords": "swap channels copy channel rgb",
+  "inputs": [
+   {
+    "port": "in",
+    "to": [
+     "a.in"
+    ]
+   },
+   {
+    "port": "in2",
+    "to": [
+     "b.in"
+    ]
+   }
+  ],
+  "output": "join",
+  "nodes": [
+   {
+    "id": "a",
+    "type": "heeler.merge",
+    "name": "A",
+    "at": [
+     0,
+     100
+    ]
+   },
+   {
+    "id": "b",
+    "type": "heeler.merge",
+    "name": "B",
+    "at": [
+     0,
+     300
+    ]
+   },
+   {
+    "id": "a_alpha",
+    "type": "heeler.measure",
+    "name": "A alpha",
+    "at": [
+     170,
+     0
+    ],
+    "params": {
+     "metric": "alpha"
+    }
+   },
+   {
+    "id": "sel_r",
+    "type": "heeler.math",
+    "name": "Red: B when 1",
+    "at": [
+     340,
+     100
+    ],
+    "params": {
+     "scale": 0,
+     "op": "add"
+    }
+   },
+   {
+    "id": "pick_r",
+    "type": "heeler.conditional",
+    "name": "Red source",
+    "at": [
+     510,
+     100
+    ]
+   },
+   {
+    "id": "read_r",
+    "type": "heeler.measure",
+    "name": "Red channel",
+    "at": [
+     680,
+     100
+    ],
+    "params": {
+     "metric": "red"
+    }
+   },
+   {
+    "id": "value_r",
+    "type": "heeler.math",
+    "name": "Red value",
+    "at": [
+     850,
+     100
+    ],
+    "params": {
+     "op": "add"
+    }
+   },
+   {
+    "id": "sel_g",
+    "type": "heeler.math",
+    "name": "Green: B when 1",
+    "at": [
+     340,
+     200
+    ],
+    "params": {
+     "scale": 0,
+     "op": "add"
+    }
+   },
+   {
+    "id": "pick_g",
+    "type": "heeler.conditional",
+    "name": "Green source",
+    "at": [
+     510,
+     200
+    ]
+   },
+   {
+    "id": "read_g",
+    "type": "heeler.measure",
+    "name": "Green channel",
+    "at": [
+     680,
+     200
+    ],
+    "params": {
+     "metric": "green"
+    }
+   },
+   {
+    "id": "value_g",
+    "type": "heeler.math",
+    "name": "Green value",
+    "at": [
+     850,
+     200
+    ],
+    "params": {
+     "op": "add"
+    }
+   },
+   {
+    "id": "sel_b",
+    "type": "heeler.math",
+    "name": "Blue: B when 1",
+    "at": [
+     340,
+     300
+    ],
+    "params": {
+     "scale": 0,
+     "op": "add"
+    }
+   },
+   {
+    "id": "pick_b",
+    "type": "heeler.conditional",
+    "name": "Blue source",
+    "at": [
+     510,
+     300
+    ]
+   },
+   {
+    "id": "read_b",
+    "type": "heeler.measure",
+    "name": "Blue channel",
+    "at": [
+     680,
+     300
+    ],
+    "params": {
+     "metric": "blue"
+    }
+   },
+   {
+    "id": "value_b",
+    "type": "heeler.math",
+    "name": "Blue value",
+    "at": [
+     850,
+     300
+    ],
+    "params": {
+     "op": "add"
+    }
+   },
+   {
+    "id": "join",
+    "type": "heeler.channel_join",
+    "name": "Result",
+    "at": [
+     1020,
+     200
+    ]
+   }
+  ],
+  "wires": [
+   {
+    "from": "a.out",
+    "to": "a_alpha.in"
+   },
+   {
+    "from": "a_alpha.out",
+    "to": "sel_r.in"
+   },
+   {
+    "from": "a.out",
+    "to": "pick_r.in"
+   },
+   {
+    "from": "b.out",
+    "to": "pick_r.in2"
+   },
+   {
+    "from": "sel_r.out",
+    "to": "pick_r.mask"
+   },
+   {
+    "from": "pick_r.out",
+    "to": "read_r.in"
+   },
+   {
+    "from": "read_r.out",
+    "to": "value_r.in"
+   },
+   {
+    "from": "value_r.out",
+    "to": "join.in"
+   },
+   {
+    "from": "a_alpha.out",
+    "to": "sel_g.in"
+   },
+   {
+    "from": "a.out",
+    "to": "pick_g.in"
+   },
+   {
+    "from": "b.out",
+    "to": "pick_g.in2"
+   },
+   {
+    "from": "sel_g.out",
+    "to": "pick_g.mask"
+   },
+   {
+    "from": "pick_g.out",
+    "to": "read_g.in"
+   },
+   {
+    "from": "read_g.out",
+    "to": "value_g.in"
+   },
+   {
+    "from": "value_g.out",
+    "to": "join.in2"
+   },
+   {
+    "from": "a_alpha.out",
+    "to": "sel_b.in"
+   },
+   {
+    "from": "a.out",
+    "to": "pick_b.in"
+   },
+   {
+    "from": "b.out",
+    "to": "pick_b.in2"
+   },
+   {
+    "from": "sel_b.out",
+    "to": "pick_b.mask"
+   },
+   {
+    "from": "pick_b.out",
+    "to": "read_b.in"
+   },
+   {
+    "from": "read_b.out",
+    "to": "value_b.in"
+   },
+   {
+    "from": "value_b.out",
+    "to": "join.in3"
+   },
+   {
+    "from": "a_alpha.out",
+    "to": "join.alpha"
+   }
+  ],
+  "controls": [
+   {
+    "label": "Red from",
+    "options": [
+     {
+      "label": "A red",
+      "set": [
+       {
+        "target": "sel_r.offset",
+        "value": 0
+       },
+       {
+        "target": "read_r.metric",
+        "value": "red"
+       },
+       {
+        "target": "value_r.scale",
+        "value": 1
+       },
+       {
+        "target": "value_r.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "A green",
+      "set": [
+       {
+        "target": "sel_r.offset",
+        "value": 0
+       },
+       {
+        "target": "read_r.metric",
+        "value": "green"
+       },
+       {
+        "target": "value_r.scale",
+        "value": 1
+       },
+       {
+        "target": "value_r.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "A blue",
+      "set": [
+       {
+        "target": "sel_r.offset",
+        "value": 0
+       },
+       {
+        "target": "read_r.metric",
+        "value": "blue"
+       },
+       {
+        "target": "value_r.scale",
+        "value": 1
+       },
+       {
+        "target": "value_r.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "B red",
+      "set": [
+       {
+        "target": "sel_r.offset",
+        "value": 1
+       },
+       {
+        "target": "read_r.metric",
+        "value": "red"
+       },
+       {
+        "target": "value_r.scale",
+        "value": 1
+       },
+       {
+        "target": "value_r.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "B green",
+      "set": [
+       {
+        "target": "sel_r.offset",
+        "value": 1
+       },
+       {
+        "target": "read_r.metric",
+        "value": "green"
+       },
+       {
+        "target": "value_r.scale",
+        "value": 1
+       },
+       {
+        "target": "value_r.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "B blue",
+      "set": [
+       {
+        "target": "sel_r.offset",
+        "value": 1
+       },
+       {
+        "target": "read_r.metric",
+        "value": "blue"
+       },
+       {
+        "target": "value_r.scale",
+        "value": 1
+       },
+       {
+        "target": "value_r.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "0",
+      "set": [
+       {
+        "target": "value_r.scale",
+        "value": 0
+       },
+       {
+        "target": "value_r.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "1",
+      "set": [
+       {
+        "target": "value_r.scale",
+        "value": 0
+       },
+       {
+        "target": "value_r.offset",
+        "value": 1
+       }
+      ]
+     }
+    ],
+    "reads": "read_r.metric"
+   },
+   {
+    "label": "Green from",
+    "options": [
+     {
+      "label": "A red",
+      "set": [
+       {
+        "target": "sel_g.offset",
+        "value": 0
+       },
+       {
+        "target": "read_g.metric",
+        "value": "red"
+       },
+       {
+        "target": "value_g.scale",
+        "value": 1
+       },
+       {
+        "target": "value_g.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "A green",
+      "set": [
+       {
+        "target": "sel_g.offset",
+        "value": 0
+       },
+       {
+        "target": "read_g.metric",
+        "value": "green"
+       },
+       {
+        "target": "value_g.scale",
+        "value": 1
+       },
+       {
+        "target": "value_g.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "A blue",
+      "set": [
+       {
+        "target": "sel_g.offset",
+        "value": 0
+       },
+       {
+        "target": "read_g.metric",
+        "value": "blue"
+       },
+       {
+        "target": "value_g.scale",
+        "value": 1
+       },
+       {
+        "target": "value_g.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "B red",
+      "set": [
+       {
+        "target": "sel_g.offset",
+        "value": 1
+       },
+       {
+        "target": "read_g.metric",
+        "value": "red"
+       },
+       {
+        "target": "value_g.scale",
+        "value": 1
+       },
+       {
+        "target": "value_g.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "B green",
+      "set": [
+       {
+        "target": "sel_g.offset",
+        "value": 1
+       },
+       {
+        "target": "read_g.metric",
+        "value": "green"
+       },
+       {
+        "target": "value_g.scale",
+        "value": 1
+       },
+       {
+        "target": "value_g.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "B blue",
+      "set": [
+       {
+        "target": "sel_g.offset",
+        "value": 1
+       },
+       {
+        "target": "read_g.metric",
+        "value": "blue"
+       },
+       {
+        "target": "value_g.scale",
+        "value": 1
+       },
+       {
+        "target": "value_g.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "0",
+      "set": [
+       {
+        "target": "value_g.scale",
+        "value": 0
+       },
+       {
+        "target": "value_g.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "1",
+      "set": [
+       {
+        "target": "value_g.scale",
+        "value": 0
+       },
+       {
+        "target": "value_g.offset",
+        "value": 1
+       }
+      ]
+     }
+    ],
+    "reads": "read_g.metric"
+   },
+   {
+    "label": "Blue from",
+    "options": [
+     {
+      "label": "A red",
+      "set": [
+       {
+        "target": "sel_b.offset",
+        "value": 0
+       },
+       {
+        "target": "read_b.metric",
+        "value": "red"
+       },
+       {
+        "target": "value_b.scale",
+        "value": 1
+       },
+       {
+        "target": "value_b.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "A green",
+      "set": [
+       {
+        "target": "sel_b.offset",
+        "value": 0
+       },
+       {
+        "target": "read_b.metric",
+        "value": "green"
+       },
+       {
+        "target": "value_b.scale",
+        "value": 1
+       },
+       {
+        "target": "value_b.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "A blue",
+      "set": [
+       {
+        "target": "sel_b.offset",
+        "value": 0
+       },
+       {
+        "target": "read_b.metric",
+        "value": "blue"
+       },
+       {
+        "target": "value_b.scale",
+        "value": 1
+       },
+       {
+        "target": "value_b.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "B red",
+      "set": [
+       {
+        "target": "sel_b.offset",
+        "value": 1
+       },
+       {
+        "target": "read_b.metric",
+        "value": "red"
+       },
+       {
+        "target": "value_b.scale",
+        "value": 1
+       },
+       {
+        "target": "value_b.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "B green",
+      "set": [
+       {
+        "target": "sel_b.offset",
+        "value": 1
+       },
+       {
+        "target": "read_b.metric",
+        "value": "green"
+       },
+       {
+        "target": "value_b.scale",
+        "value": 1
+       },
+       {
+        "target": "value_b.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "B blue",
+      "set": [
+       {
+        "target": "sel_b.offset",
+        "value": 1
+       },
+       {
+        "target": "read_b.metric",
+        "value": "blue"
+       },
+       {
+        "target": "value_b.scale",
+        "value": 1
+       },
+       {
+        "target": "value_b.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "0",
+      "set": [
+       {
+        "target": "value_b.scale",
+        "value": 0
+       },
+       {
+        "target": "value_b.offset",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "label": "1",
+      "set": [
+       {
+        "target": "value_b.scale",
+        "value": 0
+       },
+       {
+        "target": "value_b.offset",
+        "value": 1
+       }
+      ]
+     }
+    ],
+    "reads": "read_b.metric"
+   }
+  ]
+ },
+ "hand_made": {
+  "heeler_recipe": 1,
+  "name": "Hand made: no, yes, on",
+  "description": "Soft screen with a curve",
+  "category": "Looks/Soft",
+  "keywords": "soft screen",
+  "inputs": [
+   {
+    "port": "in",
+    "to": [
+     "soft.in",
+     "blend_mode.in"
+    ]
+   }
+  ],
+  "output": "blend_mode",
+  "nodes": [
+   {
+    "id": "soft",
+    "type": "heeler.blur",
+    "name": "Soft",
+    "note": "the soft half",
+    "tint": "#4a8ac6",
+    "at": [
+     0,
+     0
+    ],
+    "params": {
+     "radius": 12,
+     "kind": "box"
+    }
+   },
+   {
+    "id": "curves",
+    "type": "heeler.curves",
+    "at": [
+     170,
+     0
+    ],
+    "curves": {
+     "rgb": [
+      [
+       0,
+       0
+      ],
+      [
+       0.25,
+       0.2
+      ],
+      [
+       1,
+       1
+      ]
+     ]
+    },
+    "curve_interp": "linear"
+   },
+   {
+    "id": "blend_mode",
+    "type": "heeler.blend",
+    "at": [
+     340,
+     0
+    ],
+    "enabled": false,
+    "params": {
+     "opacity": 40,
+     "mode": "screen"
+    }
+   }
+  ],
+  "wires": [
+   {
+    "from": "soft.out",
+    "to": "curves.in"
+   },
+   {
+    "from": "curves.out",
+    "to": "blend_mode.in2"
+   }
+  ],
+  "controls": [
+   {
+    "label": "Softness",
+    "drives": [
+     "soft.radius"
+    ],
+    "range": [
+     0,
+     60
+    ],
+    "default": 10
+   },
+   {
+    "label": "Mode",
+    "options": [
+     {
+      "label": "Screen",
+      "set": [
+       {
+        "target": "blend_mode.mode",
+        "value": "screen"
+       }
+      ]
+     },
+     {
+      "label": "Overlay",
+      "set": [
+       {
+        "target": "blend_mode.mode",
+        "value": "overlay"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

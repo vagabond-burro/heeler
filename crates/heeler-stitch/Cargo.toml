@@ -1,0 +1,10 @@
+[package]
+name = "heeler-stitch"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+heeler-engine = { path = "../heeler-engine" }
+rayon = "1"
+serde.workspace = true

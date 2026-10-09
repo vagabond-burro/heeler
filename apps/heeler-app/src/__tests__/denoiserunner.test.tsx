@@ -1,0 +1,34 @@
+import { act, render } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { initialState } from "../data";
+import { MODEL_DENOISE_ID } from "../state";
+import { DenoiseRunner, denoiseStatusNow, requestFullDenoise, retryDenoise } from "../ui/denoisetool";
+import * as bridge from "../bridge";
+
+afterEach(() => vi.restoreAllMocks());
+const answer = { version: "1", work: "model" as const, tiles: 1, width: 64, height: 64 };
+it("waits out gestures, serializes full work, retries failure and invalidates after model changes", async () => {
+  const s0 = initialState();
+  const state = { ...s0, nodes: [...s0.nodes, { ...s0.nodes[0], id: MODEL_DENOISE_ID, type: "heeler.model_denoise", enabled: true, params: { method: 1 } }] };
+  let resolve!: (value: typeof answer) => void;
+  const map = vi.spyOn(bridge, "denoiseMap").mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+  const dispatch = vi.fn();
+  const view = render(<DenoiseRunner state={{ ...state, gesture: { key: "drag" } as any }} dispatch={dispatch} />);
+  await act(async () => {});
+  expect(map).not.toHaveBeenCalled();
+  view.rerender(<DenoiseRunner state={state} dispatch={dispatch} />);
+  await act(async () => {});
+  expect(map).toHaveBeenCalledTimes(1);
+  await act(async () => { await requestFullDenoise(state, dispatch); });
+  expect(map).toHaveBeenCalledTimes(1);
+  await act(async () => resolve(answer));
+  map.mockRejectedValueOnce(new Error("temporary failure"));
+  await act(async () => { await bridge.modelUpdateApply("scunet_color_real_psnr"); });
+  expect(map).toHaveBeenCalledTimes(2);
+  expect(denoiseStatusNow().failed).toBeTruthy();
+  map.mockResolvedValue(answer);
+  await act(async () => retryDenoise());
+  expect(map).toHaveBeenCalledTimes(3);
+  expect(denoiseStatusNow().failed).toBeUndefined();
+  view.unmount();
+});

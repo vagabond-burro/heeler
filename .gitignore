@@ -1,1 +1,49 @@
+/target
+node_modules/
+dist/
+
+__pycache__/
+/reference/
+licenses/
+
+# Tauri regenerates these on every build and they differ per platform:
+# building on Windows deletes macOS-schema.json, building on Linux adds
+# linux-schema.json. Tracked, they are dirty after every build and they
+# block a pull on any machine that only consumes the repo. Tauri's own
+# template ignores them for the same reason.
+/apps/heeler-app/src-tauri/gen/schemas/
+
+# macOS's per-folder droppings. Every Mac makes them and no machine
+# wants anyone else's.
 .DS_Store
+
+
+# The source photographs for the demo library: kept locally for
+# re-processing, never published. The stripped demo-*.jpg copies beside
+# them are what the repo carries.
+apps/heeler-app/src/demo-photos/originals/
+# Per-machine golden baselines: raw f32 hashes whose transcendental
+# last bits differ per platform libm. Each machine bootstraps its own.
+# The *_small.txt frames are committed (2026-09-03): they are what
+# catches an op rewrite that drifts, and a per-machine file caught the
+# Recolor fold only by the accident of being stale. The unsuffixed
+# file is the macOS baseline; other platforms commit their own beside
+# it, named by OS and architecture (*_small.windows-x86_64.txt), since
+# the libms disagree in the last bits (tests/golden_baseline/mod.rs).
+crates/heeler-engine/tests/golden_color_chain.txt
+crates/heeler-engine/tests/golden_tone_chain.txt
+crates/heeler-engine/tests/golden_detail_chain.txt
+crates/heeler-engine/tests/golden_field_chain.txt
+crates/heeler-engine/tests/golden_mask_chain.txt
+crates/heeler-engine/tests/golden_geo_chain.txt
+crates/heeler-engine/tests/dof_compare/
+
+# Local AI tool configuration (preview servers, worktrees): per machine,
+# not content.
+/.claude/
+
+# Review and refactor prompts and their reports, from 2026-10-07: they
+# stay on the machine that ran them and never enter the repository
+# ("It's just turning into repo clutter"). A finding worth keeping goes
+# into the commit message that fixes it.
+/.reviews/

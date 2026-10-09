@@ -1,0 +1,17 @@
+{
+  "about": "Questions asked in both Develop and Graph (Ed, 2026-09-28: \"is the assistant context aware if the user is in Adjustments or Node graph? that would matter a lot of the directions being given\"), each with the guide chapters its answer needs in each workspace (null: the question means nothing there). An entry that is a list is satisfied by any one of its chapters. `selected` is the graph's selection when asked (node types). The workspace test (src/__tests__/assistantwhere.test.tsx) runs the local ranking over the real guide in each workspace; src/__tests__/assistantroute.live.test.ts asks the routing call, by hand only.",
+  "questions": [
+    { "q": "How do I desaturate the reds?", "develop": [["adjustments/color-tune.md", "adjustments/color.md", "adjustments/recolor.md"]], "graph": ["graph/nodes/color.md"] },
+    { "q": "How do I darken the sky?", "develop": [["adjustments/sky-rescue.md", "adjustments/color-tune.md"]], "graph": [["graph/nodes/color.md", "graph/nodes/masking.md", "graph/examples.md"]] },
+    { "q": "How do I add grain?", "develop": ["adjustments/grain.md"], "graph": ["graph/nodes/detail.md"] },
+    { "q": "How do I blur only the background?", "develop": ["adjustments/depth-of-field.md"], "graph": [["graph/nodes/detail.md", "graph/nodes/masking.md"]] },
+    { "q": "What does this node do?", "selected": ["heeler.curves"], "develop": null, "graph": ["graph/nodes/color.md"] },
+    { "q": "What does the selected node do?", "selected": ["heeler.depth_map"], "develop": null, "graph": ["graph/nodes/detail.md"] },
+    { "q": "How do I convert the photo to black and white?", "develop": [["adjustments/color.md", "adjustments/black-and-white.md"]], "graph": ["graph/nodes/color.md"] },
+    { "q": "How do I sharpen the photo?", "develop": ["adjustments/sharpening.md"], "graph": ["graph/nodes/detail.md"] },
+    { "q": "How can I brighten only the shadows?", "develop": [["adjustments/relight.md", "adjustments/curves.md", "adjustments/levels.md", "adjustments/exposure.md"]], "graph": [["graph/nodes/color.md", "graph/examples.md"]] },
+    { "q": "How do I add a vignette?", "develop": ["adjustments/vignette.md"], "graph": ["graph/nodes/detail.md"] },
+    { "q": "How do I warm up the white balance?", "develop": ["adjustments/color.md"], "graph": ["graph/nodes/color.md"] },
+    { "q": "How do I reduce the noise?", "develop": ["adjustments/noise-reduction.md"], "graph": ["graph/nodes/detail.md"] }
+  ]
+}

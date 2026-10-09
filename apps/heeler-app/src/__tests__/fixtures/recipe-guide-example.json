@@ -1,0 +1,179 @@
+{
+  "doc": {
+    "category": "Looks",
+    "controls": [
+      {
+        "default": 25.0,
+        "drives": [
+          "soften.radius"
+        ],
+        "label": "Size",
+        "range": [
+          0.0,
+          150.0
+        ]
+      },
+      {
+        "drives": [
+          "glow.opacity"
+        ],
+        "label": "Strength",
+        "range": [
+          0.0,
+          100.0
+        ]
+      },
+      {
+        "label": "Blend",
+        "options": [
+          {
+            "label": "Screen",
+            "set": [
+              {
+                "target": "glow.mode",
+                "value": "screen"
+              }
+            ]
+          },
+          {
+            "label": "Soft Light",
+            "set": [
+              {
+                "target": "glow.mode",
+                "value": "soft_light"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "description": "A dreamy glow over the highlights, its size and strength on the group",
+    "heeler_recipe": 1,
+    "inputs": [
+      {
+        "port": "in",
+        "to": [
+          "picture.in"
+        ]
+      }
+    ],
+    "keywords": "glow bloom orton",
+    "name": "Soft Glow",
+    "nodes": [
+      {
+        "at": [
+          0.0,
+          100.0
+        ],
+        "id": "picture",
+        "name": "Picture",
+        "type": "heeler.merge"
+      },
+      {
+        "at": [
+          170.0,
+          0.0
+        ],
+        "id": "soften",
+        "name": "Glow blur",
+        "params": {
+          "kind": "gaussian",
+          "radius": 25.0
+        },
+        "type": "heeler.blur"
+      },
+      {
+        "at": [
+          340.0,
+          100.0
+        ],
+        "id": "glow",
+        "name": "Glow",
+        "note": "Screen lays the blur over the picture",
+        "params": {
+          "mode": "screen",
+          "opacity": 60.0
+        },
+        "type": "heeler.blend"
+      }
+    ],
+    "output": "glow",
+    "wires": [
+      {
+        "from": "picture.out",
+        "to": "soften.in"
+      },
+      {
+        "from": "picture.out",
+        "to": "glow.in"
+      },
+      {
+        "from": "soften.out",
+        "to": "glow.in2"
+      }
+    ]
+  },
+  "lines": {
+    "category": 5,
+    "controls": 38,
+    "controls.0": 39,
+    "controls.0.default": 42,
+    "controls.0.drives": 40,
+    "controls.0.drives.0": 40,
+    "controls.0.label": 39,
+    "controls.0.range": 41,
+    "controls.1": 43,
+    "controls.1.drives": 44,
+    "controls.1.drives.0": 44,
+    "controls.1.label": 43,
+    "controls.1.range": 45,
+    "controls.2": 46,
+    "controls.2.label": 46,
+    "controls.2.options": 47,
+    "controls.2.options.0": 48,
+    "controls.2.options.0.label": 48,
+    "controls.2.options.0.set": 49,
+    "controls.2.options.0.set.glow.mode": 49,
+    "controls.2.options.1": 50,
+    "controls.2.options.1.label": 50,
+    "controls.2.options.1.set": 51,
+    "controls.2.options.1.set.glow.mode": 51,
+    "description": 4,
+    "heeler_recipe": 2,
+    "inputs": 8,
+    "inputs.in.0": 9,
+    "keywords": 6,
+    "name": 3,
+    "nodes": 12,
+    "nodes.glow": 24,
+    "nodes.glow.at": 27,
+    "nodes.glow.name": 26,
+    "nodes.glow.note": 28,
+    "nodes.glow.params": 29,
+    "nodes.glow.params.mode": 30,
+    "nodes.glow.params.opacity": 31,
+    "nodes.glow.type": 25,
+    "nodes.picture": 13,
+    "nodes.picture.at": 16,
+    "nodes.picture.name": 15,
+    "nodes.picture.type": 14,
+    "nodes.soften": 17,
+    "nodes.soften.at": 20,
+    "nodes.soften.name": 19,
+    "nodes.soften.params": 21,
+    "nodes.soften.params.kind": 23,
+    "nodes.soften.params.radius": 22,
+    "nodes.soften.type": 18,
+    "output": 10,
+    "wires": 33,
+    "wires.0": 34,
+    "wires.0.from": 34,
+    "wires.0.to": 34,
+    "wires.1": 35,
+    "wires.1.from": 35,
+    "wires.1.to": 35,
+    "wires.2": 36,
+    "wires.2.from": 36,
+    "wires.2.to": 36
+  }
+}

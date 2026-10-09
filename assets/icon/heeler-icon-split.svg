@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="78%">
+      <stop offset="0%" stop-color="#262d35"/>
+      <stop offset="100%" stop-color="#13161a"/>
+    </radialGradient>
+    <clipPath id="rightHalf">
+      <rect x="256" y="0" width="256" height="512"/>
+    </clipPath>
+  </defs>
+
+  <!-- icon plate -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+
+  <!-- head silhouette, ungraded steel blue -->
+  <path id="head" d="M 118 84 L 150 210 L 138 296 L 196 344 L 228 404 Q 256 432 284 404 L 316 344 L 374 296 L 362 210 L 394 84 L 286 152 Q 256 138 226 152 Z" fill="#5b6d7e"/>
+
+  <!-- graded warm half -->
+  <g clip-path="url(#rightHalf)">
+    <path d="M 118 84 L 150 210 L 138 296 L 196 344 L 228 404 Q 256 432 284 404 L 316 344 L 374 296 L 362 210 L 394 84 L 286 152 Q 256 138 226 152 Z" fill="#cf9140"/>
+  </g>
+
+  <!-- heeler coat speckles, cool side -->
+  <g fill="#47576a">
+    <circle cx="185" cy="250" r="6"/>
+    <circle cx="205" cy="315" r="4.5"/>
+    <circle cx="168" cy="285" r="3.5"/>
+    <circle cx="222" cy="205" r="3.5"/>
+  </g>
+  <!-- heeler coat speckles, warm side -->
+  <g fill="#a5642a">
+    <circle cx="327" cy="250" r="6"/>
+    <circle cx="307" cy="315" r="4.5"/>
+    <circle cx="344" cy="285" r="3.5"/>
+    <circle cx="290" cy="205" r="3.5"/>
+  </g>
+
+  <!-- eyes -->
+  <circle cx="204" cy="262" r="10" fill="#222a31"/>
+  <circle cx="208" cy="258" r="3" fill="#cfd9e2" opacity="0.85"/>
+  <circle cx="308" cy="262" r="10" fill="#33220f"/>
+  <circle cx="312" cy="258" r="3" fill="#f5e3c4" opacity="0.85"/>
+
+  <!-- nose -->
+  <path d="M 238 386 h 36 l -13 24 a 6 6 0 0 1 -10 0 z" fill="#232b33"/>
+
+  <!-- before/after split line -->
+  <line x1="256" y1="70" x2="256" y2="442" stroke="#eef2f5" stroke-width="4" stroke-linecap="round" opacity="0.85"/>
+
+  <!-- split handle, sitting in the gap between the ears -->
+  <circle cx="256" cy="104" r="16" fill="#eef2f5"/>
+  <g stroke="#1a1f24" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 251 98 l -6 6 6 6"/>
+    <path d="M 261 98 l 6 6 -6 6"/>
+  </g>
+</svg>

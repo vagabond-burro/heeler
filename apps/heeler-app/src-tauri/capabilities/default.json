@@ -1,0 +1,18 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability for the main window and every pop-out. A window missing from this list gets no Tauri APIs at all: it loads, and then nothing in it works, silently. allow-destroy rides with allow-close: once the frontend listens for the close request (app.tsx flushes the autosave first), Tauri hands the actual closing to the frontend, and that is a destroy call. Without it the close button and File > Exit did nothing.",
+  "windows": ["main", "graph", "spectrum", "takes", "bend", "console", "wheels", "curves", "toneeq", "recolor", "colorconsole"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-destroy",
+    "core:window:allow-set-focus"
+  ]
+}

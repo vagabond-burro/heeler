@@ -1,0 +1,19 @@
+[package]
+name = "heeler-raw"
+version.workspace = true
+edition.workspace = true
+# LibRaw is consumed under its CDDL-1.0 dual-license option; the license
+# text ships beside the source it covers, in the vendored tree under
+# third_party/. No GPL-family code. The version lives in build.rs as
+# LIBRAW_VERSION and nowhere else: this note used to name 0.21.3 for a
+# month after the build moved to 0.22.2.
+license = "MPL-2.0 AND CDDL-1.0"
+
+[dependencies]
+heeler-engine = { path = "../heeler-engine" }
+libz-sys = { version = "1.1.29", default-features = false, features = ["static"] }
+mozjpeg-sys = "2.2.3"
+thiserror.workspace = true
+
+[build-dependencies]
+cc = "1"

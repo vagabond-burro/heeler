@@ -1,0 +1,1340 @@
+{
+ "old": {
+  "schema_version": 1,
+  "graph_id": "layer_opacity_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {
+     "camera_wb": 1,
+     "camera_matrix": 1
+    },
+    "x": 24,
+    "y": 24
+   },
+   {
+    "id": "stdcolor",
+    "type": "heeler.standard_color",
+    "label": "Standard Color",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 0,
+     "vibrance": 0,
+     "texture": 0,
+     "clarity": 0,
+     "dehaze": 0,
+     "texture_shadows": 100,
+     "texture_midtones": 100,
+     "texture_highlights": 100,
+     "texture_red": 100,
+     "texture_green": 100,
+     "texture_blue": 100,
+     "clarity_shadows": 100,
+     "clarity_midtones": 100,
+     "clarity_highlights": 100,
+     "clarity_red": 100,
+     "clarity_green": 100,
+     "clarity_blue": 100,
+     "dehaze_shadows": 100,
+     "dehaze_midtones": 100,
+     "dehaze_highlights": 100,
+     "dehaze_red": 100,
+     "dehaze_green": 100,
+     "dehaze_blue": 100
+    },
+    "x": 224,
+    "y": 24
+   },
+   {
+    "id": "exposure",
+    "type": "heeler.exposure",
+    "label": "Exposure",
+    "enabled": true,
+    "params": {
+     "exposure": 0,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 424,
+    "y": 24
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 824,
+    "y": 24
+   },
+   {
+    "id": "profile",
+    "type": "heeler.tone_profile",
+    "label": "Tone Profile",
+    "enabled": true,
+    "params": {
+     "contrast": 100,
+     "colorfulness": 0,
+     "development": 0,
+     "baseline_ev": 1.3,
+     "shadow_toe": 50,
+     "highlight_rolloff": 25,
+     "mode": "standard",
+     "film": ""
+    },
+    "x": 624,
+    "y": 24
+   },
+   {
+    "id": "layer_1_adj",
+    "type": "heeler.exposure",
+    "label": "Radial 1",
+    "enabled": true,
+    "params": {
+     "exposure": 1,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 199,
+    "y": 484
+   },
+   {
+    "id": "layer_1_mask",
+    "type": "heeler.radial_mask",
+    "label": "Radial Mask",
+    "enabled": true,
+    "params": {
+     "depth_on": false,
+     "depth_invert": false,
+     "depth_black": 0,
+     "depth_white": 1,
+     "depth_gamma": 1,
+     "depth_black_soft": 0,
+     "depth_white_soft": 0,
+     "center_x": 0.5,
+     "center_y": 0.5,
+     "radius": 0.3,
+     "feather": 0.4,
+     "aspect": 1,
+     "rotation": 0,
+     "shape_amount": 0.5,
+     "shape": "ellipse"
+    },
+    "x": 199,
+    "y": 580
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "stdcolor",
+     "out"
+    ],
+    "to": [
+     "exposure",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "profile",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "stdcolor",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "exposure",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_adj",
+     "out"
+    ],
+    "to": [
+     "profile",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "layer_1_mask",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "mask"
+    ]
+   }
+  ]
+ },
+ "p0": {
+  "schema_version": 1,
+  "graph_id": "layer_opacity_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {
+     "camera_wb": 1,
+     "camera_matrix": 1
+    },
+    "x": 24,
+    "y": 24
+   },
+   {
+    "id": "stdcolor",
+    "type": "heeler.standard_color",
+    "label": "Standard Color",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 0,
+     "vibrance": 0,
+     "texture": 0,
+     "clarity": 0,
+     "dehaze": 0,
+     "texture_shadows": 100,
+     "texture_midtones": 100,
+     "texture_highlights": 100,
+     "texture_red": 100,
+     "texture_green": 100,
+     "texture_blue": 100,
+     "clarity_shadows": 100,
+     "clarity_midtones": 100,
+     "clarity_highlights": 100,
+     "clarity_red": 100,
+     "clarity_green": 100,
+     "clarity_blue": 100,
+     "dehaze_shadows": 100,
+     "dehaze_midtones": 100,
+     "dehaze_highlights": 100,
+     "dehaze_red": 100,
+     "dehaze_green": 100,
+     "dehaze_blue": 100
+    },
+    "x": 224,
+    "y": 24
+   },
+   {
+    "id": "exposure",
+    "type": "heeler.exposure",
+    "label": "Exposure",
+    "enabled": true,
+    "params": {
+     "exposure": 0,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 424,
+    "y": 24
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 824,
+    "y": 24
+   },
+   {
+    "id": "profile",
+    "type": "heeler.tone_profile",
+    "label": "Tone Profile",
+    "enabled": true,
+    "params": {
+     "contrast": 100,
+     "colorfulness": 0,
+     "development": 0,
+     "baseline_ev": 1.3,
+     "shadow_toe": 50,
+     "highlight_rolloff": 25,
+     "mode": "standard",
+     "film": ""
+    },
+    "x": 624,
+    "y": 24
+   },
+   {
+    "id": "layer_1_adj",
+    "type": "heeler.exposure",
+    "label": "Radial 1",
+    "enabled": true,
+    "params": {
+     "exposure": 1,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0,
+     "opacity": 0
+    },
+    "x": 199,
+    "y": 484
+   },
+   {
+    "id": "layer_1_mask",
+    "type": "heeler.radial_mask",
+    "label": "Radial Mask",
+    "enabled": true,
+    "params": {
+     "depth_on": false,
+     "depth_invert": false,
+     "depth_black": 0,
+     "depth_white": 1,
+     "depth_gamma": 1,
+     "depth_black_soft": 0,
+     "depth_white_soft": 0,
+     "center_x": 0.5,
+     "center_y": 0.5,
+     "radius": 0.3,
+     "feather": 0.4,
+     "aspect": 1,
+     "rotation": 0,
+     "shape_amount": 0.5,
+     "shape": "ellipse"
+    },
+    "x": 199,
+    "y": 580
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "stdcolor",
+     "out"
+    ],
+    "to": [
+     "exposure",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "profile",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "stdcolor",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "exposure",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_adj",
+     "out"
+    ],
+    "to": [
+     "profile",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "layer_1_mask",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "mask"
+    ]
+   }
+  ]
+ },
+ "p50": {
+  "schema_version": 1,
+  "graph_id": "layer_opacity_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {
+     "camera_wb": 1,
+     "camera_matrix": 1
+    },
+    "x": 24,
+    "y": 24
+   },
+   {
+    "id": "stdcolor",
+    "type": "heeler.standard_color",
+    "label": "Standard Color",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 0,
+     "vibrance": 0,
+     "texture": 0,
+     "clarity": 0,
+     "dehaze": 0,
+     "texture_shadows": 100,
+     "texture_midtones": 100,
+     "texture_highlights": 100,
+     "texture_red": 100,
+     "texture_green": 100,
+     "texture_blue": 100,
+     "clarity_shadows": 100,
+     "clarity_midtones": 100,
+     "clarity_highlights": 100,
+     "clarity_red": 100,
+     "clarity_green": 100,
+     "clarity_blue": 100,
+     "dehaze_shadows": 100,
+     "dehaze_midtones": 100,
+     "dehaze_highlights": 100,
+     "dehaze_red": 100,
+     "dehaze_green": 100,
+     "dehaze_blue": 100
+    },
+    "x": 224,
+    "y": 24
+   },
+   {
+    "id": "exposure",
+    "type": "heeler.exposure",
+    "label": "Exposure",
+    "enabled": true,
+    "params": {
+     "exposure": 0,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 424,
+    "y": 24
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 824,
+    "y": 24
+   },
+   {
+    "id": "profile",
+    "type": "heeler.tone_profile",
+    "label": "Tone Profile",
+    "enabled": true,
+    "params": {
+     "contrast": 100,
+     "colorfulness": 0,
+     "development": 0,
+     "baseline_ev": 1.3,
+     "shadow_toe": 50,
+     "highlight_rolloff": 25,
+     "mode": "standard",
+     "film": ""
+    },
+    "x": 624,
+    "y": 24
+   },
+   {
+    "id": "layer_1_adj",
+    "type": "heeler.exposure",
+    "label": "Radial 1",
+    "enabled": true,
+    "params": {
+     "exposure": 1,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0,
+     "opacity": 50
+    },
+    "x": 199,
+    "y": 484
+   },
+   {
+    "id": "layer_1_mask",
+    "type": "heeler.radial_mask",
+    "label": "Radial Mask",
+    "enabled": true,
+    "params": {
+     "depth_on": false,
+     "depth_invert": false,
+     "depth_black": 0,
+     "depth_white": 1,
+     "depth_gamma": 1,
+     "depth_black_soft": 0,
+     "depth_white_soft": 0,
+     "center_x": 0.5,
+     "center_y": 0.5,
+     "radius": 0.3,
+     "feather": 0.4,
+     "aspect": 1,
+     "rotation": 0,
+     "shape_amount": 0.5,
+     "shape": "ellipse"
+    },
+    "x": 199,
+    "y": 580
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "stdcolor",
+     "out"
+    ],
+    "to": [
+     "exposure",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "profile",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "stdcolor",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "exposure",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_adj",
+     "out"
+    ],
+    "to": [
+     "profile",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "layer_1_mask",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "mask"
+    ]
+   }
+  ]
+ },
+ "p100": {
+  "schema_version": 1,
+  "graph_id": "layer_opacity_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {
+     "camera_wb": 1,
+     "camera_matrix": 1
+    },
+    "x": 24,
+    "y": 24
+   },
+   {
+    "id": "stdcolor",
+    "type": "heeler.standard_color",
+    "label": "Standard Color",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 0,
+     "vibrance": 0,
+     "texture": 0,
+     "clarity": 0,
+     "dehaze": 0,
+     "texture_shadows": 100,
+     "texture_midtones": 100,
+     "texture_highlights": 100,
+     "texture_red": 100,
+     "texture_green": 100,
+     "texture_blue": 100,
+     "clarity_shadows": 100,
+     "clarity_midtones": 100,
+     "clarity_highlights": 100,
+     "clarity_red": 100,
+     "clarity_green": 100,
+     "clarity_blue": 100,
+     "dehaze_shadows": 100,
+     "dehaze_midtones": 100,
+     "dehaze_highlights": 100,
+     "dehaze_red": 100,
+     "dehaze_green": 100,
+     "dehaze_blue": 100
+    },
+    "x": 224,
+    "y": 24
+   },
+   {
+    "id": "exposure",
+    "type": "heeler.exposure",
+    "label": "Exposure",
+    "enabled": true,
+    "params": {
+     "exposure": 0,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 424,
+    "y": 24
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 824,
+    "y": 24
+   },
+   {
+    "id": "profile",
+    "type": "heeler.tone_profile",
+    "label": "Tone Profile",
+    "enabled": true,
+    "params": {
+     "contrast": 100,
+     "colorfulness": 0,
+     "development": 0,
+     "baseline_ev": 1.3,
+     "shadow_toe": 50,
+     "highlight_rolloff": 25,
+     "mode": "standard",
+     "film": ""
+    },
+    "x": 624,
+    "y": 24
+   },
+   {
+    "id": "layer_1_adj",
+    "type": "heeler.exposure",
+    "label": "Radial 1",
+    "enabled": true,
+    "params": {
+     "exposure": 1,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0,
+     "opacity": 100
+    },
+    "x": 199,
+    "y": 484
+   },
+   {
+    "id": "layer_1_mask",
+    "type": "heeler.radial_mask",
+    "label": "Radial Mask",
+    "enabled": true,
+    "params": {
+     "depth_on": false,
+     "depth_invert": false,
+     "depth_black": 0,
+     "depth_white": 1,
+     "depth_gamma": 1,
+     "depth_black_soft": 0,
+     "depth_white_soft": 0,
+     "center_x": 0.5,
+     "center_y": 0.5,
+     "radius": 0.3,
+     "feather": 0.4,
+     "aspect": 1,
+     "rotation": 0,
+     "shape_amount": 0.5,
+     "shape": "ellipse"
+    },
+    "x": 199,
+    "y": 580
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "stdcolor",
+     "out"
+    ],
+    "to": [
+     "exposure",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "profile",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "stdcolor",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "exposure",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_adj",
+     "out"
+    ],
+    "to": [
+     "profile",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "layer_1_mask",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "mask"
+    ]
+   }
+  ]
+ },
+ "tool_old": {
+  "schema_version": 1,
+  "graph_id": "layer_opacity_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {
+     "camera_wb": 1,
+     "camera_matrix": 1
+    },
+    "x": 24,
+    "y": 24
+   },
+   {
+    "id": "stdcolor",
+    "type": "heeler.standard_color",
+    "label": "Standard Color",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 0,
+     "vibrance": 0,
+     "texture": 0,
+     "clarity": 0,
+     "dehaze": 0,
+     "texture_shadows": 100,
+     "texture_midtones": 100,
+     "texture_highlights": 100,
+     "texture_red": 100,
+     "texture_green": 100,
+     "texture_blue": 100,
+     "clarity_shadows": 100,
+     "clarity_midtones": 100,
+     "clarity_highlights": 100,
+     "clarity_red": 100,
+     "clarity_green": 100,
+     "clarity_blue": 100,
+     "dehaze_shadows": 100,
+     "dehaze_midtones": 100,
+     "dehaze_highlights": 100,
+     "dehaze_red": 100,
+     "dehaze_green": 100,
+     "dehaze_blue": 100
+    },
+    "x": 224,
+    "y": 24
+   },
+   {
+    "id": "exposure",
+    "type": "heeler.exposure",
+    "label": "Exposure",
+    "enabled": true,
+    "params": {
+     "exposure": 0,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 424,
+    "y": 24
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 824,
+    "y": 24
+   },
+   {
+    "id": "profile",
+    "type": "heeler.tone_profile",
+    "label": "Tone Profile",
+    "enabled": true,
+    "params": {
+     "contrast": 100,
+     "colorfulness": 0,
+     "development": 0,
+     "baseline_ev": 1.3,
+     "shadow_toe": 50,
+     "highlight_rolloff": 25,
+     "mode": "standard",
+     "film": ""
+    },
+    "x": 624,
+    "y": 24
+   },
+   {
+    "id": "layer_1_adj",
+    "type": "heeler.exposure",
+    "label": "Radial 1",
+    "enabled": true,
+    "params": {
+     "exposure": 1,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 199,
+    "y": 484
+   },
+   {
+    "id": "layer_1_mask",
+    "type": "heeler.radial_mask",
+    "label": "Radial Mask",
+    "enabled": true,
+    "params": {
+     "depth_on": false,
+     "depth_invert": false,
+     "depth_black": 0,
+     "depth_white": 1,
+     "depth_gamma": 1,
+     "depth_black_soft": 0,
+     "depth_white_soft": 0,
+     "center_x": 0.5,
+     "center_y": 0.5,
+     "radius": 0.3,
+     "feather": 0.4,
+     "aspect": 1,
+     "rotation": 0,
+     "shape_amount": 0.5,
+     "shape": "ellipse"
+    },
+    "x": 199,
+    "y": 580
+   },
+   {
+    "id": "layer_1_color",
+    "type": "heeler.standard_color",
+    "label": "Color",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 60,
+     "vibrance": 0
+    },
+    "x": 199,
+    "y": 676
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "stdcolor",
+     "out"
+    ],
+    "to": [
+     "exposure",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "profile",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "stdcolor",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "exposure",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "layer_1_mask",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_adj",
+     "out"
+    ],
+    "to": [
+     "layer_1_color",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_color",
+     "out"
+    ],
+    "to": [
+     "profile",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "layer_1_color",
+     "mask"
+    ]
+   }
+  ]
+ },
+ "tool_p0": {
+  "schema_version": 1,
+  "graph_id": "layer_opacity_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {
+     "camera_wb": 1,
+     "camera_matrix": 1
+    },
+    "x": 24,
+    "y": 24
+   },
+   {
+    "id": "stdcolor",
+    "type": "heeler.standard_color",
+    "label": "Standard Color",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 0,
+     "vibrance": 0,
+     "texture": 0,
+     "clarity": 0,
+     "dehaze": 0,
+     "texture_shadows": 100,
+     "texture_midtones": 100,
+     "texture_highlights": 100,
+     "texture_red": 100,
+     "texture_green": 100,
+     "texture_blue": 100,
+     "clarity_shadows": 100,
+     "clarity_midtones": 100,
+     "clarity_highlights": 100,
+     "clarity_red": 100,
+     "clarity_green": 100,
+     "clarity_blue": 100,
+     "dehaze_shadows": 100,
+     "dehaze_midtones": 100,
+     "dehaze_highlights": 100,
+     "dehaze_red": 100,
+     "dehaze_green": 100,
+     "dehaze_blue": 100
+    },
+    "x": 224,
+    "y": 24
+   },
+   {
+    "id": "exposure",
+    "type": "heeler.exposure",
+    "label": "Exposure",
+    "enabled": true,
+    "params": {
+     "exposure": 0,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 424,
+    "y": 24
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 824,
+    "y": 24
+   },
+   {
+    "id": "profile",
+    "type": "heeler.tone_profile",
+    "label": "Tone Profile",
+    "enabled": true,
+    "params": {
+     "contrast": 100,
+     "colorfulness": 0,
+     "development": 0,
+     "baseline_ev": 1.3,
+     "shadow_toe": 50,
+     "highlight_rolloff": 25,
+     "mode": "standard",
+     "film": ""
+    },
+    "x": 624,
+    "y": 24
+   },
+   {
+    "id": "layer_1_adj",
+    "type": "heeler.exposure",
+    "label": "Radial 1",
+    "enabled": true,
+    "params": {
+     "exposure": 1,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0,
+     "opacity": 0
+    },
+    "x": 199,
+    "y": 484
+   },
+   {
+    "id": "layer_1_mask",
+    "type": "heeler.radial_mask",
+    "label": "Radial Mask",
+    "enabled": true,
+    "params": {
+     "depth_on": false,
+     "depth_invert": false,
+     "depth_black": 0,
+     "depth_white": 1,
+     "depth_gamma": 1,
+     "depth_black_soft": 0,
+     "depth_white_soft": 0,
+     "center_x": 0.5,
+     "center_y": 0.5,
+     "radius": 0.3,
+     "feather": 0.4,
+     "aspect": 1,
+     "rotation": 0,
+     "shape_amount": 0.5,
+     "shape": "ellipse"
+    },
+    "x": 199,
+    "y": 580
+   },
+   {
+    "id": "layer_1_color",
+    "type": "heeler.standard_color",
+    "label": "Color",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 60,
+     "vibrance": 0
+    },
+    "x": 199,
+    "y": 676
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "stdcolor",
+     "out"
+    ],
+    "to": [
+     "exposure",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "profile",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "stdcolor",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "exposure",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "layer_1_mask",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_adj",
+     "out"
+    ],
+    "to": [
+     "layer_1_color",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_color",
+     "out"
+    ],
+    "to": [
+     "profile",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "layer_1_color",
+     "mask"
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,186 @@
+{
+  "about": "How-do-I questions and the guided tours they should produce (src/tour.ts, docs/spec-agentic.md \"Guided tours\"). Each has the guide chapters its answer comes from, an answer a model might write from them, and a scripted tour reply. The test (src/__tests__/tour.test.ts) runs each against the stop list offline: every stop the reply names must be among the stops offered for that question and answer, the reply must pass the check with exactly the expected sequence, and the walk must complete when the user does each step (the `user` field names what the user does, in the test's own words).",
+  "questions": [
+    {
+      "q": "How do I make a photo black and white?",
+      "chapters": ["adjustments/color.md", "adjustments/black-and-white.md"],
+      "answer": "Open the **Color** section in Adjustments and set **Treatment** to black and white. Then use the mix: **Red**, **Green** and **Blue** set how bright each color renders; lower Blue to darken a blue sky.",
+      "reply": { "steps": [
+        { "stop": "section.color", "say": "Unfold the Color section." },
+        { "stop": "bw.treatment", "say": "Set Treatment to black and white." },
+        { "stop": "bw.mix.blue", "say": "Lower Blue to darken a blue sky." }
+      ] },
+      "expect": ["section.color", "bw.treatment", "bw.mix.blue"],
+      "user": ["open_section:Color", "bw_on", "bw_blue"]
+    },
+    {
+      "q": "How do I crop to 16:9?",
+      "chapters": ["image-viewport.md", "adjustments/geometry.md"],
+      "answer": "Choose **Crop** above the photograph, pick 16:9 in the crop's ratio list, then drag the frame's handles.",
+      "reply": { "steps": [
+        { "stop": "viewer.crop", "say": "Click Crop to arm the crop tool." },
+        { "stop": "viewer.crop.ratio", "say": "Choose 16:9 in the ratio list." },
+        { "stop": "viewer.crop.frame", "say": "Drag the frame's handles to recompose." }
+      ] },
+      "expect": ["viewer.crop", "viewer.crop.ratio", "viewer.crop.frame"],
+      "user": ["tool:crop", "ratio:16:9", "crop_drag"]
+    },
+    {
+      "q": "How do I crop to 16:9 from the menu?",
+      "chapters": ["image-viewport.md", "menus.md"],
+      "answer": "Choose **Photo > Crop / Straighten > Crop to Aspect Ratio > 16:9**; the crop tool arms held to 16:9.",
+      "reply": { "steps": [
+        { "stop": "menu.photo", "say": "Open the Photo menu." },
+        { "stop": "menu.photo.crop", "say": "Point to Crop / Straighten." },
+        { "stop": "menu.photo.ratio", "say": "Point to Crop to Aspect Ratio." },
+        { "stop": "menu.photo.ratio.16-9", "say": "Choose 16:9." }
+      ] },
+      "expect": ["menu.photo", "menu.photo.crop", "menu.photo.ratio", "menu.photo.ratio.16-9"]
+    },
+    {
+      "q": "How do I export a JPEG 2048 pixels on the long side?",
+      "chapters": ["export.md"],
+      "answer": "Open the **Export** panel on the right, set **Format** to JPEG and **Size** to 2048, then press **Export**.",
+      "reply": { "steps": [
+        { "stop": "export.open", "say": "Open the Export panel on the right edge." },
+        { "stop": "export.format", "say": "Set Format to JPEG." },
+        { "stop": "export.size.2048", "say": "Choose 2048 for the long side." },
+        { "stop": "export.run", "say": "Press Export to write the file." }
+      ] },
+      "expect": ["export.open", "export.format", "export.size.2048", "export.run"],
+      "user": ["toggle_export", "format:png", "size:2048"]
+    },
+    {
+      "q": "How do I remove a dust spot?",
+      "chapters": ["finish/pixel-layer.md", "finish/toolbar.md"],
+      "answer": "In the **Finish** tab add a **Pixel layer**, choose **Clone / Heal** on the toolbar, Alt-click a clean spot, then brush over the dust.",
+      "reply": { "steps": [
+        { "stop": "tab.layers", "say": "Open the Finish tab." },
+        { "stop": "finish.add.paint", "say": "Add a Pixel layer to retouch on." },
+        { "stop": "finish.tool.repair", "say": "Choose Heal on the toolbar." },
+        { "stop": "viewer.photograph", "say": "Alt-click a clean spot beside the dust, then brush over the dust." }
+      ] },
+      "expect": ["tab.layers", "finish.add.paint", "finish.tool.repair", "viewer.photograph"]
+    },
+    {
+      "q": "How do I straighten a crooked horizon?",
+      "chapters": ["image-viewport.md", "adjustments/geometry.md"],
+      "answer": "Choose **Straighten** above the photograph and drag along the horizon; the photograph turns to level it.",
+      "reply": { "steps": [
+        { "stop": "viewer.straighten", "say": "Click Straighten, then drag along the horizon." }
+      ] },
+      "expect": ["viewer.straighten"],
+      "user": ["tool:straighten"]
+    },
+    {
+      "q": "How do I add film grain?",
+      "chapters": ["adjustments/grain.md"],
+      "answer": "Switch the **Grain** section on and raise **Grain amount**; **Grain size** sets how coarse it is.",
+      "reply": { "steps": [
+        { "stop": "section.grain.on", "say": "Switch Grain on." },
+        { "stop": "control.grain.intensity", "say": "Raise Grain amount." },
+        { "stop": "control.grain.size", "say": "Set Grain size." }
+      ] },
+      "expect": ["section.grain.on", "control.grain.intensity", "control.grain.size"]
+    },
+    {
+      "q": "How do I darken the corners with a vignette?",
+      "chapters": ["adjustments/vignette.md"],
+      "answer": "Switch **Vignette** on and lower **Amount** to darken the corners; **Midpoint** moves where it starts.",
+      "reply": { "steps": [
+        { "stop": "section.vignette.on", "say": "Switch Vignette on." },
+        { "stop": "control.vignette.vignette", "say": "Lower Amount to darken the corners \u2014 gently." }
+      ] },
+      "expect": ["section.vignette.on", "control.vignette.vignette"]
+    },
+    {
+      "q": "How do I add a node that lowers saturation in the graph?",
+      "chapters": ["graph/canvas.md", "graph/nodes/color.md"],
+      "answer": "In Graph, add a **Desaturate** node from the palette (Shift+Space), drop it on the wire before Output so it splices in, then lower saturation in the Inspector.",
+      "reply": { "steps": [
+        { "stop": "mode.graph", "say": "Switch to the Graph workspace." },
+        { "stop": "graph.add.desaturate", "say": "Add a Desaturate node." },
+        { "stop": "graph.splice", "from": "node.desaturate", "say": "Drop it on the wire before Output." },
+        { "stop": "graph.inspector.controls", "say": "Set how much color it takes out in the Inspector." }
+      ] },
+      "expect": ["mode.graph", "graph.add.desaturate", "graph.splice", "graph.inspector.controls"],
+      "graph": true
+    },
+    {
+      "q": "How do I use the red channel as a mask in the node graph?",
+      "chapters": ["graph/canvas.md", "graph/nodes/utility.md", "graph/nodes/masking.md"],
+      "answer": "Add a **Channel** node set to red and wire **Image Source** into it. Its output is a field: drag it to the mask input of the node it should limit, for example an **Exposure** node.",
+      "reply": { "steps": [
+        { "stop": "graph.add.channel_extract", "say": "Add a Channel node." },
+        { "stop": "graph.connect", "from": "port.image_source.out", "to": "port.channel_extract.in", "say": "Drag from Image Source's output to Channel's input." },
+        { "stop": "graph.inspector.controls", "say": "Choose the red channel in the Inspector." },
+        { "stop": "graph.add.exposure", "say": "Add an Exposure node to limit." },
+        { "stop": "graph.connect", "from": "port.channel_extract.mask-out", "to": "port.exposure.mask", "say": "Drag Channel's output to Exposure's mask diamond." }
+      ] },
+      "expect": ["graph.add.channel_extract", "graph.connect", "graph.inspector.controls", "graph.add.exposure", "graph.connect"],
+      "graph": true,
+      "user": ["add:heeler.channel_extract", "wire:heeler.image_source>heeler.channel_extract.in", "param:heeler.channel_extract", "add:heeler.exposure", "wire:heeler.channel_extract>heeler.exposure.mask"]
+    },
+    {
+      "q": "How do I split a picture into two branches and blend them back together?",
+      "chapters": ["graph/canvas.md", "graph/nodes/utility.md", "graph/examples.md"],
+      "answer": "Drag from **Image Source** to a second node (a **Blur**), then bring both branches into a **Blend Mode**: the original on its base, the blurred one on its top.",
+      "reply": { "steps": [
+        { "stop": "graph.add.blur", "say": "Add a Blur for the second branch." },
+        { "stop": "graph.connect", "from": "port.image_source.out", "to": "port.blur.in", "say": "Drag from Image Source's output to Blur's input." },
+        { "stop": "graph.add.blend", "say": "Add a Blend Mode to join the branches." },
+        { "stop": "graph.connect", "from": "port.image_source.out", "to": "port.blend.in", "say": "Wire Image Source into Blend Mode's base." },
+        { "stop": "graph.connect", "from": "port.blur.out", "to": "port.blend.in2", "say": "Wire Blur into Blend Mode's top input." }
+      ] },
+      "expect": ["graph.add.blur", "graph.connect", "graph.add.blend", "graph.connect", "graph.connect"],
+      "graph": true
+    },
+    {
+      "q": "How do I add a Blur only to the sky using a mask in the graph?",
+      "chapters": ["graph/canvas.md", "graph/nodes/masking.md", "graph/nodes/detail.md"],
+      "answer": "Add a **Blur** and splice it into the chain, then add a **Hue Range Mask** on the blues and drag its output to Blur's mask input.",
+      "reply": { "steps": [
+        { "stop": "graph.add.blur", "say": "Add a Blur." },
+        { "stop": "graph.splice", "from": "node.blur", "say": "Drop it on the wire before Output." },
+        { "stop": "graph.add.hue_range_mask", "say": "Add a Hue Range Mask." },
+        { "stop": "graph.connect", "from": "port.hue_range_mask.mask-out", "to": "port.blur.mask", "say": "Drag the mask's output to Blur's mask diamond." }
+      ] },
+      "expect": ["graph.add.blur", "graph.splice", "graph.add.hue_range_mask", "graph.connect"],
+      "graph": true
+    },
+    {
+      "q": "How do I insert a node between two connected nodes?",
+      "chapters": ["graph/canvas.md"],
+      "answer": "Add the node (for example **Sharpen**) and drag it onto the wire between the two: it splices in and its neighbors reconnect through it.",
+      "reply": { "steps": [
+        { "stop": "graph.add.sharpen", "say": "Add a Sharpen node." },
+        { "stop": "graph.splice", "from": "node.sharpen", "say": "Drag it onto the wire between the two nodes and drop it." }
+      ] },
+      "expect": ["graph.add.sharpen", "graph.splice"],
+      "graph": true
+    },
+    {
+      "q": "How do I group nodes in the graph?",
+      "chapters": ["graph/groups-popout.md", "graph/canvas.md"],
+      "answer": "Select two or more nodes (Shift-click or drag a marquee), right-click and choose **Save selection as group...**, then name it.",
+      "reply": { "steps": [
+        { "stop": "graph.canvas", "say": "Shift-click two or more nodes to select them." },
+        { "stop": "graph.menu", "say": "Right-click the selection." },
+        { "stop": "graph.group", "say": "Choose Save selection as group and name it." }
+      ] },
+      "expect": ["graph.canvas", "graph.menu", "graph.group"],
+      "graph": true
+    },
+    {
+      "q": "How do I organize the graph with a backdrop?",
+      "chapters": ["graph/groups-popout.md"],
+      "answer": "Right-click the canvas and choose **Add backdrop**; drag or resize it around a branch.",
+      "reply": { "steps": [
+        { "stop": "graph.menu", "say": "Right-click the canvas." },
+        { "stop": "graph.backdrop", "say": "Choose Add backdrop." }
+      ] },
+      "expect": ["graph.menu", "graph.backdrop"],
+      "graph": true
+    }
+  ]
+}

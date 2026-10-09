@@ -1,0 +1,255 @@
+{
+ "masked": {
+  "schema_version": 1,
+  "graph_id": "img_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {},
+    "x": 40,
+    "y": 40
+   },
+   {
+    "id": "ct",
+    "type": "heeler.color_transform",
+    "label": "Color Transform",
+    "enabled": true,
+    "params": {
+     "from": "linear_rec709",
+     "to": "srgb"
+    },
+    "x": 300,
+    "y": 40
+   },
+   {
+    "id": "rm",
+    "type": "heeler.radial_mask",
+    "label": "Radial Mask",
+    "enabled": true,
+    "params": {
+     "center_x": 0.5,
+     "center_y": 0.5,
+     "radius": 0.3,
+     "feather": 0.2
+    },
+    "x": 40,
+    "y": 240
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 560,
+    "y": 40
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "ct",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "rm",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "ct",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "rm",
+     "out"
+    ],
+    "to": [
+     "ct",
+     "mask"
+    ]
+   }
+  ]
+ },
+ "dead_before": {
+  "schema_version": 1,
+  "graph_id": "img_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {},
+    "x": 40,
+    "y": 40
+   },
+   {
+    "id": "gf",
+    "type": "heeler.noise",
+    "label": "Grain Field",
+    "enabled": true,
+    "params": {},
+    "x": 300,
+    "y": 40
+   },
+   {
+    "id": "rm",
+    "type": "heeler.radial_mask",
+    "label": "Radial Mask",
+    "enabled": true,
+    "params": {},
+    "x": 40,
+    "y": 240
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 560,
+    "y": 40
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "gf",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "rm",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "gf",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "rm",
+     "out"
+    ],
+    "to": [
+     "gf",
+     "mask"
+    ]
+   }
+  ]
+ },
+ "dead_after": {
+  "schema_version": 1,
+  "graph_id": "img_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {
+     "camera_wb": 1,
+     "camera_matrix": 1
+    },
+    "x": 40,
+    "y": 40
+   },
+   {
+    "id": "gf",
+    "type": "heeler.noise",
+    "label": "Grain Field",
+    "enabled": true,
+    "params": {},
+    "x": 300,
+    "y": 40
+   },
+   {
+    "id": "rm",
+    "type": "heeler.radial_mask",
+    "label": "Radial Mask",
+    "enabled": true,
+    "params": {},
+    "x": 40,
+    "y": 240
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 560,
+    "y": 40
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "gf",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "rm",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "gf",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   }
+  ]
+ }
+}

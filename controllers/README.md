@@ -1,5 +1,7 @@
 # Controllers
 
-Profiles for hardware controllers, one folder per device. Each folder holds the profile file and a README naming the vendor software version it was made in and what each control does in Heeler.
+Profiles for hardware controllers, one folder per device.
 
-No profiles yet. Released to the public domain under CC0; see [LICENSE](../LICENSE).
+- [TourBox](TourBox/Heeler.tb): a profile for the TourBox controller.
+
+Under the Mozilla Public License 2.0 with the rest of Heeler; see [LICENSE](../LICENSE).

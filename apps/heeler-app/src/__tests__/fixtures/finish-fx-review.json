@@ -1,0 +1,6179 @@
+{
+ "neutral_exposure": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.exposure",
+    "label": "Exposure 1",
+    "enabled": true,
+    "params": {
+     "exposure": 0,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Exposure 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_xm_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Exposure 1 Mask Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finishmask:art_b1",
+     "part": "alpha",
+     "name": "Exposure 1 mask"
+    },
+    "x": 624,
+    "y": 156
+   },
+   {
+    "id": "__finish_scene_art_p1",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "__finish_display_art_p1",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__finish_scene_art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_xm_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_scene_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__finish_display_art_p1",
+     "in"
+    ]
+   }
+  ]
+ },
+ "neutral_curves": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.curves",
+    "label": "Curves 1",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Curves 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_xm_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Curves 1 Mask Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finishmask:art_b1",
+     "part": "alpha",
+     "name": "Curves 1 mask"
+    },
+    "x": 624,
+    "y": 156
+   },
+   {
+    "id": "__finish_scene_art_p1",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "__finish_display_art_p1",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__finish_scene_art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_xm_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_scene_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__finish_display_art_p1",
+     "in"
+    ]
+   }
+  ]
+ },
+ "neutral_levels": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.levels",
+    "label": "Levels 1",
+    "enabled": true,
+    "params": {
+     "black": 0,
+     "white": 1,
+     "gamma": 1,
+     "black_soft": 0,
+     "white_soft": 0
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Levels 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_xm_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Levels 1 Mask Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finishmask:art_b1",
+     "part": "alpha",
+     "name": "Levels 1 mask"
+    },
+    "x": 624,
+    "y": 156
+   },
+   {
+    "id": "__finish_scene_art_p1",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "__finish_display_art_p1",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__finish_scene_art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_xm_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_scene_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__finish_display_art_p1",
+     "in"
+    ]
+   }
+  ]
+ },
+ "neutral_white_balance": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.standard_color",
+    "label": "White Balance 1",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 0,
+     "vibrance": 0,
+     "texture": 0,
+     "clarity": 0,
+     "dehaze": 0,
+     "texture_shadows": 100,
+     "texture_midtones": 100,
+     "texture_highlights": 100,
+     "texture_red": 100,
+     "texture_green": 100,
+     "texture_blue": 100,
+     "clarity_shadows": 100,
+     "clarity_midtones": 100,
+     "clarity_highlights": 100,
+     "clarity_red": 100,
+     "clarity_green": 100,
+     "clarity_blue": 100,
+     "dehaze_shadows": 100,
+     "dehaze_midtones": 100,
+     "dehaze_highlights": 100,
+     "dehaze_red": 100,
+     "dehaze_green": 100,
+     "dehaze_blue": 100
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "White Balance 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_xm_art_b1",
+    "type": "heeler.export_layer",
+    "label": "White Balance 1 Mask Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finishmask:art_b1",
+     "part": "alpha",
+     "name": "White Balance 1 mask"
+    },
+    "x": 624,
+    "y": 156
+   },
+   {
+    "id": "__finish_scene_art_p1",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "__finish_display_art_p1",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__finish_scene_art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_xm_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_scene_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__finish_display_art_p1",
+     "in"
+    ]
+   }
+  ]
+ },
+ "neutral_color": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.standard_color",
+    "label": "Color 1",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 0,
+     "vibrance": 0,
+     "texture": 0,
+     "clarity": 0,
+     "dehaze": 0,
+     "texture_shadows": 100,
+     "texture_midtones": 100,
+     "texture_highlights": 100,
+     "texture_red": 100,
+     "texture_green": 100,
+     "texture_blue": 100,
+     "clarity_shadows": 100,
+     "clarity_midtones": 100,
+     "clarity_highlights": 100,
+     "clarity_red": 100,
+     "clarity_green": 100,
+     "clarity_blue": 100,
+     "dehaze_shadows": 100,
+     "dehaze_midtones": 100,
+     "dehaze_highlights": 100,
+     "dehaze_red": 100,
+     "dehaze_green": 100,
+     "dehaze_blue": 100
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Color 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_xm_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Color 1 Mask Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finishmask:art_b1",
+     "part": "alpha",
+     "name": "Color 1 mask"
+    },
+    "x": 624,
+    "y": 156
+   },
+   {
+    "id": "__finish_scene_art_p1",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "__finish_display_art_p1",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__finish_scene_art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_xm_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_scene_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__finish_display_art_p1",
+     "in"
+    ]
+   }
+  ]
+ },
+ "neutral_color_balance": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.color_balance",
+    "label": "Color Balance 1",
+    "enabled": true,
+    "params": {
+     "shadows_lum": 0,
+     "midtones_lum": 0,
+     "highlights_lum": 0,
+     "shadows_hue": 0,
+     "midtones_hue": 0,
+     "highlights_hue": 0,
+     "shadows_sat": 0,
+     "midtones_sat": 0,
+     "highlights_sat": 0
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Color Balance 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_xm_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Color Balance 1 Mask Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finishmask:art_b1",
+     "part": "alpha",
+     "name": "Color Balance 1 mask"
+    },
+    "x": 624,
+    "y": 156
+   },
+   {
+    "id": "__finish_scene_art_p1",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "__finish_display_art_p1",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__finish_scene_art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_xm_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_scene_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__finish_display_art_p1",
+     "in"
+    ]
+   }
+  ]
+ },
+ "neutral_black_white": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.black_white",
+    "label": "Black & White 1",
+    "enabled": true,
+    "params": {
+     "red": 30,
+     "green": 59,
+     "blue": 11,
+     "amount": 100,
+     "film": ""
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Black & White 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_xm_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Black & White 1 Mask Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finishmask:art_b1",
+     "part": "alpha",
+     "name": "Black & White 1 mask"
+    },
+    "x": 624,
+    "y": 156
+   },
+   {
+    "id": "__finish_scene_art_p1",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "__finish_display_art_p1",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__finish_scene_art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_xm_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_scene_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__finish_display_art_p1",
+     "in"
+    ]
+   }
+  ]
+ },
+ "neutral_invert": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.invert",
+    "label": "Invert 1",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Invert 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_xm_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Invert 1 Mask Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finishmask:art_b1",
+     "part": "alpha",
+     "name": "Invert 1 mask"
+    },
+    "x": 624,
+    "y": 156
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "art_xm_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   }
+  ]
+ },
+ "exposure": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.exposure",
+    "label": "Exposure 1",
+    "enabled": true,
+    "params": {
+     "exposure": 1,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Exposure 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "__finish_scene_art_p1",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "__finish_display_art_p1",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 64,
+    "y": 220
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__finish_scene_art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_scene_art_p1",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__finish_display_art_p1",
+     "in"
+    ]
+   }
+  ]
+ },
+ "group_adjustment": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_b3",
+    "type": "heeler.blend",
+    "label": "Group 3",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "mode": "normal"
+    },
+    "x": 24,
+    "y": 460
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_g3_c",
+    "type": "heeler.paint",
+    "label": "Canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.fill",
+    "label": "Fill 1",
+    "enabled": true,
+    "params": {
+     "color": "#804020"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_g3_m1",
+    "type": "heeler.blend",
+    "label": "Fill 1",
+    "enabled": true,
+    "params": {
+     "opacity": 50,
+     "clip": false,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_p2",
+    "type": "heeler.exposure",
+    "label": "Exposure 2",
+    "enabled": true,
+    "params": {
+     "exposure": 1,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 104,
+    "y": 220
+   },
+   {
+    "id": "art_g3_m2",
+    "type": "heeler.blend",
+    "label": "Exposure 2",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "clip": false,
+     "adjustment": 1,
+     "mode": "normal"
+    },
+    "x": 104,
+    "y": 220
+   },
+   {
+    "id": "__finish_scene_art_p2",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 104,
+    "y": 220
+   },
+   {
+    "id": "__finish_display_art_p2",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 104,
+    "y": 220
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_b3",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_g3_c",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_g3_c",
+     "out"
+    ],
+    "to": [
+     "art_g3_m1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "art_g3_m1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_g3_m1",
+     "out"
+    ],
+    "to": [
+     "__finish_scene_art_p2",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_g3_m1",
+     "out"
+    ],
+    "to": [
+     "art_g3_m2",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__finish_display_art_p2",
+     "out"
+    ],
+    "to": [
+     "art_g3_m2",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_g3_c",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_g3_m2",
+     "out"
+    ],
+    "to": [
+     "art_b3",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "__finish_scene_art_p2",
+     "out"
+    ],
+    "to": [
+     "art_p2",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p2",
+     "out"
+    ],
+    "to": [
+     "__finish_display_art_p2",
+     "in"
+    ]
+   }
+  ]
+ },
+ "clipped_invert": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.fill",
+    "label": "Fill 1",
+    "enabled": true,
+    "params": {
+     "color": "#804020"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Fill 1",
+    "enabled": true,
+    "params": {
+     "opacity": 50,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_p2",
+    "type": "heeler.invert",
+    "label": "Invert 2",
+    "enabled": true,
+    "params": {},
+    "x": 104,
+    "y": 220
+   },
+   {
+    "id": "art_b2",
+    "type": "heeler.blend",
+    "label": "Invert 2",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "clip": true,
+     "adjustment": 1,
+     "adjustment_delta": 1,
+     "mode": "normal"
+    },
+    "x": 104,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "__clip_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Clip canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__clip_source_art_b1",
+    "type": "heeler.blend",
+    "label": "Clip source",
+    "enabled": true,
+    "params": {
+     "opacity": 50,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__clip_result_art_b2",
+    "type": "heeler.blend",
+    "label": "Invert 2",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "clip": false,
+     "adjustment": 1,
+     "adjustment_delta": 0,
+     "mode": "normal"
+    },
+    "x": 104,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "__clip_source_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p2",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_b2",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p2",
+     "out"
+    ],
+    "to": [
+     "art_b2",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b2",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__clip_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__clip_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__clip_source_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__clip_source_art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "__clip_source_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_b2",
+     "clip"
+    ]
+   },
+   {
+    "from": [
+     "__clip_source_art_b1",
+     "out"
+    ],
+    "to": [
+     "__clip_result_art_b2",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p2",
+     "out"
+    ],
+    "to": [
+     "__clip_result_art_b2",
+     "fg"
+    ]
+   }
+  ]
+ },
+ "clipped_double_invert": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.fill",
+    "label": "Fill 1",
+    "enabled": true,
+    "params": {
+     "color": "#804020"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Fill 1",
+    "enabled": true,
+    "params": {
+     "opacity": 50,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_p2",
+    "type": "heeler.invert",
+    "label": "Invert 2",
+    "enabled": true,
+    "params": {},
+    "x": 104,
+    "y": 220
+   },
+   {
+    "id": "art_b2",
+    "type": "heeler.blend",
+    "label": "Invert 2",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "clip": true,
+     "adjustment": 1,
+     "adjustment_delta": 1,
+     "mode": "normal"
+    },
+    "x": 104,
+    "y": 340
+   },
+   {
+    "id": "art_p3",
+    "type": "heeler.invert",
+    "label": "Invert 3",
+    "enabled": true,
+    "params": {},
+    "x": 144,
+    "y": 220
+   },
+   {
+    "id": "art_b3",
+    "type": "heeler.blend",
+    "label": "Invert 3",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "clip": true,
+     "adjustment": 1,
+     "adjustment_delta": 1,
+     "mode": "normal"
+    },
+    "x": 144,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "__clip_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Clip canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__clip_source_art_b1",
+    "type": "heeler.blend",
+    "label": "Clip source",
+    "enabled": true,
+    "params": {
+     "opacity": 50,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__clip_result_art_b2",
+    "type": "heeler.blend",
+    "label": "Invert 2",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "clip": false,
+     "adjustment": 1,
+     "adjustment_delta": 0,
+     "mode": "normal"
+    },
+    "x": 104,
+    "y": 340
+   },
+   {
+    "id": "__clip_result_art_b3",
+    "type": "heeler.blend",
+    "label": "Invert 3",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "clip": false,
+     "adjustment": 1,
+     "adjustment_delta": 0,
+     "mode": "normal"
+    },
+    "x": 144,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "__clip_source_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p2",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_b2",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p2",
+     "out"
+    ],
+    "to": [
+     "art_b2",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "__clip_result_art_b2",
+     "out"
+    ],
+    "to": [
+     "art_p3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_b2",
+     "out"
+    ],
+    "to": [
+     "art_b3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p3",
+     "out"
+    ],
+    "to": [
+     "art_b3",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b3",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__clip_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__clip_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__clip_source_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__clip_source_art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "__clip_source_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_b2",
+     "clip"
+    ]
+   },
+   {
+    "from": [
+     "__clip_source_art_b1",
+     "out"
+    ],
+    "to": [
+     "__clip_result_art_b2",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p2",
+     "out"
+    ],
+    "to": [
+     "__clip_result_art_b2",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "__clip_result_art_b2",
+     "out"
+    ],
+    "to": [
+     "art_b3",
+     "clip"
+    ]
+   },
+   {
+    "from": [
+     "__clip_result_art_b2",
+     "out"
+    ],
+    "to": [
+     "__clip_result_art_b3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p3",
+     "out"
+    ],
+    "to": [
+     "__clip_result_art_b3",
+     "fg"
+    ]
+   }
+  ]
+ },
+ "effect_shadow": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.paint",
+    "label": "Pixel 1 Paint",
+    "enabled": true,
+    "params": {
+     "strokes": "[{\"points\":[[0.5,0.5]],\"radius\":0.1,\"color\":\"#ff0000\"}]"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_p1_fx3",
+    "type": "heeler.fx_shadow",
+    "label": "Shadow",
+    "enabled": true,
+    "params": {
+     "size": 12,
+     "distance": 8,
+     "angle": 135,
+     "opacity": 75,
+     "color": "#000000"
+    },
+    "x": 64,
+    "y": 310
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Pixel 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "content_placed": 1,
+     "mask_baked": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_x_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Pixel 1 Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finish:art_b1",
+     "name": "Pixel 1",
+     "group": ""
+    },
+    "x": 624,
+    "y": 96
+   },
+   {
+    "id": "__fx_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Effect canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__fx_shape_art_b1",
+    "type": "heeler.blend",
+    "label": "Effect shape",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 0,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_shape_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p1_fx3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_x_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__fx_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "fg"
+    ]
+   }
+  ]
+ },
+ "masked_shadow": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.paint",
+    "label": "Pixel 1 Paint",
+    "enabled": true,
+    "params": {
+     "strokes": "[{\"points\":[[0.5,0.5]],\"radius\":0.1,\"color\":\"#ff0000\"}]"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_p1_fx3",
+    "type": "heeler.fx_shadow",
+    "label": "Shadow",
+    "enabled": true,
+    "params": {
+     "size": 12,
+     "distance": 8,
+     "angle": 135,
+     "opacity": 75,
+     "color": "#000000"
+    },
+    "x": 64,
+    "y": 310
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Pixel 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "content_placed": 1,
+     "mask_baked": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_x_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Pixel 1 Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finish:art_b1",
+     "name": "Pixel 1",
+     "group": ""
+    },
+    "x": 624,
+    "y": 96
+   },
+   {
+    "id": "art_m_art_b1",
+    "type": "heeler.brush_mask",
+    "label": "Layer Mask",
+    "enabled": true,
+    "params": {
+     "invert": false,
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 458
+   },
+   {
+    "id": "__fx_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Effect canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__fx_shape_art_b1",
+    "type": "heeler.blend",
+    "label": "Effect shape",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 0,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_shape_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p1_fx3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_x_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_m_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_m_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__fx_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_m_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "mask"
+    ]
+   }
+  ]
+ },
+ "effect_glow": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.paint",
+    "label": "Pixel 1 Paint",
+    "enabled": true,
+    "params": {
+     "strokes": "[{\"points\":[[0.5,0.5]],\"radius\":0.1,\"color\":\"#ff0000\"}]"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_p1_fx3",
+    "type": "heeler.fx_glow",
+    "label": "Glow",
+    "enabled": true,
+    "params": {
+     "size": 12,
+     "opacity": 75,
+     "color": "#ffe9b0"
+    },
+    "x": 64,
+    "y": 310
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Pixel 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "content_placed": 1,
+     "mask_baked": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_x_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Pixel 1 Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finish:art_b1",
+     "name": "Pixel 1",
+     "group": ""
+    },
+    "x": 624,
+    "y": 96
+   },
+   {
+    "id": "__fx_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Effect canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__fx_shape_art_b1",
+    "type": "heeler.blend",
+    "label": "Effect shape",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 0,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_shape_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p1_fx3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_x_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__fx_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "fg"
+    ]
+   }
+  ]
+ },
+ "masked_glow": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.paint",
+    "label": "Pixel 1 Paint",
+    "enabled": true,
+    "params": {
+     "strokes": "[{\"points\":[[0.5,0.5]],\"radius\":0.1,\"color\":\"#ff0000\"}]"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_p1_fx3",
+    "type": "heeler.fx_glow",
+    "label": "Glow",
+    "enabled": true,
+    "params": {
+     "size": 12,
+     "opacity": 75,
+     "color": "#ffe9b0"
+    },
+    "x": 64,
+    "y": 310
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Pixel 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "content_placed": 1,
+     "mask_baked": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_x_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Pixel 1 Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finish:art_b1",
+     "name": "Pixel 1",
+     "group": ""
+    },
+    "x": 624,
+    "y": 96
+   },
+   {
+    "id": "art_m_art_b1",
+    "type": "heeler.brush_mask",
+    "label": "Layer Mask",
+    "enabled": true,
+    "params": {
+     "invert": false,
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 458
+   },
+   {
+    "id": "__fx_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Effect canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__fx_shape_art_b1",
+    "type": "heeler.blend",
+    "label": "Effect shape",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 0,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_shape_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p1_fx3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_x_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_m_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_m_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__fx_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_m_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "mask"
+    ]
+   }
+  ]
+ },
+ "effect_color_overlay": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.paint",
+    "label": "Pixel 1 Paint",
+    "enabled": true,
+    "params": {
+     "strokes": "[{\"points\":[[0.5,0.5]],\"radius\":0.1,\"color\":\"#ff0000\"}]"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_p1_fx3",
+    "type": "heeler.fx_color_overlay",
+    "label": "Color Overlay",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "color": "#808080"
+    },
+    "x": 64,
+    "y": 310
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Pixel 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "content_placed": 1,
+     "mask_baked": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_x_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Pixel 1 Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finish:art_b1",
+     "name": "Pixel 1",
+     "group": ""
+    },
+    "x": 624,
+    "y": 96
+   },
+   {
+    "id": "__fx_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Effect canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__fx_shape_art_b1",
+    "type": "heeler.blend",
+    "label": "Effect shape",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 0,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_shape_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p1_fx3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_x_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__fx_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "fg"
+    ]
+   }
+  ]
+ },
+ "masked_color_overlay": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.paint",
+    "label": "Pixel 1 Paint",
+    "enabled": true,
+    "params": {
+     "strokes": "[{\"points\":[[0.5,0.5]],\"radius\":0.1,\"color\":\"#ff0000\"}]"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_p1_fx3",
+    "type": "heeler.fx_color_overlay",
+    "label": "Color Overlay",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "color": "#808080"
+    },
+    "x": 64,
+    "y": 310
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Pixel 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "content_placed": 1,
+     "mask_baked": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_x_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Pixel 1 Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finish:art_b1",
+     "name": "Pixel 1",
+     "group": ""
+    },
+    "x": 624,
+    "y": 96
+   },
+   {
+    "id": "art_m_art_b1",
+    "type": "heeler.brush_mask",
+    "label": "Layer Mask",
+    "enabled": true,
+    "params": {
+     "invert": false,
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 458
+   },
+   {
+    "id": "__fx_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Effect canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__fx_shape_art_b1",
+    "type": "heeler.blend",
+    "label": "Effect shape",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 0,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_shape_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p1_fx3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_x_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_m_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_m_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__fx_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_m_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "mask"
+    ]
+   }
+  ]
+ },
+ "effect_gradient_overlay": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.paint",
+    "label": "Pixel 1 Paint",
+    "enabled": true,
+    "params": {
+     "strokes": "[{\"points\":[[0.5,0.5]],\"radius\":0.1,\"color\":\"#ff0000\"}]"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_p1_fx3",
+    "type": "heeler.fx_gradient_overlay",
+    "label": "Gradient Overlay",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "angle": 0,
+     "midpoint": 50,
+     "color_a": "#000000",
+     "color_b": "#ffffff",
+     "shape": "linear"
+    },
+    "x": 64,
+    "y": 310
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Pixel 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "content_placed": 1,
+     "mask_baked": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_x_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Pixel 1 Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finish:art_b1",
+     "name": "Pixel 1",
+     "group": ""
+    },
+    "x": 624,
+    "y": 96
+   },
+   {
+    "id": "__fx_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Effect canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__fx_shape_art_b1",
+    "type": "heeler.blend",
+    "label": "Effect shape",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 0,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_shape_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p1_fx3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_x_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__fx_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "fg"
+    ]
+   }
+  ]
+ },
+ "masked_gradient_overlay": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.paint",
+    "label": "Pixel 1 Paint",
+    "enabled": true,
+    "params": {
+     "strokes": "[{\"points\":[[0.5,0.5]],\"radius\":0.1,\"color\":\"#ff0000\"}]"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_p1_fx3",
+    "type": "heeler.fx_gradient_overlay",
+    "label": "Gradient Overlay",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "angle": 0,
+     "midpoint": 50,
+     "color_a": "#000000",
+     "color_b": "#ffffff",
+     "shape": "linear"
+    },
+    "x": 64,
+    "y": 310
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Pixel 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "content_placed": 1,
+     "mask_baked": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_x_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Pixel 1 Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finish:art_b1",
+     "name": "Pixel 1",
+     "group": ""
+    },
+    "x": 624,
+    "y": 96
+   },
+   {
+    "id": "art_m_art_b1",
+    "type": "heeler.brush_mask",
+    "label": "Layer Mask",
+    "enabled": true,
+    "params": {
+     "invert": false,
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 458
+   },
+   {
+    "id": "__fx_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Effect canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__fx_shape_art_b1",
+    "type": "heeler.blend",
+    "label": "Effect shape",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 0,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_shape_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p1_fx3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_x_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_m_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_m_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__fx_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_m_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "mask"
+    ]
+   }
+  ]
+ },
+ "effect_bevel": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.paint",
+    "label": "Pixel 1 Paint",
+    "enabled": true,
+    "params": {
+     "strokes": "[{\"points\":[[0.5,0.5]],\"radius\":0.1,\"color\":\"#ff0000\"}]"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_p1_fx3",
+    "type": "heeler.fx_bevel",
+    "label": "Bevel / Emboss",
+    "enabled": true,
+    "params": {
+     "size": 6,
+     "depth": 100,
+     "angle": 135,
+     "opacity": 75,
+     "highlight": "#ffffff",
+     "shadow": "#000000"
+    },
+    "x": 64,
+    "y": 310
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Pixel 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "content_placed": 1,
+     "mask_baked": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_x_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Pixel 1 Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finish:art_b1",
+     "name": "Pixel 1",
+     "group": ""
+    },
+    "x": 624,
+    "y": 96
+   },
+   {
+    "id": "__fx_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Effect canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__fx_shape_art_b1",
+    "type": "heeler.blend",
+    "label": "Effect shape",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 0,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_shape_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p1_fx3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_x_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__fx_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "fg"
+    ]
+   }
+  ]
+ },
+ "masked_bevel": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.paint",
+    "label": "Pixel 1 Paint",
+    "enabled": true,
+    "params": {
+     "strokes": "[{\"points\":[[0.5,0.5]],\"radius\":0.1,\"color\":\"#ff0000\"}]"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_p1_fx3",
+    "type": "heeler.fx_bevel",
+    "label": "Bevel / Emboss",
+    "enabled": true,
+    "params": {
+     "size": 6,
+     "depth": 100,
+     "angle": 135,
+     "opacity": 75,
+     "highlight": "#ffffff",
+     "shadow": "#000000"
+    },
+    "x": 64,
+    "y": 310
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Pixel 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "content_placed": 1,
+     "mask_baked": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_x_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Pixel 1 Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finish:art_b1",
+     "name": "Pixel 1",
+     "group": ""
+    },
+    "x": 624,
+    "y": 96
+   },
+   {
+    "id": "art_m_art_b1",
+    "type": "heeler.brush_mask",
+    "label": "Layer Mask",
+    "enabled": true,
+    "params": {
+     "invert": false,
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 458
+   },
+   {
+    "id": "__fx_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Effect canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__fx_shape_art_b1",
+    "type": "heeler.blend",
+    "label": "Effect shape",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 0,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_shape_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p1_fx3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_x_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_m_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_m_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__fx_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_m_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "mask"
+    ]
+   }
+  ]
+ },
+ "effect_blur": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.paint",
+    "label": "Pixel 1 Paint",
+    "enabled": true,
+    "params": {
+     "strokes": "[{\"points\":[[0.5,0.5]],\"radius\":0.1,\"color\":\"#ff0000\"}]"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_p1_fx3",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 6,
+     "angle": 0,
+     "kind": "gaussian"
+    },
+    "x": 64,
+    "y": 310
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Pixel 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "content_placed": 1,
+     "mask_baked": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_x_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Pixel 1 Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finish:art_b1",
+     "name": "Pixel 1",
+     "group": ""
+    },
+    "x": 624,
+    "y": 96
+   },
+   {
+    "id": "__fx_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Effect canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__fx_shape_art_b1",
+    "type": "heeler.blend",
+    "label": "Effect shape",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 0,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_shape_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p1_fx3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_x_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__fx_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "fg"
+    ]
+   }
+  ]
+ },
+ "masked_blur": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.paint",
+    "label": "Pixel 1 Paint",
+    "enabled": true,
+    "params": {
+     "strokes": "[{\"points\":[[0.5,0.5]],\"radius\":0.1,\"color\":\"#ff0000\"}]"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_p1_fx3",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 6,
+     "angle": 0,
+     "kind": "gaussian"
+    },
+    "x": 64,
+    "y": 310
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Pixel 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "content_placed": 1,
+     "mask_baked": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_x_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Pixel 1 Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finish:art_b1",
+     "name": "Pixel 1",
+     "group": ""
+    },
+    "x": 624,
+    "y": 96
+   },
+   {
+    "id": "art_m_art_b1",
+    "type": "heeler.brush_mask",
+    "label": "Layer Mask",
+    "enabled": true,
+    "params": {
+     "invert": false,
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 458
+   },
+   {
+    "id": "__fx_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Effect canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__fx_shape_art_b1",
+    "type": "heeler.blend",
+    "label": "Effect shape",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 0,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_shape_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p1_fx3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_x_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_m_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_m_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__fx_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_m_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "mask"
+    ]
+   }
+  ]
+ },
+ "warp_blur": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.layer_warp",
+    "label": "Warp 1",
+    "enabled": true,
+    "params": {
+     "cols": 4,
+     "rows": 3,
+     "room": 25,
+     "space": "frame",
+     "cols_u": "",
+     "rows_v": "",
+     "mesh": "[]",
+     "lattice": "",
+     "shapes": "[]",
+     "edges": "clamp"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_p1_fx3",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 6,
+     "angle": 0,
+     "kind": "gaussian"
+    },
+    "x": 64,
+    "y": 310
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Warp 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "content_placed": 1,
+     "mask_baked": 1,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_m_art_b1",
+    "type": "heeler.brush_mask",
+    "label": "Layer Mask",
+    "enabled": true,
+    "params": {
+     "invert": true,
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 458
+   },
+   {
+    "id": "__fx_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Effect canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__fx_shape_art_b1",
+    "type": "heeler.blend",
+    "label": "Effect shape",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "adjustment": 0,
+     "mode": "normal"
+    },
+    "x": 64,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_shape_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p1_fx3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_m_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_m_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__fx_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_m_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "mask"
+    ]
+   }
+  ]
+ },
+ "image_glow": {
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+   {
+    "id": "review_source",
+    "type": "heeler.image_source",
+    "label": "review_source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "output",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "art_in",
+    "type": "heeler.to_display",
+    "label": "To Display",
+    "enabled": true,
+    "params": {},
+    "x": 24,
+    "y": 96
+   },
+   {
+    "id": "art_p1",
+    "type": "heeler.file",
+    "label": "Image 1",
+    "enabled": true,
+    "params": {
+     "path": "",
+     "layer": "",
+     "space": "display"
+    },
+    "x": 64,
+    "y": 220
+   },
+   {
+    "id": "art_p1_fx3",
+    "type": "heeler.fx_glow",
+    "label": "Glow",
+    "enabled": true,
+    "params": {
+     "size": 12,
+     "opacity": 75,
+     "color": "#ffe9b0"
+    },
+    "x": 64,
+    "y": 310
+   },
+   {
+    "id": "art_b1",
+    "type": "heeler.blend",
+    "label": "Image 1",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "warp_bx": 0.25,
+     "warp_by": 0.25,
+     "warp_bw": 0.5,
+     "warp_bh": 0.5,
+     "warp_x0": 0.25,
+     "warp_y0": 0.25,
+     "warp_x1": 0.75,
+     "warp_y1": 0.25,
+     "warp_x2": 0.75,
+     "warp_y2": 0.75,
+     "warp_x3": 0.25,
+     "warp_y3": 0.75,
+     "content_placed": 1,
+     "mask_baked": 1,
+     "mode": "normal",
+     "fit": "place"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "art_out",
+    "type": "heeler.to_scene",
+    "label": "To Scene",
+    "enabled": true,
+    "params": {},
+    "x": 324,
+    "y": 96
+   },
+   {
+    "id": "art_x_art_b1",
+    "type": "heeler.export_layer",
+    "label": "Image 1 Export Layer",
+    "enabled": true,
+    "params": {
+     "source": "finish:art_b1",
+     "name": "Image 1",
+     "group": ""
+    },
+    "x": 624,
+    "y": 96
+   },
+   {
+    "id": "__fx_canvas_art_b1",
+    "type": "heeler.paint",
+    "label": "Effect canvas",
+    "enabled": true,
+    "params": {
+     "strokes": "[]"
+    },
+    "x": 64,
+    "y": 340
+   },
+   {
+    "id": "__fx_shape_art_b1",
+    "type": "heeler.blend",
+    "label": "Effect shape",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "warp_bx": 0.25,
+     "warp_by": 0.25,
+     "warp_bw": 0.5,
+     "warp_bh": 0.5,
+     "warp_x0": 0.25,
+     "warp_y0": 0.25,
+     "warp_x1": 0.75,
+     "warp_y1": 0.25,
+     "warp_x2": 0.75,
+     "warp_y2": 0.75,
+     "warp_x3": 0.25,
+     "warp_y3": 0.75,
+     "adjustment": 0,
+     "mode": "normal",
+     "fit": "place"
+    },
+    "x": 64,
+    "y": 340
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_p1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_shape_art_b1",
+     "out"
+    ],
+    "to": [
+     "art_p1_fx3",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_b1",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "art_b1",
+     "out"
+    ],
+    "to": [
+     "art_out",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1_fx3",
+     "out"
+    ],
+    "to": [
+     "art_x_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "review_source",
+     "out"
+    ],
+    "to": [
+     "art_in",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_out",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_in",
+     "out"
+    ],
+    "to": [
+     "__fx_canvas_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "__fx_canvas_art_b1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "art_p1",
+     "out"
+    ],
+    "to": [
+     "__fx_shape_art_b1",
+     "fg"
+    ]
+   }
+  ]
+ }
+}

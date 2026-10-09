@@ -1,0 +1,8 @@
+{
+  "id": "colorchecker-passport-pre-2014",
+  "name": "X-Rite ColorChecker Passport (before Nov 2014)",
+  "rows": 4,
+  "cols": 6,
+  "source": "The ColorChecker Passport's 24-patch color area shares the ColorChecker Classic's published values; this chart is an alias of colorchecker-classic-pre-2014. X-Rite (2016), 'New color specifications for ColorChecker SG and Classic Charts' (official CIE Lab D50 values), archived at https://zenodo.org/records/3245895; transcribed from the colour-science library dataset DATA_COLORCHECKER24_BEFORE_NOV2014_CIE_LAB at https://colour.readthedocs.io/en/develop/_modules/colour/characterisation/datasets/colour_checkers/chromaticity_coordinates.html",
+  "alias": "colorchecker-classic-pre-2014"
+}

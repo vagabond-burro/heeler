@@ -1,0 +1,97 @@
+[package]
+name = "heeler-io"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+heeler-engine = { path = "../heeler-engine" }
+heeler-raw = { path = "../heeler-raw", optional = true }
+image = "0.25"
+# Multi-page TIFF reading (src/tiff_pages.rs): the image crate decodes
+# the first directory only, and the File node's layer param needs the
+# rest. Already in the lock as image's TIFF backend.
+tiff = "0.11"
+# OpenEXR render passes (src/exr_passes.rs). BSD-3-Clause, pure Rust, and
+# already in the lock as the image crate's EXR backend; named directly so
+# the reader sees every channel, which image's RGBA view flattens away.
+exr = "1.74"
+# JPEG XL, for the DNG variants LibRaw declines (src/dng_jxl.rs). MIT or
+# Apache-2.0, pure Rust, and reached directly rather than through rawler,
+# which carries the same decoder under the LGPL.
+jxl-oxide = "0.12"
+# Lossy WebP for exports and the media server: photographs at half the
+# JPEG bytes, which an iPad on wifi notices. libwebp underneath, the
+# reference encoder, builds everywhere the app does.
+webp = "0.3"
+# The viewer's JPEG frames (src/fast_jpeg.rs): libjpeg-turbo's SIMD
+# encoder, the same crate and version heeler-raw links for LibRaw's
+# lossy DNG decode, so nothing new in the binary or the notices. Default
+# features: SIMD (NEON on arm64, NASM on x64 when installed) and the
+# unwinding a libjpeg error needs to reach Rust as an error.
+mozjpeg-sys = "2.2.3"
+# Row-parallel sRGB conversion ahead of that encoder; already in the
+# lock through the engine and the image crate.
+rayon = "1"
+thiserror.workspace = true
+# Pinned past 0.7.2: the released crate ships a dead X-Trans demosaic
+# and silently runs Bayer PPG on Fuji mosaics (issue drafted in
+# reference/); this revision of main fixes both and measures better
+# than the stand-in we briefly carried (rawdiff: 1.01/0.99/1.08 vs
+# LibRaw on the X-H1 frame). Re-pin to a crates.io version when one
+# ships with the fix.
+rawler = { git = "https://github.com/dnglab/dnglab", rev = "ac975f5d1b3362feb3974811db6cc5a37a77b02b", optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+# Only for examples/highlights.rs, which renders through the real
+# tone-profile op and so needs a Node to hand it. heeler-graph is already
+# in the tree via heeler-engine; this just names it.
+heeler-graph = { path = "../heeler-graph" }
+# Only for examples/rawmatrix.rs, which reports what the catalog would
+# index beside what LibRaw can develop.
+heeler-catalog = { path = "../heeler-catalog" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+
+# WIC, for HEIC decode through Windows' own codec (src/heic.rs). These
+# are Microsoft's own bindings, MIT or Apache-2.0, and they carry no
+# HEVC code: the decoding is done by the HEVC/HEIF extension the user
+# has installed, under the license Microsoft pays for.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Imaging",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Variant",
+  "Win32_Storage_FileSystem",
+] }
+
+[features]
+libraw = ["dep:heeler-raw"]
+rawler = ["dep:rawler"]
+
+[[example]]
+name = "rawdiff"
+required-features = ["rawler", "libraw"]
+
+[[example]]
+name = "dngprobe"
+required-features = ["libraw"]
+
+[[example]]
+name = "highlights"
+required-features = ["libraw"]
+
+[[example]]
+name = "rawmatrix"
+required-features = ["libraw"]
+
+[[example]]
+name = "gainprobe"
+required-features = ["libraw"]
+
+[build-dependencies]
+serde_json.workspace = true

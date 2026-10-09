@@ -1,0 +1,6 @@
+synthetic stack e2df802652aef3ad 7291730a425a250e
+synthetic vivid 1aa820204f2a5053 7061796a5dd7dabf
+synthetic hipass 2b3153c96bc94dea d48bbcbd80181bfa
+synthetic skin 0d230b4cea2b0df5 0e5dd52c0d2c0c7c
+synthetic boxblur f5f1ee82e60c9fa5 f5f1ee82e60c9fa5
+synthetic motion 62b9bd3c77234408 62b9bd3c77234408

@@ -1,0 +1,19 @@
+[package]
+name = "heeler-engine"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+heeler-graph = { path = "../heeler-graph" }
+rayon = "1"
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# The color-chain bench and golden tests decode the app's demo photos
+# through the same JPEG path the preview pipeline uses. Dev-dependency
+# cycles are legal in Cargo, so heeler-io (which depends on this crate)
+# can serve its tests.
+heeler-io = { path = "../heeler-io" }

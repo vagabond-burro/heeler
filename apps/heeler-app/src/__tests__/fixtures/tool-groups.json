@@ -1,0 +1,855 @@
+{
+  "vivid": {
+    "schema_version": 1,
+    "graph_id": "review_fixture_ui",
+    "nodes": [
+      {
+        "id": "src",
+        "type": "heeler.image_source",
+        "label": "Image Source",
+        "enabled": true,
+        "params": {
+          "camera_wb": 1,
+          "camera_matrix": 1
+        },
+        "x": 24,
+        "y": 96
+      },
+      {
+        "id": "output",
+        "type": "heeler.output",
+        "label": "Output",
+        "enabled": true,
+        "params": {},
+        "x": 1249,
+        "y": 96
+      },
+      {
+        "id": "sharp_input_review_sharpening",
+        "type": "heeler.merge",
+        "label": "Picture",
+        "enabled": true,
+        "params": {
+          "opacity": 100
+        },
+        "x": -160,
+        "y": 60
+      },
+      {
+        "id": "sharp_display_review_sharpening",
+        "type": "heeler.to_display",
+        "label": "To Display",
+        "enabled": true,
+        "params": {},
+        "x": 0,
+        "y": 60
+      },
+      {
+        "id": "sharp_inv_review_sharpening",
+        "type": "heeler.invert",
+        "label": "Invert",
+        "enabled": true,
+        "params": {
+          "amount": 1
+        },
+        "x": 150,
+        "y": 0
+      },
+      {
+        "id": "sharp_blur_review_sharpening",
+        "type": "heeler.blur",
+        "label": "Blur",
+        "enabled": true,
+        "params": {
+          "radius": 3,
+          "angle": 0,
+          "kind": "gaussian"
+        },
+        "x": 300,
+        "y": 0
+      },
+      {
+        "id": "sharp_vivid_review_sharpening",
+        "type": "heeler.blend",
+        "label": "Blend Mode",
+        "enabled": true,
+        "params": {
+          "opacity": 100,
+          "mode": "vivid_light"
+        },
+        "x": 450,
+        "y": 30
+      },
+      {
+        "id": "sharp_desat_review_sharpening",
+        "type": "heeler.desaturate",
+        "label": "Desaturate",
+        "enabled": false,
+        "params": {
+          "amount": 1
+        },
+        "x": 150,
+        "y": 130
+      },
+      {
+        "id": "sharp_hp_review_sharpening",
+        "type": "heeler.high_pass",
+        "label": "High Pass",
+        "enabled": false,
+        "params": {
+          "radius": 3
+        },
+        "x": 300,
+        "y": 130
+      },
+      {
+        "id": "sharp_over_review_sharpening",
+        "type": "heeler.blend",
+        "label": "Blend Mode",
+        "enabled": true,
+        "params": {
+          "opacity": 50,
+          "mode": "overlay"
+        },
+        "x": 620,
+        "y": 60
+      },
+      {
+        "id": "sharp_color_review_sharpening",
+        "type": "heeler.blend",
+        "label": "Keep color",
+        "enabled": true,
+        "params": {
+          "opacity": 100,
+          "mode": "color"
+        },
+        "x": 780,
+        "y": 60
+      },
+      {
+        "id": "sharp_scene_review_sharpening",
+        "type": "heeler.to_scene",
+        "label": "To Scene",
+        "enabled": true,
+        "params": {},
+        "x": 940,
+        "y": 60
+      },
+      {
+        "id": "sharp_mask_review_sharpening",
+        "type": "heeler.blend",
+        "label": "Apply mask",
+        "enabled": true,
+        "params": {
+          "opacity": 100,
+          "mode": "normal"
+        },
+        "x": 1100,
+        "y": 60
+      }
+    ],
+    "connections": [
+      {
+        "from": [
+          "sharp_display_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_over_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_display_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_inv_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_inv_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_blur_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_display_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_vivid_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_blur_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_vivid_review_sharpening",
+          "fg"
+        ]
+      },
+      {
+        "from": [
+          "sharp_vivid_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_over_review_sharpening",
+          "fg"
+        ]
+      },
+      {
+        "from": [
+          "sharp_over_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_color_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_display_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_color_review_sharpening",
+          "fg"
+        ]
+      },
+      {
+        "from": [
+          "sharp_color_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_scene_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_input_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_display_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_input_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_scene_review_sharpening",
+          "fg"
+        ]
+      },
+      {
+        "from": [
+          "sharp_input_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_mask_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_scene_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_mask_review_sharpening",
+          "fg"
+        ]
+      },
+      {
+        "from": [
+          "src",
+          "out"
+        ],
+        "to": [
+          "sharp_input_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_mask_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "output",
+          "in"
+        ]
+      }
+    ]
+  },
+  "hipass": {
+    "schema_version": 1,
+    "graph_id": "review_fixture_ui",
+    "nodes": [
+      {
+        "id": "src",
+        "type": "heeler.image_source",
+        "label": "Image Source",
+        "enabled": true,
+        "params": {
+          "camera_wb": 1,
+          "camera_matrix": 1
+        },
+        "x": 24,
+        "y": 96
+      },
+      {
+        "id": "output",
+        "type": "heeler.output",
+        "label": "Output",
+        "enabled": true,
+        "params": {},
+        "x": 1249,
+        "y": 96
+      },
+      {
+        "id": "sharp_input_review_sharpening",
+        "type": "heeler.merge",
+        "label": "Picture",
+        "enabled": true,
+        "params": {
+          "opacity": 100
+        },
+        "x": -160,
+        "y": 60
+      },
+      {
+        "id": "sharp_display_review_sharpening",
+        "type": "heeler.to_display",
+        "label": "To Display",
+        "enabled": true,
+        "params": {},
+        "x": 0,
+        "y": 60
+      },
+      {
+        "id": "sharp_inv_review_sharpening",
+        "type": "heeler.invert",
+        "label": "Invert",
+        "enabled": false,
+        "params": {
+          "amount": 1
+        },
+        "x": 150,
+        "y": 0
+      },
+      {
+        "id": "sharp_blur_review_sharpening",
+        "type": "heeler.blur",
+        "label": "Blur",
+        "enabled": false,
+        "params": {
+          "radius": 3,
+          "angle": 0,
+          "kind": "gaussian"
+        },
+        "x": 300,
+        "y": 0
+      },
+      {
+        "id": "sharp_vivid_review_sharpening",
+        "type": "heeler.blend",
+        "label": "Blend Mode",
+        "enabled": false,
+        "params": {
+          "opacity": 100,
+          "mode": "vivid_light"
+        },
+        "x": 450,
+        "y": 30
+      },
+      {
+        "id": "sharp_desat_review_sharpening",
+        "type": "heeler.desaturate",
+        "label": "Desaturate",
+        "enabled": true,
+        "params": {
+          "amount": 1
+        },
+        "x": 150,
+        "y": 130
+      },
+      {
+        "id": "sharp_hp_review_sharpening",
+        "type": "heeler.high_pass",
+        "label": "High Pass",
+        "enabled": true,
+        "params": {
+          "radius": 3
+        },
+        "x": 300,
+        "y": 130
+      },
+      {
+        "id": "sharp_over_review_sharpening",
+        "type": "heeler.blend",
+        "label": "Blend Mode",
+        "enabled": true,
+        "params": {
+          "opacity": 50,
+          "mode": "overlay"
+        },
+        "x": 620,
+        "y": 60
+      },
+      {
+        "id": "sharp_color_review_sharpening",
+        "type": "heeler.blend",
+        "label": "Keep color",
+        "enabled": true,
+        "params": {
+          "opacity": 100,
+          "mode": "color"
+        },
+        "x": 780,
+        "y": 60
+      },
+      {
+        "id": "sharp_scene_review_sharpening",
+        "type": "heeler.to_scene",
+        "label": "To Scene",
+        "enabled": true,
+        "params": {},
+        "x": 940,
+        "y": 60
+      },
+      {
+        "id": "sharp_mask_review_sharpening",
+        "type": "heeler.blend",
+        "label": "Apply mask",
+        "enabled": true,
+        "params": {
+          "opacity": 100,
+          "mode": "normal"
+        },
+        "x": 1100,
+        "y": 60
+      }
+    ],
+    "connections": [
+      {
+        "from": [
+          "sharp_display_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_over_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_display_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_desat_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_desat_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_hp_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_hp_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_over_review_sharpening",
+          "fg"
+        ]
+      },
+      {
+        "from": [
+          "sharp_over_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_color_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_display_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_color_review_sharpening",
+          "fg"
+        ]
+      },
+      {
+        "from": [
+          "sharp_color_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_scene_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_input_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_display_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_input_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_scene_review_sharpening",
+          "fg"
+        ]
+      },
+      {
+        "from": [
+          "sharp_input_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_mask_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_scene_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "sharp_mask_review_sharpening",
+          "fg"
+        ]
+      },
+      {
+        "from": [
+          "src",
+          "out"
+        ],
+        "to": [
+          "sharp_input_review_sharpening",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "sharp_mask_review_sharpening",
+          "out"
+        ],
+        "to": [
+          "output",
+          "in"
+        ]
+      }
+    ]
+  },
+  "skin": {
+    "schema_version": 1,
+    "graph_id": "review_fixture_ui",
+    "nodes": [
+      {
+        "id": "src",
+        "type": "heeler.image_source",
+        "label": "Image Source",
+        "enabled": true,
+        "params": {
+          "camera_wb": 1,
+          "camera_matrix": 1
+        },
+        "x": 24,
+        "y": 96
+      },
+      {
+        "id": "output",
+        "type": "heeler.output",
+        "label": "Output",
+        "enabled": true,
+        "params": {},
+        "x": 1249,
+        "y": 96
+      },
+      {
+        "id": "skin_input_review_skin",
+        "type": "heeler.merge",
+        "label": "Picture",
+        "enabled": true,
+        "params": {
+          "opacity": 100
+        },
+        "x": -160,
+        "y": 60
+      },
+      {
+        "id": "skin_display_review_skin",
+        "type": "heeler.to_display",
+        "label": "To Display",
+        "enabled": true,
+        "params": {},
+        "x": 0,
+        "y": 60
+      },
+      {
+        "id": "skin_inv_review_skin",
+        "type": "heeler.invert",
+        "label": "Invert",
+        "enabled": true,
+        "params": {
+          "amount": 1
+        },
+        "x": 150,
+        "y": 0
+      },
+      {
+        "id": "skin_hp_review_skin",
+        "type": "heeler.high_pass",
+        "label": "High Pass",
+        "enabled": true,
+        "params": {
+          "radius": 8
+        },
+        "x": 300,
+        "y": 0
+      },
+      {
+        "id": "skin_blur_review_skin",
+        "type": "heeler.blur",
+        "label": "Blur",
+        "enabled": true,
+        "params": {
+          "radius": 4,
+          "angle": 0,
+          "kind": "gaussian"
+        },
+        "x": 450,
+        "y": 0
+      },
+      {
+        "id": "skin_vivid_review_skin",
+        "type": "heeler.blend",
+        "label": "Blend Mode",
+        "enabled": true,
+        "params": {
+          "opacity": 100,
+          "mode": "vivid_light"
+        },
+        "x": 600,
+        "y": 30
+      },
+      {
+        "id": "skin_over_review_skin",
+        "type": "heeler.blend",
+        "label": "Blend Mode",
+        "enabled": true,
+        "params": {
+          "opacity": 50,
+          "mode": "normal"
+        },
+        "x": 760,
+        "y": 60
+      },
+      {
+        "id": "skin_scene_review_skin",
+        "type": "heeler.to_scene",
+        "label": "To Scene",
+        "enabled": true,
+        "params": {},
+        "x": 920,
+        "y": 60
+      },
+      {
+        "id": "skin_mask_review_skin",
+        "type": "heeler.blend",
+        "label": "Apply mask",
+        "enabled": true,
+        "params": {
+          "opacity": 100,
+          "mode": "normal"
+        },
+        "x": 1100,
+        "y": 60
+      }
+    ],
+    "connections": [
+      {
+        "from": [
+          "skin_display_review_skin",
+          "out"
+        ],
+        "to": [
+          "skin_inv_review_skin",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "skin_inv_review_skin",
+          "out"
+        ],
+        "to": [
+          "skin_hp_review_skin",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "skin_hp_review_skin",
+          "out"
+        ],
+        "to": [
+          "skin_blur_review_skin",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "skin_display_review_skin",
+          "out"
+        ],
+        "to": [
+          "skin_vivid_review_skin",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "skin_blur_review_skin",
+          "out"
+        ],
+        "to": [
+          "skin_vivid_review_skin",
+          "fg"
+        ]
+      },
+      {
+        "from": [
+          "skin_display_review_skin",
+          "out"
+        ],
+        "to": [
+          "skin_over_review_skin",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "skin_vivid_review_skin",
+          "out"
+        ],
+        "to": [
+          "skin_over_review_skin",
+          "fg"
+        ]
+      },
+      {
+        "from": [
+          "skin_over_review_skin",
+          "out"
+        ],
+        "to": [
+          "skin_scene_review_skin",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "skin_input_review_skin",
+          "out"
+        ],
+        "to": [
+          "skin_display_review_skin",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "skin_input_review_skin",
+          "out"
+        ],
+        "to": [
+          "skin_scene_review_skin",
+          "fg"
+        ]
+      },
+      {
+        "from": [
+          "skin_input_review_skin",
+          "out"
+        ],
+        "to": [
+          "skin_mask_review_skin",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "skin_scene_review_skin",
+          "out"
+        ],
+        "to": [
+          "skin_mask_review_skin",
+          "fg"
+        ]
+      },
+      {
+        "from": [
+          "src",
+          "out"
+        ],
+        "to": [
+          "skin_input_review_skin",
+          "in"
+        ]
+      },
+      {
+        "from": [
+          "skin_mask_review_skin",
+          "out"
+        ],
+        "to": [
+          "output",
+          "in"
+        ]
+      }
+    ]
+  }
+}

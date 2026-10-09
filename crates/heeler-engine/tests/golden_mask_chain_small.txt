@@ -1,0 +1,17 @@
+synthetic radial e015b148b91e47a8
+synthetic linear 9cc4e4c422901511
+synthetic rangeselect 60fd441b672493e5
+synthetic lumarange 78e9c92cacbc5b5c
+synthetic colorrange e3b8036b66ae0837
+synthetic selmarquee ab4526de650d898c
+synthetic selpath 5a7f3f4786412114
+synthetic selbezier 9ea43e794e854420
+synthetic selkey 2b3b62fa7c81a865
+synthetic selsamples d2c4f34a2a5dd36d
+synthetic selbrush 383322bc38a8c322
+synthetic selpolish 617eb928a273dfd0
+synthetic seleverything 168d999636597cf6
+synthetic smart f50f6ceac07211ce
+synthetic brush 75e7cac9dc029980
+synthetic invert 1841f98cc0e5e899
+synthetic maskedstack 4e5fea6396ac1b2c

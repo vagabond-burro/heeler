@@ -1,0 +1,91 @@
+[package]
+name = "heeler-desktop"
+version.workspace = true
+# File::lock (agreement.rs, the receipt writer) is stable from 1.89.
+rust-version = "1.89"
+license.workspace = true
+edition.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+rayon = "1"
+# Already in the workspace lockfile; streaming recovery checksums.
+sha2 = "0.10"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+base64 = "0.22"
+# The served-views feature: one small synchronous HTTP server,
+# MIT/Apache, no async runtime dragged in.
+tiny_http = "0.12"
+heeler-project = { path = "../../../crates/heeler-project" }
+heeler-graph = { path = "../../../crates/heeler-graph" }
+heeler-engine = { path = "../../../crates/heeler-engine" }
+heeler-vision = { path = "../../../crates/heeler-vision" }
+heeler-stitch = { path = "../../../crates/heeler-stitch" }
+heeler-gpu = { path = "../../../crates/heeler-gpu" }
+# No "rawler" here on purpose. It is LGPL-2.1 with no dual option, and
+# static linking it into a shipped binary carries a relinking obligation
+# that LibRaw's CDDL option exists precisely to avoid. It stays an
+# optional dependency of heeler-io so `--features rawler` still builds
+# the rawdiff comparison harness on a developer's machine; it just does
+# not travel to users. See the ledger entry for 2026-08-25.
+heeler-io = { path = "../../../crates/heeler-io", features = ["libraw"] }
+heeler-catalog = { path = "../../../crates/heeler-catalog" }
+tauri-plugin-window-state = "2.4.1"
+# USB for the tether camera transport: pure Rust, Apache-2.0 OR MIT
+# (crates.io, verified 2026-08-26), no C library and no GPL anywhere
+# under it. The PTP layer on top is our own (src/ptp.rs): the crates.io
+# `ptp` lineage is MIT but unmaintained since 2017 and rides the C
+# libusb, which is the dependency the transport decision exists to
+# avoid.
+nusb = "0.2"
+# The assistant's requests to a model server (src/assistant.rs). The
+# same crate heeler-vision already fetches models with, so nothing new
+# enters the lockfile.
+ureq = "2"
+# The assistant's address check (src/assistant.rs): this computer's own
+# network addresses, on macOS, Windows and Linux. MIT OR BSD-3-Clause;
+# its dependencies (libc, windows-sys 0.61) were already linked. The
+# link-local feature keeps fe80:: addresses in the list, so a server on
+# this computer reached by one of those is still recognized as local.
+if-addrs = { version = "0.15", features = ["link-local"] }
+# Recipe files (src/recipe_files.rs; 2026-10-01: "ease of manual
+# editing which YAML is far better at than JSON"). saphyr is the YAML
+# 1.2 library from the yaml-rust2 maintainers: pure safe Rust, MIT OR
+# Apache-2.0, maintained (0.1.0, September 2026). YAML 1.2 keeps `no`,
+# `on` and `yes` strings. The event parser gives every value its line,
+# and building the tree ourselves refuses duplicate keys, anchors and
+# aliases (an alias expands by copying). Default features off: the
+# encoding feature only serves byte readers, and files are read as
+# UTF-8 here. Not serde_yaml (archived 2024), serde_yml (deprecated
+# shim after its soundness trouble) or serde_norway (wraps the
+# C-translated unsafe-libyaml).
+saphyr = { version = "0.1.0", default-features = false }
+saphyr-parser = "0.1.0"
+
+[dev-dependencies]
+tempfile = "3"
+# Writes the OpenEXR fixtures the file-depth tests read (already linked
+# through heeler-io for the reading).
+exr = "1.74"
+
+[lib]
+name = "heeler_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[target.'cfg(windows)'.dependencies]
+# The Snap Layouts overlay (src/snaplayouts.rs) is raw Win32: a child
+# window that answers Windows' hit test. The same crate and version
+# Tauri's own runtime uses for its resize-border overlay.
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }

@@ -1,0 +1,13 @@
+[package]
+name = "heeler-gpu"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+heeler-engine = { path = "../heeler-engine" }
+heeler-graph = { path = "../heeler-graph" }
+wgpu = "25"
+pollster = "0.4"
+bytemuck = "1"
+thiserror.workspace = true

@@ -1,0 +1,990 @@
+{
+  "schema_version": 1,
+  "graph_id": "4871_ui",
+  "nodes": [
+    {
+      "id": "src",
+      "type": "heeler.image_source",
+      "label": "Image Source",
+      "enabled": true,
+      "params": {
+        "camera_wb": 1,
+        "camera_matrix": 1
+      },
+      "x": 24,
+      "y": 96
+    },
+    {
+      "id": "portra",
+      "type": "heeler.group",
+      "label": "Portra Grade",
+      "enabled": true,
+      "params": {
+        "grade_strength": 78
+      },
+      "x": 24,
+      "y": 290
+    },
+    {
+      "id": "merge",
+      "type": "heeler.merge",
+      "label": "Merge",
+      "enabled": true,
+      "params": {
+        "opacity": 72
+      },
+      "x": 199,
+      "y": 96
+    },
+    {
+      "id": "stdcolor",
+      "type": "heeler.standard_color",
+      "label": "Standard Color",
+      "enabled": true,
+      "params": {
+        "temperature": 5480,
+        "tint": 6,
+        "saturation": 4,
+        "vibrance": 22
+      },
+      "x": 374,
+      "y": 96
+    },
+    {
+      "id": "detail",
+      "type": "heeler.detail",
+      "label": "Detail",
+      "enabled": false,
+      "params": {
+        "texture": 12,
+        "clarity": 9,
+        "dehaze": 0
+      },
+      "x": 549,
+      "y": 96
+    },
+    {
+      "id": "cbal",
+      "type": "heeler.color_balance",
+      "label": "Color Balance",
+      "enabled": true,
+      "params": {
+        "shadows_lum": -4,
+        "midtones_lum": 2,
+        "highlights_lum": 6,
+        "shadows_hue": 0,
+        "midtones_hue": 0,
+        "highlights_hue": 0,
+        "shadows_sat": 0,
+        "midtones_sat": 0,
+        "highlights_sat": 0
+      },
+      "x": 549,
+      "y": 96
+    },
+    {
+      "id": "exposure",
+      "type": "heeler.exposure",
+      "label": "Exposure",
+      "enabled": true,
+      "params": {
+        "exposure": 0.62,
+        "contrast": 18,
+        "color_contrast": 0,
+        "highlights": -42,
+        "shadows": 35,
+        "whites": 8,
+        "blacks": -14
+      },
+      "x": 724,
+      "y": 96
+    },
+    {
+      "id": "sharpen",
+      "type": "heeler.sharpen",
+      "label": "Sharpen",
+      "enabled": true,
+      "params": {
+        "amount": 42,
+        "radius": 1,
+        "threshold": 0
+      },
+      "x": 899,
+      "y": 96
+    },
+    {
+      "id": "vignette",
+      "type": "heeler.vignette",
+      "label": "Vignette",
+      "enabled": false,
+      "params": {
+        "vignette": 0,
+        "vignette_mid": 50,
+        "softness": 0.5
+      },
+      "x": 1074,
+      "y": 4
+    },
+    {
+      "id": "grain",
+      "type": "heeler.grain",
+      "label": "Grain",
+      "enabled": true,
+      "params": {
+        "intensity": 14,
+        "size": 28,
+        "by_frame": true,
+        "shadows_gain": 100,
+        "midtones_gain": 100,
+        "highlights_gain": 100,
+        "red_gain": 100,
+        "green_gain": 100,
+        "blue_gain": 100
+      },
+      "x": 1074,
+      "y": 96
+    },
+    {
+      "id": "depthmap",
+      "type": "heeler.depth_map",
+      "label": "Depth Map",
+      "enabled": false,
+      "params": {
+        "edges": 50,
+        "flatten": 25,
+        "near_clip": 0,
+        "far_clip": 0,
+        "size": 518
+      },
+      "x": 1074,
+      "y": 96
+    },
+    {
+      "id": "colorchecker",
+      "type": "heeler.color_checker",
+      "label": "Color Checker",
+      "enabled": false,
+      "params": {
+        "m00": 1,
+        "m01": 0,
+        "m02": 0,
+        "m10": 0,
+        "m11": 1,
+        "m12": 0,
+        "m20": 0,
+        "m21": 0,
+        "m22": 1,
+        "exposure": 0,
+        "amount": 100,
+        "sample": 40,
+        "chart": "colorchecker-classic",
+        "quad": "",
+        "patches": "",
+        "fit": ""
+      },
+      "x": 1214,
+      "y": 96
+    },
+    {
+      "id": "keylight",
+      "type": "heeler.key_light",
+      "label": "Depth Lighting",
+      "enabled": false,
+      "params": {
+        "strength": 0,
+        "azimuth": 45,
+        "elevation": 45,
+        "ambient": 50,
+        "relief": 30,
+        "invert": false
+      },
+      "x": 1074,
+      "y": 196
+    },
+    {
+      "id": "fog",
+      "type": "heeler.fog",
+      "label": "Fog",
+      "enabled": false,
+      "params": {
+        "density": 0,
+        "start": 0,
+        "falloff": 50,
+        "texture": 0,
+        "texture_size": 30,
+        "texture_shift": 0,
+        "fog_level": 72,
+        "fog_hue": 220,
+        "fog_sat": 10,
+        "desat": 0
+      },
+      "x": 1074,
+      "y": 296
+    },
+    {
+      "id": "dof",
+      "type": "heeler.dof",
+      "label": "Depth of Field",
+      "enabled": false,
+      "params": {
+        "aperture": 0,
+        "focus": 0,
+        "blades": 6,
+        "blade_curve": 100,
+        "fringe": 0,
+        "field_curve": 0,
+        "glow": 0,
+        "bubble": 0,
+        "squeeze": 0,
+        "swirl": 0
+      },
+      "x": 1074,
+      "y": 396
+    },
+    {
+      "id": "flare",
+      "type": "heeler.flare",
+      "label": "Lens Flare",
+      "enabled": false,
+      "params": {
+        "intensity": 100,
+        "temp": 0,
+        "size": 5,
+        "softness": 40,
+        "rays": 14,
+        "ray_length": 25,
+        "ray_softness": 25,
+        "rotation": 0,
+        "ghosts": 2,
+        "ghost_spacing": 90,
+        "ghost_size": 4,
+        "blades": 7,
+        "dispersion": 20,
+        "ghost_opacity": 35,
+        "anamorphic": 0,
+        "streak_size": 1.5,
+        "streak_length": 60,
+        "streak_taper": 30,
+        "streak_angle": 0,
+        "streak_offset": 0,
+        "streak_shift": 0,
+        "streak_noise": 0,
+        "veil": 10,
+        "veil_radius": 35,
+        "veil_depth": 0,
+        "occlusion": 100,
+        "occlusion_soft": 30,
+        "lights": "[]",
+        "streak_color": "#5aa0ff",
+        "streak_stops": "",
+        "preset": "prime"
+      },
+      "x": 1074,
+      "y": 496
+    },
+    {
+      "id": "halation",
+      "type": "heeler.halation",
+      "label": "Halation",
+      "enabled": false,
+      "params": {
+        "threshold": 50,
+        "background": 50,
+        "by_depth": 0,
+        "radius": 4,
+        "diffusion": 60,
+        "hue": 18,
+        "saturation": 70,
+        "blue_comp": 0,
+        "amount": 100,
+        "mix": 100,
+        "bloom": 0,
+        "bloom_radius": 20,
+        "format": "35mm"
+      },
+      "x": 1074,
+      "y": 596
+    },
+    {
+      "id": "output",
+      "type": "heeler.output",
+      "label": "Output",
+      "enabled": true,
+      "params": {},
+      "x": 1249,
+      "y": 96
+    },
+    {
+      "id": "lummask",
+      "type": "heeler.luminance_range_mask",
+      "label": "Luminance Mask",
+      "enabled": true,
+      "params": {},
+      "x": 374,
+      "y": 290
+    },
+    {
+      "id": "brushmask",
+      "type": "heeler.brush_mask",
+      "label": "Brush Mask",
+      "enabled": true,
+      "params": {
+        "strokes": "[]"
+      },
+      "x": 549,
+      "y": 290
+    },
+    {
+      "id": "paper",
+      "type": "heeler.paper",
+      "label": "Print",
+      "enabled": false,
+      "params": {
+        "grade": 2,
+        "time": 0,
+        "split": false,
+        "soft": 0,
+        "hard": 0,
+        "dmax": 2.1,
+        "base": 0,
+        "toning": 0,
+        "crossover": 50,
+        "toner": ""
+      },
+      "x": 1074,
+      "y": 290
+    },
+    {
+      "id": "curves",
+      "type": "heeler.curves",
+      "label": "Curves",
+      "enabled": false,
+      "params": {
+        "points": "{\"interp\":\"smooth\"}"
+      },
+      "x": 724,
+      "y": 290
+    },
+    {
+      "id": "levels",
+      "type": "heeler.levels",
+      "label": "Levels",
+      "enabled": false,
+      "params": {
+        "black": 0,
+        "white": 1,
+        "gamma": 1,
+        "black_soft": 0,
+        "white_soft": 0
+      },
+      "x": 899,
+      "y": 290
+    },
+    {
+      "id": "toneeq",
+      "type": "heeler.tone_eq",
+      "label": "Relight",
+      "enabled": false,
+      "params": {
+        "ev_m4": 0,
+        "ev_m3": 0,
+        "ev_m2": 0,
+        "ev_m1": 0,
+        "ev_0": 0,
+        "ev_p1": 0,
+        "ev_p2": 0,
+        "ev_p3": 0,
+        "ev_p4": 0,
+        "smoothing": 50,
+        "range_shift": 0
+      },
+      "x": 812,
+      "y": 194
+    },
+    {
+      "id": "bw",
+      "type": "heeler.black_white",
+      "label": "Black & White",
+      "enabled": true,
+      "params": {
+        "red": 30,
+        "green": 59,
+        "blue": 11,
+        "amount": 0,
+        "film": ""
+      },
+      "x": 1074,
+      "y": 290
+    },
+    {
+      "id": "denoise",
+      "type": "heeler.denoise",
+      "label": "Denoise",
+      "enabled": true,
+      "params": {
+        "strength": 0
+      },
+      "x": 1249,
+      "y": 290
+    },
+    {
+      "id": "crop",
+      "type": "heeler.crop_rotate",
+      "label": "Crop & Rotate",
+      "enabled": true,
+      "params": {
+        "angle": 0,
+        "aspect": 0,
+        "crop_x": 0,
+        "crop_y": 0,
+        "crop_w": 1,
+        "crop_h": 1
+      },
+      "x": 199,
+      "y": 290
+    },
+    {
+      "id": "lens",
+      "type": "heeler.lens_correct",
+      "label": "Lens Correction",
+      "enabled": true,
+      "params": {
+        "distortion": 0,
+        "ca_red": 0,
+        "ca_blue": 0,
+        "vignette": 0,
+        "vignette_mid": 50
+      },
+      "x": 199,
+      "y": 484
+    },
+    {
+      "id": "bend",
+      "type": "heeler.color_bend",
+      "label": "Color Bend",
+      "enabled": false,
+      "params": {
+        "src_hue": 0,
+        "src_sat": 0,
+        "dst_hue": 0,
+        "dst_sat": 0,
+        "falloff": 0.3333333333333333,
+        "amount": 100
+      },
+      "x": 724,
+      "y": 484
+    },
+    {
+      "id": "colorconsole",
+      "type": "heeler.color_console",
+      "label": "Color Tune",
+      "enabled": false,
+      "params": {
+        "smoothing": 50
+      },
+      "x": 1074,
+      "y": 484
+    },
+    {
+      "id": "recolor",
+      "type": "heeler.recolor",
+      "label": "Recolor",
+      "enabled": false,
+      "params": {
+        "neutral_guard": 10,
+        "smoothing": 50
+      },
+      "x": 899,
+      "y": 484
+    },
+    {
+      "id": "profile",
+      "type": "heeler.tone_profile",
+      "label": "Tone Profile",
+      "enabled": true,
+      "params": {
+        "contrast": 100,
+        "baseline_ev": 1.3,
+        "shadow_toe": 50,
+        "highlight_rolloff": 25,
+        "development": 0,
+        "mode": "standard",
+        "film": ""
+      },
+      "x": 1074,
+      "y": 484
+    },
+    {
+      "id": "layer_1_adj",
+      "type": "heeler.exposure",
+      "label": "Sky",
+      "enabled": true,
+      "params": {
+        "exposure": 1,
+        "contrast": 0,
+        "color_contrast": 0,
+        "highlights": 0,
+        "shadows": 0,
+        "whites": 0,
+        "blacks": 0
+      },
+      "x": 199,
+      "y": 484
+    },
+    {
+      "id": "layer_1_mask",
+      "type": "heeler.range_mask",
+      "label": "Range Mask",
+      "enabled": true,
+      "params": {
+        "depth_on": false,
+        "depth_invert": false,
+        "depth_black": 0,
+        "depth_white": 1,
+        "depth_gamma": 1,
+        "depth_black_soft": 0,
+        "depth_white_soft": 0,
+        "luma_low": 0,
+        "luma_high": 1,
+        "sat_low": 0,
+        "sat_high": 1,
+        "hue_center": 0,
+        "hue_width": 180,
+        "softness": 0.15
+      },
+      "x": 199,
+      "y": 580
+    },
+    {
+      "id": "dev_x_layer_1_adj_exposure",
+      "type": "heeler.export_layer",
+      "label": "Sky Exposure Export Layer",
+      "enabled": true,
+      "params": {
+        "source": "develop:Exposure",
+        "tap": "layer_1_adj",
+        "layer": "layer_1_adj",
+        "name": "Sky Exposure"
+      },
+      "x": 239,
+      "y": 712
+    },
+    {
+      "id": "layer_1_curves",
+      "type": "heeler.curves",
+      "label": "Curves",
+      "enabled": true,
+      "params": {
+        "points": "{\"rgb\":[[0,0],[0.5,0.2],[1,1]],\"interp\":\"linear\"}"
+      },
+      "x": 199,
+      "y": 676
+    },
+    {
+      "id": "dev_x_layer_1_adj_curves",
+      "type": "heeler.export_layer",
+      "label": "Sky Curves Export Layer",
+      "enabled": true,
+      "params": {
+        "source": "develop:Curves",
+        "tap": "layer_1_curves",
+        "layer": "layer_1_adj",
+        "name": "Sky Curves"
+      },
+      "x": 239,
+      "y": 802
+    }
+  ],
+  "connections": [
+    {
+      "from": [
+        "src",
+        "out"
+      ],
+      "to": [
+        "merge",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "portra",
+        "out"
+      ],
+      "to": [
+        "merge",
+        "fg"
+      ]
+    },
+    {
+      "from": [
+        "merge",
+        "out"
+      ],
+      "to": [
+        "crop",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "crop",
+        "out"
+      ],
+      "to": [
+        "lens",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lens",
+        "out"
+      ],
+      "to": [
+        "depthmap",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "depthmap",
+        "out"
+      ],
+      "to": [
+        "colorchecker",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "colorchecker",
+        "out"
+      ],
+      "to": [
+        "stdcolor",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "src",
+        "out"
+      ],
+      "to": [
+        "lummask",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "src",
+        "out"
+      ],
+      "to": [
+        "brushmask",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "stdcolor",
+        "out"
+      ],
+      "to": [
+        "detail",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "detail",
+        "out"
+      ],
+      "to": [
+        "cbal",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "cbal",
+        "out"
+      ],
+      "to": [
+        "exposure",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "toneeq",
+        "out"
+      ],
+      "to": [
+        "bw",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "bw",
+        "out"
+      ],
+      "to": [
+        "denoise",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "denoise",
+        "out"
+      ],
+      "to": [
+        "sharpen",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "vignette",
+        "out"
+      ],
+      "to": [
+        "grain",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "grain",
+        "out"
+      ],
+      "to": [
+        "keylight",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "keylight",
+        "out"
+      ],
+      "to": [
+        "fog",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "fog",
+        "out"
+      ],
+      "to": [
+        "dof",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "dof",
+        "out"
+      ],
+      "to": [
+        "flare",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "flare",
+        "out"
+      ],
+      "to": [
+        "halation",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "halation",
+        "out"
+      ],
+      "to": [
+        "bend",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "bend",
+        "out"
+      ],
+      "to": [
+        "recolor",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "recolor",
+        "out"
+      ],
+      "to": [
+        "colorconsole",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "colorconsole",
+        "out"
+      ],
+      "to": [
+        "profile",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "profile",
+        "out"
+      ],
+      "to": [
+        "levels",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "levels",
+        "out"
+      ],
+      "to": [
+        "curves",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "curves",
+        "out"
+      ],
+      "to": [
+        "paper",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "paper",
+        "out"
+      ],
+      "to": [
+        "output",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lummask",
+        "out"
+      ],
+      "to": [
+        "cbal",
+        "mask"
+      ]
+    },
+    {
+      "from": [
+        "exposure",
+        "out"
+      ],
+      "to": [
+        "layer_1_adj",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lens",
+        "out"
+      ],
+      "to": [
+        "layer_1_mask",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "layer_1_mask",
+        "out"
+      ],
+      "to": [
+        "layer_1_adj",
+        "mask"
+      ]
+    },
+    {
+      "from": [
+        "layer_1_adj",
+        "out"
+      ],
+      "to": [
+        "layer_1_curves",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "layer_1_curves",
+        "out"
+      ],
+      "to": [
+        "toneeq",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "layer_1_mask",
+        "out"
+      ],
+      "to": [
+        "layer_1_curves",
+        "mask"
+      ]
+    },
+    {
+      "from": [
+        "layer_1_adj",
+        "out"
+      ],
+      "to": [
+        "dev_x_layer_1_adj_exposure",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "layer_1_curves",
+        "out"
+      ],
+      "to": [
+        "dev_x_layer_1_adj_curves",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "sharpen",
+        "out"
+      ],
+      "to": [
+        "vignette",
+        "in"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,4356 @@
+[
+ {
+  "category": "Nature",
+  "preset": {
+   "schema": 1,
+   "name": "Meadow",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 5150,
+      "tint": 0,
+      "saturation": 10,
+      "vibrance": 58,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 0,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 60,
+      "whites": 0,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "detail",
+     "type": "heeler.detail",
+     "name": "Detail",
+     "cat": "detail",
+     "x": 224,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "texture": 0,
+      "clarity": 22,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "detail",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "detail",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Nature",
+  "preset": {
+   "schema": 1,
+   "name": "Golden Field",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 6600,
+      "tint": 12,
+      "saturation": 0,
+      "vibrance": 46,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 0,
+      "color_contrast": 0,
+      "highlights": -70,
+      "shadows": 60,
+      "whites": 0,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "grain",
+     "type": "heeler.grain",
+     "name": "Grain",
+     "cat": "detail",
+     "x": 424,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "intensity": 10,
+      "size": 25,
+      "shadows_gain": 100,
+      "midtones_gain": 100,
+      "highlights_gain": 100,
+      "red_gain": 100,
+      "green_gain": 100,
+      "blue_gain": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "grain",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "grain",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Nature",
+  "preset": {
+   "schema": 1,
+   "name": "Alpine Air",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 4700,
+      "tint": 0,
+      "saturation": 0,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 38,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 20,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "detail",
+     "type": "heeler.detail",
+     "name": "Detail",
+     "cat": "detail",
+     "x": 224,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "texture": 0,
+      "clarity": 25,
+      "dehaze": 28,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "detail",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "detail",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Nature",
+  "preset": {
+   "schema": 1,
+   "name": "Forest Deep",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 4950,
+      "tint": 0,
+      "saturation": 0,
+      "vibrance": 44,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 45,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": -34
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "cbal",
+     "type": "heeler.color_balance",
+     "name": "Color Balance",
+     "cat": "color",
+     "x": 224,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "opacity": 100,
+      "shadows_lum": 0,
+      "midtones_lum": 0,
+      "highlights_lum": 0,
+      "shadows_hue": 150,
+      "midtones_hue": 0,
+      "highlights_hue": 0,
+      "shadows_sat": 14,
+      "midtones_sat": 0,
+      "highlights_sat": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "cbal",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "cbal",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Nature",
+  "preset": {
+   "schema": 1,
+   "name": "Coastal Light",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 4850,
+      "tint": -6,
+      "saturation": 0,
+      "vibrance": 52,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 0,
+      "color_contrast": 0,
+      "highlights": -75,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "detail",
+     "type": "heeler.detail",
+     "name": "Detail",
+     "cat": "detail",
+     "x": 224,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 14,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "detail",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "detail",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Vibrance",
+  "preset": {
+   "schema": 1,
+   "name": "Punch",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 6500,
+      "tint": 0,
+      "saturation": 16,
+      "vibrance": 75,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 50,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "detail",
+     "type": "heeler.detail",
+     "name": "Detail",
+     "cat": "detail",
+     "x": 224,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "texture": 0,
+      "clarity": 28,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "detail",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "detail",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Vibrance",
+  "preset": {
+   "schema": 1,
+   "name": "Gentle Lift",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 6500,
+      "tint": 0,
+      "saturation": 0,
+      "vibrance": 52,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0.4,
+      "contrast": 0,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 62,
+      "whites": 0,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Vibrance",
+  "preset": {
+   "schema": 1,
+   "name": "Market Colors",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 5750,
+      "tint": 0,
+      "saturation": 28,
+      "vibrance": 58,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 40,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Vibrance",
+  "preset": {
+   "schema": 1,
+   "name": "Bloom",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 6500,
+      "tint": 15,
+      "saturation": 0,
+      "vibrance": 64,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 0,
+      "color_contrast": 0,
+      "highlights": -75,
+      "shadows": 0,
+      "whites": 26,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Vibrance",
+  "preset": {
+   "schema": 1,
+   "name": "Electric Evening",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 4500,
+      "tint": 0,
+      "saturation": 0,
+      "vibrance": 70,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 42,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "cbal",
+     "type": "heeler.color_balance",
+     "name": "Color Balance",
+     "cat": "color",
+     "x": 224,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "opacity": 100,
+      "shadows_lum": 0,
+      "midtones_lum": 0,
+      "highlights_lum": 0,
+      "shadows_hue": 0,
+      "midtones_hue": 0,
+      "highlights_hue": 200,
+      "shadows_sat": 0,
+      "midtones_sat": 0,
+      "highlights_sat": 16
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "cbal",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "cbal",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Cinematic",
+  "preset": {
+   "schema": 1,
+   "name": "Teal Hour",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 6500,
+      "tint": 0,
+      "saturation": 0,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 40,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": -32
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "cbal",
+     "type": "heeler.color_balance",
+     "name": "Color Balance",
+     "cat": "color",
+     "x": 224,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "opacity": 100,
+      "shadows_lum": 0,
+      "midtones_lum": 0,
+      "highlights_lum": 0,
+      "shadows_hue": 190,
+      "midtones_hue": 0,
+      "highlights_hue": 35,
+      "shadows_sat": 26,
+      "midtones_sat": 0,
+      "highlights_sat": 16
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "cbal",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "cbal",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Cinematic",
+  "preset": {
+   "schema": 1,
+   "name": "Night Runner",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 4400,
+      "tint": 0,
+      "saturation": -8,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 48,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": -44
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "cbal",
+     "type": "heeler.color_balance",
+     "name": "Color Balance",
+     "cat": "color",
+     "x": 224,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "opacity": 100,
+      "shadows_lum": 0,
+      "midtones_lum": 0,
+      "highlights_lum": 0,
+      "shadows_hue": 210,
+      "midtones_hue": 0,
+      "highlights_hue": 0,
+      "shadows_sat": 20,
+      "midtones_sat": 0,
+      "highlights_sat": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    },
+    {
+     "id": "grain",
+     "type": "heeler.grain",
+     "name": "Grain",
+     "cat": "detail",
+     "x": 424,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "intensity": 14,
+      "size": 25,
+      "shadows_gain": 100,
+      "midtones_gain": 100,
+      "highlights_gain": 100,
+      "red_gain": 100,
+      "green_gain": 100,
+      "blue_gain": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "cbal",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "cbal",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "grain",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "grain",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Cinematic",
+  "preset": {
+   "schema": 1,
+   "name": "Neo Noir",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 6500,
+      "tint": 0,
+      "saturation": -24,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 58,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": -40
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "cbal",
+     "type": "heeler.color_balance",
+     "name": "Color Balance",
+     "cat": "color",
+     "x": 224,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "opacity": 100,
+      "shadows_lum": 0,
+      "midtones_lum": 0,
+      "highlights_lum": 0,
+      "shadows_hue": 0,
+      "midtones_hue": 0,
+      "highlights_hue": 45,
+      "shadows_sat": 0,
+      "midtones_sat": 0,
+      "highlights_sat": 10
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    },
+    {
+     "id": "grain",
+     "type": "heeler.grain",
+     "name": "Grain",
+     "cat": "detail",
+     "x": 424,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "intensity": 16,
+      "size": 25,
+      "shadows_gain": 100,
+      "midtones_gain": 100,
+      "highlights_gain": 100,
+      "red_gain": 100,
+      "green_gain": 100,
+      "blue_gain": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "cbal",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "cbal",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "grain",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "grain",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Cinematic",
+  "preset": {
+   "schema": 1,
+   "name": "Desert Chrome",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 6400,
+      "tint": 0,
+      "saturation": 0,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 42,
+      "color_contrast": 0,
+      "highlights": -85,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "detail",
+     "type": "heeler.detail",
+     "name": "Detail",
+     "cat": "detail",
+     "x": 224,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "texture": 0,
+      "clarity": 30,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    },
+    {
+     "id": "cbal",
+     "type": "heeler.color_balance",
+     "name": "Color Balance",
+     "cat": "color",
+     "x": 224,
+     "y": 220,
+     "enabled": true,
+     "params": {
+      "opacity": 100,
+      "shadows_lum": 0,
+      "midtones_lum": 0,
+      "highlights_lum": 0,
+      "shadows_hue": 0,
+      "midtones_hue": 35,
+      "highlights_hue": 0,
+      "shadows_sat": 0,
+      "midtones_sat": 14,
+      "highlights_sat": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "detail",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "detail",
+     "to": "cbal",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "cbal",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Cinematic",
+  "preset": {
+   "schema": 1,
+   "name": "Steel Morning",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 4600,
+      "tint": 0,
+      "saturation": -10,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 38,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "cbal",
+     "type": "heeler.color_balance",
+     "name": "Color Balance",
+     "cat": "color",
+     "x": 224,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "opacity": 100,
+      "shadows_lum": 0,
+      "midtones_lum": 0,
+      "highlights_lum": 0,
+      "shadows_hue": 220,
+      "midtones_hue": 210,
+      "highlights_hue": 0,
+      "shadows_sat": 16,
+      "midtones_sat": 8,
+      "highlights_sat": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "cbal",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "cbal",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Black & White",
+  "preset": {
+   "schema": 1,
+   "name": "Silver Classic",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 6500,
+      "tint": 0,
+      "saturation": 0,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 44,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "bw",
+     "type": "heeler.black_white",
+     "name": "Black & White",
+     "cat": "color",
+     "x": 424,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "red": 30,
+      "green": 59,
+      "blue": 11,
+      "amount": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "bw",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "bw",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Black & White",
+  "preset": {
+   "schema": 1,
+   "name": "High Key",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 6500,
+      "tint": 0,
+      "saturation": 0,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0.7,
+      "contrast": 10,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 75,
+      "whites": 28,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "bw",
+     "type": "heeler.black_white",
+     "name": "Black & White",
+     "cat": "color",
+     "x": 424,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "red": 30,
+      "green": 59,
+      "blue": 11,
+      "amount": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "bw",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "bw",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Black & White",
+  "preset": {
+   "schema": 1,
+   "name": "Low Key",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 6500,
+      "tint": 0,
+      "saturation": 0,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 55,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 32,
+      "whites": 0,
+      "blacks": -52
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "bw",
+     "type": "heeler.black_white",
+     "name": "Black & White",
+     "cat": "color",
+     "x": 424,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "red": 30,
+      "green": 59,
+      "blue": 11,
+      "amount": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "bw",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "bw",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Black & White",
+  "preset": {
+   "schema": 1,
+   "name": "Newsprint",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 6500,
+      "tint": 0,
+      "saturation": 0,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 65,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "bw",
+     "type": "heeler.black_white",
+     "name": "Black & White",
+     "cat": "color",
+     "x": 424,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "red": 30,
+      "green": 59,
+      "blue": 11,
+      "amount": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    },
+    {
+     "id": "grain",
+     "type": "heeler.grain",
+     "name": "Grain",
+     "cat": "detail",
+     "x": 424,
+     "y": 220,
+     "enabled": true,
+     "params": {
+      "intensity": 46,
+      "size": 45,
+      "shadows_gain": 100,
+      "midtones_gain": 100,
+      "highlights_gain": 100,
+      "red_gain": 100,
+      "green_gain": 100,
+      "blue_gain": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "bw",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "bw",
+     "to": "grain",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "grain",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Black & White",
+  "preset": {
+   "schema": 1,
+   "name": "Portrait Silver",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 6500,
+      "tint": 0,
+      "saturation": 0,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 0,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 58,
+      "whites": 0,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "bw",
+     "type": "heeler.black_white",
+     "name": "Black & White",
+     "cat": "color",
+     "x": 424,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "red": 55,
+      "green": 35,
+      "blue": 10,
+      "amount": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    },
+    {
+     "id": "detail",
+     "type": "heeler.detail",
+     "name": "Detail",
+     "cat": "detail",
+     "x": 224,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "texture": 0,
+      "clarity": 5,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "bw",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "bw",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "detail",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "detail",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Artistic",
+  "preset": {
+   "schema": 1,
+   "name": "Faded Memory",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 6100,
+      "tint": 0,
+      "saturation": -14,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 4,
+      "color_contrast": 0,
+      "highlights": -68,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 24
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "grain",
+     "type": "heeler.grain",
+     "name": "Grain",
+     "cat": "detail",
+     "x": 424,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "intensity": 20,
+      "size": 25,
+      "shadows_gain": 100,
+      "midtones_gain": 100,
+      "highlights_gain": 100,
+      "red_gain": 100,
+      "green_gain": 100,
+      "blue_gain": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "grain",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "grain",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Artistic",
+  "preset": {
+   "schema": 1,
+   "name": "Emberlight",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 7200,
+      "tint": 17,
+      "saturation": 0,
+      "vibrance": 44,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 0,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 34,
+      "whites": 0,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "cbal",
+     "type": "heeler.color_balance",
+     "name": "Color Balance",
+     "cat": "color",
+     "x": 224,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "opacity": 100,
+      "shadows_lum": 0,
+      "midtones_lum": 0,
+      "highlights_lum": 0,
+      "shadows_hue": 0,
+      "midtones_hue": 0,
+      "highlights_hue": 30,
+      "shadows_sat": 0,
+      "midtones_sat": 0,
+      "highlights_sat": 22
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "cbal",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "cbal",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Artistic",
+  "preset": {
+   "schema": 1,
+   "name": "Cyan Dream",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 5050,
+      "tint": 0,
+      "saturation": -4,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 34,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "cbal",
+     "type": "heeler.color_balance",
+     "name": "Color Balance",
+     "cat": "color",
+     "x": 224,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "opacity": 100,
+      "shadows_lum": 0,
+      "midtones_lum": 0,
+      "highlights_lum": 0,
+      "shadows_hue": 0,
+      "midtones_hue": 195,
+      "highlights_hue": 0,
+      "shadows_sat": 0,
+      "midtones_sat": 20,
+      "highlights_sat": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "cbal",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "cbal",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Artistic",
+  "preset": {
+   "schema": 1,
+   "name": "Cross Wind",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 6500,
+      "tint": 0,
+      "saturation": 14,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 44,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 0
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "cbal",
+     "type": "heeler.color_balance",
+     "name": "Color Balance",
+     "cat": "color",
+     "x": 224,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "opacity": 100,
+      "shadows_lum": 0,
+      "midtones_lum": 0,
+      "highlights_lum": 0,
+      "shadows_hue": 90,
+      "midtones_hue": 0,
+      "highlights_hue": 300,
+      "shadows_sat": 16,
+      "midtones_sat": 0,
+      "highlights_sat": 14
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "cbal",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "cbal",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ {
+  "category": "Artistic",
+  "preset": {
+   "schema": 1,
+   "name": "Matte Story",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "name": "Image Source",
+     "cat": "source",
+     "x": 24,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "hasOut": true
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "name": "Standard Color",
+     "cat": "color",
+     "x": 224,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "temperature": 5850,
+      "tint": 0,
+      "saturation": -8,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "name": "Exposure",
+     "cat": "color",
+     "x": 424,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 14,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 26
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "maskIn": true,
+     "textParams": {}
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "name": "Output",
+     "cat": "utility",
+     "x": 824,
+     "y": 24,
+     "enabled": true,
+     "params": {},
+     "badge": "JPEG",
+     "hasIn": true
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "name": "Tone Profile",
+     "cat": "color",
+     "x": 624,
+     "y": 24,
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25
+     },
+     "textParams": {
+      "mode": "standard"
+     },
+     "hasIn": true,
+     "hasOut": true
+    },
+    {
+     "id": "grain",
+     "type": "heeler.grain",
+     "name": "Grain",
+     "cat": "detail",
+     "x": 424,
+     "y": 122,
+     "enabled": true,
+     "params": {
+      "intensity": 14,
+      "size": 25,
+      "shadows_gain": 100,
+      "midtones_gain": 100,
+      "highlights_gain": 100,
+      "red_gain": 100,
+      "green_gain": 100,
+      "blue_gain": 100
+     },
+     "hasIn": true,
+     "hasOut": true,
+     "textParams": {}
+    }
+   ],
+   "wires": [
+    {
+     "from": "profile",
+     "to": "output",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "stdcolor",
+     "to": "exposure",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "src",
+     "to": "stdcolor",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "exposure",
+     "to": "grain",
+     "toPort": "in",
+     "kind": "image"
+    },
+    {
+     "from": "grain",
+     "to": "profile",
+     "toPort": "in",
+     "kind": "image"
+    }
+   ]
+  }
+ }
+]

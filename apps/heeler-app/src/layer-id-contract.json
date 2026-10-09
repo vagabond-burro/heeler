@@ -1,0 +1,116 @@
+[
+  {
+    "id": "layer_0_adj",
+    "node": true,
+    "adj": true,
+    "mask": false
+  },
+  {
+    "id": "layer_12_mask",
+    "node": true,
+    "adj": false,
+    "mask": true
+  },
+  {
+    "id": "layer_001_curves",
+    "node": true,
+    "adj": false,
+    "mask": false
+  },
+  {
+    "id": "layer_001_adj",
+    "node": true,
+    "adj": true,
+    "mask": false
+  },
+  {
+    "id": "layer_2_",
+    "node": true,
+    "adj": false,
+    "mask": false
+  },
+  {
+    "id": "layer_2_adj_extra",
+    "node": true,
+    "adj": false,
+    "mask": false
+  },
+  {
+    "id": "layer__adj",
+    "node": false,
+    "adj": false,
+    "mask": false
+  },
+  {
+    "id": "layer_x_adj",
+    "node": false,
+    "adj": false,
+    "mask": false
+  },
+  {
+    "id": "layer_2_mask_extra",
+    "node": true,
+    "adj": false,
+    "mask": false
+  },
+  {
+    "id": "art_m_2",
+    "node": false,
+    "adj": false,
+    "mask": false
+  },
+  {
+    "id": "layer_\u0661_adj",
+    "node": false,
+    "adj": false,
+    "mask": false
+  },
+  {
+    "id": "xlayer_2_adj",
+    "node": false,
+    "adj": false,
+    "mask": false
+  },
+  {
+    "id": "layer_2_tool-part",
+    "node": true,
+    "adj": false,
+    "mask": false
+  },
+  {
+    "id": "layer_2_adj_adj",
+    "node": true,
+    "adj": false,
+    "mask": false
+  },
+  {
+    "id": "layer_2_adj\n",
+    "node": true,
+    "adj": false,
+    "mask": false
+  },
+  {
+    "id": "layer_2_adj\r",
+    "node": true,
+    "adj": false,
+    "mask": false
+  },
+  {
+    "id": "layer_2_adj\r\n",
+    "node": true,
+    "adj": false,
+    "mask": false
+  },
+  {
+    "id": "layer_2_adj\u2028",
+    "node": true,
+    "adj": false,
+    "mask": false
+  },
+  {
+    "id": "layer_2_adj\u2029",
+    "node": true,
+    "adj": false,
+    "mask": false
+  }
+]

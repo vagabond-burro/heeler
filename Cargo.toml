@@ -1,0 +1,55 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/heeler-graph",
+    "crates/heeler-commands",
+    "crates/heeler-engine",
+    "crates/heeler-project",
+    "crates/heeler-io",
+    "crates/heeler-catalog",
+    "crates/heeler-gpu",
+    "crates/heeler-raw",
+    "crates/heeler-stitch",
+    "crates/heeler-vision",
+    "apps/heeler-app/src-tauri",
+]
+
+[workspace.package]
+version = "26.5.0"
+edition = "2021"
+license = "MPL-2.0"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+# Dev builds (tauri dev) compile the image-processing crates and all
+# dependencies fully optimized: debug-profile pixel loops are 10-40x
+# slower and made the app feel sluggish. The thin shell crates stay on
+# the default dev profile for fast rebuilds.
+[profile.dev.package.heeler-engine]
+opt-level = 3
+# Overflow checks stay on by default in dev even at opt-level 3, and
+# measured 2.2x on the blur loops (2026-09-09 measurement): the
+# owner's dev-build timings were not the timings a customer would see.
+# The engine's arithmetic is f32; the index math it would guard is what
+# the engine's own tests exercise in release too.
+overflow-checks = false
+[profile.dev.package.heeler-vision]
+# The depth refinement runs here: five seconds a dial change at
+# opt-level 0 on a 2048 px preview, under a tenth of that at 3
+# (2026-09-16). Same reason as the engine's entry above.
+opt-level = 3
+[profile.dev.package.heeler-io]
+opt-level = 3
+[profile.dev.package.heeler-raw]
+opt-level = 3
+[profile.dev.package.heeler-graph]
+opt-level = 3
+[profile.dev.package.heeler-stitch]
+opt-level = 3
+[profile.dev.package."*"]
+opt-level = 3
+
+

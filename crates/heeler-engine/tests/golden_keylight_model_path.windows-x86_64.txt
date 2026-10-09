@@ -1,0 +1,3 @@
+legacy directional f92624adcf901083 716f6d2da268c277
+rig with a lamp b0cfe9b5f48063a5 76b35850db3618fb
+inverted through levels 2c0137ebd79c57cd 2d37d062eab307ff

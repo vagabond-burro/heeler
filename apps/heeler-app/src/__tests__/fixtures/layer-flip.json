@@ -1,0 +1,1126 @@
+{
+ "pixel": {
+  "before": {
+   "schema_version": 1,
+   "graph_id": "layer_flip_ui",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "label": "Image Source",
+     "enabled": true,
+     "params": {
+      "camera_wb": 1,
+      "camera_matrix": 1
+     },
+     "x": 24,
+     "y": 24
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "label": "Standard Color",
+     "enabled": true,
+     "params": {
+      "temperature": 6500,
+      "tint": 0,
+      "saturation": 0,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "x": 224,
+     "y": 24
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "label": "Exposure",
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 0,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 0
+     },
+     "x": 424,
+     "y": 24
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "label": "Output",
+     "enabled": true,
+     "params": {},
+     "x": 824,
+     "y": 24
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "label": "Tone Profile",
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "development": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25,
+      "mode": "standard",
+      "film": ""
+     },
+     "x": 624,
+     "y": 24
+    },
+    {
+     "id": "crop",
+     "type": "heeler.crop_rotate",
+     "label": "Crop & Rotate",
+     "enabled": true,
+     "params": {
+      "angle": 5,
+      "aspect": 0,
+      "crop_x": 0.16666666666666666,
+      "crop_y": 0.16666666666666666,
+      "crop_w": 0.6666666666666666,
+      "crop_h": 0.6666666666666666
+     },
+     "x": 24,
+     "y": 122
+    },
+    {
+     "id": "art_in",
+     "type": "heeler.to_display",
+     "label": "To Display",
+     "enabled": true,
+     "params": {},
+     "x": 24,
+     "y": 96
+    },
+    {
+     "id": "art_p1",
+     "type": "heeler.paint",
+     "label": "Pixel 1 Paint",
+     "enabled": true,
+     "params": {
+      "strokes": "[{\"points\":[[0.3,0.4],[0.34,0.42]],\"radius\":0.05,\"hardness\":1,\"flow\":1,\"color\":\"#ff2000\"}]"
+     },
+     "x": 64,
+     "y": 220
+    },
+    {
+     "id": "art_b1",
+     "type": "heeler.blend",
+     "label": "Pixel 1",
+     "enabled": true,
+     "params": {
+      "opacity": 100,
+      "mode": "normal"
+     },
+     "x": 64,
+     "y": 340
+    },
+    {
+     "id": "art_out",
+     "type": "heeler.to_scene",
+     "label": "To Scene",
+     "enabled": true,
+     "params": {},
+     "x": 324,
+     "y": 96
+    },
+    {
+     "id": "art_m_art_b1",
+     "type": "heeler.brush_mask",
+     "label": "Layer Mask",
+     "enabled": true,
+     "params": {
+      "invert": true,
+      "strokes": "[{\"points\":[[0.33,0.41]],\"radius\":0.02,\"hardness\":1,\"flow\":1}]"
+     },
+     "x": 64,
+     "y": 458
+    }
+   ],
+   "connections": [
+    {
+     "from": [
+      "stdcolor",
+      "out"
+     ],
+     "to": [
+      "exposure",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "exposure",
+      "out"
+     ],
+     "to": [
+      "profile",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "src",
+      "out"
+     ],
+     "to": [
+      "crop",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "crop",
+      "out"
+     ],
+     "to": [
+      "stdcolor",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_in",
+      "out"
+     ],
+     "to": [
+      "art_p1",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_in",
+      "out"
+     ],
+     "to": [
+      "art_b1",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_p1",
+      "out"
+     ],
+     "to": [
+      "art_b1",
+      "fg"
+     ]
+    },
+    {
+     "from": [
+      "art_b1",
+      "out"
+     ],
+     "to": [
+      "art_out",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_m_art_b1",
+      "out"
+     ],
+     "to": [
+      "art_b1",
+      "mask"
+     ]
+    },
+    {
+     "from": [
+      "profile",
+      "out"
+     ],
+     "to": [
+      "art_in",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "crop",
+      "out"
+     ],
+     "to": [
+      "art_m_art_b1",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_out",
+      "out"
+     ],
+     "to": [
+      "output",
+      "in"
+     ]
+    }
+   ]
+  },
+  "after": {
+   "schema_version": 1,
+   "graph_id": "layer_flip_ui",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "label": "Image Source",
+     "enabled": true,
+     "params": {
+      "camera_wb": 1,
+      "camera_matrix": 1
+     },
+     "x": 24,
+     "y": 24
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "label": "Standard Color",
+     "enabled": true,
+     "params": {
+      "temperature": 6500,
+      "tint": 0,
+      "saturation": 0,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "x": 224,
+     "y": 24
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "label": "Exposure",
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 0,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 0
+     },
+     "x": 424,
+     "y": 24
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "label": "Output",
+     "enabled": true,
+     "params": {},
+     "x": 824,
+     "y": 24
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "label": "Tone Profile",
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "development": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25,
+      "mode": "standard",
+      "film": ""
+     },
+     "x": 624,
+     "y": 24
+    },
+    {
+     "id": "crop",
+     "type": "heeler.crop_rotate",
+     "label": "Crop & Rotate",
+     "enabled": true,
+     "params": {
+      "angle": 5,
+      "aspect": 0,
+      "crop_x": 0.16666666666666666,
+      "crop_y": 0.16666666666666666,
+      "crop_w": 0.6666666666666666,
+      "crop_h": 0.6666666666666666
+     },
+     "x": 24,
+     "y": 122
+    },
+    {
+     "id": "art_in",
+     "type": "heeler.to_display",
+     "label": "To Display",
+     "enabled": true,
+     "params": {},
+     "x": 24,
+     "y": 96
+    },
+    {
+     "id": "art_p1",
+     "type": "heeler.paint",
+     "label": "Pixel 1 Paint",
+     "enabled": true,
+     "params": {
+      "strokes": "[{\"points\":[[0.7,0.4],[0.6599999999999999,0.42]],\"radius\":0.05,\"hardness\":1,\"flow\":1,\"color\":\"#ff2000\"}]"
+     },
+     "x": 64,
+     "y": 220
+    },
+    {
+     "id": "art_b1",
+     "type": "heeler.blend",
+     "label": "Pixel 1",
+     "enabled": true,
+     "params": {
+      "opacity": 100,
+      "mode": "normal"
+     },
+     "x": 64,
+     "y": 340
+    },
+    {
+     "id": "art_out",
+     "type": "heeler.to_scene",
+     "label": "To Scene",
+     "enabled": true,
+     "params": {},
+     "x": 324,
+     "y": 96
+    },
+    {
+     "id": "art_m_art_b1",
+     "type": "heeler.brush_mask",
+     "label": "Layer Mask",
+     "enabled": true,
+     "params": {
+      "invert": true,
+      "strokes": "[{\"points\":[[0.6699999999999999,0.41]],\"radius\":0.02,\"hardness\":1,\"flow\":1}]"
+     },
+     "x": 64,
+     "y": 458
+    }
+   ],
+   "connections": [
+    {
+     "from": [
+      "stdcolor",
+      "out"
+     ],
+     "to": [
+      "exposure",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "exposure",
+      "out"
+     ],
+     "to": [
+      "profile",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "src",
+      "out"
+     ],
+     "to": [
+      "crop",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "crop",
+      "out"
+     ],
+     "to": [
+      "stdcolor",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_in",
+      "out"
+     ],
+     "to": [
+      "art_p1",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_in",
+      "out"
+     ],
+     "to": [
+      "art_b1",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_p1",
+      "out"
+     ],
+     "to": [
+      "art_b1",
+      "fg"
+     ]
+    },
+    {
+     "from": [
+      "art_b1",
+      "out"
+     ],
+     "to": [
+      "art_out",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_m_art_b1",
+      "out"
+     ],
+     "to": [
+      "art_b1",
+      "mask"
+     ]
+    },
+    {
+     "from": [
+      "profile",
+      "out"
+     ],
+     "to": [
+      "art_in",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "crop",
+      "out"
+     ],
+     "to": [
+      "art_m_art_b1",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_out",
+      "out"
+     ],
+     "to": [
+      "output",
+      "in"
+     ]
+    }
+   ]
+  }
+ },
+ "image": {
+  "before": {
+   "schema_version": 1,
+   "graph_id": "layer_flip_ui",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "label": "Image Source",
+     "enabled": true,
+     "params": {
+      "camera_wb": 1,
+      "camera_matrix": 1
+     },
+     "x": 24,
+     "y": 24
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "label": "Standard Color",
+     "enabled": true,
+     "params": {
+      "temperature": 6500,
+      "tint": 0,
+      "saturation": 0,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "x": 224,
+     "y": 24
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "label": "Exposure",
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 0,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 0
+     },
+     "x": 424,
+     "y": 24
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "label": "Output",
+     "enabled": true,
+     "params": {},
+     "x": 824,
+     "y": 24
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "label": "Tone Profile",
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "development": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25,
+      "mode": "standard",
+      "film": ""
+     },
+     "x": 624,
+     "y": 24
+    },
+    {
+     "id": "crop",
+     "type": "heeler.crop_rotate",
+     "label": "Crop & Rotate",
+     "enabled": true,
+     "params": {
+      "angle": 5,
+      "aspect": 0,
+      "crop_x": 0.16666666666666666,
+      "crop_y": 0.16666666666666666,
+      "crop_w": 0.6666666666666666,
+      "crop_h": 0.6666666666666666
+     },
+     "x": 24,
+     "y": 122
+    },
+    {
+     "id": "art_in",
+     "type": "heeler.to_display",
+     "label": "To Display",
+     "enabled": true,
+     "params": {},
+     "x": 24,
+     "y": 96
+    },
+    {
+     "id": "art_p1",
+     "type": "heeler.file",
+     "label": "logo",
+     "enabled": true,
+     "params": {
+      "path": "/fixture/flip.png",
+      "layer": "",
+      "space": "display"
+     },
+     "x": 64,
+     "y": 220
+    },
+    {
+     "id": "art_b1",
+     "type": "heeler.blend",
+     "label": "logo",
+     "enabled": true,
+     "params": {
+      "opacity": 100,
+      "warp_bx": 0,
+      "warp_by": 0.125,
+      "warp_bw": 1,
+      "warp_bh": 0.75,
+      "warp_x0": 0.15,
+      "warp_y0": 0.2,
+      "warp_x1": 0.55,
+      "warp_y1": 0.25,
+      "warp_x2": 0.52,
+      "warp_y2": 0.45,
+      "warp_x3": 0.12,
+      "warp_y3": 0.4,
+      "warp_aspect": 1.5,
+      "mode": "normal",
+      "fit": "place"
+     },
+     "x": 64,
+     "y": 340
+    },
+    {
+     "id": "art_out",
+     "type": "heeler.to_scene",
+     "label": "To Scene",
+     "enabled": true,
+     "params": {},
+     "x": 324,
+     "y": 96
+    }
+   ],
+   "connections": [
+    {
+     "from": [
+      "stdcolor",
+      "out"
+     ],
+     "to": [
+      "exposure",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "exposure",
+      "out"
+     ],
+     "to": [
+      "profile",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "src",
+      "out"
+     ],
+     "to": [
+      "crop",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "crop",
+      "out"
+     ],
+     "to": [
+      "stdcolor",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_in",
+      "out"
+     ],
+     "to": [
+      "art_p1",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_in",
+      "out"
+     ],
+     "to": [
+      "art_b1",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_p1",
+      "out"
+     ],
+     "to": [
+      "art_b1",
+      "fg"
+     ]
+    },
+    {
+     "from": [
+      "art_b1",
+      "out"
+     ],
+     "to": [
+      "art_out",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "profile",
+      "out"
+     ],
+     "to": [
+      "art_in",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_out",
+      "out"
+     ],
+     "to": [
+      "output",
+      "in"
+     ]
+    }
+   ]
+  },
+  "after": {
+   "schema_version": 1,
+   "graph_id": "layer_flip_ui",
+   "nodes": [
+    {
+     "id": "src",
+     "type": "heeler.image_source",
+     "label": "Image Source",
+     "enabled": true,
+     "params": {
+      "camera_wb": 1,
+      "camera_matrix": 1
+     },
+     "x": 24,
+     "y": 24
+    },
+    {
+     "id": "stdcolor",
+     "type": "heeler.standard_color",
+     "label": "Standard Color",
+     "enabled": true,
+     "params": {
+      "temperature": 6500,
+      "tint": 0,
+      "saturation": 0,
+      "vibrance": 0,
+      "texture": 0,
+      "clarity": 0,
+      "dehaze": 0,
+      "texture_shadows": 100,
+      "texture_midtones": 100,
+      "texture_highlights": 100,
+      "texture_red": 100,
+      "texture_green": 100,
+      "texture_blue": 100,
+      "clarity_shadows": 100,
+      "clarity_midtones": 100,
+      "clarity_highlights": 100,
+      "clarity_red": 100,
+      "clarity_green": 100,
+      "clarity_blue": 100,
+      "dehaze_shadows": 100,
+      "dehaze_midtones": 100,
+      "dehaze_highlights": 100,
+      "dehaze_red": 100,
+      "dehaze_green": 100,
+      "dehaze_blue": 100
+     },
+     "x": 224,
+     "y": 24
+    },
+    {
+     "id": "exposure",
+     "type": "heeler.exposure",
+     "label": "Exposure",
+     "enabled": true,
+     "params": {
+      "exposure": 0,
+      "contrast": 0,
+      "color_contrast": 0,
+      "highlights": 0,
+      "shadows": 0,
+      "whites": 0,
+      "blacks": 0
+     },
+     "x": 424,
+     "y": 24
+    },
+    {
+     "id": "output",
+     "type": "heeler.output",
+     "label": "Output",
+     "enabled": true,
+     "params": {},
+     "x": 824,
+     "y": 24
+    },
+    {
+     "id": "profile",
+     "type": "heeler.tone_profile",
+     "label": "Tone Profile",
+     "enabled": true,
+     "params": {
+      "contrast": 100,
+      "colorfulness": 0,
+      "development": 0,
+      "baseline_ev": 1.3,
+      "shadow_toe": 50,
+      "highlight_rolloff": 25,
+      "mode": "standard",
+      "film": ""
+     },
+     "x": 624,
+     "y": 24
+    },
+    {
+     "id": "crop",
+     "type": "heeler.crop_rotate",
+     "label": "Crop & Rotate",
+     "enabled": true,
+     "params": {
+      "angle": 5,
+      "aspect": 0,
+      "crop_x": 0.16666666666666666,
+      "crop_y": 0.16666666666666666,
+      "crop_w": 0.6666666666666666,
+      "crop_h": 0.6666666666666666
+     },
+     "x": 24,
+     "y": 122
+    },
+    {
+     "id": "art_in",
+     "type": "heeler.to_display",
+     "label": "To Display",
+     "enabled": true,
+     "params": {},
+     "x": 24,
+     "y": 96
+    },
+    {
+     "id": "art_p1",
+     "type": "heeler.file",
+     "label": "logo",
+     "enabled": true,
+     "params": {
+      "path": "/fixture/flip.png",
+      "layer": "",
+      "space": "display"
+     },
+     "x": 64,
+     "y": 220
+    },
+    {
+     "id": "art_b1",
+     "type": "heeler.blend",
+     "label": "logo",
+     "enabled": true,
+     "params": {
+      "opacity": 100,
+      "warp_bx": 0,
+      "warp_by": 0.125,
+      "warp_bw": 1,
+      "warp_bh": 0.75,
+      "warp_x0": 0.55,
+      "warp_y0": 0.25,
+      "warp_x1": 0.15,
+      "warp_y1": 0.2,
+      "warp_x2": 0.12,
+      "warp_y2": 0.4,
+      "warp_x3": 0.52,
+      "warp_y3": 0.45,
+      "warp_aspect": 1.5,
+      "mode": "normal",
+      "fit": "place"
+     },
+     "x": 64,
+     "y": 340
+    },
+    {
+     "id": "art_out",
+     "type": "heeler.to_scene",
+     "label": "To Scene",
+     "enabled": true,
+     "params": {},
+     "x": 324,
+     "y": 96
+    }
+   ],
+   "connections": [
+    {
+     "from": [
+      "stdcolor",
+      "out"
+     ],
+     "to": [
+      "exposure",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "exposure",
+      "out"
+     ],
+     "to": [
+      "profile",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "src",
+      "out"
+     ],
+     "to": [
+      "crop",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "crop",
+      "out"
+     ],
+     "to": [
+      "stdcolor",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_in",
+      "out"
+     ],
+     "to": [
+      "art_p1",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_in",
+      "out"
+     ],
+     "to": [
+      "art_b1",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_p1",
+      "out"
+     ],
+     "to": [
+      "art_b1",
+      "fg"
+     ]
+    },
+    {
+     "from": [
+      "art_b1",
+      "out"
+     ],
+     "to": [
+      "art_out",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "profile",
+      "out"
+     ],
+     "to": [
+      "art_in",
+      "in"
+     ]
+    },
+    {
+     "from": [
+      "art_out",
+      "out"
+     ],
+     "to": [
+      "output",
+      "in"
+     ]
+    }
+   ]
+  }
+ }
+}

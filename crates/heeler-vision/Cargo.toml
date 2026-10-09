@@ -1,0 +1,25 @@
+[package]
+name = "heeler-vision"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+
+# The ML boundary crate: ort sessions, model download with pinned
+# checksums, SAM pre/post processing. The engine never depends on
+# this; the desktop calls it the way it calls LibRaw, as a source of
+# pixels (here, of masks).
+
+[dependencies]
+ort = "2.0.0-rc.13"
+rayon = "1"
+sha2 = "0.10"
+ureq = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# The ignored real-model tests read the demo photographs (JPEG); the
+# same crate and version heeler-io already builds, so nothing new.
+image = "0.25"

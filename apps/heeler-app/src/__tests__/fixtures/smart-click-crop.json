@@ -1,0 +1,1177 @@
+{
+ "straight": {
+  "schema_version": 1,
+  "graph_id": "smart_click_crop_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {
+     "camera_wb": 1,
+     "camera_matrix": 1
+    },
+    "x": 24,
+    "y": 24
+   },
+   {
+    "id": "stdcolor",
+    "type": "heeler.standard_color",
+    "label": "Standard Color",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 0,
+     "vibrance": 0,
+     "texture": 0,
+     "clarity": 0,
+     "dehaze": 0,
+     "texture_shadows": 100,
+     "texture_midtones": 100,
+     "texture_highlights": 100,
+     "texture_red": 100,
+     "texture_green": 100,
+     "texture_blue": 100,
+     "clarity_shadows": 100,
+     "clarity_midtones": 100,
+     "clarity_highlights": 100,
+     "clarity_red": 100,
+     "clarity_green": 100,
+     "clarity_blue": 100,
+     "dehaze_shadows": 100,
+     "dehaze_midtones": 100,
+     "dehaze_highlights": 100,
+     "dehaze_red": 100,
+     "dehaze_green": 100,
+     "dehaze_blue": 100
+    },
+    "x": 224,
+    "y": 24
+   },
+   {
+    "id": "exposure",
+    "type": "heeler.exposure",
+    "label": "Exposure",
+    "enabled": true,
+    "params": {
+     "exposure": 0,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 424,
+    "y": 24
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 824,
+    "y": 24
+   },
+   {
+    "id": "profile",
+    "type": "heeler.tone_profile",
+    "label": "Tone Profile",
+    "enabled": true,
+    "params": {
+     "contrast": 100,
+     "colorfulness": 0,
+     "development": 0,
+     "baseline_ev": 1.3,
+     "shadow_toe": 50,
+     "highlight_rolloff": 25,
+     "mode": "standard",
+     "film": ""
+    },
+    "x": 624,
+    "y": 24
+   },
+   {
+    "id": "layer_1_adj",
+    "type": "heeler.exposure",
+    "label": "Smart 1",
+    "enabled": true,
+    "params": {
+     "exposure": 2,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 199,
+    "y": 484
+   },
+   {
+    "id": "layer_1_mask",
+    "type": "heeler.smart_mask",
+    "label": "Smart Mask",
+    "enabled": true,
+    "params": {
+     "depth_on": false,
+     "depth_invert": false,
+     "depth_black": 0,
+     "depth_white": 1,
+     "depth_gamma": 1,
+     "depth_black_soft": 0,
+     "depth_white_soft": 0,
+     "threshold": 50,
+     "feather": 0,
+     "expand": 0,
+     "mode": "click",
+     "prompts": "[{\"x\":0.6600000000000001,\"y\":0.65,\"positive\":true}]",
+     "model": "mobile_sam"
+    },
+    "x": 199,
+    "y": 580
+   },
+   {
+    "id": "crop",
+    "type": "heeler.crop_rotate",
+    "label": "Crop & Rotate",
+    "enabled": true,
+    "params": {
+     "angle": 0,
+     "aspect": 0,
+     "crop_x": 0.35,
+     "crop_y": 0.3,
+     "crop_w": 0.6,
+     "crop_h": 0.65
+    },
+    "x": 24,
+    "y": 122
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "stdcolor",
+     "out"
+    ],
+    "to": [
+     "exposure",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "profile",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "exposure",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_adj",
+     "out"
+    ],
+    "to": [
+     "profile",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "crop",
+     "out"
+    ],
+    "to": [
+     "layer_1_mask",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "crop",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "crop",
+     "out"
+    ],
+    "to": [
+     "stdcolor",
+     "in"
+    ]
+   }
+  ]
+ },
+ "square": {
+  "schema_version": 1,
+  "graph_id": "smart_click_crop_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {
+     "camera_wb": 1,
+     "camera_matrix": 1
+    },
+    "x": 24,
+    "y": 24
+   },
+   {
+    "id": "stdcolor",
+    "type": "heeler.standard_color",
+    "label": "Standard Color",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 0,
+     "vibrance": 0,
+     "texture": 0,
+     "clarity": 0,
+     "dehaze": 0,
+     "texture_shadows": 100,
+     "texture_midtones": 100,
+     "texture_highlights": 100,
+     "texture_red": 100,
+     "texture_green": 100,
+     "texture_blue": 100,
+     "clarity_shadows": 100,
+     "clarity_midtones": 100,
+     "clarity_highlights": 100,
+     "clarity_red": 100,
+     "clarity_green": 100,
+     "clarity_blue": 100,
+     "dehaze_shadows": 100,
+     "dehaze_midtones": 100,
+     "dehaze_highlights": 100,
+     "dehaze_red": 100,
+     "dehaze_green": 100,
+     "dehaze_blue": 100
+    },
+    "x": 224,
+    "y": 24
+   },
+   {
+    "id": "exposure",
+    "type": "heeler.exposure",
+    "label": "Exposure",
+    "enabled": true,
+    "params": {
+     "exposure": 0,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 424,
+    "y": 24
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 824,
+    "y": 24
+   },
+   {
+    "id": "profile",
+    "type": "heeler.tone_profile",
+    "label": "Tone Profile",
+    "enabled": true,
+    "params": {
+     "contrast": 100,
+     "colorfulness": 0,
+     "development": 0,
+     "baseline_ev": 1.3,
+     "shadow_toe": 50,
+     "highlight_rolloff": 25,
+     "mode": "standard",
+     "film": ""
+    },
+    "x": 624,
+    "y": 24
+   },
+   {
+    "id": "layer_1_adj",
+    "type": "heeler.exposure",
+    "label": "Smart 1",
+    "enabled": true,
+    "params": {
+     "exposure": 2,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 199,
+    "y": 484
+   },
+   {
+    "id": "layer_1_mask",
+    "type": "heeler.smart_mask",
+    "label": "Smart Mask",
+    "enabled": true,
+    "params": {
+     "depth_on": false,
+     "depth_invert": false,
+     "depth_black": 0,
+     "depth_white": 1,
+     "depth_gamma": 1,
+     "depth_black_soft": 0,
+     "depth_white_soft": 0,
+     "threshold": 50,
+     "feather": 0,
+     "expand": 0,
+     "mode": "click",
+     "prompts": "[{\"x\":0.6599999999999999,\"y\":0.6500000000000001,\"positive\":true}]",
+     "model": "mobile_sam"
+    },
+    "x": 199,
+    "y": 580
+   },
+   {
+    "id": "crop",
+    "type": "heeler.crop_rotate",
+    "label": "Crop & Rotate",
+    "enabled": true,
+    "params": {
+     "angle": 0,
+     "aspect": 0,
+     "crop_x": 0.45,
+     "crop_y": 0.25,
+     "crop_w": 0.5,
+     "crop_h": 0.75
+    },
+    "x": 24,
+    "y": 122
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "stdcolor",
+     "out"
+    ],
+    "to": [
+     "exposure",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "profile",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "exposure",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_adj",
+     "out"
+    ],
+    "to": [
+     "profile",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "crop",
+     "out"
+    ],
+    "to": [
+     "layer_1_mask",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "crop",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "crop",
+     "out"
+    ],
+    "to": [
+     "stdcolor",
+     "in"
+    ]
+   }
+  ]
+ },
+ "rotated": {
+  "schema_version": 1,
+  "graph_id": "smart_click_crop_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {
+     "camera_wb": 1,
+     "camera_matrix": 1
+    },
+    "x": 24,
+    "y": 24
+   },
+   {
+    "id": "stdcolor",
+    "type": "heeler.standard_color",
+    "label": "Standard Color",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 0,
+     "vibrance": 0,
+     "texture": 0,
+     "clarity": 0,
+     "dehaze": 0,
+     "texture_shadows": 100,
+     "texture_midtones": 100,
+     "texture_highlights": 100,
+     "texture_red": 100,
+     "texture_green": 100,
+     "texture_blue": 100,
+     "clarity_shadows": 100,
+     "clarity_midtones": 100,
+     "clarity_highlights": 100,
+     "clarity_red": 100,
+     "clarity_green": 100,
+     "clarity_blue": 100,
+     "dehaze_shadows": 100,
+     "dehaze_midtones": 100,
+     "dehaze_highlights": 100,
+     "dehaze_red": 100,
+     "dehaze_green": 100,
+     "dehaze_blue": 100
+    },
+    "x": 224,
+    "y": 24
+   },
+   {
+    "id": "exposure",
+    "type": "heeler.exposure",
+    "label": "Exposure",
+    "enabled": true,
+    "params": {
+     "exposure": 0,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 424,
+    "y": 24
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 824,
+    "y": 24
+   },
+   {
+    "id": "profile",
+    "type": "heeler.tone_profile",
+    "label": "Tone Profile",
+    "enabled": true,
+    "params": {
+     "contrast": 100,
+     "colorfulness": 0,
+     "development": 0,
+     "baseline_ev": 1.3,
+     "shadow_toe": 50,
+     "highlight_rolloff": 25,
+     "mode": "standard",
+     "film": ""
+    },
+    "x": 624,
+    "y": 24
+   },
+   {
+    "id": "layer_1_adj",
+    "type": "heeler.exposure",
+    "label": "Smart 1",
+    "enabled": true,
+    "params": {
+     "exposure": 2,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 199,
+    "y": 484
+   },
+   {
+    "id": "layer_1_mask",
+    "type": "heeler.smart_mask",
+    "label": "Smart Mask",
+    "enabled": true,
+    "params": {
+     "depth_on": false,
+     "depth_invert": false,
+     "depth_black": 0,
+     "depth_white": 1,
+     "depth_gamma": 1,
+     "depth_black_soft": 0,
+     "depth_white_soft": 0,
+     "threshold": 50,
+     "feather": 0,
+     "expand": 0,
+     "mode": "click",
+     "prompts": "[{\"x\":0.6599999999999999,\"y\":0.6500000000000001,\"positive\":true}]",
+     "model": "mobile_sam"
+    },
+    "x": 199,
+    "y": 580
+   },
+   {
+    "id": "crop",
+    "type": "heeler.crop_rotate",
+    "label": "Crop & Rotate",
+    "enabled": true,
+    "params": {
+     "angle": 8,
+     "aspect": 0,
+     "crop_x": 0.3,
+     "crop_y": 0.3,
+     "crop_w": 0.65,
+     "crop_h": 0.65
+    },
+    "x": 24,
+    "y": 122
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "stdcolor",
+     "out"
+    ],
+    "to": [
+     "exposure",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "profile",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "exposure",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_adj",
+     "out"
+    ],
+    "to": [
+     "profile",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "crop",
+     "out"
+    ],
+    "to": [
+     "layer_1_mask",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "crop",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "crop",
+     "out"
+    ],
+    "to": [
+     "stdcolor",
+     "in"
+    ]
+   }
+  ]
+ },
+ "stretched": {
+  "schema_version": 1,
+  "graph_id": "smart_click_crop_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {
+     "camera_wb": 1,
+     "camera_matrix": 1
+    },
+    "x": 24,
+    "y": 24
+   },
+   {
+    "id": "stdcolor",
+    "type": "heeler.standard_color",
+    "label": "Standard Color",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 0,
+     "vibrance": 0,
+     "texture": 0,
+     "clarity": 0,
+     "dehaze": 0,
+     "texture_shadows": 100,
+     "texture_midtones": 100,
+     "texture_highlights": 100,
+     "texture_red": 100,
+     "texture_green": 100,
+     "texture_blue": 100,
+     "clarity_shadows": 100,
+     "clarity_midtones": 100,
+     "clarity_highlights": 100,
+     "clarity_red": 100,
+     "clarity_green": 100,
+     "clarity_blue": 100,
+     "dehaze_shadows": 100,
+     "dehaze_midtones": 100,
+     "dehaze_highlights": 100,
+     "dehaze_red": 100,
+     "dehaze_green": 100,
+     "dehaze_blue": 100
+    },
+    "x": 224,
+    "y": 24
+   },
+   {
+    "id": "exposure",
+    "type": "heeler.exposure",
+    "label": "Exposure",
+    "enabled": true,
+    "params": {
+     "exposure": 0,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 424,
+    "y": 24
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 824,
+    "y": 24
+   },
+   {
+    "id": "profile",
+    "type": "heeler.tone_profile",
+    "label": "Tone Profile",
+    "enabled": true,
+    "params": {
+     "contrast": 100,
+     "colorfulness": 0,
+     "development": 0,
+     "baseline_ev": 1.3,
+     "shadow_toe": 50,
+     "highlight_rolloff": 25,
+     "mode": "standard",
+     "film": ""
+    },
+    "x": 624,
+    "y": 24
+   },
+   {
+    "id": "layer_1_adj",
+    "type": "heeler.exposure",
+    "label": "Smart 1",
+    "enabled": true,
+    "params": {
+     "exposure": 2,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 199,
+    "y": 484
+   },
+   {
+    "id": "layer_1_mask",
+    "type": "heeler.smart_mask",
+    "label": "Smart Mask",
+    "enabled": true,
+    "params": {
+     "depth_on": false,
+     "depth_invert": false,
+     "depth_black": 0,
+     "depth_white": 1,
+     "depth_gamma": 1,
+     "depth_black_soft": 0,
+     "depth_white_soft": 0,
+     "threshold": 50,
+     "feather": 0,
+     "expand": 0,
+     "mode": "click",
+     "prompts": "[{\"x\":0.66,\"y\":0.65,\"positive\":true}]",
+     "model": "mobile_sam"
+    },
+    "x": 199,
+    "y": 580
+   },
+   {
+    "id": "crop",
+    "type": "heeler.crop_rotate",
+    "label": "Crop & Rotate",
+    "enabled": true,
+    "params": {
+     "angle": 0,
+     "aspect": 30,
+     "crop_x": 0.35,
+     "crop_y": 0.3,
+     "crop_w": 0.6,
+     "crop_h": 0.65
+    },
+    "x": 24,
+    "y": 122
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "stdcolor",
+     "out"
+    ],
+    "to": [
+     "exposure",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "profile",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "exposure",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_adj",
+     "out"
+    ],
+    "to": [
+     "profile",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "crop",
+     "out"
+    ],
+    "to": [
+     "layer_1_mask",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "crop",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "crop",
+     "out"
+    ],
+    "to": [
+     "stdcolor",
+     "in"
+    ]
+   }
+  ]
+ },
+ "recropped": {
+  "schema_version": 1,
+  "graph_id": "smart_click_crop_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {
+     "camera_wb": 1,
+     "camera_matrix": 1
+    },
+    "x": 24,
+    "y": 24
+   },
+   {
+    "id": "stdcolor",
+    "type": "heeler.standard_color",
+    "label": "Standard Color",
+    "enabled": true,
+    "params": {
+     "temperature": 6500,
+     "tint": 0,
+     "saturation": 0,
+     "vibrance": 0,
+     "texture": 0,
+     "clarity": 0,
+     "dehaze": 0,
+     "texture_shadows": 100,
+     "texture_midtones": 100,
+     "texture_highlights": 100,
+     "texture_red": 100,
+     "texture_green": 100,
+     "texture_blue": 100,
+     "clarity_shadows": 100,
+     "clarity_midtones": 100,
+     "clarity_highlights": 100,
+     "clarity_red": 100,
+     "clarity_green": 100,
+     "clarity_blue": 100,
+     "dehaze_shadows": 100,
+     "dehaze_midtones": 100,
+     "dehaze_highlights": 100,
+     "dehaze_red": 100,
+     "dehaze_green": 100,
+     "dehaze_blue": 100
+    },
+    "x": 224,
+    "y": 24
+   },
+   {
+    "id": "exposure",
+    "type": "heeler.exposure",
+    "label": "Exposure",
+    "enabled": true,
+    "params": {
+     "exposure": 0,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 424,
+    "y": 24
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 824,
+    "y": 24
+   },
+   {
+    "id": "profile",
+    "type": "heeler.tone_profile",
+    "label": "Tone Profile",
+    "enabled": true,
+    "params": {
+     "contrast": 100,
+     "colorfulness": 0,
+     "development": 0,
+     "baseline_ev": 1.3,
+     "shadow_toe": 50,
+     "highlight_rolloff": 25,
+     "mode": "standard",
+     "film": ""
+    },
+    "x": 624,
+    "y": 24
+   },
+   {
+    "id": "layer_1_adj",
+    "type": "heeler.exposure",
+    "label": "Smart 1",
+    "enabled": true,
+    "params": {
+     "exposure": 2,
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0
+    },
+    "x": 199,
+    "y": 484
+   },
+   {
+    "id": "layer_1_mask",
+    "type": "heeler.smart_mask",
+    "label": "Smart Mask",
+    "enabled": true,
+    "params": {
+     "depth_on": false,
+     "depth_invert": false,
+     "depth_black": 0,
+     "depth_white": 1,
+     "depth_gamma": 1,
+     "depth_black_soft": 0,
+     "depth_white_soft": 0,
+     "threshold": 50,
+     "feather": 0,
+     "expand": 0,
+     "mode": "click",
+     "prompts": "[{\"x\":0.6600000000000001,\"y\":0.65,\"positive\":true}]",
+     "model": "mobile_sam"
+    },
+    "x": 199,
+    "y": 580
+   },
+   {
+    "id": "crop",
+    "type": "heeler.crop_rotate",
+    "label": "Crop & Rotate",
+    "enabled": true,
+    "params": {
+     "angle": 0,
+     "aspect": 0,
+     "crop_x": 0.45,
+     "crop_y": 0.25,
+     "crop_w": 0.5,
+     "crop_h": 0.75
+    },
+    "x": 24,
+    "y": 122
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "stdcolor",
+     "out"
+    ],
+    "to": [
+     "exposure",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "profile",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "exposure",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_adj",
+     "out"
+    ],
+    "to": [
+     "profile",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "crop",
+     "out"
+    ],
+    "to": [
+     "layer_1_mask",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "layer_1_mask",
+     "out"
+    ],
+    "to": [
+     "layer_1_adj",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "crop",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "crop",
+     "out"
+    ],
+    "to": [
+     "stdcolor",
+     "in"
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,31 @@
+{
+  "heeler": 1,
+  "comment": "The scripting bridge's method list, shared by both doors. The frontend test walks it to prove every method the app door should answer is answered; the batch test walks it to prove every method either works natively or refuses by naming batch mode. Additive only: shrinking this list is a protocol break.",
+  "methods": [
+    "app.ping",
+    "app.state",
+    "app.open_folder",
+    "registry.nodes",
+    "graph.get",
+    "graph.serialize",
+    "graph.command",
+    "graph.save",
+    "catalog.images",
+    "catalog.collections",
+    "takes.list",
+    "prefs.get",
+    "hotkeys.export",
+    "hotkeys.import",
+    "export.run",
+    "stack.create",
+    "stack.info",
+    "stack.configure",
+    "stack.bake",
+    "pano.create",
+    "pano.info",
+    "pano.configure",
+    "render.preview"
+  ],
+  "native": ["app.ping", "registry.nodes", "render.preview"],
+  "batch_only": ["noise.estimate"]
+}

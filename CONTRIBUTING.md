@@ -1,19 +1,28 @@
-# Contributing
+# Contributing to Heeler
 
-Three kinds of contribution are accepted here. Open a pull request against `main`.
+Pull requests are welcome, on one condition: **show that the tests pass.**
 
-## What goes where
+Heeler comes with a large test suite, and one command runs all of it:
 
-- **`scripts/`**: Python scripts that use only the public `heeler` package and the standard library. One script per file, a docstring at the top saying what it does and whether it runs in the app console, the batch runner, or both.
-- **`presets/`**: `.heelerpreset` files exported from Heeler's Presets tab with **Export**. Put each in a folder named for the category it belongs in, and add a line to that folder's README saying what the look is for.
-- **`controllers/`**: profiles for hardware controllers. One folder per device, the profile file plus a README with the version of the vendor software it was made in.
+```
+python3 scripts/test.py
+```
 
-## Licensing of contributions
+It runs the release script's tests, the Rust workspace, the frontend's type check and the frontend suite, and it ends with `All suites passed.` when everything is green. Running it takes no special setup beyond what [building](README.md#building) already needs.
 
-By opening a pull request you agree that your contribution is licensed as its folder is: MIT for `scripts/`, CC0 for `presets/` and `controllers/`. See [LICENSE](LICENSE). Do not contribute anything you do not have the right to license that way.
+## What a pull request must include
 
-## What is not accepted here
+1. **The test run on all three platforms Heeler builds on: macOS, Windows and Linux.** Paste the end of `python3 scripts/test.py` from each, with the `All suites passed.` line, and say which machine and OS version each ran on. Every release is tested on all three, and so is every pull request.
+2. **Tests for the change.** A fix comes with a test that fails without it; a feature comes with tests of what it does. A pull request that changes behavior and adds no test is not done.
+3. **A description of what changed and why**, in plain words.
 
-- Heeler source code, decompiled or otherwise.
-- Copies of the installers. Link to the Releases page instead.
-- Bug reports about Heeler itself. Use the app's Help menu.
+A pull request without the test runs is closed without being read. Not running them is not a reason anyone has to accept: the suite is one command.
+
+## What a pull request is not
+
+- **A promise it will be merged.** Heeler has one maintainer who decides what goes in, including turning down working, tested code that does not fit.
+- **A claim on anything.** What you submit is licensed under the [Mozilla Public License 2.0](LICENSE), the same as the rest of Heeler, and you confirm you have the right to submit it. No payment, credit or ownership is owed for a contribution or a suggestion.
+
+## Bugs and suggestions
+
+Write to support@heeler.app. Suggestions are given freely, without a promise of payment or adoption.

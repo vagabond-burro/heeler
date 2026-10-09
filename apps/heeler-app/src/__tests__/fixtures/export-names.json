@@ -1,0 +1,38 @@
+{
+ "new": {
+  "develop": {
+   "name": "Curves",
+   "part": "rgb"
+  },
+  "depth": {
+   "name": "Depth Map",
+   "part": "rgb"
+  },
+  "finish": {
+   "name": "Pixel 2",
+   "part": "rgb"
+  },
+  "mask": {
+   "name": "Pixel 2 mask",
+   "part": "alpha"
+  }
+ },
+ "old": {
+  "develop": {
+   "name": "Curves",
+   "part": "rgb"
+  },
+  "depth": {
+   "name": "Depth Map",
+   "part": "rgb"
+  },
+  "finish": {
+   "name": "Pixel 2",
+   "part": "rgb"
+  },
+  "mask": {
+   "name": "Pixel 2 mask",
+   "part": "alpha"
+  }
+ }
+}

@@ -1,0 +1,730 @@
+{
+  "heeler.black_white": {
+    "amount": 0.0,
+    "blue": 11.0,
+    "green": 59.0,
+    "hue_curve_on": 1.0,
+    "ir_foliage": 2.4,
+    "ir_skin": 0.6,
+    "ir_sky": -2.5,
+    "ir_water": -0.8,
+    "neutral": 10.0,
+    "red": 30.0
+  },
+  "heeler.blend": {
+    "clip": 0.0,
+    "opacity": 100.0,
+    "place_pad": 0.0,
+    "warp_aspect": 0.0,
+    "warp_bh": 0.0,
+    "warp_bw": 0.0,
+    "warp_bx": 0.0,
+    "warp_by": 0.0,
+    "warp_x0": 0.0,
+    "warp_x1": 0.0,
+    "warp_x2": 0.0,
+    "warp_x3": 0.0,
+    "warp_y0": 0.0,
+    "warp_y1": 0.0,
+    "warp_y2": 0.0,
+    "warp_y3": 0.0
+  },
+  "heeler.blur": {
+    "angle": 0.0,
+    "radius": 0.0
+  },
+  "heeler.brush_mask": {
+    "base_invert": 0.0,
+    "depth_black": 0.0,
+    "depth_black_soft": 0.0,
+    "depth_gamma": 1.0,
+    "depth_invert": 0.0,
+    "depth_on": 0.0,
+    "depth_white": 1.0,
+    "depth_white_soft": 0.0,
+    "invert": 0.0
+  },
+  "heeler.channel_gain": {
+    "gain": 100.0
+  },
+  "heeler.channel_mixer": {
+    "mix_bb": 100.0,
+    "mix_bg": 0.0,
+    "mix_br": 0.0,
+    "mix_gb": 0.0,
+    "mix_gg": 100.0,
+    "mix_gr": 0.0,
+    "mix_rb": 0.0,
+    "mix_rg": 0.0,
+    "mix_rr": 100.0,
+    "preserve_gray": 1.0
+  },
+  "heeler.chroma_key": {
+    "key_b": 0.251,
+    "key_g": 0.694,
+    "key_r": 0.0,
+    "softness": 0.1,
+    "tolerance": 0.05
+  },
+  "heeler.chroma_key_despill": {
+    "key_b": 0.251,
+    "key_g": 0.694,
+    "key_r": 0.0,
+    "spill": 1.0
+  },
+  "heeler.chromatic_adapt": {
+    "strength": 100.0,
+    "temperature": 6500.0
+  },
+  "heeler.clarity": {
+    "clarity": 0.0,
+    "local_contrast": 0.0,
+    "texture": 0.0
+  },
+  "heeler.clone": {
+    "heal": 0.0,
+    "roi_h": 1.0,
+    "roi_w": 1.0,
+    "roi_x": 0.0,
+    "roi_y": 0.0
+  },
+  "heeler.color_balance": {
+    "highlights_hue": 0.0,
+    "highlights_lum": 0.0,
+    "highlights_sat": 0.0,
+    "midtones_hue": 0.0,
+    "midtones_lum": 0.0,
+    "midtones_sat": 0.0,
+    "shadows_hue": 0.0,
+    "shadows_lum": 0.0,
+    "shadows_sat": 0.0
+  },
+  "heeler.color_bend": {
+    "amount": 100.0,
+    "dst_hue": 0.0,
+    "dst_sat": 0.0,
+    "falloff": 0.3333333333333333,
+    "src_hue": 0.0,
+    "src_sat": 0.0
+  },
+  "heeler.color_checker": {
+    "amount": 100.0,
+    "exposure": 0.0,
+    "m00": 1.0,
+    "m01": 0.0,
+    "m02": 0.0,
+    "m10": 0.0,
+    "m11": 1.0,
+    "m12": 0.0,
+    "m20": 0.0,
+    "m21": 0.0,
+    "m22": 1.0,
+    "sample": 40.0
+  },
+  "heeler.color_console": {
+    "smoothing": 50.0
+  },
+  "heeler.color_grade": {
+    "band_center": 30.0,
+    "exposure": 0.0,
+    "hue_shift": 0.0,
+    "saturation": 0.0,
+    "uniformity": 0.0,
+    "vibrance": 0.0
+  },
+  "heeler.color_range_mask": {
+    "falloff": 0.1,
+    "invert": 0.0,
+    "range": 0.2
+  },
+  "heeler.compare": {
+    "level": 0.5,
+    "softness": 0.0
+  },
+  "heeler.crop_rotate": {
+    "angle": 0.0,
+    "aspect": 0.0,
+    "crop_h": 1.0,
+    "crop_w": 1.0,
+    "crop_x": 0.0,
+    "crop_y": 0.0,
+    "flip_h": 0.0,
+    "flip_v": 0.0
+  },
+  "heeler.denoise": {
+    "strength": 0.0
+  },
+  "heeler.depth_map": {
+    "depth_black": 0.0,
+    "depth_black_soft": 0.0,
+    "depth_gamma": 1.0,
+    "depth_white": 1.0,
+    "depth_white_soft": 0.0,
+    "edges": 50.0,
+    "far_clip": 0.0,
+    "flatten": 25.0,
+    "near_clip": 0.0,
+    "size": 518.0
+  },
+  "heeler.depth_normals": {
+    "cliff": 0.15,
+    "strength": 2000.0
+  },
+  "heeler.desaturate": {
+    "amount": 1.0
+  },
+  "heeler.detail": {
+    "clarity": 0.0,
+    "clarity_blue": 100.0,
+    "clarity_green": 100.0,
+    "clarity_highlights": 100.0,
+    "clarity_midtones": 100.0,
+    "clarity_red": 100.0,
+    "clarity_shadows": 100.0,
+    "dehaze": 0.0,
+    "dehaze_blue": 100.0,
+    "dehaze_green": 100.0,
+    "dehaze_highlights": 100.0,
+    "dehaze_midtones": 100.0,
+    "dehaze_red": 100.0,
+    "dehaze_shadows": 100.0,
+    "texture": 0.0,
+    "texture_blue": 100.0,
+    "texture_green": 100.0,
+    "texture_highlights": 100.0,
+    "texture_midtones": 100.0,
+    "texture_red": 100.0,
+    "texture_shadows": 100.0
+  },
+  "heeler.displacement_map": {
+    "max_displacement": 50.0,
+    "strength": 20.0
+  },
+  "heeler.distance_field": {
+    "max_distance": 20.0
+  },
+  "heeler.dof": {
+    "aperture": 0.0,
+    "blade_curve": 100.0,
+    "blades": 6.0,
+    "bubble": 0.0,
+    "field_curve": 0.0,
+    "focus": 0.0,
+    "fringe": 0.0,
+    "glow": 0.0,
+    "squeeze": 0.0,
+    "swirl": 0.0
+  },
+  "heeler.edge_field": {
+    "scale": 1.0,
+    "softness": 0.0,
+    "threshold": 0.0
+  },
+  "heeler.exposure": {
+    "blacks": 0.0,
+    "color_contrast": 0.0,
+    "contrast": 0.0,
+    "exposure": 0.0,
+    "highlights": 0.0,
+    "shadows": 0.0,
+    "whites": 0.0
+  },
+  "heeler.flare": {
+    "anamorphic": 0.0,
+    "blades": 7.0,
+    "dispersion": 30.0,
+    "ghost_opacity": 60.0,
+    "ghost_size": 6.0,
+    "ghost_spacing": 100.0,
+    "ghosts": 0.0,
+    "intensity": 100.0,
+    "occlusion": 100.0,
+    "occlusion_soft": 30.0,
+    "ray_length": 30.0,
+    "ray_softness": 30.0,
+    "rays": 0.0,
+    "roi_h": 1.0,
+    "roi_w": 1.0,
+    "roi_x": 0.0,
+    "roi_y": 0.0,
+    "rotation": 0.0,
+    "size": 6.0,
+    "softness": 50.0,
+    "streak_angle": 0.0,
+    "streak_length": 60.0,
+    "streak_noise": 0.0,
+    "streak_offset": 0.0,
+    "streak_shift": 0.0,
+    "streak_size": 1.5,
+    "streak_taper": 30.0,
+    "temp": 0.0,
+    "veil": 20.0,
+    "veil_depth": 0.0,
+    "veil_radius": 40.0
+  },
+  "heeler.fog": {
+    "density": 0.0,
+    "depth_black": 0.0,
+    "depth_black_soft": 0.0,
+    "depth_gamma": 1.0,
+    "depth_white": 1.0,
+    "depth_white_soft": 0.0,
+    "desat": 0.0,
+    "falloff": 50.0,
+    "fog_hue": 220.0,
+    "fog_level": 72.0,
+    "fog_sat": 10.0,
+    "start": 0.0,
+    "texture": 0.0,
+    "texture_shift": 0.0,
+    "texture_size": 30.0
+  },
+  "heeler.fx_bevel": {
+    "angle": 135.0,
+    "depth": 100.0,
+    "opacity": 75.0,
+    "size": 6.0
+  },
+  "heeler.fx_color_overlay": {
+    "opacity": 100.0
+  },
+  "heeler.fx_glow": {
+    "inner": 0.0,
+    "opacity": 75.0,
+    "size": 12.0
+  },
+  "heeler.fx_gradient_overlay": {
+    "angle": 0.0,
+    "midpoint": 50.0,
+    "opacity": 100.0,
+    "roi_h": 1.0,
+    "roi_w": 1.0,
+    "roi_x": 0.0,
+    "roi_y": 0.0
+  },
+  "heeler.fx_shadow": {
+    "angle": 135.0,
+    "distance": 8.0,
+    "inner": 0.0,
+    "opacity": 75.0,
+    "size": 12.0
+  },
+  "heeler.gamut_map": {
+    "amount": 100.0
+  },
+  "heeler.gradient": {
+    "alpha_a": 100.0,
+    "alpha_b": 100.0,
+    "angle": 0.0,
+    "midpoint": 50.0,
+    "roi_h": 1.0,
+    "roi_w": 1.0,
+    "roi_x": 0.0,
+    "roi_y": 0.0
+  },
+  "heeler.gradient_map": {
+    "amount": 100.0,
+    "midpoint": 50.0
+  },
+  "heeler.grain": {
+    "blue_gain": 100.0,
+    "by_frame": 0.0,
+    "color_grain": 0.0,
+    "green_gain": 100.0,
+    "highlights_gain": 100.0,
+    "intensity": 0.0,
+    "midtones_gain": 100.0,
+    "red_gain": 100.0,
+    "shadows_gain": 100.0,
+    "size": 25.0
+  },
+  "heeler.grid_warp": {
+    "cols": 4.0,
+    "rows": 3.0
+  },
+  "heeler.guided_filter": {
+    "epsilon": 0.01,
+    "radius": 8.0
+  },
+  "heeler.guided_filter_mask": {
+    "epsilon": 0.01,
+    "radius": 8.0
+  },
+  "heeler.halation": {
+    "amount": 100.0,
+    "background": 50.0,
+    "bloom": 0.0,
+    "bloom_radius": 20.0,
+    "blue_comp": 0.0,
+    "by_depth": 0.0,
+    "diffusion": 60.0,
+    "hue": 18.0,
+    "mix": 100.0,
+    "radius": 4.0,
+    "roi_h": 1.0,
+    "roi_w": 1.0,
+    "roi_x": 0.0,
+    "roi_y": 0.0,
+    "saturation": 70.0,
+    "threshold": 50.0
+  },
+  "heeler.high_pass": {
+    "radius": 3.0
+  },
+  "heeler.hot_pixel": {
+    "sensitivity": 50.0
+  },
+  "heeler.hue_range_mask": {
+    "band_center": 30.0,
+    "depth_black": 0.0,
+    "depth_black_soft": 0.0,
+    "depth_gamma": 1.0,
+    "depth_invert": 0.0,
+    "depth_on": 0.0,
+    "depth_white": 1.0,
+    "depth_white_soft": 0.0,
+    "hue_falloff": 30.0,
+    "hue_range": 60.0,
+    "invert": 0.0
+  },
+  "heeler.invert": {
+    "amount": 1.0
+  },
+  "heeler.key_light": {
+    "ambient": 50.0,
+    "azimuth": 45.0,
+    "depth_black": 0.0,
+    "depth_black_soft": 0.0,
+    "depth_gamma": 1.0,
+    "depth_white": 1.0,
+    "depth_white_soft": 0.0,
+    "elevation": 45.0,
+    "invert": 0.0,
+    "relief": 30.0,
+    "strength": 0.0
+  },
+  "heeler.layer_warp": {
+    "cols": 4.0,
+    "room": 25.0,
+    "rows": 3.0
+  },
+  "heeler.layer_warp_mask": {
+    "cols": 4.0,
+    "room": 25.0,
+    "rows": 3.0
+  },
+  "heeler.lens_correct": {
+    "ca_blue": 0.0,
+    "ca_red": 0.0,
+    "dist_a": 0.0,
+    "dist_b": 0.0,
+    "dist_c": 0.0,
+    "dist_scale": 1.0,
+    "distortion": 0.0,
+    "tca_bb": 0.0,
+    "tca_br": 0.0,
+    "tca_cb": 0.0,
+    "tca_cr": 0.0,
+    "tca_vb": 1.0,
+    "tca_vr": 1.0,
+    "vig_k1": 0.0,
+    "vig_k2": 0.0,
+    "vig_k3": 0.0,
+    "vignette": 0.0,
+    "vignette_mid": 50.0
+  },
+  "heeler.levels": {
+    "black": 0.0,
+    "black_soft": 0.0,
+    "gamma": 1.0,
+    "white": 1.0,
+    "white_soft": 0.0
+  },
+  "heeler.linear_mask": {
+    "angle": 90.0,
+    "depth_black": 0.0,
+    "depth_black_soft": 0.0,
+    "depth_gamma": 1.0,
+    "depth_invert": 0.0,
+    "depth_on": 0.0,
+    "depth_white": 1.0,
+    "depth_white_soft": 0.0,
+    "invert": 0.0,
+    "position": 0.5,
+    "span": 0.25
+  },
+  "heeler.luminance_range_mask": {
+    "feather": 0.1,
+    "high": 1.0,
+    "invert": 0.0,
+    "low": 0.0
+  },
+  "heeler.lut": {
+    "amount": 100.0
+  },
+  "heeler.mask_crop": {
+    "crop_h": 1.0,
+    "crop_w": 1.0,
+    "crop_x": 0.0,
+    "crop_y": 0.0
+  },
+  "heeler.math": {
+    "constant": 0.0,
+    "offset": 0.0,
+    "scale": 1.0
+  },
+  "heeler.matte_mask": {
+    "depth_black": 0.0,
+    "depth_black_soft": 0.0,
+    "depth_gamma": 1.0,
+    "depth_invert": 0.0,
+    "depth_on": 0.0,
+    "depth_white": 1.0,
+    "depth_white_soft": 0.0,
+    "feather": 0.0,
+    "invert": 0.0
+  },
+  "heeler.measure": {
+    "smoothing": 0.0
+  },
+  "heeler.median": {
+    "percentile": 50.0,
+    "radius": 2.0
+  },
+  "heeler.median_mask": {
+    "percentile": 50.0,
+    "radius": 2.0
+  },
+  "heeler.merge": {
+    "opacity": 100.0
+  },
+  "heeler.model_denoise": {
+    "chroma": 50.0,
+    "detail": 50.0,
+    "luminance": 50.0,
+    "method": 0.0
+  },
+  "heeler.morphology": {
+    "radius": 2.0
+  },
+  "heeler.nlm_denoise": {
+    "strength": 0.0
+  },
+  "heeler.noise": {
+    "by_frame": 0.0,
+    "color_grain": 0.0,
+    "seed": 0.0,
+    "size": 25.0
+  },
+  "heeler.output": {
+    "long_edge": 0.0,
+    "quality": 90.0
+  },
+  "heeler.paint": {
+    "heal": 0.0,
+    "roi_h": 1.0,
+    "roi_w": 1.0,
+    "roi_x": 0.0,
+    "roi_y": 0.0
+  },
+  "heeler.paper": {
+    "base": 0.0,
+    "crossover": 50.0,
+    "dmax": 2.1,
+    "grade": 2.0,
+    "hard": 0.0,
+    "soft": 0.0,
+    "split": 0.0,
+    "time": 0.0,
+    "toning": 0.0
+  },
+  "heeler.perspective": {
+    "horizontal": 0.0,
+    "vertical": 0.0,
+    "zoom": 0.0
+  },
+  "heeler.radial_mask": {
+    "aspect": 1.0,
+    "center_x": 0.5,
+    "center_y": 0.5,
+    "depth_black": 0.0,
+    "depth_black_soft": 0.0,
+    "depth_gamma": 1.0,
+    "depth_invert": 0.0,
+    "depth_on": 0.0,
+    "depth_white": 1.0,
+    "depth_white_soft": 0.0,
+    "feather": 0.3,
+    "invert": 0.0,
+    "radius": 0.4,
+    "rotation": 0.0,
+    "shape_amount": 0.5
+  },
+  "heeler.range_mask": {
+    "depth_black": 0.0,
+    "depth_black_soft": 0.0,
+    "depth_gamma": 1.0,
+    "depth_invert": 0.0,
+    "depth_on": 0.0,
+    "depth_white": 1.0,
+    "depth_white_soft": 0.0,
+    "hue_center": 0.0,
+    "hue_width": 180.0,
+    "invert": 0.0,
+    "luma_high": 1.0,
+    "luma_low": 0.0,
+    "sat_high": 1.0,
+    "sat_low": 0.0,
+    "softness": 0.15
+  },
+  "heeler.recolor": {
+    "around_radius": 15.0,
+    "neutral_guard": 10.0,
+    "smoothing": 50.0
+  },
+  "heeler.remap": {
+    "clamp": 1.0,
+    "gamma": 1.0,
+    "in_high": 1.0,
+    "in_low": 0.0,
+    "out_high": 1.0,
+    "out_low": 0.0
+  },
+  "heeler.selection_mask": {
+    "antialias": 1.0,
+    "border_width": 10.0,
+    "depth_black": 0.0,
+    "depth_black_soft": 0.0,
+    "depth_gamma": 1.0,
+    "depth_invert": 0.0,
+    "depth_on": 0.0,
+    "depth_white": 1.0,
+    "depth_white_soft": 0.0,
+    "feather": 0.0,
+    "feather_guided": 0.0,
+    "grow": 0.0,
+    "invert": 0.0,
+    "matte_contrast": 25.0,
+    "matte_reach": 50.0,
+    "ramp": 0.0,
+    "smooth": 0.0
+  },
+  "heeler.sharpen": {
+    "amount": 0.0,
+    "radius": 1.0,
+    "threshold": 0.0
+  },
+  "heeler.sharpening": {
+    "intensity": 50.0,
+    "keep_color": 100.0,
+    "radius": 3.0
+  },
+  "heeler.skin_soften": {
+    "detail_back": 4.0,
+    "softening": 8.0,
+    "strength": 50.0
+  },
+  "heeler.smart_mask": {
+    "depth_black": 0.0,
+    "depth_black_soft": 0.0,
+    "depth_gamma": 1.0,
+    "depth_invert": 0.0,
+    "depth_on": 0.0,
+    "depth_white": 1.0,
+    "depth_white_soft": 0.0,
+    "expand": 0.0,
+    "feather": 0.0,
+    "invert": 0.0,
+    "threshold": 50.0
+  },
+  "heeler.soft_clip": {
+    "ceiling": 1.0,
+    "knee": 0.2,
+    "toe": 0.0
+  },
+  "heeler.split_tone": {
+    "balance": 0.0,
+    "highlight_hue": 0.0,
+    "highlight_sat": 0.0,
+    "shadow_hue": 0.0,
+    "shadow_sat": 0.0
+  },
+  "heeler.standard_color": {
+    "clarity": 0.0,
+    "clarity_blue": 100.0,
+    "clarity_green": 100.0,
+    "clarity_highlights": 100.0,
+    "clarity_midtones": 100.0,
+    "clarity_red": 100.0,
+    "clarity_shadows": 100.0,
+    "contrast": 0.0,
+    "dehaze": 0.0,
+    "dehaze_blue": 100.0,
+    "dehaze_green": 100.0,
+    "dehaze_highlights": 100.0,
+    "dehaze_midtones": 100.0,
+    "dehaze_red": 100.0,
+    "dehaze_shadows": 100.0,
+    "exposure": 0.0,
+    "saturation": 0.0,
+    "temperature": 6500.0,
+    "texture": 0.0,
+    "texture_blue": 100.0,
+    "texture_green": 100.0,
+    "texture_highlights": 100.0,
+    "texture_midtones": 100.0,
+    "texture_red": 100.0,
+    "texture_shadows": 100.0,
+    "tint": 0.0,
+    "vibrance": 0.0
+  },
+  "heeler.to_display": {
+    "gamma": 0.0
+  },
+  "heeler.to_scene": {
+    "gamma": 0.0
+  },
+  "heeler.tone_eq": {
+    "ev_0": 0.0,
+    "ev_m1": 0.0,
+    "ev_m2": 0.0,
+    "ev_m3": 0.0,
+    "ev_m4": 0.0,
+    "ev_p1": 0.0,
+    "ev_p2": 0.0,
+    "ev_p3": 0.0,
+    "ev_p4": 0.0,
+    "range_shift": 0.0,
+    "smoothing": 50.0
+  },
+  "heeler.tone_profile": {
+    "baseline_ev": 0.0,
+    "colorfulness": 0.0,
+    "contrast": 100.0,
+    "development": 0.0,
+    "highlight_rolloff": 0.0,
+    "shadow_toe": 0.0
+  },
+  "heeler.transform": {
+    "move_x": 0.0,
+    "move_y": 0.0,
+    "pivot_x": 50.0,
+    "pivot_y": 50.0,
+    "rotate": 0.0,
+    "size": 100.0
+  },
+  "heeler.view_transform": {
+    "contrast": 100.0,
+    "exposure_ev": 0.0,
+    "white_ev": 6.0
+  },
+  "heeler.vignette": {
+    "softness": 0.5,
+    "vignette": 0.0,
+    "vignette_mid": 50.0
+  },
+  "heeler.white_balance": {
+    "temperature": 6500.0,
+    "tint": 0.0
+  }
+}

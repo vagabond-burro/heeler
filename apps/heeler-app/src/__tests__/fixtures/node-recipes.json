@@ -1,0 +1,6667 @@
+{
+ "frequency_separation": {
+  "schema_version": 1,
+  "graph_id": "recipes_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "soft",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 3,
+     "angle": 0
+    },
+    "x": 200,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 400,
+    "y": 0
+   },
+   {
+    "id": "picture_fs",
+    "type": "heeler.merge",
+    "label": "Picture",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 200
+   },
+   {
+    "id": "blur_fs",
+    "type": "heeler.blur",
+    "label": "Low (blur)",
+    "enabled": true,
+    "params": {
+     "angle": 0,
+     "radius": 8,
+     "kind": "gaussian"
+    },
+    "x": 170,
+    "y": 0
+   },
+   {
+    "id": "alpha_fs",
+    "type": "heeler.measure",
+    "label": "Picture alpha",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "alpha"
+    },
+    "x": 850,
+    "y": 500
+   },
+   {
+    "id": "pic_r_fs",
+    "type": "heeler.measure",
+    "label": "Picture Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 170,
+    "y": 200
+   },
+   {
+    "id": "low_r_fs",
+    "type": "heeler.measure",
+    "label": "Low Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 340,
+    "y": 200
+   },
+   {
+    "id": "high_r_fs",
+    "type": "heeler.math",
+    "label": "High Red",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "subtract"
+    },
+    "x": 510,
+    "y": 200
+   },
+   {
+    "id": "back_low_r_fs",
+    "type": "heeler.measure",
+    "label": "Edited low Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 1020,
+    "y": 0
+   },
+   {
+    "id": "back_high_r_fs",
+    "type": "heeler.measure",
+    "label": "Edited high Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 1020,
+    "y": 300
+   },
+   {
+    "id": "sum_r_fs",
+    "type": "heeler.math",
+    "label": "Red low plus high",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 1190,
+    "y": 100
+   },
+   {
+    "id": "pic_g_fs",
+    "type": "heeler.measure",
+    "label": "Picture Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 170,
+    "y": 300
+   },
+   {
+    "id": "low_g_fs",
+    "type": "heeler.measure",
+    "label": "Low Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 340,
+    "y": 300
+   },
+   {
+    "id": "high_g_fs",
+    "type": "heeler.math",
+    "label": "High Green",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "subtract"
+    },
+    "x": 510,
+    "y": 300
+   },
+   {
+    "id": "back_low_g_fs",
+    "type": "heeler.measure",
+    "label": "Edited low Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 1020,
+    "y": 100
+   },
+   {
+    "id": "back_high_g_fs",
+    "type": "heeler.measure",
+    "label": "Edited high Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 1020,
+    "y": 400
+   },
+   {
+    "id": "sum_g_fs",
+    "type": "heeler.math",
+    "label": "Green low plus high",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 1190,
+    "y": 200
+   },
+   {
+    "id": "pic_b_fs",
+    "type": "heeler.measure",
+    "label": "Picture Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 170,
+    "y": 400
+   },
+   {
+    "id": "low_b_fs",
+    "type": "heeler.measure",
+    "label": "Low Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 340,
+    "y": 400
+   },
+   {
+    "id": "high_b_fs",
+    "type": "heeler.math",
+    "label": "High Blue",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "subtract"
+    },
+    "x": 510,
+    "y": 400
+   },
+   {
+    "id": "back_low_b_fs",
+    "type": "heeler.measure",
+    "label": "Edited low Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 1020,
+    "y": 200
+   },
+   {
+    "id": "back_high_b_fs",
+    "type": "heeler.measure",
+    "label": "Edited high Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 1020,
+    "y": 500
+   },
+   {
+    "id": "sum_b_fs",
+    "type": "heeler.math",
+    "label": "Blue low plus high",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 1190,
+    "y": 300
+   },
+   {
+    "id": "high_fs",
+    "type": "heeler.channel_join",
+    "label": "High (detail)",
+    "enabled": true,
+    "params": {},
+    "x": 680,
+    "y": 300
+   },
+   {
+    "id": "edit_low_fs",
+    "type": "heeler.merge",
+    "label": "Edit low here",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 680,
+    "y": 0
+   },
+   {
+    "id": "edit_high_fs",
+    "type": "heeler.merge",
+    "label": "Edit high here",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 850,
+    "y": 300
+   },
+   {
+    "id": "result_fs",
+    "type": "heeler.channel_join",
+    "label": "Low plus high",
+    "enabled": true,
+    "params": {},
+    "x": 1360,
+    "y": 200
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "soft",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "picture_fs",
+     "out"
+    ],
+    "to": [
+     "blur_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "blur_fs",
+     "out"
+    ],
+    "to": [
+     "edit_low_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "picture_fs",
+     "out"
+    ],
+    "to": [
+     "alpha_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "picture_fs",
+     "out"
+    ],
+    "to": [
+     "pic_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "blur_fs",
+     "out"
+    ],
+    "to": [
+     "low_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "pic_r_fs",
+     "out"
+    ],
+    "to": [
+     "high_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "low_r_fs",
+     "out"
+    ],
+    "to": [
+     "high_r_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "high_r_fs",
+     "out"
+    ],
+    "to": [
+     "high_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "edit_low_fs",
+     "out"
+    ],
+    "to": [
+     "back_low_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "edit_high_fs",
+     "out"
+    ],
+    "to": [
+     "back_high_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_low_r_fs",
+     "out"
+    ],
+    "to": [
+     "sum_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_high_r_fs",
+     "out"
+    ],
+    "to": [
+     "sum_r_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "sum_r_fs",
+     "out"
+    ],
+    "to": [
+     "result_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "picture_fs",
+     "out"
+    ],
+    "to": [
+     "pic_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "blur_fs",
+     "out"
+    ],
+    "to": [
+     "low_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "pic_g_fs",
+     "out"
+    ],
+    "to": [
+     "high_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "low_g_fs",
+     "out"
+    ],
+    "to": [
+     "high_g_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "high_g_fs",
+     "out"
+    ],
+    "to": [
+     "high_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "edit_low_fs",
+     "out"
+    ],
+    "to": [
+     "back_low_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "edit_high_fs",
+     "out"
+    ],
+    "to": [
+     "back_high_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_low_g_fs",
+     "out"
+    ],
+    "to": [
+     "sum_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_high_g_fs",
+     "out"
+    ],
+    "to": [
+     "sum_g_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "sum_g_fs",
+     "out"
+    ],
+    "to": [
+     "result_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "picture_fs",
+     "out"
+    ],
+    "to": [
+     "pic_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "blur_fs",
+     "out"
+    ],
+    "to": [
+     "low_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "pic_b_fs",
+     "out"
+    ],
+    "to": [
+     "high_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "low_b_fs",
+     "out"
+    ],
+    "to": [
+     "high_b_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "high_b_fs",
+     "out"
+    ],
+    "to": [
+     "high_fs",
+     "in3"
+    ]
+   },
+   {
+    "from": [
+     "edit_low_fs",
+     "out"
+    ],
+    "to": [
+     "back_low_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "edit_high_fs",
+     "out"
+    ],
+    "to": [
+     "back_high_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_low_b_fs",
+     "out"
+    ],
+    "to": [
+     "sum_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_high_b_fs",
+     "out"
+    ],
+    "to": [
+     "sum_b_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "sum_b_fs",
+     "out"
+    ],
+    "to": [
+     "result_fs",
+     "in3"
+    ]
+   },
+   {
+    "from": [
+     "high_fs",
+     "out"
+    ],
+    "to": [
+     "edit_high_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "alpha_fs",
+     "out"
+    ],
+    "to": [
+     "result_fs",
+     "alpha"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "picture_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "result_fs",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   }
+  ]
+ },
+ "frequency_separation_gain0": {
+  "schema_version": 1,
+  "graph_id": "recipes_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "soft",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 3,
+     "angle": 0
+    },
+    "x": 200,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 400,
+    "y": 0
+   },
+   {
+    "id": "picture_fs",
+    "type": "heeler.merge",
+    "label": "Picture",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 200
+   },
+   {
+    "id": "blur_fs",
+    "type": "heeler.blur",
+    "label": "Low (blur)",
+    "enabled": true,
+    "params": {
+     "angle": 0,
+     "radius": 8,
+     "kind": "gaussian"
+    },
+    "x": 170,
+    "y": 0
+   },
+   {
+    "id": "alpha_fs",
+    "type": "heeler.measure",
+    "label": "Picture alpha",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "alpha"
+    },
+    "x": 850,
+    "y": 500
+   },
+   {
+    "id": "pic_r_fs",
+    "type": "heeler.measure",
+    "label": "Picture Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 170,
+    "y": 200
+   },
+   {
+    "id": "low_r_fs",
+    "type": "heeler.measure",
+    "label": "Low Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 340,
+    "y": 200
+   },
+   {
+    "id": "high_r_fs",
+    "type": "heeler.math",
+    "label": "High Red",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 0,
+     "op": "subtract"
+    },
+    "x": 510,
+    "y": 200
+   },
+   {
+    "id": "back_low_r_fs",
+    "type": "heeler.measure",
+    "label": "Edited low Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 1020,
+    "y": 0
+   },
+   {
+    "id": "back_high_r_fs",
+    "type": "heeler.measure",
+    "label": "Edited high Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 1020,
+    "y": 300
+   },
+   {
+    "id": "sum_r_fs",
+    "type": "heeler.math",
+    "label": "Red low plus high",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 1190,
+    "y": 100
+   },
+   {
+    "id": "pic_g_fs",
+    "type": "heeler.measure",
+    "label": "Picture Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 170,
+    "y": 300
+   },
+   {
+    "id": "low_g_fs",
+    "type": "heeler.measure",
+    "label": "Low Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 340,
+    "y": 300
+   },
+   {
+    "id": "high_g_fs",
+    "type": "heeler.math",
+    "label": "High Green",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 0,
+     "op": "subtract"
+    },
+    "x": 510,
+    "y": 300
+   },
+   {
+    "id": "back_low_g_fs",
+    "type": "heeler.measure",
+    "label": "Edited low Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 1020,
+    "y": 100
+   },
+   {
+    "id": "back_high_g_fs",
+    "type": "heeler.measure",
+    "label": "Edited high Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 1020,
+    "y": 400
+   },
+   {
+    "id": "sum_g_fs",
+    "type": "heeler.math",
+    "label": "Green low plus high",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 1190,
+    "y": 200
+   },
+   {
+    "id": "pic_b_fs",
+    "type": "heeler.measure",
+    "label": "Picture Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 170,
+    "y": 400
+   },
+   {
+    "id": "low_b_fs",
+    "type": "heeler.measure",
+    "label": "Low Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 340,
+    "y": 400
+   },
+   {
+    "id": "high_b_fs",
+    "type": "heeler.math",
+    "label": "High Blue",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 0,
+     "op": "subtract"
+    },
+    "x": 510,
+    "y": 400
+   },
+   {
+    "id": "back_low_b_fs",
+    "type": "heeler.measure",
+    "label": "Edited low Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 1020,
+    "y": 200
+   },
+   {
+    "id": "back_high_b_fs",
+    "type": "heeler.measure",
+    "label": "Edited high Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 1020,
+    "y": 500
+   },
+   {
+    "id": "sum_b_fs",
+    "type": "heeler.math",
+    "label": "Blue low plus high",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 1190,
+    "y": 300
+   },
+   {
+    "id": "high_fs",
+    "type": "heeler.channel_join",
+    "label": "High (detail)",
+    "enabled": true,
+    "params": {},
+    "x": 680,
+    "y": 300
+   },
+   {
+    "id": "edit_low_fs",
+    "type": "heeler.merge",
+    "label": "Edit low here",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 680,
+    "y": 0
+   },
+   {
+    "id": "edit_high_fs",
+    "type": "heeler.merge",
+    "label": "Edit high here",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 850,
+    "y": 300
+   },
+   {
+    "id": "result_fs",
+    "type": "heeler.channel_join",
+    "label": "Low plus high",
+    "enabled": true,
+    "params": {},
+    "x": 1360,
+    "y": 200
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "soft",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "picture_fs",
+     "out"
+    ],
+    "to": [
+     "blur_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "blur_fs",
+     "out"
+    ],
+    "to": [
+     "edit_low_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "picture_fs",
+     "out"
+    ],
+    "to": [
+     "alpha_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "picture_fs",
+     "out"
+    ],
+    "to": [
+     "pic_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "blur_fs",
+     "out"
+    ],
+    "to": [
+     "low_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "pic_r_fs",
+     "out"
+    ],
+    "to": [
+     "high_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "low_r_fs",
+     "out"
+    ],
+    "to": [
+     "high_r_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "high_r_fs",
+     "out"
+    ],
+    "to": [
+     "high_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "edit_low_fs",
+     "out"
+    ],
+    "to": [
+     "back_low_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "edit_high_fs",
+     "out"
+    ],
+    "to": [
+     "back_high_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_low_r_fs",
+     "out"
+    ],
+    "to": [
+     "sum_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_high_r_fs",
+     "out"
+    ],
+    "to": [
+     "sum_r_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "sum_r_fs",
+     "out"
+    ],
+    "to": [
+     "result_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "picture_fs",
+     "out"
+    ],
+    "to": [
+     "pic_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "blur_fs",
+     "out"
+    ],
+    "to": [
+     "low_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "pic_g_fs",
+     "out"
+    ],
+    "to": [
+     "high_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "low_g_fs",
+     "out"
+    ],
+    "to": [
+     "high_g_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "high_g_fs",
+     "out"
+    ],
+    "to": [
+     "high_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "edit_low_fs",
+     "out"
+    ],
+    "to": [
+     "back_low_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "edit_high_fs",
+     "out"
+    ],
+    "to": [
+     "back_high_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_low_g_fs",
+     "out"
+    ],
+    "to": [
+     "sum_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_high_g_fs",
+     "out"
+    ],
+    "to": [
+     "sum_g_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "sum_g_fs",
+     "out"
+    ],
+    "to": [
+     "result_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "picture_fs",
+     "out"
+    ],
+    "to": [
+     "pic_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "blur_fs",
+     "out"
+    ],
+    "to": [
+     "low_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "pic_b_fs",
+     "out"
+    ],
+    "to": [
+     "high_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "low_b_fs",
+     "out"
+    ],
+    "to": [
+     "high_b_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "high_b_fs",
+     "out"
+    ],
+    "to": [
+     "high_fs",
+     "in3"
+    ]
+   },
+   {
+    "from": [
+     "edit_low_fs",
+     "out"
+    ],
+    "to": [
+     "back_low_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "edit_high_fs",
+     "out"
+    ],
+    "to": [
+     "back_high_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_low_b_fs",
+     "out"
+    ],
+    "to": [
+     "sum_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_high_b_fs",
+     "out"
+    ],
+    "to": [
+     "sum_b_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "sum_b_fs",
+     "out"
+    ],
+    "to": [
+     "result_fs",
+     "in3"
+    ]
+   },
+   {
+    "from": [
+     "high_fs",
+     "out"
+    ],
+    "to": [
+     "edit_high_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "alpha_fs",
+     "out"
+    ],
+    "to": [
+     "result_fs",
+     "alpha"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "picture_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "result_fs",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   }
+  ]
+ },
+ "frequency_separation_published_detail": {
+  "schema_version": 1,
+  "graph_id": "recipes_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "soft",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 3,
+     "angle": 0
+    },
+    "x": 200,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 400,
+    "y": 0
+   },
+   {
+    "id": "picture_fs",
+    "type": "heeler.merge",
+    "label": "Picture",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 200
+   },
+   {
+    "id": "blur_fs",
+    "type": "heeler.blur",
+    "label": "Low (blur)",
+    "enabled": true,
+    "params": {
+     "angle": 0,
+     "radius": 8,
+     "kind": "gaussian"
+    },
+    "x": 170,
+    "y": 0
+   },
+   {
+    "id": "alpha_fs",
+    "type": "heeler.measure",
+    "label": "Picture alpha",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "alpha"
+    },
+    "x": 850,
+    "y": 500
+   },
+   {
+    "id": "pic_r_fs",
+    "type": "heeler.measure",
+    "label": "Picture Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 170,
+    "y": 200
+   },
+   {
+    "id": "low_r_fs",
+    "type": "heeler.measure",
+    "label": "Low Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 340,
+    "y": 200
+   },
+   {
+    "id": "high_r_fs",
+    "type": "heeler.math",
+    "label": "High Red",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 0,
+     "op": "subtract"
+    },
+    "x": 510,
+    "y": 200
+   },
+   {
+    "id": "back_low_r_fs",
+    "type": "heeler.measure",
+    "label": "Edited low Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 1020,
+    "y": 0
+   },
+   {
+    "id": "back_high_r_fs",
+    "type": "heeler.measure",
+    "label": "Edited high Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 1020,
+    "y": 300
+   },
+   {
+    "id": "sum_r_fs",
+    "type": "heeler.math",
+    "label": "Red low plus high",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 1190,
+    "y": 100
+   },
+   {
+    "id": "pic_g_fs",
+    "type": "heeler.measure",
+    "label": "Picture Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 170,
+    "y": 300
+   },
+   {
+    "id": "low_g_fs",
+    "type": "heeler.measure",
+    "label": "Low Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 340,
+    "y": 300
+   },
+   {
+    "id": "high_g_fs",
+    "type": "heeler.math",
+    "label": "High Green",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 0,
+     "op": "subtract"
+    },
+    "x": 510,
+    "y": 300
+   },
+   {
+    "id": "back_low_g_fs",
+    "type": "heeler.measure",
+    "label": "Edited low Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 1020,
+    "y": 100
+   },
+   {
+    "id": "back_high_g_fs",
+    "type": "heeler.measure",
+    "label": "Edited high Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 1020,
+    "y": 400
+   },
+   {
+    "id": "sum_g_fs",
+    "type": "heeler.math",
+    "label": "Green low plus high",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 1190,
+    "y": 200
+   },
+   {
+    "id": "pic_b_fs",
+    "type": "heeler.measure",
+    "label": "Picture Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 170,
+    "y": 400
+   },
+   {
+    "id": "low_b_fs",
+    "type": "heeler.measure",
+    "label": "Low Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 340,
+    "y": 400
+   },
+   {
+    "id": "high_b_fs",
+    "type": "heeler.math",
+    "label": "High Blue",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 0,
+     "op": "subtract"
+    },
+    "x": 510,
+    "y": 400
+   },
+   {
+    "id": "back_low_b_fs",
+    "type": "heeler.measure",
+    "label": "Edited low Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 1020,
+    "y": 200
+   },
+   {
+    "id": "back_high_b_fs",
+    "type": "heeler.measure",
+    "label": "Edited high Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 1020,
+    "y": 500
+   },
+   {
+    "id": "sum_b_fs",
+    "type": "heeler.math",
+    "label": "Blue low plus high",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 1190,
+    "y": 300
+   },
+   {
+    "id": "high_fs",
+    "type": "heeler.channel_join",
+    "label": "High (detail)",
+    "enabled": true,
+    "params": {},
+    "x": 680,
+    "y": 300
+   },
+   {
+    "id": "edit_low_fs",
+    "type": "heeler.merge",
+    "label": "Edit low here",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 680,
+    "y": 0
+   },
+   {
+    "id": "edit_high_fs",
+    "type": "heeler.merge",
+    "label": "Edit high here",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 850,
+    "y": 300
+   },
+   {
+    "id": "result_fs",
+    "type": "heeler.channel_join",
+    "label": "Low plus high",
+    "enabled": true,
+    "params": {},
+    "x": 1360,
+    "y": 200
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "soft",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "picture_fs",
+     "out"
+    ],
+    "to": [
+     "blur_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "blur_fs",
+     "out"
+    ],
+    "to": [
+     "edit_low_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "picture_fs",
+     "out"
+    ],
+    "to": [
+     "alpha_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "picture_fs",
+     "out"
+    ],
+    "to": [
+     "pic_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "blur_fs",
+     "out"
+    ],
+    "to": [
+     "low_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "pic_r_fs",
+     "out"
+    ],
+    "to": [
+     "high_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "low_r_fs",
+     "out"
+    ],
+    "to": [
+     "high_r_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "high_r_fs",
+     "out"
+    ],
+    "to": [
+     "high_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "edit_low_fs",
+     "out"
+    ],
+    "to": [
+     "back_low_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "edit_high_fs",
+     "out"
+    ],
+    "to": [
+     "back_high_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_low_r_fs",
+     "out"
+    ],
+    "to": [
+     "sum_r_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_high_r_fs",
+     "out"
+    ],
+    "to": [
+     "sum_r_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "sum_r_fs",
+     "out"
+    ],
+    "to": [
+     "result_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "picture_fs",
+     "out"
+    ],
+    "to": [
+     "pic_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "blur_fs",
+     "out"
+    ],
+    "to": [
+     "low_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "pic_g_fs",
+     "out"
+    ],
+    "to": [
+     "high_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "low_g_fs",
+     "out"
+    ],
+    "to": [
+     "high_g_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "high_g_fs",
+     "out"
+    ],
+    "to": [
+     "high_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "edit_low_fs",
+     "out"
+    ],
+    "to": [
+     "back_low_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "edit_high_fs",
+     "out"
+    ],
+    "to": [
+     "back_high_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_low_g_fs",
+     "out"
+    ],
+    "to": [
+     "sum_g_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_high_g_fs",
+     "out"
+    ],
+    "to": [
+     "sum_g_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "sum_g_fs",
+     "out"
+    ],
+    "to": [
+     "result_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "picture_fs",
+     "out"
+    ],
+    "to": [
+     "pic_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "blur_fs",
+     "out"
+    ],
+    "to": [
+     "low_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "pic_b_fs",
+     "out"
+    ],
+    "to": [
+     "high_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "low_b_fs",
+     "out"
+    ],
+    "to": [
+     "high_b_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "high_b_fs",
+     "out"
+    ],
+    "to": [
+     "high_fs",
+     "in3"
+    ]
+   },
+   {
+    "from": [
+     "edit_low_fs",
+     "out"
+    ],
+    "to": [
+     "back_low_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "edit_high_fs",
+     "out"
+    ],
+    "to": [
+     "back_high_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_low_b_fs",
+     "out"
+    ],
+    "to": [
+     "sum_b_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "back_high_b_fs",
+     "out"
+    ],
+    "to": [
+     "sum_b_fs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "sum_b_fs",
+     "out"
+    ],
+    "to": [
+     "result_fs",
+     "in3"
+    ]
+   },
+   {
+    "from": [
+     "high_fs",
+     "out"
+    ],
+    "to": [
+     "edit_high_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "alpha_fs",
+     "out"
+    ],
+    "to": [
+     "result_fs",
+     "alpha"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "picture_fs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "result_fs",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   }
+  ]
+ },
+ "subtract_self": {
+  "schema_version": 1,
+  "graph_id": "recipes_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "soft",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 3,
+     "angle": 0
+    },
+    "x": 200,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 400,
+    "y": 0
+   },
+   {
+    "id": "a_ia",
+    "type": "heeler.merge",
+    "label": "A",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 100
+   },
+   {
+    "id": "b_ia",
+    "type": "heeler.merge",
+    "label": "B",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 300
+   },
+   {
+    "id": "a_alpha_ia",
+    "type": "heeler.measure",
+    "label": "A alpha",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "alpha"
+    },
+    "x": 170,
+    "y": 0
+   },
+   {
+    "id": "a_r_ia",
+    "type": "heeler.measure",
+    "label": "A Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 170,
+    "y": 100
+   },
+   {
+    "id": "b_r_ia",
+    "type": "heeler.measure",
+    "label": "B Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 340,
+    "y": 200
+   },
+   {
+    "id": "op_r_ia",
+    "type": "heeler.math",
+    "label": "Red A op B",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "subtract"
+    },
+    "x": 510,
+    "y": 100
+   },
+   {
+    "id": "a_g_ia",
+    "type": "heeler.measure",
+    "label": "A Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 170,
+    "y": 200
+   },
+   {
+    "id": "b_g_ia",
+    "type": "heeler.measure",
+    "label": "B Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 340,
+    "y": 300
+   },
+   {
+    "id": "op_g_ia",
+    "type": "heeler.math",
+    "label": "Green A op B",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "subtract"
+    },
+    "x": 510,
+    "y": 200
+   },
+   {
+    "id": "a_b_ia",
+    "type": "heeler.measure",
+    "label": "A Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 170,
+    "y": 300
+   },
+   {
+    "id": "b_b_ia",
+    "type": "heeler.measure",
+    "label": "B Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 340,
+    "y": 400
+   },
+   {
+    "id": "op_b_ia",
+    "type": "heeler.math",
+    "label": "Blue A op B",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "subtract"
+    },
+    "x": 510,
+    "y": 300
+   },
+   {
+    "id": "join_ia",
+    "type": "heeler.channel_join",
+    "label": "Result",
+    "enabled": true,
+    "params": {},
+    "x": 680,
+    "y": 200
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "soft",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "soft",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_ia",
+     "out"
+    ],
+    "to": [
+     "a_alpha_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_ia",
+     "out"
+    ],
+    "to": [
+     "a_r_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_ia",
+     "out"
+    ],
+    "to": [
+     "b_r_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_r_ia",
+     "out"
+    ],
+    "to": [
+     "op_r_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_r_ia",
+     "out"
+    ],
+    "to": [
+     "op_r_ia",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "op_r_ia",
+     "out"
+    ],
+    "to": [
+     "join_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_ia",
+     "out"
+    ],
+    "to": [
+     "a_g_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_ia",
+     "out"
+    ],
+    "to": [
+     "b_g_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_g_ia",
+     "out"
+    ],
+    "to": [
+     "op_g_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_g_ia",
+     "out"
+    ],
+    "to": [
+     "op_g_ia",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "op_g_ia",
+     "out"
+    ],
+    "to": [
+     "join_ia",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "a_ia",
+     "out"
+    ],
+    "to": [
+     "a_b_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_ia",
+     "out"
+    ],
+    "to": [
+     "b_b_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_b_ia",
+     "out"
+    ],
+    "to": [
+     "op_b_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_b_ia",
+     "out"
+    ],
+    "to": [
+     "op_b_ia",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "op_b_ia",
+     "out"
+    ],
+    "to": [
+     "join_ia",
+     "in3"
+    ]
+   },
+   {
+    "from": [
+     "a_alpha_ia",
+     "out"
+    ],
+    "to": [
+     "join_ia",
+     "alpha"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "a_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "b_ia",
+     "in"
+    ]
+   }
+  ]
+ },
+ "divide_self": {
+  "schema_version": 1,
+  "graph_id": "recipes_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "soft",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 3,
+     "angle": 0
+    },
+    "x": 200,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 400,
+    "y": 0
+   },
+   {
+    "id": "a_ia",
+    "type": "heeler.merge",
+    "label": "A",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 100
+   },
+   {
+    "id": "b_ia",
+    "type": "heeler.merge",
+    "label": "B",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 300
+   },
+   {
+    "id": "a_alpha_ia",
+    "type": "heeler.measure",
+    "label": "A alpha",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "alpha"
+    },
+    "x": 170,
+    "y": 0
+   },
+   {
+    "id": "a_r_ia",
+    "type": "heeler.measure",
+    "label": "A Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 170,
+    "y": 100
+   },
+   {
+    "id": "b_r_ia",
+    "type": "heeler.measure",
+    "label": "B Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 340,
+    "y": 200
+   },
+   {
+    "id": "op_r_ia",
+    "type": "heeler.math",
+    "label": "Red A op B",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "divide"
+    },
+    "x": 510,
+    "y": 100
+   },
+   {
+    "id": "a_g_ia",
+    "type": "heeler.measure",
+    "label": "A Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 170,
+    "y": 200
+   },
+   {
+    "id": "b_g_ia",
+    "type": "heeler.measure",
+    "label": "B Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 340,
+    "y": 300
+   },
+   {
+    "id": "op_g_ia",
+    "type": "heeler.math",
+    "label": "Green A op B",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "divide"
+    },
+    "x": 510,
+    "y": 200
+   },
+   {
+    "id": "a_b_ia",
+    "type": "heeler.measure",
+    "label": "A Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 170,
+    "y": 300
+   },
+   {
+    "id": "b_b_ia",
+    "type": "heeler.measure",
+    "label": "B Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 340,
+    "y": 400
+   },
+   {
+    "id": "op_b_ia",
+    "type": "heeler.math",
+    "label": "Blue A op B",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "divide"
+    },
+    "x": 510,
+    "y": 300
+   },
+   {
+    "id": "join_ia",
+    "type": "heeler.channel_join",
+    "label": "Result",
+    "enabled": true,
+    "params": {},
+    "x": 680,
+    "y": 200
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "soft",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "soft",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_ia",
+     "out"
+    ],
+    "to": [
+     "a_alpha_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_ia",
+     "out"
+    ],
+    "to": [
+     "a_r_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_ia",
+     "out"
+    ],
+    "to": [
+     "b_r_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_r_ia",
+     "out"
+    ],
+    "to": [
+     "op_r_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_r_ia",
+     "out"
+    ],
+    "to": [
+     "op_r_ia",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "op_r_ia",
+     "out"
+    ],
+    "to": [
+     "join_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_ia",
+     "out"
+    ],
+    "to": [
+     "a_g_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_ia",
+     "out"
+    ],
+    "to": [
+     "b_g_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_g_ia",
+     "out"
+    ],
+    "to": [
+     "op_g_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_g_ia",
+     "out"
+    ],
+    "to": [
+     "op_g_ia",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "op_g_ia",
+     "out"
+    ],
+    "to": [
+     "join_ia",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "a_ia",
+     "out"
+    ],
+    "to": [
+     "a_b_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_ia",
+     "out"
+    ],
+    "to": [
+     "b_b_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_b_ia",
+     "out"
+    ],
+    "to": [
+     "op_b_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_b_ia",
+     "out"
+    ],
+    "to": [
+     "op_b_ia",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "op_b_ia",
+     "out"
+    ],
+    "to": [
+     "join_ia",
+     "in3"
+    ]
+   },
+   {
+    "from": [
+     "a_alpha_ia",
+     "out"
+    ],
+    "to": [
+     "join_ia",
+     "alpha"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "a_ia",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "b_ia",
+     "in"
+    ]
+   }
+  ]
+ },
+ "negatives_survive": {
+  "schema_version": 1,
+  "graph_id": "recipes_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "soft",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 3,
+     "angle": 0
+    },
+    "x": 200,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 400,
+    "y": 0
+   },
+   {
+    "id": "twice",
+    "type": "heeler.exposure",
+    "label": "Exposure",
+    "enabled": true,
+    "params": {
+     "contrast": 0,
+     "color_contrast": 0,
+     "highlights": 0,
+     "shadows": 0,
+     "whites": 0,
+     "blacks": 0,
+     "exposure": 1
+    },
+    "x": 0,
+    "y": 300
+   },
+   {
+    "id": "a_minus",
+    "type": "heeler.merge",
+    "label": "A",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 100
+   },
+   {
+    "id": "b_minus",
+    "type": "heeler.merge",
+    "label": "B",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 300
+   },
+   {
+    "id": "a_alpha_minus",
+    "type": "heeler.measure",
+    "label": "A alpha",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "alpha"
+    },
+    "x": 170,
+    "y": 0
+   },
+   {
+    "id": "a_r_minus",
+    "type": "heeler.measure",
+    "label": "A Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 170,
+    "y": 100
+   },
+   {
+    "id": "b_r_minus",
+    "type": "heeler.measure",
+    "label": "B Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 340,
+    "y": 200
+   },
+   {
+    "id": "op_r_minus",
+    "type": "heeler.math",
+    "label": "Red A op B",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "subtract"
+    },
+    "x": 510,
+    "y": 100
+   },
+   {
+    "id": "a_g_minus",
+    "type": "heeler.measure",
+    "label": "A Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 170,
+    "y": 200
+   },
+   {
+    "id": "b_g_minus",
+    "type": "heeler.measure",
+    "label": "B Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 340,
+    "y": 300
+   },
+   {
+    "id": "op_g_minus",
+    "type": "heeler.math",
+    "label": "Green A op B",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "subtract"
+    },
+    "x": 510,
+    "y": 200
+   },
+   {
+    "id": "a_b_minus",
+    "type": "heeler.measure",
+    "label": "A Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 170,
+    "y": 300
+   },
+   {
+    "id": "b_b_minus",
+    "type": "heeler.measure",
+    "label": "B Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 340,
+    "y": 400
+   },
+   {
+    "id": "op_b_minus",
+    "type": "heeler.math",
+    "label": "Blue A op B",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "subtract"
+    },
+    "x": 510,
+    "y": 300
+   },
+   {
+    "id": "join_minus",
+    "type": "heeler.channel_join",
+    "label": "Result",
+    "enabled": true,
+    "params": {},
+    "x": 680,
+    "y": 200
+   },
+   {
+    "id": "a_plus",
+    "type": "heeler.merge",
+    "label": "A",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 100
+   },
+   {
+    "id": "b_plus",
+    "type": "heeler.merge",
+    "label": "B",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 300
+   },
+   {
+    "id": "a_alpha_plus",
+    "type": "heeler.measure",
+    "label": "A alpha",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "alpha"
+    },
+    "x": 170,
+    "y": 0
+   },
+   {
+    "id": "a_r_plus",
+    "type": "heeler.measure",
+    "label": "A Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 170,
+    "y": 100
+   },
+   {
+    "id": "b_r_plus",
+    "type": "heeler.measure",
+    "label": "B Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 340,
+    "y": 200
+   },
+   {
+    "id": "op_r_plus",
+    "type": "heeler.math",
+    "label": "Red A op B",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 510,
+    "y": 100
+   },
+   {
+    "id": "a_g_plus",
+    "type": "heeler.measure",
+    "label": "A Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 170,
+    "y": 200
+   },
+   {
+    "id": "b_g_plus",
+    "type": "heeler.measure",
+    "label": "B Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 340,
+    "y": 300
+   },
+   {
+    "id": "op_g_plus",
+    "type": "heeler.math",
+    "label": "Green A op B",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 510,
+    "y": 200
+   },
+   {
+    "id": "a_b_plus",
+    "type": "heeler.measure",
+    "label": "A Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 170,
+    "y": 300
+   },
+   {
+    "id": "b_b_plus",
+    "type": "heeler.measure",
+    "label": "B Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 340,
+    "y": 400
+   },
+   {
+    "id": "op_b_plus",
+    "type": "heeler.math",
+    "label": "Blue A op B",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 510,
+    "y": 300
+   },
+   {
+    "id": "join_plus",
+    "type": "heeler.channel_join",
+    "label": "Result",
+    "enabled": true,
+    "params": {},
+    "x": 680,
+    "y": 200
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "soft",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "soft",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "twice",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_minus",
+     "out"
+    ],
+    "to": [
+     "a_alpha_minus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_minus",
+     "out"
+    ],
+    "to": [
+     "a_r_minus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_minus",
+     "out"
+    ],
+    "to": [
+     "b_r_minus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_r_minus",
+     "out"
+    ],
+    "to": [
+     "op_r_minus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_r_minus",
+     "out"
+    ],
+    "to": [
+     "op_r_minus",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "op_r_minus",
+     "out"
+    ],
+    "to": [
+     "join_minus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_minus",
+     "out"
+    ],
+    "to": [
+     "a_g_minus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_minus",
+     "out"
+    ],
+    "to": [
+     "b_g_minus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_g_minus",
+     "out"
+    ],
+    "to": [
+     "op_g_minus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_g_minus",
+     "out"
+    ],
+    "to": [
+     "op_g_minus",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "op_g_minus",
+     "out"
+    ],
+    "to": [
+     "join_minus",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "a_minus",
+     "out"
+    ],
+    "to": [
+     "a_b_minus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_minus",
+     "out"
+    ],
+    "to": [
+     "b_b_minus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_b_minus",
+     "out"
+    ],
+    "to": [
+     "op_b_minus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_b_minus",
+     "out"
+    ],
+    "to": [
+     "op_b_minus",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "op_b_minus",
+     "out"
+    ],
+    "to": [
+     "join_minus",
+     "in3"
+    ]
+   },
+   {
+    "from": [
+     "a_alpha_minus",
+     "out"
+    ],
+    "to": [
+     "join_minus",
+     "alpha"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "a_minus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "twice",
+     "out"
+    ],
+    "to": [
+     "b_minus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_plus",
+     "out"
+    ],
+    "to": [
+     "a_alpha_plus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_plus",
+     "out"
+    ],
+    "to": [
+     "a_r_plus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_plus",
+     "out"
+    ],
+    "to": [
+     "b_r_plus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_r_plus",
+     "out"
+    ],
+    "to": [
+     "op_r_plus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_r_plus",
+     "out"
+    ],
+    "to": [
+     "op_r_plus",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "op_r_plus",
+     "out"
+    ],
+    "to": [
+     "join_plus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_plus",
+     "out"
+    ],
+    "to": [
+     "a_g_plus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_plus",
+     "out"
+    ],
+    "to": [
+     "b_g_plus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_g_plus",
+     "out"
+    ],
+    "to": [
+     "op_g_plus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_g_plus",
+     "out"
+    ],
+    "to": [
+     "op_g_plus",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "op_g_plus",
+     "out"
+    ],
+    "to": [
+     "join_plus",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "a_plus",
+     "out"
+    ],
+    "to": [
+     "a_b_plus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_plus",
+     "out"
+    ],
+    "to": [
+     "b_b_plus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_b_plus",
+     "out"
+    ],
+    "to": [
+     "op_b_plus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_b_plus",
+     "out"
+    ],
+    "to": [
+     "op_b_plus",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "op_b_plus",
+     "out"
+    ],
+    "to": [
+     "join_plus",
+     "in3"
+    ]
+   },
+   {
+    "from": [
+     "a_alpha_plus",
+     "out"
+    ],
+    "to": [
+     "join_plus",
+     "alpha"
+    ]
+   },
+   {
+    "from": [
+     "twice",
+     "out"
+    ],
+    "to": [
+     "b_plus",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "join_minus",
+     "out"
+    ],
+    "to": [
+     "a_plus",
+     "in"
+    ]
+   }
+  ]
+ },
+ "difference_key": {
+  "schema_version": 1,
+  "graph_id": "recipes_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "soft",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 3,
+     "angle": 0
+    },
+    "x": 200,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 400,
+    "y": 0
+   },
+   {
+    "id": "plate",
+    "type": "heeler.file",
+    "label": "File",
+    "enabled": true,
+    "params": {
+     "path": "__A__",
+     "layer": "",
+     "space": "scene"
+    },
+    "x": 0,
+    "y": 400
+   },
+   {
+    "id": "painted",
+    "type": "heeler.file",
+    "label": "File",
+    "enabled": true,
+    "params": {
+     "path": "__B__",
+     "layer": "",
+     "space": "scene"
+    },
+    "x": 0,
+    "y": 400
+   },
+   {
+    "id": "fg_dk",
+    "type": "heeler.merge",
+    "label": "Foreground",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 100
+   },
+   {
+    "id": "plate_dk",
+    "type": "heeler.merge",
+    "label": "Clean plate",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 300
+   },
+   {
+    "id": "fg_r_dk",
+    "type": "heeler.measure",
+    "label": "Foreground Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 170,
+    "y": 0
+   },
+   {
+    "id": "plate_r_dk",
+    "type": "heeler.measure",
+    "label": "Plate Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 170,
+    "y": 300
+   },
+   {
+    "id": "diff_r_dk",
+    "type": "heeler.math",
+    "label": "Red difference",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "difference"
+    },
+    "x": 340,
+    "y": 100
+   },
+   {
+    "id": "fg_g_dk",
+    "type": "heeler.measure",
+    "label": "Foreground Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 170,
+    "y": 100
+   },
+   {
+    "id": "plate_g_dk",
+    "type": "heeler.measure",
+    "label": "Plate Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 170,
+    "y": 400
+   },
+   {
+    "id": "diff_g_dk",
+    "type": "heeler.math",
+    "label": "Green difference",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "difference"
+    },
+    "x": 340,
+    "y": 200
+   },
+   {
+    "id": "fg_b_dk",
+    "type": "heeler.measure",
+    "label": "Foreground Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 170,
+    "y": 200
+   },
+   {
+    "id": "plate_b_dk",
+    "type": "heeler.measure",
+    "label": "Plate Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 170,
+    "y": 500
+   },
+   {
+    "id": "diff_b_dk",
+    "type": "heeler.math",
+    "label": "Blue difference",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "difference"
+    },
+    "x": 340,
+    "y": 300
+   },
+   {
+    "id": "max_rg_dk",
+    "type": "heeler.math",
+    "label": "Larger of red, green",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "max"
+    },
+    "x": 510,
+    "y": 100
+   },
+   {
+    "id": "max_dk",
+    "type": "heeler.math",
+    "label": "Largest difference",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "max"
+    },
+    "x": 680,
+    "y": 200
+   },
+   {
+    "id": "key_dk",
+    "type": "heeler.compare",
+    "label": "Key",
+    "enabled": true,
+    "params": {
+     "level": 0.05,
+     "softness": 0.02,
+     "op": "gt"
+    },
+    "x": 850,
+    "y": 200
+   },
+   {
+    "id": "clean_dk",
+    "type": "heeler.morphology",
+    "label": "Cleanup",
+    "enabled": true,
+    "params": {
+     "radius": 0,
+     "mode": "open"
+    },
+    "x": 1020,
+    "y": 200
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "soft",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "soft",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "fg_dk",
+     "out"
+    ],
+    "to": [
+     "fg_r_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_dk",
+     "out"
+    ],
+    "to": [
+     "plate_r_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "fg_r_dk",
+     "out"
+    ],
+    "to": [
+     "diff_r_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_r_dk",
+     "out"
+    ],
+    "to": [
+     "diff_r_dk",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "fg_dk",
+     "out"
+    ],
+    "to": [
+     "fg_g_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_dk",
+     "out"
+    ],
+    "to": [
+     "plate_g_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "fg_g_dk",
+     "out"
+    ],
+    "to": [
+     "diff_g_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_g_dk",
+     "out"
+    ],
+    "to": [
+     "diff_g_dk",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "fg_dk",
+     "out"
+    ],
+    "to": [
+     "fg_b_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_dk",
+     "out"
+    ],
+    "to": [
+     "plate_b_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "fg_b_dk",
+     "out"
+    ],
+    "to": [
+     "diff_b_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_b_dk",
+     "out"
+    ],
+    "to": [
+     "diff_b_dk",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "diff_r_dk",
+     "out"
+    ],
+    "to": [
+     "max_rg_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "diff_g_dk",
+     "out"
+    ],
+    "to": [
+     "max_rg_dk",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "max_rg_dk",
+     "out"
+    ],
+    "to": [
+     "max_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "diff_b_dk",
+     "out"
+    ],
+    "to": [
+     "max_dk",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "max_dk",
+     "out"
+    ],
+    "to": [
+     "key_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "key_dk",
+     "out"
+    ],
+    "to": [
+     "clean_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "painted",
+     "out"
+    ],
+    "to": [
+     "fg_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate",
+     "out"
+    ],
+    "to": [
+     "plate_dk",
+     "in"
+    ]
+   }
+  ]
+ },
+ "difference_key_same": {
+  "schema_version": 1,
+  "graph_id": "recipes_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "soft",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 3,
+     "angle": 0
+    },
+    "x": 200,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 400,
+    "y": 0
+   },
+   {
+    "id": "plate",
+    "type": "heeler.file",
+    "label": "File",
+    "enabled": true,
+    "params": {
+     "path": "__A__",
+     "layer": "",
+     "space": "scene"
+    },
+    "x": 0,
+    "y": 400
+   },
+   {
+    "id": "painted",
+    "type": "heeler.file",
+    "label": "File",
+    "enabled": true,
+    "params": {
+     "path": "__B__",
+     "layer": "",
+     "space": "scene"
+    },
+    "x": 0,
+    "y": 400
+   },
+   {
+    "id": "fg_dk",
+    "type": "heeler.merge",
+    "label": "Foreground",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 100
+   },
+   {
+    "id": "plate_dk",
+    "type": "heeler.merge",
+    "label": "Clean plate",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 300
+   },
+   {
+    "id": "fg_r_dk",
+    "type": "heeler.measure",
+    "label": "Foreground Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 170,
+    "y": 0
+   },
+   {
+    "id": "plate_r_dk",
+    "type": "heeler.measure",
+    "label": "Plate Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 170,
+    "y": 300
+   },
+   {
+    "id": "diff_r_dk",
+    "type": "heeler.math",
+    "label": "Red difference",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "difference"
+    },
+    "x": 340,
+    "y": 100
+   },
+   {
+    "id": "fg_g_dk",
+    "type": "heeler.measure",
+    "label": "Foreground Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 170,
+    "y": 100
+   },
+   {
+    "id": "plate_g_dk",
+    "type": "heeler.measure",
+    "label": "Plate Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 170,
+    "y": 400
+   },
+   {
+    "id": "diff_g_dk",
+    "type": "heeler.math",
+    "label": "Green difference",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "difference"
+    },
+    "x": 340,
+    "y": 200
+   },
+   {
+    "id": "fg_b_dk",
+    "type": "heeler.measure",
+    "label": "Foreground Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 170,
+    "y": 200
+   },
+   {
+    "id": "plate_b_dk",
+    "type": "heeler.measure",
+    "label": "Plate Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 170,
+    "y": 500
+   },
+   {
+    "id": "diff_b_dk",
+    "type": "heeler.math",
+    "label": "Blue difference",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "difference"
+    },
+    "x": 340,
+    "y": 300
+   },
+   {
+    "id": "max_rg_dk",
+    "type": "heeler.math",
+    "label": "Larger of red, green",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "max"
+    },
+    "x": 510,
+    "y": 100
+   },
+   {
+    "id": "max_dk",
+    "type": "heeler.math",
+    "label": "Largest difference",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "max"
+    },
+    "x": 680,
+    "y": 200
+   },
+   {
+    "id": "key_dk",
+    "type": "heeler.compare",
+    "label": "Key",
+    "enabled": true,
+    "params": {
+     "level": 0.05,
+     "softness": 0.02,
+     "op": "gt"
+    },
+    "x": 850,
+    "y": 200
+   },
+   {
+    "id": "clean_dk",
+    "type": "heeler.morphology",
+    "label": "Cleanup",
+    "enabled": true,
+    "params": {
+     "radius": 0,
+     "mode": "open"
+    },
+    "x": 1020,
+    "y": 200
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "soft",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "soft",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "fg_dk",
+     "out"
+    ],
+    "to": [
+     "fg_r_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_dk",
+     "out"
+    ],
+    "to": [
+     "plate_r_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "fg_r_dk",
+     "out"
+    ],
+    "to": [
+     "diff_r_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_r_dk",
+     "out"
+    ],
+    "to": [
+     "diff_r_dk",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "fg_dk",
+     "out"
+    ],
+    "to": [
+     "fg_g_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_dk",
+     "out"
+    ],
+    "to": [
+     "plate_g_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "fg_g_dk",
+     "out"
+    ],
+    "to": [
+     "diff_g_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_g_dk",
+     "out"
+    ],
+    "to": [
+     "diff_g_dk",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "fg_dk",
+     "out"
+    ],
+    "to": [
+     "fg_b_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_dk",
+     "out"
+    ],
+    "to": [
+     "plate_b_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "fg_b_dk",
+     "out"
+    ],
+    "to": [
+     "diff_b_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_b_dk",
+     "out"
+    ],
+    "to": [
+     "diff_b_dk",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "diff_r_dk",
+     "out"
+    ],
+    "to": [
+     "max_rg_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "diff_g_dk",
+     "out"
+    ],
+    "to": [
+     "max_rg_dk",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "max_rg_dk",
+     "out"
+    ],
+    "to": [
+     "max_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "diff_b_dk",
+     "out"
+    ],
+    "to": [
+     "max_dk",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "max_dk",
+     "out"
+    ],
+    "to": [
+     "key_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "key_dk",
+     "out"
+    ],
+    "to": [
+     "clean_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate",
+     "out"
+    ],
+    "to": [
+     "fg_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate",
+     "out"
+    ],
+    "to": [
+     "plate_dk",
+     "in"
+    ]
+   }
+  ]
+ },
+ "difference_key_cleanup": {
+  "schema_version": 1,
+  "graph_id": "recipes_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "soft",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 3,
+     "angle": 0
+    },
+    "x": 200,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 400,
+    "y": 0
+   },
+   {
+    "id": "plate",
+    "type": "heeler.file",
+    "label": "File",
+    "enabled": true,
+    "params": {
+     "path": "__A__",
+     "layer": "",
+     "space": "scene"
+    },
+    "x": 0,
+    "y": 400
+   },
+   {
+    "id": "painted",
+    "type": "heeler.file",
+    "label": "File",
+    "enabled": true,
+    "params": {
+     "path": "__B__",
+     "layer": "",
+     "space": "scene"
+    },
+    "x": 0,
+    "y": 400
+   },
+   {
+    "id": "fg_dk",
+    "type": "heeler.merge",
+    "label": "Foreground",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 100
+   },
+   {
+    "id": "plate_dk",
+    "type": "heeler.merge",
+    "label": "Clean plate",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 300
+   },
+   {
+    "id": "fg_r_dk",
+    "type": "heeler.measure",
+    "label": "Foreground Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 170,
+    "y": 0
+   },
+   {
+    "id": "plate_r_dk",
+    "type": "heeler.measure",
+    "label": "Plate Red",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 170,
+    "y": 300
+   },
+   {
+    "id": "diff_r_dk",
+    "type": "heeler.math",
+    "label": "Red difference",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "difference"
+    },
+    "x": 340,
+    "y": 100
+   },
+   {
+    "id": "fg_g_dk",
+    "type": "heeler.measure",
+    "label": "Foreground Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 170,
+    "y": 100
+   },
+   {
+    "id": "plate_g_dk",
+    "type": "heeler.measure",
+    "label": "Plate Green",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 170,
+    "y": 400
+   },
+   {
+    "id": "diff_g_dk",
+    "type": "heeler.math",
+    "label": "Green difference",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "difference"
+    },
+    "x": 340,
+    "y": 200
+   },
+   {
+    "id": "fg_b_dk",
+    "type": "heeler.measure",
+    "label": "Foreground Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 170,
+    "y": 200
+   },
+   {
+    "id": "plate_b_dk",
+    "type": "heeler.measure",
+    "label": "Plate Blue",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 170,
+    "y": 500
+   },
+   {
+    "id": "diff_b_dk",
+    "type": "heeler.math",
+    "label": "Blue difference",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "difference"
+    },
+    "x": 340,
+    "y": 300
+   },
+   {
+    "id": "max_rg_dk",
+    "type": "heeler.math",
+    "label": "Larger of red, green",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "max"
+    },
+    "x": 510,
+    "y": 100
+   },
+   {
+    "id": "max_dk",
+    "type": "heeler.math",
+    "label": "Largest difference",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "max"
+    },
+    "x": 680,
+    "y": 200
+   },
+   {
+    "id": "key_dk",
+    "type": "heeler.compare",
+    "label": "Key",
+    "enabled": true,
+    "params": {
+     "level": 0.05,
+     "softness": 0.02,
+     "op": "gt"
+    },
+    "x": 850,
+    "y": 200
+   },
+   {
+    "id": "clean_dk",
+    "type": "heeler.morphology",
+    "label": "Cleanup",
+    "enabled": true,
+    "params": {
+     "radius": 30,
+     "mode": "open"
+    },
+    "x": 1020,
+    "y": 200
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "soft",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "soft",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "fg_dk",
+     "out"
+    ],
+    "to": [
+     "fg_r_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_dk",
+     "out"
+    ],
+    "to": [
+     "plate_r_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "fg_r_dk",
+     "out"
+    ],
+    "to": [
+     "diff_r_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_r_dk",
+     "out"
+    ],
+    "to": [
+     "diff_r_dk",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "fg_dk",
+     "out"
+    ],
+    "to": [
+     "fg_g_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_dk",
+     "out"
+    ],
+    "to": [
+     "plate_g_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "fg_g_dk",
+     "out"
+    ],
+    "to": [
+     "diff_g_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_g_dk",
+     "out"
+    ],
+    "to": [
+     "diff_g_dk",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "fg_dk",
+     "out"
+    ],
+    "to": [
+     "fg_b_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_dk",
+     "out"
+    ],
+    "to": [
+     "plate_b_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "fg_b_dk",
+     "out"
+    ],
+    "to": [
+     "diff_b_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate_b_dk",
+     "out"
+    ],
+    "to": [
+     "diff_b_dk",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "diff_r_dk",
+     "out"
+    ],
+    "to": [
+     "max_rg_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "diff_g_dk",
+     "out"
+    ],
+    "to": [
+     "max_rg_dk",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "max_rg_dk",
+     "out"
+    ],
+    "to": [
+     "max_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "diff_b_dk",
+     "out"
+    ],
+    "to": [
+     "max_dk",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "max_dk",
+     "out"
+    ],
+    "to": [
+     "key_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "key_dk",
+     "out"
+    ],
+    "to": [
+     "clean_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "painted",
+     "out"
+    ],
+    "to": [
+     "fg_dk",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "plate",
+     "out"
+    ],
+    "to": [
+     "plate_dk",
+     "in"
+    ]
+   }
+  ]
+ },
+ "depth_color_matte": {
+  "schema_version": 1,
+  "graph_id": "recipes_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "soft",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 3,
+     "angle": 0
+    },
+    "x": 200,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 400,
+    "y": 0
+   },
+   {
+    "id": "ramp",
+    "type": "heeler.linear_mask",
+    "label": "Linear Mask",
+    "enabled": true,
+    "params": {
+     "angle": 0,
+     "position": 0.5,
+     "span": 1
+    },
+    "x": 0,
+    "y": 500
+   },
+   {
+    "id": "depth_dcm",
+    "type": "heeler.math",
+    "label": "Depth",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "near_dcm",
+    "type": "heeler.compare",
+    "label": "Near edge",
+    "enabled": true,
+    "params": {
+     "level": 0.2,
+     "softness": 0.1,
+     "op": "ge"
+    },
+    "x": 170,
+    "y": 0
+   },
+   {
+    "id": "far_dcm",
+    "type": "heeler.compare",
+    "label": "Far edge",
+    "enabled": true,
+    "params": {
+     "level": 0.7,
+     "softness": 0.05,
+     "op": "le"
+    },
+    "x": 170,
+    "y": 100
+   },
+   {
+    "id": "window_dcm",
+    "type": "heeler.logic",
+    "label": "Depth window",
+    "enabled": true,
+    "params": {
+     "op": "and"
+    },
+    "x": 340,
+    "y": 50
+   },
+   {
+    "id": "hue_dcm",
+    "type": "heeler.hue_range_mask",
+    "label": "Hue band",
+    "enabled": true,
+    "params": {
+     "band_center": 30,
+     "depth_black": 0,
+     "depth_black_soft": 0,
+     "depth_gamma": 1,
+     "depth_invert": false,
+     "depth_on": false,
+     "depth_white": 1,
+     "depth_white_soft": 0,
+     "hue_falloff": 30,
+     "hue_range": 40,
+     "invert": false
+    },
+    "x": 340,
+    "y": 200
+   },
+   {
+    "id": "combine_dcm",
+    "type": "heeler.logic",
+    "label": "Combine",
+    "enabled": true,
+    "params": {
+     "op": "and"
+    },
+    "x": 510,
+    "y": 100
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "soft",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "soft",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "depth_dcm",
+     "out"
+    ],
+    "to": [
+     "near_dcm",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "depth_dcm",
+     "out"
+    ],
+    "to": [
+     "far_dcm",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "near_dcm",
+     "out"
+    ],
+    "to": [
+     "window_dcm",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "far_dcm",
+     "out"
+    ],
+    "to": [
+     "window_dcm",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "window_dcm",
+     "out"
+    ],
+    "to": [
+     "combine_dcm",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "hue_dcm",
+     "out"
+    ],
+    "to": [
+     "combine_dcm",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "hue_dcm",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "ramp",
+     "out"
+    ],
+    "to": [
+     "depth_dcm",
+     "in"
+    ]
+   }
+  ]
+ },
+ "depth_color_matte_union": {
+  "schema_version": 1,
+  "graph_id": "recipes_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "soft",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 3,
+     "angle": 0
+    },
+    "x": 200,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 400,
+    "y": 0
+   },
+   {
+    "id": "ramp",
+    "type": "heeler.linear_mask",
+    "label": "Linear Mask",
+    "enabled": true,
+    "params": {
+     "angle": 0,
+     "position": 0.5,
+     "span": 1
+    },
+    "x": 0,
+    "y": 500
+   },
+   {
+    "id": "depth_dcm",
+    "type": "heeler.math",
+    "label": "Depth",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "near_dcm",
+    "type": "heeler.compare",
+    "label": "Near edge",
+    "enabled": true,
+    "params": {
+     "level": 0.2,
+     "softness": 0.1,
+     "op": "ge"
+    },
+    "x": 170,
+    "y": 0
+   },
+   {
+    "id": "far_dcm",
+    "type": "heeler.compare",
+    "label": "Far edge",
+    "enabled": true,
+    "params": {
+     "level": 0.7,
+     "softness": 0.05,
+     "op": "le"
+    },
+    "x": 170,
+    "y": 100
+   },
+   {
+    "id": "window_dcm",
+    "type": "heeler.logic",
+    "label": "Depth window",
+    "enabled": true,
+    "params": {
+     "op": "and"
+    },
+    "x": 340,
+    "y": 50
+   },
+   {
+    "id": "hue_dcm",
+    "type": "heeler.hue_range_mask",
+    "label": "Hue band",
+    "enabled": true,
+    "params": {
+     "band_center": 30,
+     "depth_black": 0,
+     "depth_black_soft": 0,
+     "depth_gamma": 1,
+     "depth_invert": false,
+     "depth_on": false,
+     "depth_white": 1,
+     "depth_white_soft": 0,
+     "hue_falloff": 30,
+     "hue_range": 40,
+     "invert": false
+    },
+    "x": 340,
+    "y": 200
+   },
+   {
+    "id": "combine_dcm",
+    "type": "heeler.logic",
+    "label": "Combine",
+    "enabled": true,
+    "params": {
+     "op": "or"
+    },
+    "x": 510,
+    "y": 100
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "soft",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "soft",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "depth_dcm",
+     "out"
+    ],
+    "to": [
+     "near_dcm",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "depth_dcm",
+     "out"
+    ],
+    "to": [
+     "far_dcm",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "near_dcm",
+     "out"
+    ],
+    "to": [
+     "window_dcm",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "far_dcm",
+     "out"
+    ],
+    "to": [
+     "window_dcm",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "window_dcm",
+     "out"
+    ],
+    "to": [
+     "combine_dcm",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "hue_dcm",
+     "out"
+    ],
+    "to": [
+     "combine_dcm",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "hue_dcm",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "ramp",
+     "out"
+    ],
+    "to": [
+     "depth_dcm",
+     "in"
+    ]
+   }
+  ]
+ },
+ "channel_shuffle_swap": {
+  "schema_version": 1,
+  "graph_id": "recipes_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "soft",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 3,
+     "angle": 0
+    },
+    "x": 200,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 400,
+    "y": 0
+   },
+   {
+    "id": "a_cs",
+    "type": "heeler.merge",
+    "label": "A",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 100
+   },
+   {
+    "id": "b_cs",
+    "type": "heeler.merge",
+    "label": "B",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 300
+   },
+   {
+    "id": "a_alpha_cs",
+    "type": "heeler.measure",
+    "label": "A alpha",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "alpha"
+    },
+    "x": 170,
+    "y": 0
+   },
+   {
+    "id": "sel_r_cs",
+    "type": "heeler.math",
+    "label": "Red: B when 1",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 0,
+     "op": "add"
+    },
+    "x": 340,
+    "y": 100
+   },
+   {
+    "id": "pick_r_cs",
+    "type": "heeler.conditional",
+    "label": "Red source",
+    "enabled": true,
+    "params": {},
+    "x": 510,
+    "y": 100
+   },
+   {
+    "id": "read_r_cs",
+    "type": "heeler.measure",
+    "label": "Red channel",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 680,
+    "y": 100
+   },
+   {
+    "id": "value_r_cs",
+    "type": "heeler.math",
+    "label": "Red value",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 850,
+    "y": 100
+   },
+   {
+    "id": "sel_g_cs",
+    "type": "heeler.math",
+    "label": "Green: B when 1",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 0,
+     "op": "add"
+    },
+    "x": 340,
+    "y": 200
+   },
+   {
+    "id": "pick_g_cs",
+    "type": "heeler.conditional",
+    "label": "Green source",
+    "enabled": true,
+    "params": {},
+    "x": 510,
+    "y": 200
+   },
+   {
+    "id": "read_g_cs",
+    "type": "heeler.measure",
+    "label": "Green channel",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 680,
+    "y": 200
+   },
+   {
+    "id": "value_g_cs",
+    "type": "heeler.math",
+    "label": "Green value",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 850,
+    "y": 200
+   },
+   {
+    "id": "sel_b_cs",
+    "type": "heeler.math",
+    "label": "Blue: B when 1",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 0,
+     "op": "add"
+    },
+    "x": 340,
+    "y": 300
+   },
+   {
+    "id": "pick_b_cs",
+    "type": "heeler.conditional",
+    "label": "Blue source",
+    "enabled": true,
+    "params": {},
+    "x": 510,
+    "y": 300
+   },
+   {
+    "id": "read_b_cs",
+    "type": "heeler.measure",
+    "label": "Blue channel",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "red"
+    },
+    "x": 680,
+    "y": 300
+   },
+   {
+    "id": "value_b_cs",
+    "type": "heeler.math",
+    "label": "Blue value",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 850,
+    "y": 300
+   },
+   {
+    "id": "join_cs",
+    "type": "heeler.channel_join",
+    "label": "Result",
+    "enabled": true,
+    "params": {},
+    "x": 1020,
+    "y": 200
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "soft",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_cs",
+     "out"
+    ],
+    "to": [
+     "a_alpha_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_alpha_cs",
+     "out"
+    ],
+    "to": [
+     "sel_r_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_cs",
+     "out"
+    ],
+    "to": [
+     "pick_r_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_cs",
+     "out"
+    ],
+    "to": [
+     "pick_r_cs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "sel_r_cs",
+     "out"
+    ],
+    "to": [
+     "pick_r_cs",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "pick_r_cs",
+     "out"
+    ],
+    "to": [
+     "read_r_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "read_r_cs",
+     "out"
+    ],
+    "to": [
+     "value_r_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "value_r_cs",
+     "out"
+    ],
+    "to": [
+     "join_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_alpha_cs",
+     "out"
+    ],
+    "to": [
+     "sel_g_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_cs",
+     "out"
+    ],
+    "to": [
+     "pick_g_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_cs",
+     "out"
+    ],
+    "to": [
+     "pick_g_cs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "sel_g_cs",
+     "out"
+    ],
+    "to": [
+     "pick_g_cs",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "pick_g_cs",
+     "out"
+    ],
+    "to": [
+     "read_g_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "read_g_cs",
+     "out"
+    ],
+    "to": [
+     "value_g_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "value_g_cs",
+     "out"
+    ],
+    "to": [
+     "join_cs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "a_alpha_cs",
+     "out"
+    ],
+    "to": [
+     "sel_b_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_cs",
+     "out"
+    ],
+    "to": [
+     "pick_b_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_cs",
+     "out"
+    ],
+    "to": [
+     "pick_b_cs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "sel_b_cs",
+     "out"
+    ],
+    "to": [
+     "pick_b_cs",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "pick_b_cs",
+     "out"
+    ],
+    "to": [
+     "read_b_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "read_b_cs",
+     "out"
+    ],
+    "to": [
+     "value_b_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "value_b_cs",
+     "out"
+    ],
+    "to": [
+     "join_cs",
+     "in3"
+    ]
+   },
+   {
+    "from": [
+     "a_alpha_cs",
+     "out"
+    ],
+    "to": [
+     "join_cs",
+     "alpha"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "a_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "b_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "join_cs",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   }
+  ]
+ },
+ "channel_shuffle_constants": {
+  "schema_version": 1,
+  "graph_id": "recipes_ui",
+  "nodes": [
+   {
+    "id": "src",
+    "type": "heeler.image_source",
+    "label": "Image Source",
+    "enabled": true,
+    "params": {},
+    "x": 0,
+    "y": 0
+   },
+   {
+    "id": "soft",
+    "type": "heeler.blur",
+    "label": "Blur",
+    "enabled": true,
+    "params": {
+     "radius": 3,
+     "angle": 0
+    },
+    "x": 200,
+    "y": 0
+   },
+   {
+    "id": "output",
+    "type": "heeler.output",
+    "label": "Output",
+    "enabled": true,
+    "params": {},
+    "x": 400,
+    "y": 0
+   },
+   {
+    "id": "a_cs",
+    "type": "heeler.merge",
+    "label": "A",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 100
+   },
+   {
+    "id": "b_cs",
+    "type": "heeler.merge",
+    "label": "B",
+    "enabled": true,
+    "params": {
+     "opacity": 100,
+     "fit": "fit"
+    },
+    "x": 0,
+    "y": 300
+   },
+   {
+    "id": "a_alpha_cs",
+    "type": "heeler.measure",
+    "label": "A alpha",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "alpha"
+    },
+    "x": 170,
+    "y": 0
+   },
+   {
+    "id": "sel_r_cs",
+    "type": "heeler.math",
+    "label": "Red: B when 1",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 0,
+     "op": "add"
+    },
+    "x": 340,
+    "y": 100
+   },
+   {
+    "id": "pick_r_cs",
+    "type": "heeler.conditional",
+    "label": "Red source",
+    "enabled": true,
+    "params": {},
+    "x": 510,
+    "y": 100
+   },
+   {
+    "id": "read_r_cs",
+    "type": "heeler.measure",
+    "label": "Red channel",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "blue"
+    },
+    "x": 680,
+    "y": 100
+   },
+   {
+    "id": "value_r_cs",
+    "type": "heeler.math",
+    "label": "Red value",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 1,
+     "scale": 0,
+     "op": "add"
+    },
+    "x": 850,
+    "y": 100
+   },
+   {
+    "id": "sel_g_cs",
+    "type": "heeler.math",
+    "label": "Green: B when 1",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 0,
+     "op": "add"
+    },
+    "x": 340,
+    "y": 200
+   },
+   {
+    "id": "pick_g_cs",
+    "type": "heeler.conditional",
+    "label": "Green source",
+    "enabled": true,
+    "params": {},
+    "x": 510,
+    "y": 200
+   },
+   {
+    "id": "read_g_cs",
+    "type": "heeler.measure",
+    "label": "Green channel",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 680,
+    "y": 200
+   },
+   {
+    "id": "value_g_cs",
+    "type": "heeler.math",
+    "label": "Green value",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 0,
+     "op": "add"
+    },
+    "x": 850,
+    "y": 200
+   },
+   {
+    "id": "sel_b_cs",
+    "type": "heeler.math",
+    "label": "Blue: B when 1",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 1,
+     "scale": 0,
+     "op": "add"
+    },
+    "x": 340,
+    "y": 300
+   },
+   {
+    "id": "pick_b_cs",
+    "type": "heeler.conditional",
+    "label": "Blue source",
+    "enabled": true,
+    "params": {},
+    "x": 510,
+    "y": 300
+   },
+   {
+    "id": "read_b_cs",
+    "type": "heeler.measure",
+    "label": "Blue channel",
+    "enabled": true,
+    "params": {
+     "smoothing": 0,
+     "metric": "green"
+    },
+    "x": 680,
+    "y": 300
+   },
+   {
+    "id": "value_b_cs",
+    "type": "heeler.math",
+    "label": "Blue value",
+    "enabled": true,
+    "params": {
+     "constant": 0,
+     "offset": 0,
+     "scale": 1,
+     "op": "add"
+    },
+    "x": 850,
+    "y": 300
+   },
+   {
+    "id": "join_cs",
+    "type": "heeler.channel_join",
+    "label": "Result",
+    "enabled": true,
+    "params": {},
+    "x": 1020,
+    "y": 200
+   }
+  ],
+  "connections": [
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "soft",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_cs",
+     "out"
+    ],
+    "to": [
+     "a_alpha_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_alpha_cs",
+     "out"
+    ],
+    "to": [
+     "sel_r_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_cs",
+     "out"
+    ],
+    "to": [
+     "pick_r_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_cs",
+     "out"
+    ],
+    "to": [
+     "pick_r_cs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "sel_r_cs",
+     "out"
+    ],
+    "to": [
+     "pick_r_cs",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "pick_r_cs",
+     "out"
+    ],
+    "to": [
+     "read_r_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "read_r_cs",
+     "out"
+    ],
+    "to": [
+     "value_r_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "value_r_cs",
+     "out"
+    ],
+    "to": [
+     "join_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_alpha_cs",
+     "out"
+    ],
+    "to": [
+     "sel_g_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_cs",
+     "out"
+    ],
+    "to": [
+     "pick_g_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_cs",
+     "out"
+    ],
+    "to": [
+     "pick_g_cs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "sel_g_cs",
+     "out"
+    ],
+    "to": [
+     "pick_g_cs",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "pick_g_cs",
+     "out"
+    ],
+    "to": [
+     "read_g_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "read_g_cs",
+     "out"
+    ],
+    "to": [
+     "value_g_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "value_g_cs",
+     "out"
+    ],
+    "to": [
+     "join_cs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "a_alpha_cs",
+     "out"
+    ],
+    "to": [
+     "sel_b_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "a_cs",
+     "out"
+    ],
+    "to": [
+     "pick_b_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "b_cs",
+     "out"
+    ],
+    "to": [
+     "pick_b_cs",
+     "fg"
+    ]
+   },
+   {
+    "from": [
+     "sel_b_cs",
+     "out"
+    ],
+    "to": [
+     "pick_b_cs",
+     "mask"
+    ]
+   },
+   {
+    "from": [
+     "pick_b_cs",
+     "out"
+    ],
+    "to": [
+     "read_b_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "read_b_cs",
+     "out"
+    ],
+    "to": [
+     "value_b_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "value_b_cs",
+     "out"
+    ],
+    "to": [
+     "join_cs",
+     "in3"
+    ]
+   },
+   {
+    "from": [
+     "a_alpha_cs",
+     "out"
+    ],
+    "to": [
+     "join_cs",
+     "alpha"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "a_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "src",
+     "out"
+    ],
+    "to": [
+     "b_cs",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "join_cs",
+     "out"
+    ],
+    "to": [
+     "output",
+     "in"
+    ]
+   }
+  ]
+ }
+}

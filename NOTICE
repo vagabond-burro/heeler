@@ -1,0 +1,19 @@
+Heeler
+Copyright (c) 2026 Vagabond Burro LLC
+
+This Source Code Form is subject to the terms of the Mozilla Public
+License, v. 2.0. If a copy of the MPL was not distributed with this
+file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+The notice above applies to every file in this repository that Vagabond
+Burro LLC wrote. Files and materials with a license of their own keep it:
+everything under third_party/, test fixtures with a LICENSE beside them,
+and the license texts reproduced in the user guide. The user guide's
+Third-Party Notices page lists every bundled component and its license.
+The machine learning models Heeler downloads are not part of this
+repository and keep their own licenses.
+
+The Heeler name and logo are trademarks of Vagabond Burro LLC. The
+Mozilla Public License does not grant rights to them (section 2.3), so a
+modified version distributed by anyone else must not be called Heeler or
+carry the logo.

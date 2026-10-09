@@ -1,0 +1,213 @@
+{
+  "id": "spydercheckr-24",
+  "name": "Datacolor SpyderCheckr 24",
+  "rows": 4,
+  "cols": 6,
+  "source": "Datacolor's published CIE Lab values (post-2018 chart printing), transcribed from darktable src/common/colorchecker.h (spyder_24_v2, author Aurelien Pierre) at https://raw.githubusercontent.com/darktable-org/darktable/master/src/common/colorchecker.h; the SpyderCheckr 48 values match C. Bartneck's transcription of Datacolor's published table at https://www.bartneck.de/2017/10/24/patch-color-definitions-for-datacolor-spydercheckr-48/",
+  "neutrals": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "skin": [
+    22,
+    23
+  ],
+  "patches": [
+    {
+      "name": "A1",
+      "lab": [
+        96.04,
+        2.16,
+        2.6
+      ]
+    },
+    {
+      "name": "A2",
+      "lab": [
+        80.44,
+        1.17,
+        2.05
+      ]
+    },
+    {
+      "name": "A3",
+      "lab": [
+        65.52,
+        0.69,
+        1.86
+      ]
+    },
+    {
+      "name": "A4",
+      "lab": [
+        49.62,
+        0.58,
+        1.56
+      ]
+    },
+    {
+      "name": "A5",
+      "lab": [
+        33.55,
+        0.35,
+        1.4
+      ]
+    },
+    {
+      "name": "A6",
+      "lab": [
+        16.91,
+        1.43,
+        -0.81
+      ]
+    },
+    {
+      "name": "B1",
+      "lab": [
+        47.12,
+        -32.5,
+        -28.75
+      ]
+    },
+    {
+      "name": "B2",
+      "lab": [
+        50.49,
+        53.45,
+        -13.55
+      ]
+    },
+    {
+      "name": "B3",
+      "lab": [
+        83.61,
+        3.36,
+        87.02
+      ]
+    },
+    {
+      "name": "B4",
+      "lab": [
+        41.05,
+        60.75,
+        31.17
+      ]
+    },
+    {
+      "name": "B5",
+      "lab": [
+        54.14,
+        -40.8,
+        34.75
+      ]
+    },
+    {
+      "name": "B6",
+      "lab": [
+        24.75,
+        13.78,
+        -49.48
+      ]
+    },
+    {
+      "name": "C1",
+      "lab": [
+        60.94,
+        38.21,
+        61.31
+      ]
+    },
+    {
+      "name": "C2",
+      "lab": [
+        37.8,
+        7.3,
+        -43.04
+      ]
+    },
+    {
+      "name": "C3",
+      "lab": [
+        49.81,
+        48.5,
+        15.76
+      ]
+    },
+    {
+      "name": "C4",
+      "lab": [
+        28.88,
+        19.36,
+        -24.48
+      ]
+    },
+    {
+      "name": "C5",
+      "lab": [
+        72.45,
+        -23.57,
+        60.47
+      ]
+    },
+    {
+      "name": "C6",
+      "lab": [
+        71.65,
+        23.74,
+        72.28
+      ]
+    },
+    {
+      "name": "D1",
+      "lab": [
+        70.19,
+        -31.85,
+        1.98
+      ]
+    },
+    {
+      "name": "D2",
+      "lab": [
+        54.38,
+        8.84,
+        -25.71
+      ]
+    },
+    {
+      "name": "D3",
+      "lab": [
+        42.03,
+        -15.78,
+        22.93
+      ]
+    },
+    {
+      "name": "D4",
+      "lab": [
+        48.82,
+        -5.11,
+        -23.08
+      ]
+    },
+    {
+      "name": "D5",
+      "lab": [
+        65.1,
+        18.14,
+        18.68
+      ]
+    },
+    {
+      "name": "D6",
+      "lab": [
+        36.13,
+        14.15,
+        15.78
+      ]
+    }
+  ]
+}

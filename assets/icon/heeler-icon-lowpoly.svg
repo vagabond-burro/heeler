@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="78%">
+      <stop offset="0%" stop-color="#262d35"/>
+      <stop offset="100%" stop-color="#13161a"/>
+    </radialGradient>
+  </defs>
+
+  <!-- icon plate -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+
+  <!-- node wires: the head is the node between an input and an output port -->
+  <g stroke="#e8a33d" stroke-width="7" fill="none" stroke-linecap="round" opacity="0.75">
+    <path d="M 80 268 C 108 268 118 264 142 262"/>
+    <path d="M 372 280 C 400 276 412 272 432 270"/>
+  </g>
+  <circle cx="70" cy="268" r="12" fill="none" stroke="#e8a33d" stroke-width="7" opacity="0.9"/>
+  <circle cx="443" cy="270" r="12" fill="none" stroke="#e8a33d" stroke-width="7" opacity="0.9"/>
+
+  <!-- ears -->
+  <polygon points="150,210 118,84 226,152" fill="#4a5a6a"/>
+  <polygon points="362,210 394,84 286,152" fill="#3a4653"/>
+  <polygon points="163,192 143,113 209,158" fill="#2c3640"/>
+  <polygon points="349,192 369,113 303,158" fill="#262f38"/>
+
+  <!-- head facets, patch side (right) darker like a heeler eye patch -->
+  <polygon points="226,152 286,152 256,238" fill="#6b7f92"/>
+  <polygon points="150,210 226,152 256,238" fill="#596c7e"/>
+  <polygon points="286,152 362,210 256,238" fill="#41505e"/>
+  <polygon points="150,210 256,238 138,296" fill="#4a5a6a"/>
+  <polygon points="362,210 256,238 374,296" fill="#333e49"/>
+  <polygon points="138,296 256,238 212,352" fill="#596c7e"/>
+  <polygon points="374,296 256,238 300,352" fill="#3a4653"/>
+  <polygon points="212,352 256,238 300,352" fill="#65798c"/>
+  <polygon points="138,296 212,352 232,368 196,344" fill="#4a5a6a"/>
+  <polygon points="374,296 300,352 280,368 316,344" fill="#333e49"/>
+
+  <!-- muzzle -->
+  <polygon points="204,322 256,322 256,404 228,404" fill="#aebdca"/>
+  <polygon points="256,322 308,322 284,404 256,404" fill="#93a4b3"/>
+  <path d="M 238 384 h 36 l -13 24 a 6 6 0 0 1 -10 0 z" fill="#232b33"/>
+
+  <!-- left eye, natural -->
+  <ellipse cx="204" cy="262" rx="11" ry="13" fill="#1d242b"/>
+  <circle cx="208" cy="257" r="3.4" fill="#cfd9e2" opacity="0.85"/>
+
+  <!-- right eye as a glowing node port on the patch -->
+  <circle cx="308" cy="262" r="24" fill="#e8a33d" opacity="0.14"/>
+  <circle cx="308" cy="262" r="15" fill="none" stroke="#e8a33d" stroke-width="5"/>
+  <circle cx="308" cy="262" r="6" fill="#e8a33d"/>
+</svg>

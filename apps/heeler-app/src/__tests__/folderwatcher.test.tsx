@@ -1,0 +1,24 @@
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { initialState } from "../data";
+import { listSubfolders } from "../bridge";
+import { useFolderWatcher } from "../ui/folderwatcher";
+vi.mock("../bridge", () => ({ listSubfolders: vi.fn() }));
+afterEach(() => { vi.useRealTimers(); vi.resetAllMocks(); });
+it("a stalled directory poll stays off the next ticks and cannot update after unmount", async () => {
+  vi.useFakeTimers();
+  let finish!: (rows: []) => void;
+  vi.mocked(listSubfolders).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const ref = { current: { ...initialState(), activeFolderPath: "/Volumes/Photos", activeCollection: null } };
+  const dispatch = vi.fn();
+  const hook = renderHook(() => useFolderWatcher(ref, dispatch));
+  await act(async () => { await vi.advanceTimersByTimeAsync(60000); });
+  expect(listSubfolders).toHaveBeenCalledTimes(1);
+  await act(async () => finish([]));
+  expect(dispatch).toHaveBeenCalledTimes(1);
+  await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+  expect(listSubfolders).toHaveBeenCalledTimes(2);
+  hook.unmount();
+  await act(async () => finish([]));
+  expect(dispatch).toHaveBeenCalledTimes(1);
+});

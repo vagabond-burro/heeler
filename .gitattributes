@@ -1,1 +1,35 @@
+# Git already stores every text file in this repo as LF: 758 of them,
+# and not one CRLF blob in the index. This says so out loud and checks
+# them out as LF on every platform, so the working tree matches what
+# the repo actually holds instead of depending on each machine's
+# core.autocrlf setting.
+#
+# Without it, a Windows checkout writes CRLF while any tool that writes
+# a file directly (an editor set to LF, a script, an agent) leaves it
+# LF. Those files then sit permanently half converted: git status calls
+# them modified, git diff shows nothing, and git add stages nothing,
+# because the content really is identical and only the endings differ.
+# That is what kept apps/heeler-app/src-tauri/Cargo.toml dirty after
+# every build, and 178 other files were one mtime change away from the
+# same state.
 * text=auto eol=lf
+
+# Shell scripts do not just look wrong with CRLF, they fail to run:
+# bash reports "$'\r': command not found" on the first line and stops.
+# Called out separately because this one is a bug rather than a
+# cosmetic difference, and scripts/linux-setup.sh is the file a Linux
+# session reaches for first.
+*.sh text eol=lf
+
+# Windows shells genuinely want CRLF, so let them have it.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary, and git must never apply an end of line filter to any of it.
+# Git's own detection already gets these right; naming them means a
+# golden image or an icon cannot be corrupted by a future misdetection.
+*.png binary
+*.jpg binary
+*.ico binary
+*.icns binary
+*.pub binary

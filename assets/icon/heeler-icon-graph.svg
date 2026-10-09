@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="78%">
+      <stop offset="0%" stop-color="#262d35"/>
+      <stop offset="100%" stop-color="#13161a"/>
+    </radialGradient>
+  </defs>
+
+  <!-- icon plate -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+
+  <!-- wires tracing a heeler head in profile -->
+  <g stroke="#5d7183" stroke-width="4.5" stroke-linecap="round" fill="none">
+    <path d="M 150 400 L 150 250"/>
+    <path d="M 150 250 L 185 105"/>
+    <path d="M 185 105 L 240 190"/>
+    <path d="M 240 190 L 295 115"/>
+    <path d="M 295 115 L 330 215"/>
+    <path d="M 330 215 L 430 285"/>
+    <path d="M 430 285 L 415 320"/>
+    <path d="M 415 320 L 330 345"/>
+    <path d="M 330 345 L 300 410"/>
+    <path d="M 300 410 L 150 400"/>
+  </g>
+
+  <!-- inner wires converging on the eye node -->
+  <g stroke="#5d7183" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.45">
+    <path d="M 325 258 L 150 250"/>
+    <path d="M 325 258 L 330 215"/>
+    <path d="M 325 258 L 430 285"/>
+  </g>
+
+  <!-- port nodes: hollow -->
+  <g fill="#14171b" stroke="#7d90a2" stroke-width="4.5">
+    <circle cx="150" cy="400" r="9"/>
+    <circle cx="150" cy="250" r="9"/>
+    <circle cx="240" cy="190" r="9"/>
+    <circle cx="330" cy="215" r="9"/>
+    <circle cx="415" cy="320" r="9"/>
+    <circle cx="330" cy="345" r="9"/>
+    <circle cx="300" cy="410" r="9"/>
+  </g>
+
+  <!-- port nodes: filled (ear tips and nose) -->
+  <g fill="#8fa2b4">
+    <circle cx="185" cy="105" r="10"/>
+    <circle cx="295" cy="115" r="10"/>
+    <circle cx="430" cy="285" r="10"/>
+  </g>
+
+  <!-- the eye is the accent node -->
+  <circle cx="325" cy="258" r="22" fill="#e8a33d" opacity="0.15"/>
+  <circle cx="325" cy="258" r="13" fill="none" stroke="#e8a33d" stroke-width="4.5"/>
+  <circle cx="325" cy="258" r="5.5" fill="#e8a33d"/>
+</svg>
