@@ -9,9 +9,9 @@ Two ways to work on the same photograph. Develop is the linear workflow: sliders
 
 ![The Develop workspace: Exposure, Color, Detail, Color Wheels and Vignette set with sliders](docs/readme/develop-edit.png)
 
-Underneath, every section you touch is a node. The Canvas shows the graph under the hood, drawn over the photograph, and lets you build on it: here a Luminance Mask keeps Detail to the bright rock, a Hue Range Mask keeps Color Balance to the sky, and a second photograph is screened in from the catalog:
+Underneath, every section you touch is a node. The Canvas shows the graph under the hood, drawn over the photograph, and lets you build on it: here a Luminance Mask keeps Detail to the bright rock, a Hue Range Mask keeps Color Balance to the sky, and a lightning storm from the catalog is screened into the sky:
 
-![The Canvas workspace: the Develop edit as nodes, with two masks branching off to steer Detail and Color Balance and a second photograph blended in from below](docs/readme/canvas.png)
+![The Canvas workspace: the Develop edit as nodes, with two masks branching off to steer Detail and Color Balance and a lightning storm from the catalog screened in from below](docs/readme/canvas.png)
 
 ## Not another copy of the editor you already know
 
@@ -23,7 +23,7 @@ Every edit in Heeler is a node, from the RAW decode to the export. The Develop p
 
 Recipes like Sharpening and Skin Softening are not sealed effects: they are groups of ordinary nodes you can open and change. Start with sliders, and move to the graph the day you want more control.
 
-![The Graph workspace: two masks steer a Detail and a Color Grade, a second photograph is screened in, and the inspector shows the selected node's controls](docs/readme/graph.png)
+![The Graph workspace: two masks steer a Detail and a Color Grade, a lightning storm is screened in, and the inspector shows the selected node's controls](docs/readme/graph.png)
 
 ### It knows how far away everything is
 
