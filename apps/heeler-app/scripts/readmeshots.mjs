@@ -57,9 +57,9 @@ async function workspace(page, index) {
 /** The README's example network on the Devils Tower frame: the detail
  * lifted only where it is bright (a Luminance Mask into Detail), the
  * blues graded on their own (a Hue Range Mask into Color Grade), and a
- * second photograph screened in from the catalog, all before the Tone
+ * lightning storm screened in from the catalog, all before the Tone
  * Profile. Placed by hand in three bands so it reads at a glance: the
- * masks above the main line, the second photograph below it. */
+ * masks above the main line, the storm below it. */
 async function exampleGraph(page) {
   await page.evaluate(() => {
     const card = (id, type, name, cat, x, y, extra = {}) => ({
@@ -75,7 +75,7 @@ async function exampleGraph(page) {
       card("detail", "heeler.detail", "Detail", "detail", 200, 150, { maskIn: true, params: { clarity: 45, texture: 25 } }),
       card("hue", "heeler.hue_range_mask", "Hue Range Mask", "masking", 300, 0, { maskOut: true, params: { band_center: 210, hue_range: 70, hue_falloff: 30 } }),
       card("grade", "heeler.color_grade", "Color Grade", "color", 400, 150, { maskIn: true, params: { hue_shift: -18, saturation: 30, exposure: -0.3 } }),
-      card("cat", "heeler.catalog", "Catalog", "source", 430, 290, { textParams: { image: "4870", mode: "developed" } }),
+      card("cat", "heeler.catalog", "Catalog", "source", 430, 290, { textParams: { image: "4871", mode: "developed" } }),
       card("blend", "heeler.blend", "Blend Mode", "utility", 620, 150, { hasIn2: true, maskIn: true, params: { opacity: 40 }, textParams: { mode: "screen", fit: "fill" } }),
       card("profile", "heeler.tone_profile", "Tone Profile", "color", 820, 150, { maskIn: true }),
       card("output", "heeler.output", "Output", "utility", 1010, 150),
@@ -128,10 +128,10 @@ async function developEdit(page) {
 
 /** Develop's chain, kept node for node with its values, grown into what
  * only the graph can do: a Luminance Mask steering Detail to the bright
- * rock, a Hue Range Mask steering Color Balance to the sky, and a second
- * photograph screened in from the catalog before the Tone Profile.
- * Placed by hand in three bands: the masks above the chain, the second
- * photograph below it. */
+ * rock, a Hue Range Mask steering Color Balance to the sky, and a
+ * lightning storm screened into the sky from the catalog before the Tone
+ * Profile. Placed by hand in three bands: the masks above the chain, the
+ * storm below it. */
 async function growTree(page) {
   await page.evaluate(() => {
     const h = window.__heeler;
@@ -144,7 +144,7 @@ async function growTree(page) {
     const added = [
       card("lum", "heeler.luminance_range_mask", "Luminance Mask", "masking", { maskOut: true, params: { low: 0.35, high: 1, feather: 0.2 } }),
       card("hue", "heeler.hue_range_mask", "Hue Range Mask", "masking", { maskOut: true, params: { band_center: 230, hue_range: 70, hue_falloff: 30 } }),
-      card("cat", "heeler.catalog", "Catalog", "source", { textParams: { image: "4870", mode: "developed" } }),
+      card("cat", "heeler.catalog", "Catalog", "source", { textParams: { image: "4871", mode: "developed" } }),
       card("blend", "heeler.blend", "Blend Mode", "utility", { hasIn2: true, maskIn: true, params: { opacity: 40 }, textParams: { mode: "screen", fit: "fill" } }),
     ];
     const byId = new Map([...s.nodes, ...added].map((n) => [n.id, n]));
