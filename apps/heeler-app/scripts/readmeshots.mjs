@@ -56,15 +56,14 @@ async function workspace(page, index) {
 
 /** The README's example network on the Devils Tower frame: the detail
  * lifted only where it is bright (a Luminance Mask into Detail), the
- * blues graded on their own (a Hue Range Mask into Color Grade), and a
- * lightning storm screened in from the catalog, all before the Tone
- * Profile. Placed by hand in three bands so it reads at a glance: the
- * masks above the main line, the storm below it. */
+ * blues graded on their own (a Hue Range Mask into Color Grade), both
+ * before the Tone Profile. Placed by hand in two bands so it reads at a
+ * glance: the masks above the main line. */
 async function exampleGraph(page) {
   await page.evaluate(() => {
     const card = (id, type, name, cat, x, y, extra = {}) => ({
       id, type, name, cat, x, y, enabled: true, params: {},
-      hasIn: type !== "heeler.image_source" && type !== "heeler.catalog",
+      hasIn: type !== "heeler.image_source",
       hasOut: type !== "heeler.output", ...extra,
     });
     const img = (from, to, toPort = "in") => ({ from, to, toPort, kind: "image" });
@@ -75,16 +74,13 @@ async function exampleGraph(page) {
       card("detail", "heeler.detail", "Detail", "detail", 200, 150, { maskIn: true, params: { clarity: 45, texture: 25 } }),
       card("hue", "heeler.hue_range_mask", "Hue Range Mask", "masking", 300, 0, { maskOut: true, params: { band_center: 210, hue_range: 70, hue_falloff: 30 } }),
       card("grade", "heeler.color_grade", "Color Grade", "color", 400, 150, { maskIn: true, params: { hue_shift: -18, saturation: 30, exposure: -0.3 } }),
-      card("cat", "heeler.catalog", "Catalog", "source", 430, 290, { textParams: { image: "4871", mode: "developed" } }),
-      card("blend", "heeler.blend", "Blend Mode", "utility", 620, 150, { hasIn2: true, maskIn: true, params: { opacity: 40 }, textParams: { mode: "screen", fit: "fill" } }),
-      card("profile", "heeler.tone_profile", "Tone Profile", "color", 820, 150, { maskIn: true }),
-      card("output", "heeler.output", "Output", "utility", 1010, 150),
+      card("profile", "heeler.tone_profile", "Tone Profile", "color", 600, 150, { maskIn: true }),
+      card("output", "heeler.output", "Output", "utility", 800, 150),
     ];
     const wires = [
       img("src", "lum"), msk("lum", "detail"), img("src", "detail"),
       img("detail", "hue"), msk("hue", "grade"), img("detail", "grade"),
-      img("grade", "blend", "in"), img("cat", "blend", "in2"),
-      img("blend", "profile"), img("profile", "output"),
+      img("grade", "profile"), img("profile", "output"),
     ];
     const h = window.__heeler;
     h.dispatch({ type: "select_image", id: "4866" });
@@ -128,30 +124,26 @@ async function developEdit(page) {
 
 /** Develop's chain, kept node for node with its values, grown into what
  * only the graph can do: a Luminance Mask steering Detail to the bright
- * rock, a Hue Range Mask steering Color Balance to the sky, and a
- * lightning storm screened into the sky from the catalog before the Tone
- * Profile. Placed by hand in three bands: the masks above the chain, the
- * storm below it. */
+ * rock and a Hue Range Mask steering Color Balance to the sky, placed
+ * above the chain they feed. */
 async function growTree(page) {
   await page.evaluate(() => {
     const h = window.__heeler;
     const s = h.state();
     const card = (id, type, name, cat, extra = {}) => ({
       id, type, name, cat, x: 0, y: 0, enabled: true, params: {},
-      hasIn: type !== "heeler.catalog", hasOut: true, ...extra,
+      hasIn: true, hasOut: true, ...extra,
     });
-    const chain = ["src", "stdcolor", "detail", "cbal", "exposure", "vignette", "blend", "profile", "output"];
+    const chain = ["src", "stdcolor", "detail", "cbal", "exposure", "vignette", "profile", "output"];
     const added = [
       card("lum", "heeler.luminance_range_mask", "Luminance Mask", "masking", { maskOut: true, params: { low: 0.35, high: 1, feather: 0.2 } }),
       card("hue", "heeler.hue_range_mask", "Hue Range Mask", "masking", { maskOut: true, params: { band_center: 230, hue_range: 70, hue_falloff: 30 } }),
-      card("cat", "heeler.catalog", "Catalog", "source", { textParams: { image: "4871", mode: "developed" } }),
-      card("blend", "heeler.blend", "Blend Mode", "utility", { hasIn2: true, maskIn: true, params: { opacity: 40 }, textParams: { mode: "screen", fit: "fill" } }),
     ];
     const byId = new Map([...s.nodes, ...added].map((n) => [n.id, n]));
     const at = (id, x, y) => ({ ...byId.get(id), x, y });
     const nodes = [
       ...chain.map((id, i) => at(id, i * 200, 150)),
-      at("lum", 300, 0), at("hue", 500, 0), at("cat", 1100, 300),
+      at("lum", 300, 0), at("hue", 500, 0),
     ];
     const img = (from, to, toPort = "in") => ({ from, to, toPort, kind: "image" });
     const msk = (from, to) => ({ from, to, toPort: "mask", kind: "mask" });
@@ -159,7 +151,6 @@ async function growTree(page) {
       ...chain.slice(1).map((id, i) => img(chain[i], id)),
       img("src", "lum"), msk("lum", "detail"),
       img("detail", "hue"), msk("hue", "cbal"),
-      img("cat", "blend", "in2"),
     ];
     h.dispatch({ type: "replace_graph", nodes, wires });
   });
