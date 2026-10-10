@@ -5,7 +5,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { InterpCycle } from "./interpglyph";
 import type { Command, CurveChannel, CurveHandle, NodeCard } from "../state";
-import { EQ_PICK_GRAB, evalEq, type EqPoint } from "../eqcurve";
+import { EQ_PICK_GRAB } from "../eqcurve";
+import { curveShape, curveValueAt, monotoneTangents } from "../curvesampler";
+
+export { curveEqPoints, curvePath, curveValueAt } from "../curvesampler";
 import { CURVE_POINT_CURSOR, CURVE_TANGENT_CURSOR } from "./cursors";
 import { HintKey } from "./hintkey";
 import { CHANNEL_CHIPS, ChannelChip, INK_CHIPS } from "./channelchips";
@@ -94,112 +97,6 @@ export function storedFromInk(view: CurveShape, stored: [number, number][]): Cur
     .map((p) => shown.get(`${p[0]},${p[1]}`) ?? ([1 - p[0], 1 - p[1]] as [number, number]))
     .reverse();
   return { ...back, curve };
-}
-
-/** Fritsch-Carlson monotone cubic tangents, mirroring the engine's
- * implementation so the drawn curve matches the rendered one. */
-function monotoneTangents(pts: [number, number][]): number[] {
-  const n = pts.length;
-  const d: number[] = [];
-  for (let i = 0; i < n - 1; i++) d.push((pts[i + 1][1] - pts[i][1]) / Math.max(1e-6, pts[i + 1][0] - pts[i][0]));
-  const m = new Array<number>(n).fill(0);
-  m[0] = d[0];
-  m[n - 1] = d[n - 2];
-  for (let i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
-  for (let i = 0; i < n - 1; i++) {
-    if (Math.abs(d[i]) < 1e-6) {
-      m[i] = 0;
-      m[i + 1] = 0;
-    } else {
-      const a = m[i] / d[i];
-      const b = m[i + 1] / d[i];
-      const s = a * a + b * b;
-      if (s > 9) {
-        const t = 3 / Math.sqrt(s);
-        m[i] = t * a * d[i];
-        m[i + 1] = t * b * d[i];
-      }
-    }
-  }
-  return m;
-}
-
-/** Sample the curve for display, smooth or linear; `tangents` (parallel
- * slopes, tangent mode) replace the monotone ones when they fit. */
-export function curvePath(
-  pts: [number, number][],
-  smooth: boolean,
-  tangents?: number[],
-): [number, number][] {
-  if (pts.length < 2 || !smooth) return pts;
-  const m = tangents && tangents.length === pts.length ? tangents : monotoneTangents(pts);
-  const out: [number, number][] = [];
-  for (let i = 0; i < pts.length - 1; i++) {
-    const span = Math.max(1e-6, pts[i + 1][0] - pts[i][0]);
-    for (let s = 0; s < 16; s++) {
-      const t = s / 16;
-      const t2 = t * t;
-      const t3 = t2 * t;
-      const y =
-        (2 * t3 - 3 * t2 + 1) * pts[i][1] +
-        (t3 - 2 * t2 + t) * span * m[i] +
-        (-2 * t3 + 3 * t2) * pts[i + 1][1] +
-        (t3 - t2) * span * m[i + 1];
-      out.push([pts[i][0] + t * span, y]);
-    }
-  }
-  out.push(pts[pts.length - 1]);
-  return out;
-}
-
-/** The curve's exact value at `x`, matching what the engine renders:
- * hermite through the same monotone tangents when smooth, straight
- * segments when linear. The eyedropper's point lands ON the curve. */
-export function curveValueAt(
-  pts: [number, number][],
-  smooth: boolean,
-  x: number,
-  tangents?: number[],
-): number {
-  if (pts.length === 0) return x;
-  if (x <= pts[0][0]) return pts[0][1];
-  if (x >= pts[pts.length - 1][0]) return pts[pts.length - 1][1];
-  let i = 0;
-  while (i < pts.length - 2 && pts[i + 1][0] <= x) i++;
-  const span = Math.max(1e-6, pts[i + 1][0] - pts[i][0]);
-  const t = (x - pts[i][0]) / span;
-  // Two points bend under USER tangents (an endpoint slope is real
-  // shape); under monotone ones they are just the chord, so skip.
-  if (!smooth || (pts.length < 3 && !(tangents && tangents.length === pts.length))) {
-    return pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t;
-  }
-  const m = tangents && tangents.length === pts.length ? tangents : monotoneTangents(pts);
-  const t2 = t * t;
-  const t3 = t2 * t;
-  return (
-    (2 * t3 - 3 * t2 + 1) * pts[i][1] +
-    (t3 - 2 * t2 + t) * span * m[i] +
-    (-2 * t3 + 3 * t2) * pts[i + 1][1] +
-    (t3 - t2) * span * m[i + 1]
-  );
-}
-
-/** The channel's points and manual handles as EqPoints, for the
- * weighted evaluation that makes handle LENGTH matter
- * ("Tangent handles should be resizable, not fixed length"). Null
- * handle entries stay automatic; the engine builds the same list from
- * <ch>_h.*/
-export function curveEqPoints(
-  pts: [number, number][],
-  handles: (CurveHandle | null)[],
-): EqPoint[] {
-  return pts.map(([x, y], i) => {
-    const h = handles[i];
-    const out: EqPoint = { x, y };
-    if (h?.l) out.l = h.l;
-    if (h?.r) out.r = h.r;
-    return out;
-  });
 }
 
 /** The point list after an eyedropper commit. An existing interior
@@ -402,21 +299,16 @@ export function CurveEditor({
     storedHandles && storedHandles.length === pts.length
       ? storedHandles
       : pts.map(() => null);
-  const anyHandles = effHandles.some((h) => h && (h.l || h.r));
-  // With manual handles in play the shape comes from the weighted
-  // evaluation (the same one the engine runs), or the drawn curve
-  // would ignore the very lengths the handles just gained.
-  const eqPts = tangentMode && anyHandles ? curveEqPoints(pts, effHandles) : null;
-  const valueAt = (x: number): number =>
-    eqPts
-      ? Math.min(1, Math.max(0, evalEq(eqPts, x)))
-      : Math.min(1, Math.max(0, curveValueAt(pts, mode !== "linear", x, tangentMode ? effTan : undefined)));
   const effTan =
     storedTan && storedTan.length === pts.length
       ? storedTan
       : pts.length >= 2
         ? monotoneTangents(pts)
         : [];
+  // What the plot draws and the ghost rides, chosen as the engine
+  // chooses (handle vectors, slopes, or the chord): curvesampler.ts.
+  const shape = curveShape(pts, mode, effTan, effHandles);
+  const valueAt = shape.valueAt;
   // Refs beside the render values: the first mousemove after an add
   // arrives before React re-renders, and reading the render-time
   // points there moved the WRONG point and dropped the add on the
@@ -870,12 +762,8 @@ canvas"), then the channels, and the reset on the far end.*/}
         ))}
         <line x1={0} y1={H} x2={W} y2={0} stroke="#2c2a28" strokeDasharray="3 3" />
         <polyline
-          points={(eqPts
-            ? Array.from({ length: 129 }, (_, i): [number, number] => {
-                const x = i / 128;
-                return [x, valueAt(x)];
-              })
-            : curvePath(pts, mode !== "linear", tangentMode ? effTan : undefined))
+          points={shape
+            .outline()
             .map((p) => toSvg(p).join(","))
             .join(" ")}
           fill="none"
