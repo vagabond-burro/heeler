@@ -1099,14 +1099,22 @@ impl CurveSampler {
     /// Tangent mode with handle vectors: sorted together with their
     /// points and evaluated as EqPoints, so length means what the
     /// editor showed. A mismatched or empty handle list falls back to
-    /// the slope form, which itself falls back to monotone.
+    /// the slope form, which itself falls back to monotone, and so does
+    /// a list whose every point is automatic: the editor draws that as
+    /// the slope curve (curvesampler.ts, curveShape), and taking the
+    /// weighted path for it rendered a slightly different curve from the
+    /// one on screen.
     fn with_user_handles(
         points: Vec<[f32; 2]>,
         user: Option<Vec<f32>>,
         handles: Option<Vec<Option<HandlePair>>>,
     ) -> Self {
         match handles {
-            Some(h) if h.len() == points.len() && points.len() >= 2 => {
+            Some(h)
+                if h.len() == points.len()
+                    && points.len() >= 2
+                    && h.iter().any(|p| p.is_some_and(|p| p.l.is_some() || p.r.is_some())) =>
+            {
                 let mut z: Vec<([f32; 2], Option<HandlePair>)> =
                     points.into_iter().zip(h).collect();
                 z.sort_by(|a, b| a.0[0].partial_cmp(&b.0[0]).unwrap_or(std::cmp::Ordering::Equal));

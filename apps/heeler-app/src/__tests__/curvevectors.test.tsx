@@ -14,6 +14,7 @@ import { initialState } from "../data";
 import { evalEq } from "../eqcurve";
 import type { CurveHandle, NodeCard } from "../state";
 import { CurveEditor, curveEqPoints, curvePath, curveValueAt } from "../ui/editors";
+import { curveShape, monotoneTangents } from "../curvesampler";
 
 afterEach(cleanup);
 
@@ -30,11 +31,18 @@ const vectors: { x: number[]; cases: Case[] } = JSON.parse(
   readFileSync(resolve(process.cwd(), "../../crates/heeler-engine/tests/curve_vectors.json"), "utf8"),
 );
 
-/** The editor's evaluation of a case, the way the Curves editor picks
- * its path: handle vectors through the weighted evaluation, otherwise
- * the Hermite or the chord. */
+/** The editor's evaluation of a case, through the chooser the Curves
+ * editor draws with (curveShape): handle vectors through the weighted
+ * evaluation when some handle is set, otherwise the Hermite through the
+ * slopes, or the chord. Every vector lies inside the plot, so its clamp
+ * changes nothing here. */
 const editorValue = (c: Case, x: number) =>
-  c.handles ? evalEq(curveEqPoints(c.points, c.handles), x) : curveValueAt(c.points, c.interp !== "linear", x, c.slopes);
+  curveShape(
+    c.points,
+    c.interp,
+    c.slopes && c.slopes.length === c.points.length ? c.slopes : monotoneTangents(c.points),
+    c.handles && c.handles.length === c.points.length ? c.handles : c.points.map(() => null),
+  ).valueAt(x);
 
 describe("the Curves editor's curve is the engine's", () => {
   it("matches the shared vectors in every interpolation", () => {
