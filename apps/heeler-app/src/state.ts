@@ -9400,6 +9400,17 @@ export function exportWrittenName(n: NodeCard): string {
  * (2026-10-01: keep both conventions and say so).*/
 export const DEPTH_EXPORT_CONVENTION = "Written near black, far white (the EXR depth convention)";
 
+/** What a Depth Map card's picture is, once its depth is wired out: the
+ * plane as View depth paints it (the desktop draws the card from the
+ * plane rather than the photograph the node passes through). */
+export const DEPTH_MAP_CARD_CONVENTION = "Depth: near white, far black";
+
+/** Whether this Depth Map's card shows its depth: its depth output feeds
+ * something, which is what has the desktop compute the plane. */
+export function depthMapShowsDepth(n: NodeCard, wires: readonly Wire[]): boolean {
+  return n.type === "heeler.depth_map" && wires.some((w) => w.from === n.id && w.fromPort === "depth");
+}
+
 /** Whether this Export Layer writes a depth plane: fed from a depth
  * output port, as the Depth Map section's Export box wires it or as a
  * hand-wired one. Color and mask exports are not. */

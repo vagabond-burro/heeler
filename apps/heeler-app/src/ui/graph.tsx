@@ -24,7 +24,7 @@ import { panePropsEqual } from "./viewmemo";
 import { SpectrumBar, Spectrums } from "./spectrum";
 import type { Backdrop, Category, Command, NodeCard, State, Wire } from "../state";
 import { FlipPhotoRow } from "./flipphoto";
-import { artMaskView, BACKDROP_COLORS, CAT_COLOR, NODE_H, NODE_W, createsCycle, duplicable, nameMatches, PARAM_OPTIONS, REGISTRY_DEFAULTS, hasParamRange, TYPE_NUM_PARAMS, PARAM_TEXT_DEFAULT, paramRange, publishedValue, publishedChoice, FLAG_PARAMS, ART_KINDS, isLayerEffect, artLayers, warpNodeById, isPlacedLayer, wireLacksPort, curveModeOf, LAYER_WARP, WIRE_GESTURE, exportWrittenName, exportWritesDepth, DEPTH_EXPORT_CONVENTION, seatTakes, PARAM_CHOICE_HINTS, maskIsOff, MASK_OFF_GESTURE } from "../state";
+import { artMaskView, BACKDROP_COLORS, CAT_COLOR, NODE_H, NODE_W, createsCycle, duplicable, nameMatches, PARAM_OPTIONS, REGISTRY_DEFAULTS, hasParamRange, TYPE_NUM_PARAMS, PARAM_TEXT_DEFAULT, paramRange, publishedValue, publishedChoice, FLAG_PARAMS, ART_KINDS, isLayerEffect, artLayers, warpNodeById, isPlacedLayer, wireLacksPort, curveModeOf, LAYER_WARP, WIRE_GESTURE, exportWrittenName, exportWritesDepth, DEPTH_EXPORT_CONVENTION, DEPTH_MAP_CARD_CONVENTION, depthMapShowsDepth, seatTakes, PARAM_CHOICE_HINTS, maskIsOff, MASK_OFF_GESTURE } from "../state";
 import { GridWarpControls } from "./gridwarp";
 import { ShapeWarpControls } from "./shapewarp";
 import { FinishWarpControls } from "./finishwarp";
@@ -841,6 +841,7 @@ const NodeCardView = memo(function NodeCardView({
   photoSrc,
   thumbFilter,
   writesDepth,
+  showsDepth = false,
   smartNote,
   acts,
 }: {
@@ -866,6 +867,8 @@ const NodeCardView = memo(function NodeCardView({
   photoSrc: string | undefined;
   thumbFilter: string;
   writesDepth: boolean;
+  /** a Depth Map whose card the desktop draws from its depth plane */
+  showsDepth?: boolean;
   /** A Smart Mask's reason for an empty mask (smartnode.tsx), or "". */
   smartNote: string;
   acts: CardActs;
@@ -969,6 +972,18 @@ shows it the reverse of Develop's Depth Map view
           style={{ ...CARD_CAPTION_STYLE, marginTop: -3, paddingBottom: 6 }}
         >
           {DEPTH_EXPORT_CONVENTION}
+        </div>
+      )}
+      {/* A Depth Map says its picture is the depth, and which way it runs
+(2026-10-10: the card showed the photograph it passes through, which
+read as no depth at all).*/}
+      {showsDepth && (
+        <div
+          data-testid={`depth-map-convention-${n.id}`}
+          title={DEPTH_MAP_CARD_CONVENTION}
+          style={{ ...CARD_CAPTION_STYLE, marginTop: -3, paddingBottom: 6 }}
+        >
+          {DEPTH_MAP_CARD_CONVENTION}
         </div>
       )}
       {/* A Smart Mask says why its picture is black: the model is missing, or
@@ -2183,6 +2198,7 @@ just looks odd."*/}
               }
               thumbFilter={plain ? thumbFilter(n) : ""}
               writesDepth={exportWritesDepth(n, state.wires)}
+              showsDepth={depthMapShowsDepth(n, state.wires)}
               smartNote={smartCardNote(n, smartModels)}
               acts={acts}
             />

@@ -14,6 +14,8 @@ import { render, screen } from "@testing-library/react";
 import { initialState, NEUTRAL_NODES, NEUTRAL_WIRES } from "../data";
 import {
   DEPTH_EXPORT_CONVENTION,
+  DEPTH_MAP_CARD_CONVENTION,
+  depthMapShowsDepth,
   exportLayerCard,
   exportWritesDepth,
   layerMaskExportId,
@@ -114,5 +116,36 @@ describe("a depth export names its convention", () => {
       const text = readFileSync(resolve(process.cwd(), "src", file), "utf8");
       expect(text, file).not.toMatch(/near black, far white/);
     }
+  });
+});
+
+/** The Depth Map card is drawn from its depth plane once its depth is
+ * wired out (the desktop's node_thumbs), so it says so; unwired, its card
+ * is the photograph it passes through and says nothing (2026-10-10: "the
+ * depth map node is not black and white"). */
+describe("the Depth Map card names what its picture is", () => {
+  const withDepthWire = (on: boolean): State => {
+    const s = initialState();
+    const wires = s.wires.filter((w) => !(w.from === "depthmap" && w.fromPort === "depth"));
+    return { ...s, wires: on ? [...wires, { from: "depthmap", fromPort: "depth", to: "keylight", toPort: "depth", kind: "mask" } as State["wires"][number]] : wires };
+  };
+
+  it("only once its depth output feeds something", () => {
+    const node = (s: State) => s.nodes.find((n) => n.id === "depthmap")!;
+    expect(depthMapShowsDepth(node(withDepthWire(true)), withDepthWire(true).wires)).toBe(true);
+    expect(depthMapShowsDepth(node(withDepthWire(false)), withDepthWire(false).wires)).toBe(false);
+    // An image wire out of the Depth Map is its picture, not its depth.
+    const s = withDepthWire(false);
+    expect(depthMapShowsDepth(node(s), [...s.wires, { from: "depthmap", to: "keylight", kind: "image" } as State["wires"][number]])).toBe(false);
+  });
+
+  it("says it under the card's thumbnail in the Graph, and not when unwired", () => {
+    const { unmount } = render(<NodeEditor state={withDepthWire(true)} dispatch={() => {}} />);
+    const line = screen.getByTestId("depth-map-convention-depthmap");
+    expect(line.textContent).toBe(DEPTH_MAP_CARD_CONVENTION);
+    expect(line.previousElementSibling?.classList.contains("thumb")).toBe(true);
+    unmount();
+    render(<NodeEditor state={withDepthWire(false)} dispatch={() => {}} />);
+    expect(screen.queryByTestId("depth-map-convention-depthmap")).toBeNull();
   });
 });

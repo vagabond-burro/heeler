@@ -10409,6 +10409,16 @@ async fn node_thumbs(
             plant_smart_rasters(s, vision.as_deref(), &graph, &image_id, &mut sources);
             Ok(())
         })?;
+        // A Depth Map card shows its depth plane rather than its picture,
+        // which only passes the photograph through and looked the same as
+        // the card before it (2026-10-10: "the depth map node is not
+        // black and white"). It is not rendered for a picture at all.
+        let depth_cards: HashMap<String, String> = node_ids
+            .iter()
+            .filter(|id| graph.nodes.iter().any(|n| &n.id == *id && n.node_type == "heeler.depth_map"))
+            .filter_map(|id| Some((id.clone(), depth_card(&sources.get(&format!("{id}@depth"))?.image, edge)?)))
+            .collect();
+        let node_ids: Vec<String> = node_ids.into_iter().filter(|id| !depth_cards.contains_key(id)).collect();
         let started = std::time::Instant::now();
         let pass = card_pass(
             &node_ids,
@@ -10428,11 +10438,34 @@ async fn node_thumbs(
                 value
             },
         );
-        debug_log!(&app, "node cards: {} from the cache, {} rendered, {} ms", pass.from_cache, pass.rendered, started.elapsed().as_millis());
-        Ok(pass.cards)
+        debug_log!(&app, "node cards: {} from the cache, {} rendered, {} depth, {} ms", pass.from_cache, pass.rendered, depth_cards.len(), started.elapsed().as_millis());
+        let mut cards = pass.cards;
+        cards.extend(depth_cards);
+        Ok(cards)
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// A Depth Map card's picture: its planted plane, which runs 0 near to 1
+/// far, painted as View depth paints it, white near and black far, the
+/// way every mask card is drawn. None when the plane is empty.
+fn depth_card(plane: &ImageBuf, edge: usize) -> Option<String> {
+    let picture = depth_card_picture(plane)?;
+    heeler_io::encode_jpeg(&downscale(&picture, edge), 50).ok().map(|jpeg| data_url(&jpeg))
+}
+
+/// The plane's nearness as a gray picture, before the card's downscale.
+fn depth_card_picture(plane: &ImageBuf) -> Option<ImageBuf> {
+    if plane.width == 0 || plane.height == 0 {
+        return None;
+    }
+    let near = MaskBuf {
+        width: plane.width,
+        height: plane.height,
+        data: plane.data.chunks_exact(4).map(|px| 1.0 - px[0].clamp(0.0, 1.0)).collect(),
+    };
+    Some(mask_to_image(&near))
 }
 
 /// What one pass of graph cards did.
@@ -22024,6 +22057,23 @@ mod tests {
                 assert!((a - b).abs() < 1e-4, "sliced ({x},{y}) {a} != full {b}");
             }
         }
+    }
+
+    /// The Depth Map card shows its plane as View depth does: the plane
+    /// runs 0 near to 1 far, the card white near and black far, gray and
+    /// opaque. An empty plane makes no card, and the picture falls back.
+    #[test]
+    fn the_depth_map_card_paints_its_plane_white_near_black_far() {
+        let mut plane = ImageBuf::new(3, 1);
+        plane.set_pixel(0, 0, [0.0, 0.0, 0.0, 1.0]);
+        plane.set_pixel(1, 0, [0.25, 0.25, 0.25, 1.0]);
+        plane.set_pixel(2, 0, [1.0, 1.0, 1.0, 1.0]);
+        let card = depth_card_picture(&plane).unwrap();
+        assert_eq!(card.pixel(0, 0), [1.0, 1.0, 1.0, 1.0], "near is white");
+        assert_eq!(card.pixel(1, 0), [0.75, 0.75, 0.75, 1.0]);
+        assert_eq!(card.pixel(2, 0), [0.0, 0.0, 0.0, 1.0], "far is black");
+        assert!(depth_card(&plane, 64).unwrap().starts_with("data:image/jpeg;base64,"));
+        assert!(depth_card(&ImageBuf::new(0, 0), 64).is_none());
     }
 
     /// Hue stable Curves reaches the engine. The HUE chip writes the
