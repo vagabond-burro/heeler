@@ -49,12 +49,22 @@ fn every_kind() -> Vec<ExportLayer> {
         layer("cutwired", picture([0.9, 0.8, 0.7, 0.35]), false, "alpha", Some(mask(0.15)), None),
         layer("cutpicture", picture([0.9, 0.8, 0.7, 0.35]), false, "alpha", Some(picture([0.1, 0.1, 0.1, 0.55])), None),
         layer("depthpicture", picture([0.5, 0.25, 1.0, 0.6]), true, "rgb", None, None),
-        layer("empty", Value::Mask(Arc::new(MaskBuf { width: 0, height: 0, data: Vec::new() })), false, "alpha", None, None),
+        layer("empty", empty_mask(0, 0), false, "alpha", None, None),
+        layer("wide", empty_mask(2, 0), false, "alpha", None, None),
+        layer("tall", empty_mask(0, 2), false, "alpha", None, None),
         layer("plain", picture([0.5, 0.25, 0.0, 0.7]), false, "rgb", None, None),
         layer("over", picture([2.0, -0.5, 0.25, 0.7]), false, "rgb", None, None),
         layer("wired", picture([0.5, 0.25, 0.0, 0.7]), false, "rgb", Some(mask(0.2)), None),
         layer("paint", picture([1.5, -0.2, 0.5, 0.8]), false, "rgb", None, in_sky()),
     ]
+}
+
+/// Not heeler_io::DEFAULT_DPI, so a sibling that fell back to the
+/// default instead of the export's own setting would show it.
+const DPI: u32 = 240;
+
+fn empty_mask(width: usize, height: usize) -> Value {
+    Value::Mask(Arc::new(MaskBuf { width, height, data: Vec::new() }))
 }
 
 struct Written {
@@ -84,7 +94,7 @@ fn export(dest: &Path, format: &str, layers: Vec<ExportLayer>, keep_metadata: bo
             matte: false,
             scale_percent: None,
             allow_overwrite,
-            dpi: 300,
+            dpi: DPI,
         },
         |level, msg| log.push(format!("{level}: {msg}")),
     )
@@ -163,11 +173,11 @@ fn float_tiff_siblings_write_each_kinds_plane_at_the_frame_and_the_print_resolut
     // sample or the wired alpha (a mask, or a picture's own fourth
     // sample), a depth-fed picture its luma, and an empty mask black.
     let luma = 0.2126 * 0.5 + 0.7152 * 0.25 + 0.0722 * 1.0;
-    for (name, want) in [("mask", 0.4), ("cut", 0.35), ("cutwired", 0.15), ("cutpicture", 0.55), ("depthpicture", luma), ("empty", 0.0)] {
+    for (name, want) in [("mask", 0.4), ("cut", 0.35), ("cutwired", 0.15), ("cutpicture", 0.55), ("depthpicture", luma), ("empty", 0.0), ("wide", 0.0), ("tall", 0.0)] {
         let t = sibling(name);
         assert_eq!((t.samples, t.bits), (1, 32), "{name} is a float gray");
         close(&t.values, &grey8(want), name);
-        assert_eq!(t.dpi, Some(300), "{name} carries the export's print resolution");
+        assert_eq!(t.dpi, Some(DPI), "{name} carries the export's print resolution");
         assert!(t.description.contains("float gray"), "{name}: {}", t.description);
     }
     // The pictures: scene-linear as they are, no clamp, the alpha the
@@ -176,14 +186,14 @@ fn float_tiff_siblings_write_each_kinds_plane_at_the_frame_and_the_print_resolut
         let t = sibling(name);
         assert_eq!((t.samples, t.bits), (4, 32), "{name} is float RGBA");
         close(&t.values, &rgba8(want), name);
-        assert_eq!(t.dpi, Some(300), "{name} carries the export's print resolution");
+        assert_eq!(t.dpi, Some(DPI), "{name} carries the export's print resolution");
         assert_eq!(t.description, format!("Heeler export layer: {name}"));
     }
     // A Finish layer is clamped and linearized; alpha is coverage.
     let t = sibling("paint");
     assert_eq!((t.samples, t.bits), (4, 32));
     close(&t.values, &rgba8([1.0, 0.0, heeler_io::srgb_to_linear(0.5), 0.8]), "paint");
-    assert_eq!(t.dpi, Some(300));
+    assert_eq!(t.dpi, Some(DPI));
     assert_eq!(
         t.description,
         "Heeler Finish layer 'paint': mode=screen, opacity=62.5, group=Sky - record only, no reader acts on it; painted display-referred, linearized into scene-linear here, a linear merge will not reproduce the composite"
@@ -199,11 +209,11 @@ fn sixteen_bit_tiff_siblings_pick_the_encoder_each_kind_takes() {
     let srgb = heeler_io::linear_to_srgb;
     let luma = 0.2126 * 0.5 + 0.7152 * 0.25 + 0.0722 * 1.0;
     // The grays are display-encoded like the beauty.
-    for (name, want) in [("mask", 0.4), ("cut", 0.35), ("cutwired", 0.15), ("cutpicture", 0.55), ("depthpicture", luma), ("empty", 0.0)] {
+    for (name, want) in [("mask", 0.4), ("cut", 0.35), ("cutwired", 0.15), ("cutpicture", 0.55), ("depthpicture", luma), ("empty", 0.0), ("wide", 0.0), ("tall", 0.0)] {
         let t = sibling(name);
         assert_eq!((t.samples, t.bits), (1, 16), "{name} is a 16-bit gray");
         close(&t.values, &grey8(srgb(want)), name);
-        assert_eq!(t.dpi, Some(300), "{name} carries the export's print resolution");
+        assert_eq!(t.dpi, Some(DPI), "{name} carries the export's print resolution");
     }
     // A picture through the sRGB curve, alpha linear; the encoder clamps.
     for (name, want) in [
@@ -214,14 +224,14 @@ fn sixteen_bit_tiff_siblings_pick_the_encoder_each_kind_takes() {
         let t = sibling(name);
         assert_eq!((t.samples, t.bits), (4, 16), "{name} is 16-bit RGBA");
         close(&t.values, &rgba8(want), name);
-        assert_eq!(t.dpi, Some(300), "{name} carries the export's print resolution");
+        assert_eq!(t.dpi, Some(DPI), "{name} carries the export's print resolution");
         assert_eq!(t.description, format!("Heeler export layer: {name}"));
     }
     // A Finish layer keeps its display values, no curve.
     let t = sibling("paint");
     assert_eq!((t.samples, t.bits), (4, 16));
     close(&t.values, &rgba8([1.0, 0.0, 0.5, 0.8]), "paint");
-    assert_eq!(t.dpi, Some(300), "the display-referred sibling carries the print resolution too");
+    assert_eq!(t.dpi, Some(DPI), "the display-referred sibling carries the print resolution too");
     assert_eq!(
         t.description,
         "Heeler Finish layer 'paint': mode=screen, opacity=62.5, group=Sky - record only, no reader acts on it; display-referred, a linear merge will not reproduce the composite"
@@ -316,4 +326,35 @@ fn an_exr_without_kept_metadata_says_nothing_of_it() {
     let dir = tempfile::tempdir().unwrap();
     let w = export(&dir.path().join("photo.exr"), "exr", vec![layer("mask", mask(0.4), false, "alpha", None, None)], false, false);
     assert!(!w.log.iter().any(|m| m.contains("nothing was embedded")), "{:?}", w.log);
+}
+
+#[test]
+fn the_export_resolution_is_not_the_default() {
+    assert_ne!(DPI, heeler_io::DEFAULT_DPI, "the sibling checks above would pass on a fallback to the default");
+}
+
+/// Three depth-fed layers all resolve to mist with every suffix free:
+/// the second takes mist-2, the first free suffix, and the third
+/// mist-3, past the name the second just took.
+#[test]
+fn exr_suffixes_start_at_two_and_skip_the_names_they_just_gave() {
+    let dir = tempfile::tempdir().unwrap();
+    let layers = vec![
+        layer("near", mask(0.2), true, "alpha", None, None),
+        layer("middle", mask(0.5), true, "alpha", None, None),
+        layer("far", mask(0.8), true, "alpha", None, None),
+    ];
+    let w = export(&dir.path().join("photo.exr"), "exr", layers, false, false);
+    assert_eq!(
+        w.log.iter().filter(|m| m.contains("is written as")).collect::<Vec<_>>(),
+        vec![
+            "info: export layer 'mist' is written as 'mist-2': the name was taken",
+            "info: export layer 'mist' is written as 'mist-3': the name was taken",
+        ],
+    );
+    let planes = heeler_io::exr_passes::read_planes_file(Path::new(&w.path), 0, &["mist.Z", "mist-2.Z", "mist-3.Z"]).unwrap();
+    // Only mist itself is written f32; the renamed layers are half.
+    for (plane, want) in planes.iter().zip([0.2, 0.5, 0.8]) {
+        assert!(plane.iter().all(|v| (v - want).abs() < 0.002), "{want}: {plane:?}");
+    }
 }
