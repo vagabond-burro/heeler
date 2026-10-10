@@ -69,6 +69,9 @@ decodes to:
     HERO11 frame), and the component arrays are counted from the start so
     a failure partway releases the ones already made.
 - `vc5_common/wavelet.c`: `DeleteWavelet` skips a wavelet never allocated.
+- `vc5_decoder/decoder.c`: `DecodeImage` no longer fills the global log
+  curve on every decode, which raced with decodes on other threads; the
+  shim fills it once (`heeler_vc5_init`) before the first decode.
 
 These were found by decoding thousands of damaged copies of real HERO7
 and HERO11 tiles under AddressSanitizer, an independent review that

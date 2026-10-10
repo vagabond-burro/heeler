@@ -173,7 +173,9 @@ CODEC_ERROR DecodeImage(STREAM *stream, IMAGE *packed_image, RGB_IMAGE *rgb_imag
     DIMENSION packed_height;
     PIXEL_FORMAT packed_format;
     
-    SetupDecoderLogCurve();
+    // Heeler: the global log curve is filled once, before any decode, by
+    // heeler_vc5_init (crates/heeler-raw/src/gpr_shim.c). Filled here, every
+    // decode rewrote it while others on other threads read it.
     
     // The unpacked image will hold the component arrays decoded from the bitstream
     UNPACKED_IMAGE unpacked_image;

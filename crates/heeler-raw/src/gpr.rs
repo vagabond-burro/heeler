@@ -24,7 +24,11 @@ extern "C" {
         out_len: *mut usize,
     ) -> c_int;
     fn heeler_vc5_free(block: *mut c_void);
+    fn heeler_vc5_init();
 }
+
+/// The decoder's shared log curve, filled once before the first decode.
+static VC5_INIT: std::sync::Once = std::sync::Once::new();
 
 const COMPRESSION: u16 = 259;
 const WIDTH: u16 = 256;
@@ -231,6 +235,7 @@ fn decode(tile: &[u8], rggb: bool, width: usize, height: usize) -> Result<Decode
     let (Ok(w), Ok(h)) = (c_int::try_from(width), c_int::try_from(height)) else {
         return Err(bad("too large to decode"));
     };
+    VC5_INIT.call_once(|| unsafe { heeler_vc5_init() });
     let mut ptr: *mut c_void = std::ptr::null_mut();
     let mut len = 0usize;
     let code = unsafe { heeler_vc5_decode(tile.as_ptr() as *const c_void, tile.len(), rggb as c_int, w, h, &mut ptr, &mut len) };

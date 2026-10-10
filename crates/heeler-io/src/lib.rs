@@ -1060,15 +1060,7 @@ fn decode_thumbnail_inner(path: &Path) -> Result<ImageBuf, IoError> {
         if let Some(image) = heic::decode_thumbnail(&bytes, 1200) { return Ok(image); }
     }
     if is_raw_extension(path) {
-        if let Some(preview) = extract_raw_preview(&bytes) {
-            if let Ok(img) = decode_bytes(preview) {
-                return Ok(apply_orientation(img, raw_orientation(&bytes)));
-            }
-        }
-        if is_jxl_dng(&bytes) {
-            return decode_jxl_dng(&bytes).map(|img| unbake(as_the_file_renders(img, &bytes), &bytes));
-        }
-        // A GPR has no preview, and the TIFF reader below cannot read its
+        // A GPR has no preview (so no scan for one), and the TIFF reader below cannot read its
         // VC-5 tile: develop it at half size (plenty for a thumbnail), and
         // report a damaged one as itself.
         #[cfg(feature = "libraw")]
@@ -1078,6 +1070,14 @@ fn decode_thumbnail_inner(path: &Path) -> Result<ImageBuf, IoError> {
                 Err(heeler_raw::RawError::Memory(e)) => Err(e.into()),
                 Err(e) => Err(IoError::Unsupported(e.to_string())),
             };
+        }
+        if let Some(preview) = extract_raw_preview(&bytes) {
+            if let Ok(img) = decode_bytes(preview) {
+                return Ok(apply_orientation(img, raw_orientation(&bytes)));
+            }
+        }
+        if is_jxl_dng(&bytes) {
+            return decode_jxl_dng(&bytes).map(|img| unbake(as_the_file_renders(img, &bytes), &bytes));
         }
     }
     match decode_bytes(&bytes) {

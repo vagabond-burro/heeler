@@ -8,6 +8,12 @@
 #include <stdlib.h>
 
 #include "vc5_decoder.h"
+#include "logcurve.h"
+
+// Fills the decoder's shared log curve. Called once, before the first
+// decode, from Rust (gpr.rs); the decoder no longer fills it per decode,
+// which wrote the table while other threads' decodes read it.
+void heeler_vc5_init(void) { SetupDecoderLogCurve(); }
 
 static void *heeler_vc5_alloc(size_t size) { return malloc(size); }
 static void heeler_vc5_release(void *block) { free(block); }
