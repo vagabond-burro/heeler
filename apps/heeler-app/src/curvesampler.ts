@@ -111,11 +111,14 @@ export function curveEqPoints(pts: Pt[], handles: (CurveHandle | null)[]): EqPoi
   });
 }
 
-/** One channel's curve as the editor shows it, chosen the way the
- * engine's CurveSampler chooses: in tangent mode with a manual handle,
- * the weighted evaluation, where handle length shapes the segment
- * (or the drawn curve would ignore the very lengths the handles just
- * gained); otherwise the Hermite through the slopes, or the chord.
+/** One channel's curve as the editor shows it: in tangent mode with a
+ * manual handle, the weighted evaluation, where handle length shapes
+ * the segment (or the drawn curve would ignore the very lengths the
+ * handles just gained); otherwise the Hermite through the slopes, or
+ * the chord. Close to the engine's CurveSampler but not the same
+ * test: the engine takes the weighted path whenever a fitting handle
+ * list arrives, even one of all automatic points, and its automatic
+ * slopes there are not these.
  * `tangents` and `handles` are the channel's, already fitted to the
  * points. `valueAt` is kept inside the plot; `outline` is what the
  * plot draws. */

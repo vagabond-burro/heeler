@@ -5024,7 +5024,7 @@ mod tests {
     #[test]
     fn curves_match_the_shared_vectors() {
         // tests/curve_vectors.json is read by the Curves editor's test
-        // too (curvevectors.test.ts): the curve the editor draws and
+        // too (curvevectors.test.tsx): the curve the editor draws and
         // picks on must be the curve this samples. Inside the point
         // range only; outside it the two differ on purpose.
         #[derive(Deserialize)]

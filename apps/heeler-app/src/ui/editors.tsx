@@ -7,8 +7,6 @@ import { InterpCycle } from "./interpglyph";
 import type { Command, CurveChannel, CurveHandle, NodeCard } from "../state";
 import { EQ_PICK_GRAB } from "../eqcurve";
 import { curveShape, curveValueAt, monotoneTangents } from "../curvesampler";
-
-export { curveEqPoints, curvePath, curveValueAt } from "../curvesampler";
 import { CURVE_POINT_CURSOR, CURVE_TANGENT_CURSOR } from "./cursors";
 import { HintKey } from "./hintkey";
 import { CHANNEL_CHIPS, ChannelChip, INK_CHIPS } from "./channelchips";
@@ -16,6 +14,8 @@ import type { CurveClip, CurveMode } from "../state";
 import { CurveClipButtons } from "./curveclipboard";
 import { EyedropperIcon, ResetIcon } from "./panelicons";
 import { modLabel } from "../platform";
+
+export { curveEqPoints, curvePath, curveValueAt } from "../curvesampler";
 
 type D = React.Dispatch<Command>;
 
