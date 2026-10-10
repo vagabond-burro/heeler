@@ -1,5 +1,11 @@
 # What's new
 
+## 2026.5.1
+
+### Fixes
+
+- **Curves has no step at the top of the range.** Highlights brighter than white skipped the curve, so a curve whose top point was lowered (a faded white, say) darkened everything up to white and left anything brighter where it was: a visible jump in skies and specular highlights, and a color shift where only one channel went past white. Those highlights now carry on from where the curve ends, lowered by the same amount and never clipped. A curve whose top stays at white renders as before. [Curves](user-guide/adjustments/curves.md).
+
 ## 2026.5
 
 ### New
