@@ -22021,6 +22021,34 @@ mod tests {
         }
     }
 
+    /// Hue stable Curves reaches the engine. The HUE chip writes the
+    /// Curves node's `rgb_mode` text param, and build_graph keeps a text
+    /// param only when the node's spec declares one: the spec declared
+    /// `points` alone, so `rgb_mode` was dropped on the way and every
+    /// photograph rendered classic while the chip read HUE (the 26.5.1
+    /// review). The frontend test saw only the graph it sent.
+    #[test]
+    fn hue_stable_curves_survive_build_graph() {
+        let ui: UiGraph = serde_json::from_value(serde_json::json!({
+            "graph_id": "g",
+            "nodes": [
+                {"id": "src", "type": "heeler.image_source", "enabled": true, "params": {}},
+                {"id": "curves", "type": "heeler.curves", "enabled": true,
+                 "params": {"points": "{\"rgb\": [[0,0],[0.25,0.15],[0.75,0.85],[1,1]]}", "rgb_mode": "hue"}},
+                {"id": "output", "type": "heeler.output", "enabled": true, "params": {}}
+            ],
+            "connections": [
+                {"from": ["src", "out"], "to": ["curves", "in"]},
+                {"from": ["curves", "out"], "to": ["output", "in"]}
+            ]
+        }))
+        .unwrap();
+        let graph = build_graph(&ui, &Registry::builtin()).unwrap();
+        let curves = graph.node("curves").unwrap();
+        assert_eq!(curves.params.get("rgb_mode"), Some(&ParamValue::Text("hue".into())));
+        assert!(matches!(curves.params.get("points"), Some(ParamValue::Text(p)) if p.contains("rgb")));
+    }
+
     /// 2026-09-29, a portrait RW2 in the Develop panel with a Color Set's
     /// mask eye on: "look what happens to the image (stretching vertically)
     /// when I toggle the mask on and off". The viewer had asked for a sharp

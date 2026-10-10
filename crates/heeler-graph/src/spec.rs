@@ -403,7 +403,9 @@ impl Registry {
             type_name: "heeler.curves".into(),
             version: 1,
             label: "Curves".into(),
-            params: vec![text("points", "[]")],
+            // rgb_mode "hue" is hue stable RGB (ops.rs, curves); empty is
+            // classic. Declared, or the desktop's build_graph drops it.
+            params: vec![text("points", "[]"), text("rgb_mode", "")],
             inputs: vec![image_in(), mask_in()],
             outputs: vec![image_out()],
         });
