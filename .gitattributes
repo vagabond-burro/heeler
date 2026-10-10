@@ -33,3 +33,5 @@
 *.ico binary
 *.icns binary
 *.pub binary
+*.gpr binary
+*.GPR binary

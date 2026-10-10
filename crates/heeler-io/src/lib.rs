@@ -1466,6 +1466,52 @@ mod tests {
         }
     }
 
+    /// heeler-raw's real HERO7 Black GPR (CC0, from raw.pixls.us).
+    #[cfg(feature = "libraw")]
+    fn real_gpr() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../heeler-raw/tests/fixtures/GOPR0055.GPR")
+    }
+
+    /// A real GPR opens on every path a photograph takes: the library's
+    /// thumbnail, the preview tier, the full develop and the EXIF.
+    #[test]
+    #[cfg(feature = "libraw")]
+    fn a_real_gpr_opens_on_every_path() {
+        let path = real_gpr();
+        let full = decode_any(&path).unwrap();
+        assert_eq!((full.width.max(full.height), full.width.min(full.height)), (4000, 3000));
+        let preview = decode_preview_at(&path, RawSourceOpts::default(), 1024).unwrap();
+        assert!(preview.width.max(preview.height) >= 1024, "{}x{}", preview.width, preview.height);
+        let thumb = decode_thumbnail(&path).unwrap();
+        assert!(thumb.width > 0 && thumb.height > 0);
+        let camera = read_exif(&std::fs::read(&path).unwrap()).camera().unwrap_or_default();
+        assert!(camera.contains("HERO7"), "{camera}");
+    }
+
+    /// A stack lends each frame a fixed slice, the estimate's retained
+    /// frame plus its workspace (stack_render's per_frame, unaligned), and
+    /// a real GPR develops inside it. Without the rewritten copy in the
+    /// estimate, the slice is refused, the 26.5.1 review's full-size GPR
+    /// stack.
+    #[test]
+    #[cfg(feature = "libraw")]
+    fn a_real_gpr_develops_inside_a_stack_frames_slice() {
+        let path = real_gpr();
+        let est = probe_memory(&path).unwrap().unwrap();
+        assert_eq!((est.width, est.height), (4000, 3000));
+        let per_frame = memory::sum([est.retained, est.workspace]).unwrap();
+        let develop = |slice: usize| {
+            memory::with_budget(64 << 30, || {
+                let job = Job::admit(slice, "test stack").unwrap();
+                job.worker(slice).run(|| decode_any_scene_linear(&path, RawSourceOpts::default()).map(|img| (img.width, img.height)))
+            })
+        };
+        let (w, h) = develop(per_frame).unwrap();
+        assert_eq!((w.max(h), w.min(h)), (4000, 3000));
+        let short = develop(per_frame - memory::bytes(est.width, est.height, 1, 2).unwrap()).unwrap_err().to_string();
+        assert!(memory::is_refusal(&short), "{short}");
+    }
+
     #[test]
     #[cfg(feature = "libraw")]
     fn review_scene_linear_white_is_independent_of_the_brightest_sample() {
