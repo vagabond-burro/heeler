@@ -118,8 +118,12 @@ export function pickedCurvePoint(
     return tangents && tangents.length === pts.length ? { curve, tangents: [...tangents] } : { curve };
   }
   const cy = Math.min(1, Math.max(0, curveValueAt(pts, smooth, cx, tangents)));
+  // In x order. Past an end point pulled in from its corner (a curve a
+  // script set) the pick becomes the new end point; slotting it before
+  // the last point, as this did, stored the list out of order, which the
+  // engine sorted and the plot did not.
   let insert = pts.findIndex((p) => p[0] > cx);
-  if (insert <= 0) insert = Math.max(1, pts.length - 1);
+  if (insert < 0) insert = pts.length;
   const curve: [number, number][] = [...pts.slice(0, insert), [cx, cy], ...pts.slice(insert)];
   // In tangent mode the slopes travel with their points: the new one
   // wears the chord's slope, so the pick lands ON the curve and the
@@ -566,8 +570,9 @@ export function CurveEditor({
     const cur = ptsRef.current;
     const [x, y] = toCurve(clientX, clientY);
     const cx = Math.min(0.99, Math.max(0.01, x));
+    // In x order, as a pick is (pickedCurvePoint).
     let insert = cur.findIndex((p) => p[0] > cx);
-    if (insert <= 0) insert = Math.max(1, cur.length - 1);
+    if (insert < 0) insert = cur.length;
     const next: [number, number][] = [...cur.slice(0, insert), [cx, y], ...cur.slice(insert)];
     // The new point arrives wearing the chord's slope, so the curve
     // around it barely moves until its handles do.

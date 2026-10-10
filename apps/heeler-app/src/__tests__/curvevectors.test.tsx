@@ -8,12 +8,12 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { initialState } from "../data";
 import { evalEq } from "../eqcurve";
-import type { CurveHandle, NodeCard } from "../state";
-import { CurveEditor, curveEqPoints, curvePath, curveValueAt } from "../ui/editors";
+import type { Command, CurveHandle, NodeCard } from "../state";
+import { CurveEditor, curveEqPoints, curvePath, curveValueAt, pickedCurvePoint } from "../ui/editors";
 import { curveShape, curveTails, monotoneTangents } from "../curvesampler";
 
 afterEach(cleanup);
@@ -278,5 +278,33 @@ describe("the plot shows what the photograph does past a pulled-in end", () => {
     const pts: Pt[] = [[0.1, 0.05], [0.5, 0.5], [0.8, 0.7]];
     // At 0.95 the run is at 0.7 + 0.15; a flat line read 0.7.
     expect(ghostAt(curvesNode({ curves: { rgb: pts }, curveInterp: "smooth" }), 0.95)).toBeCloseTo(0.85, 6);
+  });
+
+  // A point added past a pulled-in end becomes the new end, in x order.
+  // Both used to slot it in before the last point, out of order: the
+  // engine sorted the list and rendered one curve, the plot drew another.
+  const ordered = (curve: Pt[]) => curve.every((p, i) => i === 0 || p[0] > curve[i - 1][0]);
+
+  it("a pick past either pulled-in end lands on the run as the new end", () => {
+    const pts: Pt[] = [[0.2, 0.1], [0.5, 0.5], [0.8, 0.85]];
+    const low = pickedCurvePoint(pts, true, 0.1)!.curve;
+    expect(ordered(low) && low[0][0]).toBeCloseTo(0.1, 6);
+    expect(low[0][1]).toBeCloseTo(0, 6); // the run is held at black there
+    const high = pickedCurvePoint(pts, true, 0.9, [1, 1, 1])!;
+    expect(ordered(high.curve) && high.curve[3][0]).toBeCloseTo(0.9, 6);
+    expect(high.curve[3][1]).toBeCloseTo(0.95, 6);
+    expect(high.tangents![3]).toBeCloseTo(1, 6); // the chord from the old end, along the run
+  });
+
+  it("a click past a pulled-in end adds the new end, in order", () => {
+    const sent: Command[] = [];
+    render(<CurveEditor node={curvesNode({ curves: { rgb: [[0.2, 0.1], [0.5, 0.5], [0.8, 0.85]] } })} dispatch={((c: Command) => sent.push(c)) as never} channelMode="rgb" />);
+    const svg = screen.getByTestId("curve-plot");
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 272, height: 150, right: 272, bottom: 150, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    fireEvent(svg, new MouseEvent("pointerdown", { bubbles: true, clientX: 272 * 0.9, clientY: 150 * 0.1 }));
+    fireEvent(window, new MouseEvent("pointerup", {}));
+    const added = (sent.filter((c) => c.type === "set_curve").pop() as Extract<Command, { type: "set_curve" }>).curve;
+    expect(added).toHaveLength(4);
+    expect(ordered(added) && added[3][0]).toBeCloseTo(0.9, 2);
   });
 });

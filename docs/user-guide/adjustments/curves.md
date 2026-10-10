@@ -17,7 +17,7 @@ A gentle S-curve increases contrast; the opposite decreases it. Channel curves c
 
 ## Past the end points
 
-An end point pulled in from its corner (the black point moved right, or the white point moved left) does not stop the curve there. Tones past it carry on at the same rate as the input, so a photograph keeps its gradation beyond the end point instead of clipping flat. The plot draws that run as a faint dashed line from each pulled-in end to the plot's edge, and the picker's ghost rides on it. With handles set in Tangent mode the curve holds the end point's value past it instead, and no dashed line is drawn.
+The editor keeps the first point at the left edge and the last at the right, but a curve set by a script can start or end inside them. Tones past such an end point do not stop there: they carry on at the input's own rate, so the photograph keeps its gradation rather than clipping flat. The plot draws that run as a faint dashed line from the end point to the plot's edge, and the picker's ghost rides on it. A point picked or clicked past the end becomes the new end point. With handles set in Tangent mode the curve holds the end point's value instead, and no dashed line is drawn.
 
 ## Hue stable
 
