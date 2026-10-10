@@ -110,7 +110,7 @@ fn find(ifd: &[(u16, Entry)], tag: u16) -> Option<Entry> {
 }
 
 fn bad(why: &str) -> RawError {
-    RawError::Code(format!("GoPro GPR: {why}"), -1)
+    RawError::Gpr(why.to_string())
 }
 
 /// The GPR as a DNG LibRaw reads, or None when the bytes are not a GPR.

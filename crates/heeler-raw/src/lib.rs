@@ -48,6 +48,11 @@ pub enum RawError {
     Code(String, c_int),
     #[error("libraw produced an unexpected image format")]
     Unexpected,
+    /// A GoPro GPR that could not be decoded, said as such rather than as
+    /// a LibRaw code: the failure is in the file or its VC-5 tile, before
+    /// LibRaw sees anything.
+    #[error("GoPro GPR: {0}")]
+    Gpr(String),
 }
 
 /// Mirrors libraw_processed_image_t.
