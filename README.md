@@ -29,7 +29,7 @@ Recipes like Sharpening and Skin Softening are not sealed effects: they are grou
 
 Heeler can estimate a depth map for any photograph, with a model that runs on your own computer, and its tools use it:
 
-- **Depth Lighting** relights a scene after the shot with a rig of lights you place on it: lamps, a sun at any elevation, and dark lights that cast shadows of their own color, all landing by the scene's relief.
+- **Depth Lighting** relights a scene after the shot with a rig of lights you place on it: lamps, a sun at any elevation, and dark lights that darken in their own color, each shaped by the scene's relief.
 - **Fog** places atmosphere through the scene by depth, thickening into the distance, not laid over everything.
 - **Depth of Field** blurs by distance, with aperture and blade shape, instead of a flat background blur.
 - **Every adjustment layer** can be limited by depth, so a grade reaches only the far hills or only the foreground.
