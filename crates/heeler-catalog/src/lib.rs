@@ -196,11 +196,10 @@ pub struct Filter {
 
 /// Extensions the library indexes. The raw entries mirror heeler-io's
 /// RAW_EXTENSIONS, and a test there fails if the two drift: every one of
-/// them developed in the raw.pixls.us corpus. GoPro .gpr is intentionally
-/// absent: LibRaw cannot decode VC-5 without GoPro's separate SDK
-/// (Apache-2.0, a future vendoring candidate), so listing them would only
-/// produce broken entries. Sigma .x3f is absent for the same reason,
-/// LibRaw dropped Foveon.
+/// them developed in the raw.pixls.us corpus. GoPro .gpr is listed since
+/// 2026.5.1, when heeler-raw began decoding its VC-5 tile with GoPro's
+/// decoder. Sigma .x3f stays absent: LibRaw dropped Foveon, so listing
+/// them would only produce broken entries.
 pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     // HEIC only where the OS supplies the codec: macOS ImageIO, and
     // Windows WIC when Microsoft's HEVC and HEIF extensions are installed
@@ -222,6 +221,7 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     // loader already developed it.
     "pef", "srw", "3fr", "iiq", "erf", "nrw", "srf", "sr2",
     "crw", "rwl", "raw", "ori", "fff", "mrw", "kdc", "dcr", "mos", "mef", "arq", "sti", "mdc",
+    "gpr",
     // OpenEXR: scene-linear renders and HDR merges, read for their beauty and, behind
     // it, their render passes.
     "exr",
@@ -2734,7 +2734,8 @@ mod tests {
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
             .collect();
-        assert_eq!(names.len(), 7, "x3f and gpr stay out: LibRaw cannot develop them");
+        assert_eq!(names.len(), 8, "x3f stays out: LibRaw cannot develop it");
+        assert!(names.contains(&"i.gpr".to_string()), "GoPro GPR is indexed");
         assert!(names.contains(&"e.PEF".to_string()), "Pentax is indexed");
         assert!(names.contains(&"f.iiq".to_string()), "Phase One is indexed");
         assert!(names.contains(&"g.crw".to_string()), "Canon CIFF is indexed");

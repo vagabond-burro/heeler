@@ -6,7 +6,7 @@ The Library is the left panel. It organizes photographs by their actual folders 
 
 ## Open and resize the Library
 
-Heeler reads the raw file every camera maker writes, including DNG, CR2, CR3, CRW, NEF, NRW, ARW, SR2, SRF, ARQ, RAF, ORF, ORI, RW2, PEF, SRW, IIQ, 3FR, FFF, ERF, RWL, MRW, KDC, DCR, MOS, MEF, STI, MDC and RAW, alongside JPEG, PNG, TIFF, HEIC and OpenEXR. An OpenEXR's alpha is premultiplied by convention and is unpremultiplied on the way in, so a render on a transparent background reads at the colors the renderer composited. Monochrome sensors and grayscale scanner DNGs develop like any other. GoPro GPR and Sigma X3F are the two it does not open. The repository file `docs/raw-support-matrix.md` records the full per-camera results.
+Heeler reads the raw file every camera maker writes, including DNG, CR2, CR3, CRW, NEF, NRW, ARW, SR2, SRF, ARQ, RAF, ORF, ORI, RW2, PEF, SRW, IIQ, 3FR, FFF, ERF, RWL, MRW, KDC, DCR, MOS, MEF, STI, MDC, RAW and GoPro's GPR, alongside JPEG, PNG, TIFF, HEIC and OpenEXR. An OpenEXR's alpha is premultiplied by convention and is unpremultiplied on the way in, so a render on a transparent background reads at the colors the renderer composited. Monochrome sensors and grayscale scanner DNGs develop like any other. Sigma X3F is the one it does not open. The repository file `docs/raw-support-matrix.md` records the full per-camera results.
 
 Open a folder with **File > Open folder…** or the folder icon in the Catalog header. The folder joins the current catalog and remains where it is on disk. Use the Library's collapse control to reduce it to a narrow rail; click the rail to restore it. Drag the right edge to resize the panel.
 

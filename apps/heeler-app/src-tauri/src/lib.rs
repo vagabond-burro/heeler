@@ -17222,9 +17222,9 @@ async fn pick_image_file(app: tauri::AppHandle) -> Result<Option<String>, String
                 "jpg", "jpeg", "png", "tif", "tiff", "heic", "heif", "webp", "exr", "dng", "nef", "cr2", "cr3",
                 "arw", "raf", "rw2", "orf", "pef", "srw", "3fr", "iiq", "erf", "nrw", "srf", "sr2",
                 "crw", "rwl", "raw", "ori", "fff", "mrw", "kdc", "dcr", "mos", "mef", "arq", "sti",
-                "mdc", "JPG", "JPEG", "PNG", "TIF", "TIFF", "HEIC", "EXR", "DNG", "NEF", "CR2", "CR3",
+                "mdc", "gpr", "JPG", "JPEG", "PNG", "TIF", "TIFF", "HEIC", "EXR", "DNG", "NEF", "CR2", "CR3",
                 "ARW", "RAF", "RW2", "ORF", "PEF", "SRW", "3FR", "IIQ", "CRW", "RWL", "RAW", "ORI",
-                "FFF", "MRW", "NRW",
+                "FFF", "MRW", "NRW", "GPR",
             ],
         )
         .blocking_pick_file()

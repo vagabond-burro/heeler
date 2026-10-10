@@ -1,18 +1,18 @@
 # RAW support matrix
 
 Corpus: a local copy of the raw.pixls.us sample archive  
-LibRaw 0.22.2 (libjpeg linked, zlib linked), develop at half size, plus the app's decode_any at full size, 2016 files in 743s.
+LibRaw 0.22.2 (libjpeg linked, zlib linked), develop at half size, plus the app's decode_any at full size, 2016 files in 743s. The GoPro rows are from a rerun of that folder on 2026-10-09, when GPR began decoding (17 files in 5s); the rest of the corpus is unchanged by it.
 
 ## What the app would show
 
 | Verdict | Files | Meaning |
 |---|---:|---|
-| develop | 1916 | LibRaw develops it and the result passes the noise gate |
+| develop | 1933 | LibRaw develops it and the result passes the noise gate |
 | jxl develop | 1 | JPEG XL DNG, decoded by Heeler's own path |
 | preview fallback | 29 | develop failed or looked like noise; the app silently shows the embedded JPEG |
 | error shown | 11 | develop failed and there is no preview to fall back on |
 | image path | 20 | extension the catalog lists but LibRaw is not asked about (TIFF) |
-| not indexed | 39 | extension the catalog never lists, so the file is invisible |
+| not indexed | 22 | extension the catalog never lists, so the file is invisible |
 
 ## By extension
 
@@ -30,7 +30,7 @@ LibRaw 0.22.2 (libjpeg linked, zlib linked), develop at half size, plus the app'
 | dng | 262 | yes | yes | 259 | 3 | 0 | 2 |
 | erf | 3 | yes | yes | 3 | 0 | 0 | 0 |
 | fff | 11 | yes | yes | 11 | 0 | 0 | 0 |
-| gpr | 17 | no | no | 0 | 17 | 0 | 0 |
+| gpr | 17 | yes | yes | 17 | 0 | 0 | 0 |
 | iiq | 35 | yes | yes | 35 | 0 | 0 | 0 |
 | kdc | 9 | yes | yes | 9 | 0 | 0 | 0 |
 | lri | 1 | no | no | 0 | 1 | 0 | 0 |
@@ -74,7 +74,7 @@ LibRaw 0.22.2 (libjpeg linked, zlib linked), develop at half size, plus the app'
 | FIMI | 1 | 1 | 0 | 0 | 0 |
 | Fujifilm | 152 | 152 | 0 | 0 | 0 |
 | Gitup | 5 | 5 | 0 | 0 | 0 |
-| GoPro | 17 | 0 | 0 | 0 | 17 |
+| GoPro | 17 | 17 | 0 | 0 | 0 |
 | Google | 7 | 7 | 0 | 0 | 0 |
 | HMD Global | 1 | 1 | 0 | 0 | 0 |
 | HTC | 1 | 1 | 0 | 0 | 0 |

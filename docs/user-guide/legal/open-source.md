@@ -58,6 +58,44 @@ at your option.
 
 The library has not been altered.
 
+## GoPro VC-5 decoder
+
+GoPro GPR files compress their pixels with GoPro's VC-5 codec. Heeler
+decodes them with the VC-5 decoder from **GoPro's GPR SDK**, © 2018
+GoPro, Inc., offered under the **Apache-2.0 or MIT** licenses at your
+option; Heeler takes the MIT option. Only the decoder is included, not
+the rest of the SDK.
+
+Heeler has changed it in one way: the decoder now checks that it stays
+inside the file it is reading, so a damaged GPR is reported as damaged
+instead of closing the app. What a sound file decodes to is unchanged.
+The changes are listed beside the source, in
+`third_party/gpr-vc5/README.md` in Heeler's repository.
+
+The MIT license asks that its text travel with the software:
+
+```text
+Copyright 2018 GoPro, Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```
+
 ## OpenEXR
 
 Renders and HDR merges saved as OpenEXR are read with **exrs** (the

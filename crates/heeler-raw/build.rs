@@ -204,6 +204,8 @@ fn main() {
     build.file("src/shim.cpp");
     build.compile("raw");
 
+    build_vc5(&target);
+
     if target.contains("windows") {
         println!("cargo:rustc-link-lib=ws2_32");
     }
@@ -225,4 +227,49 @@ fn main() {
     println!("cargo:rustc-env=HEELER_RAW_LIBRAW_VERSION={LIBRAW_VERSION}");
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/shim.cpp");
+    println!("cargo:rerun-if-changed=src/gpr_shim.c");
+}
+
+/// GoPro's VC-5 decoder (third_party/gpr-vc5, Apache-2.0 or MIT), the
+/// part of the GPR SDK that unpacks a GPR's raw tile, built as its own
+/// C library beside LibRaw. Only reading: the SDK's encoder, its patched
+/// Adobe DNG SDK and XMP toolkit are not vendored; Heeler hands LibRaw
+/// the decoded tile as an ordinary DNG (src/gpr.rs).
+fn build_vc5(target: &str) {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../third_party/gpr-vc5");
+    assert!(root.join("vc5_decoder").is_dir(), "vendored VC-5 decoder missing at {}", root.display());
+    let mut build = cc::Build::new();
+    build
+        .include(root.join("vc5_decoder"))
+        .include(root.join("vc5_common"))
+        .include(root.join("common/private"))
+        .include(root.join("common/public"))
+        .define("GPR_READING", "1")
+        .define("GPR_WRITING", "0")
+        .define("GPR_TIMING", "0")
+        // Upstream's checks are asserts; with them compiled out, the
+        // hardened paths (third_party/gpr-vc5/README.md) return errors
+        // where a debug build would abort on a damaged file.
+        .define("NDEBUG", None)
+        .warnings(false);
+    if !target.contains("msvc") {
+        build.flag_if_supported("-std=c99");
+    }
+    for dir in ["vc5_decoder", "vc5_common"] {
+        let mut files: Vec<_> = std::fs::read_dir(root.join(dir))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|e| e == "c"))
+            .collect();
+        files.sort();
+        for f in files {
+            build.file(f);
+        }
+    }
+    for f in ["gpr_allocator.c", "gpr_buffer.c", "log.c", "timer.c"] {
+        build.file(root.join("common/private").join(f));
+    }
+    build.file("src/gpr_shim.c");
+    build.compile("gprvc5");
+    println!("cargo:rerun-if-changed={}", root.display());
 }

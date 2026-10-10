@@ -389,8 +389,8 @@ pub fn decode_file(path: &Path) -> Result<ImageBuf, IoError> {
 
 /// Extensions handed to LibRaw. Every entry developed in the
 /// raw.pixls.us corpus; what is not here either failed there outright
-/// (GPR needs GoPro's SDK, X3F is Foveon, ARI, LRI, CAM) or was never
-/// seen. The catalog must index each of these too, and a test below
+/// (X3F is Foveon, ARI, LRI, CAM) or was never seen. GoPro's GPR goes
+/// to LibRaw too, after heeler-raw has decoded its VC-5 tile. The catalog must index each of these too, and a test below
 /// holds the two lists together.
 const RAW_EXTENSIONS: &[&str] = &[
     "dng", "cr2", "cr3", "nef", "nrw", "arw", "srf", "sr2", "raf", "orf", "rw2", "pef", "srw",
@@ -401,6 +401,8 @@ const RAW_EXTENSIONS: &[&str] = &[
     // from an action camera or a Pi is not a photograph LibRaw knows; it
     // fails or trips the noise gate and the file says so honestly.
     "crw", "rwl", "raw", "ori", "fff", "mrw", "kdc", "dcr", "mos", "mef", "arq", "sti", "mdc",
+    // GoPro HERO5 on and Fusion: a DNG with a VC-5 tile (heeler-raw's gpr.rs).
+    "gpr",
 ];
 
 /// Whether the extension is one LibRaw is asked to develop. Public so the

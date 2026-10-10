@@ -6,8 +6,9 @@ edition.workspace = true
 # text ships beside the source it covers, in the vendored tree under
 # third_party/. No GPL-family code. The version lives in build.rs as
 # LIBRAW_VERSION and nowhere else: this note used to name 0.21.3 for a
-# month after the build moved to 0.22.2.
-license = "MPL-2.0 AND CDDL-1.0"
+# month after the build moved to 0.22.2. GoPro's VC-5 decoder
+# (third_party/gpr-vc5, for GPR files) is taken under its MIT option.
+license = "MPL-2.0 AND CDDL-1.0 AND MIT"
 
 [dependencies]
 heeler-engine = { path = "../heeler-engine" }

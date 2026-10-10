@@ -35,6 +35,9 @@ pub const JPEG_LINKED: bool = matches!(env!("HEELER_RAW_JPEG").as_bytes(), b"1")
 /// what `examples/dngprobe.rs` prints them next to.
 pub const ZLIB_LINKED: bool = matches!(env!("HEELER_RAW_ZLIB").as_bytes(), b"1");
 
+mod gpr;
+pub use gpr::is_gpr;
+
 #[derive(Debug, thiserror::Error)]
 pub enum RawError {
     #[error("{0}")]
@@ -173,6 +176,12 @@ pub fn decode_sensor_half(bytes: &[u8]) -> Result<SensorImage, RawError> {
 
 /// Header identification only: LibRaw has not unpacked sensor pixels yet.
 pub fn dimensions(bytes: &[u8]) -> Result<(usize, usize), RawError> {
+    // A GPR answers from its header: LibRaw cannot open the VC-5 tile,
+    // and decoding a whole frame to learn its size is the cost a header
+    // probe exists to avoid (it is often handed only the file's front).
+    if let Some(dims) = gpr::dimensions(bytes) {
+        return Ok(dims);
+    }
     let p = unsafe { libraw_init(0) };
     if p.is_null() { return Err(RawError::Init); }
     let handle = Handle(p);
@@ -181,6 +190,9 @@ pub fn dimensions(bytes: &[u8]) -> Result<(usize, usize), RawError> {
 }
 
 pub fn decode_sensor_with(bytes: &[u8], opts: DevelopOpts) -> Result<SensorImage, RawError> {
+    // A GoPro GPR's VC-5 tile is decoded here; LibRaw sees a plain DNG.
+    let converted = gpr::as_dng(bytes)?;
+    let bytes = converted.as_deref().unwrap_or(bytes);
     let handle = {
         let p = unsafe { libraw_init(0) };
         if p.is_null() {
