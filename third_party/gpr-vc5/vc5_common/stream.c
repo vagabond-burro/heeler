@@ -117,7 +117,13 @@ BITWORD GetWord(STREAM *stream)
             break;
             
         case STREAM_TYPE_MEMORY:
-            memcpy(&buffer, (uint8_t *)stream->location.memory.buffer + stream->byte_count, sizeof(buffer));
+            // Heeler: bounds checked; the reference read past the end.
+            if (stream->byte_count <= stream->location.memory.size &&
+                stream->location.memory.size - stream->byte_count >= sizeof(buffer)) {
+                memcpy(&buffer, (uint8_t *)stream->location.memory.buffer + stream->byte_count, sizeof(buffer));
+            } else {
+                stream->overrun = 1;
+            }
             break;
             
         default:
@@ -146,7 +152,12 @@ uint8_t GetByte(STREAM *stream)
             break;
             
         case STREAM_TYPE_MEMORY:
-            byte = ((uint8_t *)stream->location.memory.buffer)[stream->byte_count];            
+            // Heeler: bounds checked; the reference read past the end.
+            if (stream->byte_count < stream->location.memory.size) {
+                byte = ((uint8_t *)stream->location.memory.buffer)[stream->byte_count];
+            } else {
+                stream->overrun = 1;
+            }
             break;
             
         default:
@@ -447,6 +458,11 @@ CODEC_ERROR GetBlockFile(STREAM *stream, void *buffer, size_t size, size_t offse
 */
 CODEC_ERROR GetBlockMemory(STREAM *stream, void *buffer, size_t size, size_t offset)
 {
+	// Heeler: bounds checked; the reference read past the end.
+	if (offset > stream->location.memory.size || stream->location.memory.size - offset < size) {
+		stream->overrun = 1;
+		return CODEC_ERROR_FILE_READ;
+	}
 	uint8_t *block = (uint8_t *)stream->location.memory.buffer + offset;
 	memcpy(buffer, block, size);
 	return CODEC_ERROR_OKAY;

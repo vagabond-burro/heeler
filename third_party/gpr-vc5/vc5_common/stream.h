@@ -90,6 +90,11 @@ typedef struct _stream
 
 	size_t byte_count;		//!< Number of bytes read or written to the stream
 
+	// Heeler: set when a read ran past the end of a memory buffer. The
+	// read returns zeros instead of the bytes after the buffer, and the
+	// decoder reports CODEC_ERROR_FILE_READ at the end.
+	int overrun;
+
 } STREAM;
 
 #ifdef __cplusplus

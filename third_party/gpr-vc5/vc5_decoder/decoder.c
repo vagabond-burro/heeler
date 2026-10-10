@@ -827,7 +827,10 @@ CODEC_ERROR PrepareDecoderTransforms(DECODER *decoder)
         for (wavelet_index = 0; wavelet_index < wavelet_count; wavelet_index++)
         {
             WAVELET *wavelet = decoder->transform[channel_index].wavelet[wavelet_index];
-            wavelet->valid_band_mask = 0;
+            // Heeler: a channel the header never sized has no wavelets.
+            if (wavelet != NULL) {
+                wavelet->valid_band_mask = 0;
+            }
         }
     }
     
@@ -1147,6 +1150,10 @@ CODEC_ERROR UpdateCodecState(DECODER *decoder, BITSTREAM *stream, TAGVALUE segme
     {
         case CODEC_TAG_ChannelCount:		// Number of channels in the transform
             assert(0 < value && value <= MAX_CHANNEL_COUNT);
+            // Heeler: the channel count sizes fixed arrays.
+            if (!(0 < value && value <= MAX_CHANNEL_COUNT)) {
+                return CODEC_ERROR_BITSTREAM_SYNTAX;
+            }
             codec->channel_count = (uint_least8_t)value;
             codec->header = true;
             break;
@@ -1168,6 +1175,10 @@ CODEC_ERROR UpdateCodecState(DECODER *decoder, BITSTREAM *stream, TAGVALUE segme
             break;
             
         case CODEC_TAG_SubbandNumber:		// Subband number of this wavelet band
+            // Heeler: the subband number indexes fixed arrays.
+            if (!(0 <= value && value < MAX_SUBBAND_COUNT)) {
+                return CODEC_ERROR_BITSTREAM_SYNTAX;
+            }
             codec->subband_number = value;
             break;
             
@@ -1183,6 +1194,10 @@ CODEC_ERROR UpdateCodecState(DECODER *decoder, BITSTREAM *stream, TAGVALUE segme
             break;
             
         case CODEC_TAG_ChannelNumber:		// Channel number
+            // Heeler: the channel number indexes fixed arrays.
+            if (!(0 <= value && value < MAX_CHANNEL_COUNT)) {
+                return CODEC_ERROR_BITSTREAM_SYNTAX;
+            }
             codec->channel_number = value;
             break;
             
@@ -1758,6 +1773,10 @@ CODEC_ERROR DecodeChannelSubband(DECODER *decoder, BITSTREAM *input, size_t chun
         
         // The wavelets are preallocated
         assert(wavelet != NULL);
+        // Heeler: not for a channel the header never sized.
+        if (wavelet == NULL) {
+            return CODEC_ERROR_UNEXPECTED;
+        }
         
         error = DecodeHighpassBand(decoder, input, wavelet, band);
         if (error == CODEC_ERROR_OKAY)
@@ -1784,6 +1803,10 @@ CODEC_ERROR DecodeChannelSubband(DECODER *decoder, BITSTREAM *input, size_t chun
         
         // The wavelets are preallocated
         assert(wavelet != NULL);
+        // Heeler: not for a channel the header never sized.
+        if (wavelet == NULL) {
+            return CODEC_ERROR_UNEXPECTED;
+        }
         
         error = DecodeLowpassBand(decoder, input, wavelet);
         if (error == CODEC_ERROR_OKAY)
@@ -2005,6 +2028,10 @@ CODEC_ERROR DecodeBandRuns(BITSTREAM *stream, CODEBOOK *codebook, PIXEL *data,
     
     // Check that the band dimensions are reasonable
     assert(width <= pitch);
+    // Heeler: an error in a release build, where the assert is gone.
+    if (width > pitch) {
+        return CODEC_ERROR_DECODING_SUBBAND;
+    }
     
     // Compute the number of pixels encoded into the band
     data_count = height * width;
@@ -2020,6 +2047,10 @@ CODEC_ERROR DecodeBandRuns(BITSTREAM *stream, CODEBOOK *codebook, PIXEL *data,
         
         // Check that the run does not extend past the end of the band
         assert(run.count <= data_count);
+        // Heeler: a corrupt run wrote past the band in a release build.
+        if (run.count > data_count) {
+            return CODEC_ERROR_DECODING_SUBBAND;
+        }
         
         // Copy the value into the specified number of pixels in the band
         while (run.count > 0)

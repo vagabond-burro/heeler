@@ -99,6 +99,10 @@ CODEC_ERROR vc5_decoder_process(const vc5_decoder_parameters*   decoding_paramet
     InitRGBImage(&rgb_image);
     
     error = DecodeImage(&input, &output_image, &rgb_image, &parameters);
+    // Heeler: a stream that ran out decoded zeros, not the picture.
+    if (error == CODEC_ERROR_OKAY && input.overrun) {
+        error = CODEC_ERROR_FILE_READ;
+    }
     if (error != CODEC_ERROR_OKAY) {
         fprintf(stderr, "Could not decode input vc5 bitstream. Error number %d\n", error );
         return error;
