@@ -444,6 +444,111 @@ fn sensor_to_imagebuf(s: heeler_raw::SensorImage) -> ImageBuf {
     out
 }
 
+/// A full-size develop with Highlights at Blend: the Clip develop's
+/// detail everywhere the sensor did not clip, Blend's recovered
+/// highlights where it did. LibRaw scales the mosaic for Blend before it
+/// demosaics, and its standard (AHD) demosaic decides edges differently
+/// at that scale, so a plain Blend develop changed fine texture well
+/// below white (up to 0.15 in a channel on the clipped-sky fixture; the
+/// 26.5.1 review of the Blend default). So the Clip develop runs first;
+/// a frame with nothing at white is that develop exactly, and a frame
+/// with clipping takes a second, Blend develop only in and around the
+/// clipped areas, feathered so no seam shows. Half-size develops skip
+/// AHD and differ from Clip by under a ten-thousandth, so they take
+/// Blend directly; so does every mode but Blend.
+#[cfg(feature = "libraw")]
+fn develop_full(bytes: &[u8], dev: heeler_raw::DevelopOpts) -> Result<(ImageBuf, bool), heeler_raw::RawError> {
+    if dev.highlight != 2 || dev.half_size {
+        let sensor = heeler_raw::decode_sensor_with(bytes, dev)?;
+        let sensor_data = sensor.sensor_data;
+        return Ok((sensor_to_imagebuf(sensor), sensor_data));
+    }
+    let clip = heeler_raw::decode_sensor_with(bytes, heeler_raw::DevelopOpts { highlight: 0, ..dev })?;
+    let sensor_data = clip.sensor_data;
+    let Some(weight) = clipped_weight(&clip) else {
+        return Ok((sensor_to_imagebuf(clip), sensor_data));
+    };
+    // The Clip develop waits as its compact samples and the mask a byte a
+    // pixel, so the second develop fits a stack frame's slice.
+    let blend = heeler_raw::decode_sensor_with(bytes, dev)?;
+    if (blend.width, blend.height) != (clip.width, clip.height) {
+        return Ok((sensor_to_imagebuf(clip), sensor_data));
+    }
+    let gain = blend.headroom.max(1.0);
+    let mut out = ImageBuf::new(clip.width, clip.height);
+    for px in 0..clip.width * clip.height {
+        let (i, o) = (px * 3, px * 4);
+        let w = weight[px] as f32 / 255.0;
+        for c in 0..3 {
+            let kept = clip.rgb[i + c] as f32 / 65535.0;
+            out.data[o + c] = if w == 0.0 { kept } else { kept + (blend.rgb[i + c] as f32 / 65535.0 * gain - kept) * w };
+        }
+        out.data[o + 3] = 1.0;
+    }
+    Ok((out, sensor_data))
+}
+
+/// Where a Clip develop reached white, as Blend's weight a byte a pixel:
+/// 255 on and within four pixels of a clipped pixel, falling to 0 over
+/// the next six, 0 everywhere else. None when the frame has too little
+/// at white to matter (a few hot pixels), which keeps the Clip develop.
+#[cfg(feature = "libraw")]
+fn clipped_weight(s: &heeler_raw::SensorImage) -> Option<Vec<u8>> {
+    const AT_WHITE: u16 = (0.98 * 65535.0) as u16;
+    const GROW: usize = 4;
+    const FEATHER: usize = 3;
+    let (w, h) = (s.width, s.height);
+    let clipped: Vec<bool> = s.rgb.chunks_exact(3).map(|p| p[0].max(p[1]).max(p[2]) >= AT_WHITE).collect();
+    if clipped.iter().filter(|c| **c).count() < 64 {
+        return None;
+    }
+    // Grow the clipped areas by GROW (a separable max), then soften the
+    // edge by a box of radius FEATHER: inside the grown area's core the
+    // weight is full, so every clipped pixel takes Blend whole.
+    let grow = |src: &[bool], horizontal: bool| -> Vec<bool> {
+        let mut out = vec![false; w * h];
+        for y in 0..h {
+            for x in 0..w {
+                if !src[y * w + x] {
+                    continue;
+                }
+                if horizontal {
+                    for xx in x.saturating_sub(GROW)..=(x + GROW).min(w - 1) {
+                        out[y * w + xx] = true;
+                    }
+                } else {
+                    for yy in y.saturating_sub(GROW)..=(y + GROW).min(h - 1) {
+                        out[yy * w + x] = true;
+                    }
+                }
+            }
+        }
+        out
+    };
+    let grown = grow(&grow(&clipped, true), false);
+    let box1 = |src: &[f32], horizontal: bool| -> Vec<f32> {
+        let mut out = vec![0f32; w * h];
+        let n = (2 * FEATHER + 1) as f32;
+        for y in 0..h {
+            for x in 0..w {
+                let mut sum = 0.0;
+                for d in 0..=2 * FEATHER {
+                    let (xx, yy) = if horizontal {
+                        ((x + d).saturating_sub(FEATHER).min(w - 1), y)
+                    } else {
+                        (x, (y + d).saturating_sub(FEATHER).min(h - 1))
+                    };
+                    sum += src[yy * w + xx];
+                }
+                out[y * w + x] = sum / n;
+            }
+        }
+        out
+    };
+    let soft = box1(&box1(&grown.iter().map(|g| if *g { 1.0 } else { 0.0 }).collect::<Vec<f32>>(), true), false);
+    Some(soft.iter().map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8).collect())
+}
+
 /// Decodes any supported file. RAW files go through sensor-level LibRaw
 /// develop when the `libraw` feature is on, falling back to the embedded
 /// JPEG preview, then to the standard decoders.
@@ -583,7 +688,7 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
             highlight: opts.highlight,
             demosaic: opts.demosaic,
         };
-        let decoded = heeler_raw::decode_sensor_with(&bytes, dev);
+        let decoded = develop_full(&bytes, dev);
         if let Err(heeler_raw::RawError::Memory(e)) = &decoded { return Err(e.clone().into()); }
         // A GPR has no embedded preview or readable strip to fall back on:
         // what follows would only misname the damage (a "JPEG SOF" or
@@ -591,9 +696,7 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
         if let (Err(e), true) = (&decoded, heeler_raw::is_gpr(&bytes)) {
             return Err(IoError::Unsupported(e.to_string()));
         }
-        if let Ok(sensor) = decoded {
-            let sensor_data = sensor.sensor_data;
-            let mut img = sensor_to_imagebuf(sensor);
+        if let Ok((mut img, sensor_data)) = decoded {
             if sensor_data {
                 capture_sharpen_develop(&mut img, opts, 1.0);
             }
@@ -1466,6 +1569,71 @@ mod tests {
             let why = result.expect_err(what).to_string();
             assert!(why.contains("GoPro GPR"), "{what}: {why}");
         }
+    }
+
+    /// heeler-raw's clipped-sky Canon G11 raw (CC0, from raw.pixls.us).
+    #[cfg(feature = "libraw")]
+    fn clipped_sky() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../heeler-raw/tests/fixtures/IMG_3310.CR2")
+    }
+
+    /// A full-size Blend develop is the Clip develop away from clipping,
+    /// pixel for pixel (the 26.5.1 review of the Blend default: a plain
+    /// Blend develop changed texture well below white, up to 0.15 in a
+    /// channel, through LibRaw's scaled demosaic), and in the blown sky it
+    /// is Blend's: neutral, with what the other channels saw.
+    #[test]
+    #[cfg(feature = "libraw")]
+    fn a_blend_develop_is_the_clip_develop_away_from_clipping() {
+        let path = clipped_sky();
+        // Unsharpened, so a glint sharpening pulls under white is still
+        // found where the develop finds it.
+        let plain = RawSourceOpts { capture_sharpen: 0, ..Default::default() };
+        let clip = decode_any_with(&path, RawSourceOpts { highlight: 0, ..plain }).unwrap();
+        let blend = decode_any_with(&path, plain).unwrap();
+        assert_eq!(RawSourceOpts::default().highlight, 2, "Blend is the default");
+        assert_eq!((clip.width, clip.height), (blend.width, blend.height));
+        let (w, h) = (clip.width, clip.height);
+        let at_white: Vec<bool> = (0..w * h).map(|i| clip.data[i * 4..i * 4 + 3].iter().any(|v| *v >= 0.979)).collect();
+        // Far from clipping: past the blend's reach (grown and feathered,
+        // ten pixels) and capture sharpening's, with room to spare.
+        const FAR: usize = 24;
+        let spread = |src: &[bool], horizontal: bool| -> Vec<bool> {
+            let mut out = vec![false; w * h];
+            for y in 0..h {
+                for x in 0..w {
+                    if src[y * w + x] {
+                        if horizontal {
+                            for xx in x.saturating_sub(FAR)..=(x + FAR).min(w - 1) { out[y * w + xx] = true; }
+                        } else {
+                            for yy in y.saturating_sub(FAR)..=(y + FAR).min(h - 1) { out[yy * w + x] = true; }
+                        }
+                    }
+                }
+            }
+            out
+        };
+        let near = spread(&spread(&at_white, true), false);
+        let mut compared = 0usize;
+        for i in (0..w * h).filter(|i| !near[*i]) {
+            assert_eq!(clip.data[i * 4..i * 4 + 3], blend.data[i * 4..i * 4 + 3], "pixel ({}, {}) away from clipping", i % w, i / w);
+            compared += 1;
+        }
+        assert!(compared * 2 > w * h, "compared {compared} of {} pixels", w * h);
+        // The blown sky: Blend's, so it varies where Clip is flat, and it
+        // stays neutral.
+        let sky: Vec<usize> = (0..w * h).filter(|i| clip.data[i * 4..i * 4 + 3].iter().all(|v| *v >= 0.98)).collect();
+        assert!(sky.len() * 10 > w * h, "the fixture's sky is at white");
+        let spread_of = |img: &ImageBuf| {
+            let g: Vec<f64> = sky.iter().map(|i| img.data[i * 4 + 1] as f64).collect();
+            let mean = g.iter().sum::<f64>() / g.len() as f64;
+            (g.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / g.len() as f64).sqrt()
+        };
+        assert!(spread_of(&blend) > 10.0 * spread_of(&clip).max(1e-4), "Blend brings back what the sky held: {} against {}", spread_of(&blend), spread_of(&clip));
+        let mean = |c: usize| sky.iter().map(|i| blend.data[i * 4 + c] as f64).sum::<f64>() / sky.len() as f64;
+        let (r, g, b) = (mean(0), mean(1), mean(2));
+        let top = r.max(g).max(b);
+        assert!([r, g, b].iter().all(|c| c / top > 0.94), "the blown sky stays neutral: {r:.3} {g:.3} {b:.3}");
     }
 
     /// heeler-raw's real HERO7 Black GPR (CC0, from raw.pixls.us).

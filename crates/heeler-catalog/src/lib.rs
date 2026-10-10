@@ -2346,6 +2346,14 @@ impl Catalog {
         Ok(())
     }
 
+    /// Drops the thumbnails rendered through photographs' graphs, keeping
+    /// the cameras' embedded ones: what the app does when its rendering
+    /// changes for photographs that did not ask for the change, so their
+    /// thumbnails render again as they are viewed. Returns how many went.
+    pub fn clear_rendered_thumbnails(&self) -> Result<i64, CatalogError> {
+        Ok(self.conn.execute("DELETE FROM thumbnails WHERE kind = ?1", params![ThumbKind::Rendered.as_str()])? as i64)
+    }
+
     /// Drops every thumbnail and gives the space back: a cache the user
     /// may clear from Preferences to manage their disk. Thumbnails
     /// rebuild as photographs are viewed. VACUUM follows the delete

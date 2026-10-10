@@ -88,6 +88,7 @@ export function MenuField({
   node,
   param,
   tip,
+  describedBy,
 }: {
   value: string;
   /** `hint` on an option is its status-line help, shown on its row in
@@ -123,6 +124,10 @@ export function MenuField({
    * sure the dropdowns are all the same width (defaulting to the length
    * of the longest word in all 4)").*/
   fitLabels?: string[];
+  /** The id of what describes the field beyond its name, for assistive
+   * technology (aria-describedby): the Experimental chip's explanation
+   * while an experimental choice is chosen. */
+  describedBy?: string;
   /** What the closed field says when no option is the value: a menu
    * of things to do rather than a choice held (the section looks'
    * "Preview a look"). */
@@ -274,6 +279,7 @@ export function MenuField({
         data-value={value}
         data-active={(open && !disabled) || undefined}
         aria-label={label}
+        aria-describedby={describedBy}
         aria-haspopup="listbox"
         aria-expanded={open}
         disabled={disabled}

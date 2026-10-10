@@ -10195,8 +10195,29 @@ fn upgrade_gate(approved: &std::collections::HashSet<PathBuf>, path: &Path) -> R
 /// the span migrated.
 fn open_catalog_slot(slot: &mut CatalogSlot, path: &Path) -> Result<Option<(i64, i64)>, String> {
     upgrade_gate(&slot.upgrade_approved, path)?;
-    slot.catalog = Some(Catalog::open(path).map_err(|e| e.to_string())?);
+    let catalog = Catalog::open(path).map_err(|e| e.to_string())?;
+    freshen_rendered_thumbnails(&catalog);
+    slot.catalog = Some(catalog);
     Ok(slot.catalog.as_ref().and_then(|c| c.migration_span()))
+}
+
+/// The rendering a catalog's rendered thumbnails were made under. A
+/// rendered thumbnail is a photograph's graph through this build, cached
+/// with nothing that names the decoder's defaults; when a default changes
+/// how a photograph that never chose it develops, the ones made before go
+/// stale, so a catalog meeting a new generation drops them once and they
+/// render again as they are viewed (embedded camera previews stay). The
+/// 26.5.1 review: Highlights became Blend, and an edited raw's thumbnail
+/// kept Clip's flat sky. Change the word when a default changes again.
+const RENDERED_THUMBNAILS: &str = "highlights-blend";
+
+fn freshen_rendered_thumbnails(catalog: &Catalog) {
+    if catalog.meta("rendered_thumbnails").ok().flatten().as_deref() == Some(RENDERED_THUMBNAILS) {
+        return;
+    }
+    if catalog.clear_rendered_thumbnails().is_ok() {
+        let _ = catalog.set_meta("rendered_thumbnails", RENDERED_THUMBNAILS);
+    }
 }
 
 /// Opens the persistent catalog at app data on first use.
@@ -14406,7 +14427,9 @@ async fn move_catalog(app: tauri::AppHandle, dest: String) -> Result<CatalogInfo
             // Closes the old connection, which on Windows is what makes the
             // rename below possible at all.
             set_active_catalog(&worker, &dest, slot)?;
-            slot.catalog = Some(Catalog::open_existing(&dest).map_err(|e| e.to_string())?);
+            let catalog = Catalog::open_existing(&dest).map_err(|e| e.to_string())?;
+            freshen_rendered_thumbnails(&catalog);
+            slot.catalog = Some(catalog);
             let aside = set_aside_moved(&from)?;
             debug_log!(&worker, "catalog: moved {} to {}; the old file is {}", from.display(), dest.display(), aside.display());
             Ok(())
@@ -14574,6 +14597,7 @@ async fn create_catalog(app: tauri::AppHandle, path: String) -> Result<CatalogIn
         activate_catalog_target(Path::new(&path), true, &approved, |target, catalog| {
             with_catalog_slot(&worker, |slot| {
                 set_active_catalog(&worker, target, slot)?;
+                freshen_rendered_thumbnails(&catalog);
                 slot.catalog = Some(catalog);
                 Ok(())
             })
@@ -14592,6 +14616,7 @@ async fn open_catalog(app: tauri::AppHandle, path: String) -> Result<CatalogInfo
         activate_catalog_target(Path::new(&path), false, &approved, |target, catalog| {
             with_catalog_slot(&worker, |slot| {
                 set_active_catalog(&worker, target, slot)?;
+                freshen_rendered_thumbnails(&catalog);
                 slot.catalog = Some(catalog);
                 Ok(())
             })
@@ -31540,6 +31565,24 @@ mod tests {
         let editor_only = r#"{ "activeVersion": "take_1", "nodes": [], "wires": [] }"#;
         assert!(ui_graph_from_saved(editor_only).is_none());
         assert!(ui_graph_from_saved("not json").is_none());
+    }
+
+    #[test]
+    fn a_new_rendering_drops_rendered_thumbnails_once_and_keeps_embedded_ones() {
+        let d = tempfile::tempdir().unwrap();
+        let c = Catalog::open(&d.path().join("catalog.sqlite")).unwrap();
+        c.add_image("edited", Path::new("/photos/edited.cr2"), None).unwrap();
+        c.add_image("plain", Path::new("/photos/plain.cr2"), None).unwrap();
+        c.store_thumbnail("edited", heeler_catalog::ThumbKind::Rendered, b"clip sky").unwrap();
+        c.store_thumbnail("plain", heeler_catalog::ThumbKind::Embedded, b"camera").unwrap();
+        freshen_rendered_thumbnails(&c);
+        assert!(c.thumbnail("edited").unwrap().is_none(), "the rendered one renders again");
+        assert_eq!(c.thumbnail("plain").unwrap().map(|(k, _)| k), Some(heeler_catalog::ThumbKind::Embedded));
+        // Once: a thumbnail rendered under this generation stays.
+        c.store_thumbnail("edited", heeler_catalog::ThumbKind::Rendered, b"blend sky").unwrap();
+        freshen_rendered_thumbnails(&c);
+        assert_eq!(c.thumbnail("edited").unwrap().map(|(_, d)| d), Some(b"blend sky".to_vec()));
+        assert_eq!(c.meta("rendered_thumbnails").unwrap().as_deref(), Some(RENDERED_THUMBNAILS));
     }
 
     /// a stack's thumbnail was the merge encoded as it came, with none of the

@@ -117,21 +117,36 @@ export function SourceMenuRow({
    * the theme's kicker (a Finish warp's, at the warp sections' 11px) */
   labelSize?: number;
 }) {
+  const experimental = choices.find((o) => o.id === value)?.experimental;
+  const chipId = `${testid}-experimental`;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <div className="kicker" style={{ width: 78, flex: "none", fontSize: labelSize }}>
         {label}
       </div>
-      <MenuField
-        testid={testid}
-        label={name}
-        value={value}
-        options={choices}
-        onChange={onChange}
-        size="regular"
-        fitLabels={fit}
-      />
-      <ExperimentalChip why={choices.find((o) => o.id === value)?.experimental} testid={`${testid}-experimental`} />
+      {after ? (
+        // A row with something after its menu (a Finish warp's Add shape)
+        // keeps its layout: that row measures its children to fit.
+        <MenuField testid={testid} label={name} value={value} options={choices} onChange={onChange} size="regular" fitLabels={fit} />
+      ) : (
+        // The menu and its chip wrap together: the chip sits to the
+        // menu's right where the panel has room, and under it at the
+        // narrowest panel (260 px) rather than past the edge (the 26.5.1
+        // review measured 31 px of overflow).
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, minWidth: 0 }}>
+          <MenuField
+            testid={testid}
+            label={name}
+            value={value}
+            options={choices}
+            onChange={onChange}
+            size="regular"
+            fitLabels={fit}
+            describedBy={experimental ? chipId : undefined}
+          />
+          <ExperimentalChip why={experimental} testid={chipId} id={chipId} />
+        </div>
+      )}
       {after}
     </div>
   );
@@ -141,10 +156,11 @@ export function SourceMenuRow({
  * right (2026-10-10: "keep Rebuild as experimental ... have the
  * Experimental chip appear to the right of the option menu"). A label in
  * the warning color, not a button; its hint says what is wrong. */
-export function ExperimentalChip({ why, testid }: { why?: string; testid?: string }) {
+export function ExperimentalChip({ why, testid, id }: { why?: string; testid?: string; id?: string }) {
   if (!why) return null;
   return (
     <span
+      id={id}
       data-testid={testid}
       data-hint={why}
       aria-label={why}

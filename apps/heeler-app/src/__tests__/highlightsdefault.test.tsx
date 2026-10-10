@@ -24,14 +24,20 @@ describe("Highlights", () => {
     for (const value of ["clip", "blend"]) {
       const { unmount } = row(value);
       expect(screen.queryByTestId("source-highlights-experimental"), value).toBeNull();
+      expect(screen.getByTestId("source-highlights").getAttribute("aria-describedby"), value).toBeNull();
       unmount();
     }
     row("rebuild");
     const chip = screen.getByTestId("source-highlights-experimental");
     expect(chip.textContent).toBe("Experimental");
     expect(chip.getAttribute("data-hint")).toMatch(/can tint a blown sky.*Blend keeps blown areas neutral/);
-    // To the right of the menu, in the same row.
-    expect(chip.previousElementSibling?.querySelector('[data-testid="source-highlights"]') ?? chip.previousElementSibling).toBeTruthy();
+    // Beside the menu, in one wrapper that lets it wrap under the menu
+    // at the narrowest panel; and the menu is described by it.
+    const field = screen.getByTestId("source-highlights");
+    expect(chip.parentElement!.contains(field)).toBe(true);
+    expect(chip.parentElement!.lastElementChild).toBe(chip);
+    expect(field.getAttribute("aria-describedby")).toBe(chip.id);
+    expect(getComputedStyle(chip.parentElement!).flexWrap).toBe("wrap");
   });
 
   it("the menu's hints say what each does, Rebuild's that it is experimental", () => {
