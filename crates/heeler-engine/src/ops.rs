@@ -5022,6 +5022,39 @@ mod tests {
         assert!(bad.eq.is_none());
     }
     #[test]
+    fn curves_match_the_shared_vectors() {
+        // tests/curve_vectors.json is read by the Curves editor's test
+        // too (curvevectors.test.ts): the curve the editor draws and
+        // picks on must be the curve this samples. Inside the point
+        // range only; outside it the two differ on purpose.
+        #[derive(Deserialize)]
+        struct Case {
+            name: String,
+            interp: String,
+            points: Vec<[f32; 2]>,
+            slopes: Option<Vec<f32>>,
+            handles: Option<Vec<Option<HandlePair>>>,
+            y: Vec<f32>,
+        }
+        #[derive(Deserialize)]
+        struct Vectors {
+            x: Vec<f32>,
+            cases: Vec<Case>,
+        }
+        let v: Vectors = serde_json::from_str(include_str!("../tests/curve_vectors.json")).unwrap();
+        for c in v.cases {
+            let s = match c.interp.as_str() {
+                "linear" => CurveSampler::new(c.points, false),
+                "smooth" => CurveSampler::new(c.points, true),
+                _ => CurveSampler::with_user_handles(c.points, c.slopes, c.handles),
+            };
+            for (x, y) in v.x.iter().zip(&c.y) {
+                assert!((s.eval(*x) - y).abs() < 1e-5, "{}: at {x}, {} not {y}", c.name, s.eval(*x));
+            }
+        }
+    }
+
+    #[test]
     fn the_eq_curve_matches_the_shared_vectors() {
         // Hand-computed Hermite values, the SAME numbers pinned in the
         // frontend's eqcurve.test.ts: if either side drifts from the
