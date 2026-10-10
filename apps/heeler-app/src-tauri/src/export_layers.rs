@@ -296,6 +296,9 @@ mod characterization;
 #[cfg(test)]
 #[path = "export_layers_review.rs"]
 mod review;
+#[cfg(test)]
+#[path = "export_layers_writer.rs"]
+mod writer;
 
 #[cfg(test)]
 pub(crate) mod tests {
