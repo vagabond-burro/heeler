@@ -55,7 +55,15 @@ decodes to:
     pitch, returns `CODEC_ERROR_DECODING_SUBBAND`;
   - a wavelet the header never sized is skipped when the transforms are
     reset, and decoding into it returns `CODEC_ERROR_UNEXPECTED`;
-  - a pattern other than 2x2 returns `CODEC_ERROR_PATTERN_DIMENSIONS`;
+  - a pattern other than 2x2 returns `CODEC_ERROR_PATTERN_DIMENSIONS`,
+    both where the header sets it and where the transforms are allocated,
+    whose error the reference dropped (so decoding went on with wrong
+    sizes);
+  - a codeblock whose channel number, set by the header or advanced by the
+    decoder itself after a channel's last subband, is not one of the
+    channels the header declared returns `CODEC_ERROR_BITSTREAM_SYNTAX`;
+  - out of memory for the output image returns `CODEC_ERROR_OUTOFMEMORY`
+    rather than packing into NULL;
   - `DecodeImage` releases the wavelets and component arrays when decoding
     fails (the reference returned and leaked them, about 71 MB a try on a
     HERO11 frame), and the component arrays are counted from the start so
@@ -63,7 +71,8 @@ decodes to:
 - `vc5_common/wavelet.c`: `DeleteWavelet` skips a wavelet never allocated.
 
 These were found by decoding thousands of damaged copies of real HERO7
-and HERO11 tiles under AddressSanitizer, and an independent review that
-measured the leaks and the header-sized allocations. Each case that
+and HERO11 tiles under AddressSanitizer, an independent review that
+measured the leaks and the header-sized allocations, and the 26.5.1
+release review, which read the channel advance and the dropped error. Each case that
 crashed, leaked or over-allocated before now returns an error. A sound
 tile decodes to the same bytes as upstream.

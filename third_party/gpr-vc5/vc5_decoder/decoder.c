@@ -210,7 +210,13 @@ CODEC_ERROR DecodeImage(STREAM *stream, IMAGE *packed_image, RGB_IMAGE *rgb_imag
             SetOutputImageFormat(&decoder, parameters, &packed_width, &packed_height, &packed_format);
 
             // Allocate the image buffer for output of the image packing process
-            AllocImage(decoder.allocator, packed_image, packed_width, packed_height, packed_format);
+            // Heeler: checked; out of memory, the packing wrote into NULL.
+            if (AllocImage(decoder.allocator, packed_image, packed_width, packed_height, packed_format) != CODEC_ERROR_OKAY) {
+                ReleaseComponentArrays( &parameters->allocator, &unpacked_image, unpacked_image.component_count );
+                ReleaseDecoder(&decoder);
+                ReleaseBitstream(&bitstream);
+                return CODEC_ERROR_OUTOFMEMORY;
+            }
             
             // Pack the component arrays into the output image
             ImageRepackingProcess(&unpacked_image, packed_image, parameters);
@@ -1253,6 +1259,11 @@ CODEC_ERROR UpdateCodecState(DECODER *decoder, BITSTREAM *stream, TAGVALUE segme
         case CODEC_TAG_PatternWidth:
             if (IsPartEnabled(enabled_parts, VC5_PART_IMAGE_FORMATS))
             {
+                // Heeler: a raw image is a 2x2 pattern; any other value set
+                // the component count other loops run to without a bound.
+                if (value != 2) {
+                    return CODEC_ERROR_PATTERN_DIMENSIONS;
+                }
                 codec->pattern_width = (DIMENSION)value;
                 codec->header = true;
             }
@@ -1267,6 +1278,10 @@ CODEC_ERROR UpdateCodecState(DECODER *decoder, BITSTREAM *stream, TAGVALUE segme
         case CODEC_TAG_PatternHeight:
             if (IsPartEnabled(enabled_parts, VC5_PART_IMAGE_FORMATS))
             {
+                // Heeler: as the pattern width.
+                if (value != 2) {
+                    return CODEC_ERROR_PATTERN_DIMENSIONS;
+                }
                 codec->pattern_height = (DIMENSION)value;
                 codec->header = true;
             }
@@ -1523,7 +1538,12 @@ CODEC_ERROR UpdateCodecState(DECODER *decoder, BITSTREAM *stream, TAGVALUE segme
         !decoder->memory_allocated)
     {
         // Allocate space for the wavelet transforms
-        AllocDecoderTransforms(decoder);
+        // Heeler: its error (a pattern other than 2x2, image dimensions it
+        // cannot use) was dropped and decoding went on with wrong sizes.
+        CODEC_ERROR transforms = AllocDecoderTransforms(decoder);
+        if (transforms != CODEC_ERROR_OKAY) {
+            return transforms;
+        }
         
         // Allocate all buffers required for decoding
         AllocDecoderBuffers(decoder);
@@ -1540,6 +1560,13 @@ CODEC_ERROR UpdateCodecState(DECODER *decoder, BITSTREAM *stream, TAGVALUE segme
     if (codec->codeblock)
     {
         const int channel_number = codec->channel_number;
+        // Heeler: the decoder advances the channel number by itself after
+        // a channel's last subband, which the ChannelNumber tag's check
+        // never sees; past the channels the header declared, it indexed
+        // beyond the per-channel tables.
+        if (channel_number < 0 || channel_number >= codec->channel_count || channel_number >= MAX_CHANNEL_COUNT) {
+            return CODEC_ERROR_BITSTREAM_SYNTAX;
+        }
         
         // Have the channel dimensions been initialized?
         if (!decoder->channel[channel_number].initialized)

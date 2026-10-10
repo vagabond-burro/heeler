@@ -62,6 +62,7 @@ CODEC_ERROR vc5_decoder_process(const vc5_decoder_parameters*   decoding_paramet
         parameters.rgb_resolution = GPR_RGB_RESOLUTION_NONE;
     }
         
+    // Heeler: the expected image size, passed on to the decoder.
     parameters.expected_width = decoding_parameters->expected_width;
     parameters.expected_height = decoding_parameters->expected_height;
     parameters.allocator.Alloc = decoding_parameters->mem_alloc;
@@ -96,6 +97,7 @@ CODEC_ERROR vc5_decoder_process(const vc5_decoder_parameters*   decoding_paramet
     }
 
     error = OpenStreamBuffer(&input, vc5_buffer->buffer, vc5_buffer->size );
+    // Heeler: no message on stderr; the caller reports the error code.
     if (error != CODEC_ERROR_OKAY) {
         return error;
     }
