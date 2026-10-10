@@ -2,8 +2,9 @@
 #
 # Publishes the release from the Mac: this machine's DMG plus the
 # installers the other machines left on the shared volume, handed to
-# release.py with NOTES.md. The version is read from the workspace
-# Cargo.toml, so nothing here changes from one release to the next.
+# release.py, which takes the notes from the committed latest.json. The
+# version is read from the workspace Cargo.toml, so nothing here changes
+# from one release to the next.
 #
 #   ./scripts/macos-release.zsh                  publish
 #   ./scripts/macos-release.zsh --dry-run        check everything, publish nothing
@@ -56,7 +57,7 @@ others=(${others:#*.dmg})
 python=${PYTHON:-${commands[python]:-${commands[python3]:-}}}
 [[ -n $python ]] || { print -u2 "No python on the PATH; set PYTHON."; exit 1 }
 
-run=("$python" scripts/release.py "$dmg" $others --notes-file NOTES.md $passed)
+run=("$python" scripts/release.py "$dmg" $others $passed)
 (( dry_run )) && run+=(--dry-run)
 
 print -u2 "Heeler $version"

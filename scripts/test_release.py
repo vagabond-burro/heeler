@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-import base64
+import datetime as dt
 import io
 import json
 import os
@@ -22,6 +22,47 @@ from unittest.mock import patch
 import release
 import dist
 import heeler_build
+
+WHATS_NEW = """# What's new
+
+## 2026.2.1
+
+### New
+
+- **A feature.** It does a thing. [Curves](user-guide/adjustments/curves.md#hue-stable).
+- **Another.** Wrapped
+  onto a second line. [Library](user-guide/library.md), [Legal](user-guide/legal/README.md), [site](https://example.com/x.md).
+
+### Fixes
+
+- **A fix.** Nothing breaks.
+
+## 2026.2
+
+### New
+
+- An older one.
+"""
+
+
+def manifest_file(folder: str, version: str = "26.2.1", platforms=("macos", "windows"), notes: str | None = None, name: str = "latest.json") -> Path:
+    """A latest.json as latest_json.py writes it, in a scratch folder."""
+    text = notes if notes is not None else release.manifest.notes_from_whats_new(WHATS_NEW, version)
+    doc = release.manifest.manifest_for(version, text, list(platforms))
+    path = Path(folder) / name
+    path.write_text(release.manifest.manifest_text(doc), encoding="utf-8")
+    return path
+
+
+def committed_manifest(path: Path, whats_new: str = WHATS_NEW):
+    """Patches release.py onto a scratch latest.json that git calls committed."""
+    whats = path.parent / "whats-new.md"
+    whats.write_text(whats_new, encoding="utf-8")
+    return [
+        patch.object(release.manifest, "MANIFEST_FILE", path),
+        patch.object(release.manifest, "WHATS_NEW", whats),
+        patch.object(release, "committed", return_value=None),
+    ]
 
 
 class Prune(unittest.TestCase):
@@ -71,14 +112,33 @@ class Notes(unittest.TestCase):
         text = "- One thing.\n\n* Another\n• A third\nA bare line\n   - indented\n"
         self.assertEqual(release.bullets(text), ["One thing.", "Another", "A third", "A bare line", "indented"])
 
-    def test_the_manifest_notes_keep_one_bullet_a_line(self):
-        self.assertEqual(release.notes_text(["One thing.", "Another"]), "- One thing.\n- Another")
+    def test_the_manifest_notes_are_the_versions_whats_new_one_bullet_a_line(self):
+        notes = release.manifest.notes_from_whats_new(WHATS_NEW, "26.2.1")
+        lines = notes.split("\n")
+        self.assertEqual(len(lines), 3, notes)
+        self.assertTrue(all(line.startswith("- ") for line in lines), "the update dialog draws a list only when every line is a bullet")
+        self.assertIn("Wrapped onto a second line.", lines[1])
+        self.assertNotIn("An older one", notes)
+        self.assertEqual(release.manifest.whats_new_section(WHATS_NEW, "26.2.1")[1][0], "Fixes")
 
-    def test_headings_title_sections_and_are_never_items(self):
-        text = "## New\n- A feature\n- Another\n\n## Bug fixes\n- A fix\n"
-        self.assertEqual(release.bullets(text), ["A feature", "Another", "A fix"])
-        self.assertEqual(release.sections(text), [("New", ["A feature", "Another"]), ("Bug fixes", ["A fix"])])
-        self.assertEqual(release.sections("- Plain\n"), [(None, ["Plain"])])
+    def test_guide_links_become_the_websites_pages_and_other_links_stay(self):
+        notes = release.manifest.notes_from_whats_new(WHATS_NEW, "26.2.1")
+        self.assertIn("[Curves](https://www.heeler.app/docs/adjustments/curves/#hue-stable)", notes)
+        site = release.manifest.GUIDE_SITE
+        self.assertIn(f"[Library]({site}library/)", notes)
+        self.assertIn(f"[Legal]({site}legal/)", notes)
+        self.assertIn("[site](https://example.com/x.md)", notes)
+
+    def test_a_version_without_a_section_says_so(self):
+        with self.assertRaisesRegex(SystemExit, "no '## 2026.3' section"):
+            release.manifest.notes_from_whats_new(WHATS_NEW, "26.3.0")
+
+    def test_the_body_titles_each_list_from_whats_new_unless_the_review_changed_an_item(self):
+        items = release.bullets(release.manifest.notes_from_whats_new(WHATS_NEW, "26.2.1"))
+        groups = release.sections(items, WHATS_NEW, "26.2.1")
+        self.assertEqual([(t, len(i)) for t, i in groups], [("New", 2), ("Fixes", 1)])
+        edited = [*items[:2], "**A fix.** Reworded in review."]
+        self.assertEqual(release.sections(edited, WHATS_NEW, "26.2.1"), [(None, edited)])
 
     def test_numbered_notes_and_windows_line_endings(self):
         self.assertEqual(release.bullets("1. One\r\n2) Two\r\n\r\n- Three\r\n"), ["One", "Two", "Three"])
@@ -95,11 +155,10 @@ class Body(unittest.TestCase):
 
     def test_sections_get_their_own_titled_lists_in_the_body(self):
         names = {".dmg": "Heeler-26.2.1-macos.dmg", ".exe": "Heeler-26.2.1-windows.exe"}
-        raw = "## New\n- A feature\n## Bug fixes\n- A fix\n"
-        text = release.body(release.bullets(raw), names, release.sections(raw))
-        self.assertIn("**Updates**\n**New**\n- A feature\n\n**Bug fixes**\n- A fix\n", text)
-        # The manifest stays one flat list for the dialog in installed copies.
-        self.assertEqual(release.notes_text(release.bullets(raw)), "- A feature\n- A fix")
+        items = release.bullets(release.manifest.notes_from_whats_new(WHATS_NEW, "26.2.1"))
+        text = release.body(items, names, release.sections(items, WHATS_NEW, "26.2.1"))
+        self.assertIn("**Updates**\n**New**\n- **A feature.**", text)
+        self.assertIn("\n\n**Fixes**\n- **A fix.** Nothing breaks.\n", text)
 
     def test_one_platform_says_so(self):
         text = release.body(["A fix."], {".dmg": "Heeler-26.2.1-macos.dmg"})
@@ -199,8 +258,8 @@ class Installers(unittest.TestCase):
         self.assertIn("- **Linux (AppImage, x86_64):** `Heeler-26.3.0-linux.AppImage`", text)
         self.assertIn("The Mac installer is signed and notarized by Apple.", text)
         self.assertIn("The Linux AppImage is not signed", text)
-        doc, strangers = release.manifest.manifest_for("v26.3.0", "26.3.0", "Notes.", list(names.values()))
-        self.assertEqual(strangers, [])
+        doc = release.manifest.manifest_for("26.3.0", "- Notes.", ["macos", "windows", "linux"])
+        self.assertIsNone(release.platforms_match(doc, names, "v26.3.0"))
         self.assertEqual(sorted(doc["platforms"]), ["darwin-aarch64", "linux-x86_64", "windows-x86_64"])
         self.assertTrue(doc["platforms"]["linux-x86_64"]["url"].endswith("/v26.3.0/Heeler-26.3.0-linux.AppImage"))
         # Linux alone is no release: the two required installers stay required.
@@ -262,10 +321,9 @@ class Installers(unittest.TestCase):
             path.write_bytes(b"x")
             with self.assertRaisesRegex(SystemExit, "does not read"):
                 release.classify([path], "26.4.1")
-        doc, strangers = release.manifest.manifest_for("v26.4.1", "26.4.1", "Notes.", [
-            "Heeler-26.4.1-macos.dmg", "Heeler-26.4.1-windows.exe",
-            "Heeler-26.4.1-windows.msi", "Heeler-26.4.1-windows-store.msi"])
-        self.assertEqual(strangers, [])
+        doc = release.manifest.manifest_for("26.4.1", "- Notes.", ["macos", "windows"])
+        names = {".dmg": "Heeler-26.4.1-macos.dmg", ".exe": "Heeler-26.4.1-windows.exe", ".msi": "Heeler-26.4.1-windows.msi"}
+        self.assertIsNone(release.platforms_match(doc, names, "v26.4.1"))
         self.assertTrue(doc["platforms"]["windows-x86_64"]["url"].endswith("/Heeler-26.4.1-windows.exe"))
 
     def test_deb_is_refused_with_an_explanation(self):
@@ -276,10 +334,24 @@ class Installers(unittest.TestCase):
                 release.classify([path], "26.3.0")
 
     def test_the_manifest_names_the_release_files(self):
-        doc, strangers = release.manifest.manifest_for("v26.2.1", "26.2.1", "Notes.", ["Heeler-26.2.1-macos.dmg", "Heeler-26.2.1-windows.exe", "Heeler-26.2.1-windows.msi"])
-        self.assertEqual(strangers, [])
-        self.assertEqual(sorted(doc["platforms"]), ["darwin-aarch64", "windows-x86_64"])
+        when = dt.datetime(2026, 10, 10, 12, 0, 0, 123, tzinfo=dt.timezone.utc)
+        doc = release.manifest.manifest_for("26.2.1", "- Notes.", ["macos", "windows", "linux"], now=when)
+        self.assertEqual(sorted(doc["platforms"]), ["darwin-aarch64", "linux-x86_64", "windows-x86_64"])
         self.assertTrue(doc["platforms"]["windows-x86_64"]["url"].endswith("/v26.2.1/Heeler-26.2.1-windows.exe"))
+        self.assertTrue(doc["platforms"]["linux-x86_64"]["url"].endswith("/v26.2.1/Heeler-26.2.1-linux.AppImage"))
+        self.assertEqual(doc["pub_date"], "2026-10-10T12:00:00Z")
+        # Each name is one the manifest reader takes as this platform's.
+        for key, entry in doc["platforms"].items():
+            self.assertEqual(release.manifest.installer_platform(entry["url"].rsplit("/", 1)[-1], "26.2.1"), key)
+
+    def test_the_installers_must_be_the_ones_the_manifest_names(self):
+        doc = release.manifest.manifest_for("26.2.1", "- x", ["macos", "windows", "linux"])
+        names = {".dmg": "Heeler-26.2.1-macos.dmg", ".exe": "Heeler-26.2.1-windows.exe"}
+        self.assertRegex(release.platforms_match(doc, names, "v26.2.1"), "names Heeler-26.2.1-linux.AppImage, which this release does not carry")
+        names[".appimage"] = "Heeler-26.2.1-linux.AppImage"
+        self.assertIsNone(release.platforms_match(doc, names, "v26.2.1"))
+        doc = release.manifest.manifest_for("26.2.1", "- x", ["macos"])
+        self.assertRegex(release.platforms_match(doc, names, "v26.2.1"), "does not name Heeler-26.2.1-linux.AppImage, Heeler-26.2.1-windows.exe")
 
 
 class OfflineFlow(unittest.TestCase):
@@ -294,10 +366,16 @@ class OfflineFlow(unittest.TestCase):
             paths = [Path(folder) / name for name in ("Heeler_26.2.1_aarch64.dmg", "Heeler_26.2.1_x64-setup.exe")]
             for path in paths:
                 path.write_bytes(b"stand-in")
-            notes = Path(folder) / "NOTES.md"
-            notes.write_bytes(b"1. First\r\n2. Second\r\n")
+            path = manifest_file(folder, notes="- First\n- Second")
             out, err = io.StringIO(), io.StringIO()
-            with patch.object(sys, "argv", ["release.py", *map(str, paths), "--tag", "v26.2.1", "--notes-file", str(notes), "--dry-run"]), patch.object(release, "release_exists", return_value=False), patch.object(release, "tag_exists", return_value=False), redirect_stdout(out), redirect_stderr(err):
+            with ExitStack() as stack:
+                for p in committed_manifest(path):
+                    stack.enter_context(p)
+                stack.enter_context(patch.object(sys, "argv", ["release.py", *map(str, paths), "--tag", "v26.2.1", "--dry-run"]))
+                stack.enter_context(patch.object(release, "release_exists", return_value=False))
+                stack.enter_context(patch.object(release, "tag_exists", return_value=False))
+                stack.enter_context(redirect_stdout(out))
+                stack.enter_context(redirect_stderr(err))
                 self.assertEqual(release.main(), 0)
             self.assertIn("**Updates**\n- First\n- Second", out.getvalue())
             self.assertIn("Heeler-26.2.1-macos.dmg", out.getvalue())
@@ -325,19 +403,51 @@ class OfflineFlow(unittest.TestCase):
             paths = [Path(folder) / name for name in ("Heeler-26.2.1-macos.dmg", "Heeler-26.2.1-windows.exe")]
             for path in paths:
                 path.write_bytes(b"stand-in")
+            path = manifest_file(folder)
             out, err = io.StringIO(), io.StringIO()
-            with patch.object(sys, "argv", ["release.py", *map(str, paths), "--tag", "v26.2.1", "--notes", "- x"]), \
-                    patch.object(release, "release_exists", return_value=False), patch.object(release, "tag_exists", return_value=False), \
-                    patch.object(release.manifest, "gh", side_effect=create), \
-                    patch.object(release.manifest, "answers", side_effect=lambda url: checked.append(url)), \
-                    patch.object(release.manifest, "stage_manifest", return_value="staged"), \
-                    redirect_stdout(out), redirect_stderr(err):
+            with ExitStack() as stack:
+                for p in committed_manifest(path):
+                    stack.enter_context(p)
+                stack.enter_context(patch.object(sys, "argv", ["release.py", *map(str, paths), "--tag", "v26.2.1"]))
+                stack.enter_context(patch.object(release, "release_exists", return_value=False))
+                stack.enter_context(patch.object(release, "tag_exists", return_value=False))
+                stack.enter_context(patch.object(release.manifest, "gh", side_effect=create))
+                stack.enter_context(patch.object(release.manifest, "answers", side_effect=lambda url: checked.append(url)))
+                stack.enter_context(redirect_stdout(out))
+                stack.enter_context(redirect_stderr(err))
                 self.assertEqual(release.main(), 0)
+            # The committed file goes up as it stands.
+            self.assertIn("latest.json", uploaded)
         for name in ("heeler-help-kit.zip", "heeler-user-guide.md", "heeler-help-instructions.txt"):
             self.assertIn(name, uploaded)
             self.assertIn(f"https://github.com/vagabond-burro/heeler/releases/download/v26.2.1/{name}", checked)
         self.assertIn("Heeler-26.2.1-macos.dmg", uploaded)
         self.assertIn("`heeler-help-kit.zip` for Claude", out.getvalue())
+        self.assertIn("**New**\n- **A feature.**", out.getvalue())
+        self.assertIn("next: merge dev into main", err.getvalue())
+
+    def test_the_release_refuses_a_manifest_it_cannot_trust(self):
+        with tempfile.TemporaryDirectory() as folder:
+            paths = [Path(folder) / name for name in ("Heeler-26.2.1-macos.dmg", "Heeler-26.2.1-windows.exe")]
+            for path in paths:
+                path.write_bytes(b"stand-in")
+            cases = (
+                ("uncommitted", manifest_file(folder), {"committed": "has uncommitted changes"}, "uncommitted changes: review it and commit it"),
+                ("another version", manifest_file(folder, version="26.2.0", name="other-version.json"), {}, "is for 26.2.0, not 26.2.1"),
+                ("other installers", manifest_file(folder, platforms=("macos", "windows", "linux"), name="other-installers.json"), {}, "does not match the installers given"),
+            )
+            for label, path, overrides, message in cases:
+                with self.subTest(label), ExitStack() as stack:
+                    for p in committed_manifest(path):
+                        stack.enter_context(p)
+                    if "committed" in overrides:
+                        stack.enter_context(patch.object(release, "committed", return_value=overrides["committed"]))
+                    stack.enter_context(patch.object(sys, "argv", ["release.py", *map(str, paths), "--tag", "v26.2.1", "--dry-run"]))
+                    stack.enter_context(patch.object(release, "release_exists", return_value=False))
+                    stack.enter_context(patch.object(release, "tag_exists", return_value=False))
+                    stack.enter_context(redirect_stdout(io.StringIO()))
+                    with self.assertRaisesRegex(SystemExit, message):
+                        release.main()
 
     def test_the_help_kit_repo_is_the_one_the_releases_go_to(self):
         # The guide page's stable link must name the repository the
@@ -365,19 +475,39 @@ class OfflineFlow(unittest.TestCase):
                 self.assertEqual(redirected.get_method(), "HEAD")
                 self.assertEqual(redirected.full_url, "https://cdn.example.com/asset")
 
-    def test_a_draft_prerelease_is_never_staged(self):
-        rel = {"isDraft": True, "isPrerelease": True, "assets": [{"name": "Heeler-26.2.1-macos.dmg"}]}
-        with patch.object(sys, "argv", ["latest_json.py", "--tag", "v26.2.1", "--notes", "x"]), patch.object(release.manifest, "release", return_value=rel), patch.object(release.manifest, "gh") as gh, patch.object(release.manifest, "stage_manifest") as stage, redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            self.assertEqual(release.manifest.main(), 0)
-            gh.assert_called_once()
-            stage.assert_not_called()
+    def test_latest_json_writes_the_file_and_nothing_else(self):
+        # No gh, no network: the run itself fails the test if it reaches either.
+        with tempfile.TemporaryDirectory() as folder:
+            out = Path(folder) / "latest.json"
+            whats = Path(folder) / "whats-new.md"
+            whats.write_text(WHATS_NEW, encoding="utf-8")
+            with patch.object(sys, "argv", ["latest_json.py", "--platforms", "macos,windows,linux"]), \
+                    patch.object(release.manifest, "workspace_version", return_value="26.2.1"), \
+                    patch.object(release.manifest, "MANIFEST_FILE", out), patch.object(release.manifest, "WHATS_NEW", whats), \
+                    redirect_stderr(io.StringIO()):
+                self.assertEqual(release.manifest.main(), 0)
+            doc = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(doc["version"], "26.2.1")
+        self.assertEqual(sorted(doc["platforms"]), ["darwin-aarch64", "linux-x86_64", "windows-x86_64"])
+        self.assertEqual(doc["notes"], release.manifest.notes_from_whats_new(WHATS_NEW, "26.2.1"))
+        with patch.object(sys, "argv", ["latest_json.py", "--platforms", "macos,beos"]), redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(SystemExit, "unknown platform beos"):
+                release.manifest.main()
 
     def test_msi_alone_is_not_an_update_even_with_one_platform(self):
         with tempfile.TemporaryDirectory() as folder:
             msi = Path(folder) / "Heeler-26.2.1-windows.msi"
             msi.write_bytes(b"x")
-            with patch.object(sys, "argv", ["release.py", str(msi), "--notes", "- x", "--one-platform", "--dry-run"]), patch.object(release, "release_exists", return_value=False), patch.object(release, "tag_exists", return_value=False), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                with self.assertRaises(SystemExit):
+            path = manifest_file(folder, platforms=("windows",))
+            with ExitStack() as stack:
+                for p in committed_manifest(path):
+                    stack.enter_context(p)
+                stack.enter_context(patch.object(sys, "argv", ["release.py", str(msi), "--tag", "v26.2.1", "--one-platform", "--dry-run"]))
+                stack.enter_context(patch.object(release, "release_exists", return_value=False))
+                stack.enter_context(patch.object(release, "tag_exists", return_value=False))
+                stack.enter_context(redirect_stdout(io.StringIO()))
+                stack.enter_context(redirect_stderr(io.StringIO()))
+                with self.assertRaisesRegex(SystemExit, "no .dmg or .exe given"):
                     release.main()
 
     def test_check_live_reports_main_and_missing_installers_separately(self):
@@ -393,36 +523,10 @@ class OfflineFlow(unittest.TestCase):
                 self.assertIn("redirect:", out.getvalue())
 
     def test_check_accepts_the_linux_manifest_and_checks_its_url(self):
-        doc, strangers = release.manifest.manifest_for("v26.3.0", "26.3.0", "x", ["Heeler-26.3.0-linux.AppImage"])
-        self.assertEqual(strangers, [])
-        with patch.object(sys, "argv", ["latest_json.py", "--tag", "v26.3.0", "--check"]), patch.object(release.manifest, "fetch_json", side_effect=[(doc, None), (doc, None)]), patch.object(release.manifest, "answers", return_value=None) as answers, redirect_stdout(io.StringIO()):
+        doc = release.manifest.manifest_for("26.3.0", "- x", ["linux"])
+        with patch.object(sys, "argv", ["latest_json.py", "--check"]), patch.object(release.manifest, "workspace_version", return_value="26.3.0"), patch.object(release.manifest, "fetch_json", side_effect=[(doc, None), (doc, None)]), patch.object(release.manifest, "answers", return_value=None) as answers, redirect_stdout(io.StringIO()):
             self.assertEqual(release.manifest.main(), 0)
         answers.assert_called_once_with(doc["platforms"]["linux-x86_64"]["url"])
-
-    def test_contents_base64_with_newlines_is_idempotent(self):
-        body = json.dumps({"notes": "x" * 300})
-        current = {"sha": "old", "content": base64.encodebytes(body.encode()).decode()}
-        with patch.object(release.manifest, "ensure_branch"), patch.object(release.manifest, "gh_api", return_value=current) as api:
-            self.assertIsNone(release.manifest.stage_manifest(body, "dev", "notes"))
-            api.assert_called_once_with("contents/latest.json?ref=dev", missing_ok=True)
-
-    def test_large_contents_do_not_go_on_the_command_line(self):
-        body = json.dumps({"notes": "x" * 40000})
-        calls = []
-        def run(args, **kwargs):
-            calls.append((args, kwargs))
-            if args[1] == "repos/vagabond-burro/heeler/branches/dev":
-                return subprocess.CompletedProcess(args, 0, "{}", "")
-            if "?ref=dev" in args[1]:
-                return subprocess.CompletedProcess(args, 1, "", "gh: Not Found (HTTP 404)")
-            return subprocess.CompletedProcess(args, 0, '{"commit":{"html_url":"commit-url"}}', "")
-        with patch.object(release.manifest, "run_gh", side_effect=run):
-            self.assertEqual(release.manifest.stage_manifest(body, "dev", "notes"), "commit-url")
-        args, kwargs = calls[-1]
-        self.assertLess(sum(map(len, args)), 1000)
-        payload = json.loads(kwargs["input"])
-        self.assertEqual(base64.b64decode(payload["content"]).decode(), body)
-        self.assertIn("--input", args)
 
     def test_gh_only_treats_missing_resources_as_missing(self):
         for stderr, missing in (("gh: Not Found (HTTP 404)", True), ("gh: Bad credentials (HTTP 401)", False)):
@@ -683,7 +787,7 @@ class MacReleaseScript(unittest.TestCase):
             # no second DMG, no stray file), then the notes and the flags.
             self.assertEqual(
                 done.stdout.strip(),
-                f"scripts/release.py target/release/bundle/dmg/Heeler-31.2.7-macos.dmg {builds}/Heeler-31.2.7-linux.AppImage {builds}/Heeler-31.2.7-windows.exe --notes-file NOTES.md --pre-release --dry-run",
+                f"scripts/release.py target/release/bundle/dmg/Heeler-31.2.7-macos.dmg {builds}/Heeler-31.2.7-linux.AppImage {builds}/Heeler-31.2.7-windows.exe --pre-release --dry-run",
             )
             plain = self.run_script(root, f"--builds={builds}")
             self.assertEqual(plain.returncode, 0, plain.stderr)

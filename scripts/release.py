@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Cuts a release in one command: from the built installers to a
-published GitHub release carrying them, models.json and latest.json,
-with the update manifest staged on the public repo's dev branch.
+published GitHub release carrying them, models.json and latest.json.
 
-    python scripts/release.py dist/Heeler-26.2.1-macos.dmg dist/Heeler-26.2.1-windows.exe --notes-file NOTES.md
-    python scripts/release.py ... --notes "- What is new.
-    - And what else." --dry-run
+    python scripts/release.py dist/Heeler-26.2.1-macos.dmg dist/Heeler-26.2.1-windows.exe
+    python scripts/release.py ... --dry-run
 
 2026-09-16: "I would like to get this down to a single script release
 process." The arguments are the installers dist.py built, one per platform,
@@ -19,14 +17,19 @@ one command: no manual draft or attach-after step, no window in which an
 app finds a release with no manifest. A file whose name carries another
 version is refused.
 
-The notes are a bullet list of what is new, from --notes-file or
---notes, and they go into the release body where release_body.md beside
-this script says, under Updates; the rest of the body is the template,
-and the "Which file" list is written from the files actually uploaded
-(the 2026.2 body named the wrong macOS file by hand), followed by the
-help kit's line. The same bullets, one a line, are the manifest's
-notes: the app draws them as a list (2026-09-16, on the 2026.2.1
-dialog: "The list is coming in as one huge paragraph").
+The update manifest is written before this runs: latest_json.py writes
+latest.json at the repository's root from What's New, and it is reviewed
+and committed (2026-10-10: "release.py simple uploads and makes the new
+release, it no longer has to stage the latest.json"). This attaches the
+committed file as it stands, refusing one with uncommitted changes, one
+for another version, and one whose download URLs are not the installers
+given here. Its notes go into the release body where release_body.md
+beside this script says, under Updates, each under its What's New
+heading (New, Fixes) when every bullet is found there, as one list when
+the review changed one; the rest of the body is the template, and the
+"Which file" list is written from the files actually uploaded (the
+2026.2 body named the wrong macOS file by hand), followed by the help
+kit's line.
 
 The version is the workspace Cargo.toml's, which the installers carry,
 and the tag is v<version>; a tag or release that already exists is
@@ -37,13 +40,12 @@ Every release also carries the help kit (build_help_kit.py,
 heeler-help-instructions.txt, built here from this checkout's the
 bundled guide, so the kit behind releases/latest/download/ is always
 the guide of the latest release. The release is marked Latest;
---pre-release marks it a pre-release instead, which the redirect skips
-and which is never staged on dev. models.json comes from the published
-model manifest and must name no releases/latest/download URL. After
-publishing, every uploaded file is fetched by HEAD, and latest.json is
-committed to dev through latest_json.py. The last step stays yours:
-merge dev into main when the release is checked, which is what makes it
-live for the app and the website.
+--pre-release marks it a pre-release instead, which the redirect skips.
+models.json comes from the published model manifest and must name no
+releases/latest/download URL. After publishing, every uploaded file is
+fetched by HEAD. The last step stays yours: merge dev into main when the
+release is checked, which is what makes it live for the app and the
+website (a pre-release's latest.json must not reach main).
 
 gh must be installed and signed in to the account that owns the
 vagabond-burro organization.
@@ -55,6 +57,7 @@ import argparse
 import json
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -96,27 +99,9 @@ BUNDLER_ARCH = {".dmg": "aarch64", ".exe": "x64", ".msi": "x64", ".appimage": "a
 PLATFORM_KEY = {".dmg": "darwin-aarch64", ".exe": "windows-x86_64", ".msi": "windows-x86_64", ".appimage": "linux-x86_64"}
 
 
-def sections(text: str) -> list[tuple[str | None, list[str]]]:
-    """The notes as titled lists. A Markdown heading ("## New") starts a
-    section (2026-10-02, on the 26.4 notes: "separate bullet lists for what
-    is new and bug fixes"); items before any heading belong to an untitled
-    one. Each item is read the way bullets reads it."""
-    groups: list[tuple[str | None, list[str]]] = [(None, [])]
-    for raw in text.splitlines():
-        line = raw.strip()
-        if line.startswith("#"):
-            title = line.lstrip("#").strip()
-            if title:
-                groups.append((title, []))
-            continue
-        groups[-1][1].extend(bullets(line))
-    return [(t, items) for t, items in groups if items]
-
-
 def bullets(text: str) -> list[str]:
-    """The notes as a clean bullet list: one "- " line per item, any
-    marker accepted, blank lines dropped, a bare line taken as an item.
-    Heading lines title a section (sections()) and are not items."""
+    """The manifest's notes as items: one "- " line each, any marker
+    accepted, blank lines dropped, a bare line taken as an item."""
     items = []
     for raw in text.splitlines():
         line = raw.strip()
@@ -132,11 +117,54 @@ def bullets(text: str) -> list[str]:
     return items
 
 
-def notes_text(items: list[str]) -> str:
-    """The bullets as the manifest carries them: one a line, marked, so
-    the app's dialog can draw them as the list they are and an older
-    app, which keeps line breaks, still shows one a line."""
-    return "\n".join(f"- {item}" for item in items)
+def sections(items: list[str], whats_new: str, version: str) -> list[tuple[str | None, list[str]]]:
+    """The items under their What's New headings, in the manifest's order
+    within each (2026-10-02, on the 26.4 notes: "separate bullet lists for
+    what is new and bug fixes"). The manifest is a flat list, which is all
+    the update dialog draws; the headings come from the section it was
+    written from. When the review changed or added an item, so one is not
+    found there, the body is one untitled list rather than a guess."""
+    try:
+        groups = manifest.whats_new_section(whats_new, version)
+    except SystemExit:
+        return [(None, items)]
+    title_of = {manifest.site_links(item): title for title, group in groups for item in group}
+    if not all(item in title_of for item in items):
+        return [(None, items)]
+    order = [title for title, _ in groups]
+    return [(title, [i for i in items if title_of[i] == title]) for title in order if any(title_of[i] == title for i in items)]
+
+
+def committed(path: Path) -> str | None:
+    """None when the file is tracked and has no uncommitted change, else
+    what is wrong; git missing or no repository is said as such."""
+    try:
+        done = subprocess.run(["git", "status", "--porcelain", "--", str(path)], cwd=REPO_ROOT, capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        return "git is not installed"
+    if done.returncode != 0:
+        return done.stderr.strip() or "not in a git repository"
+    return "has uncommitted changes" if done.stdout.strip() else None
+
+
+def platforms_match(doc: dict, names: dict[str, str], tag: str) -> str | None:
+    """None when the manifest names exactly the update installers being
+    uploaded (the MSI rides beside the .exe and is not one), else what
+    differs."""
+    want = {
+        f"{DOWNLOADS}/{tag}/{name}"
+        for ext, name in names.items()
+        if ext != ".msi"
+    }
+    have = {entry.get("url", "") for entry in doc.get("platforms", {}).values()}
+    if want == have:
+        return None
+    parts = []
+    if have - want:
+        parts.append(f"it names {', '.join(sorted(u.rsplit('/', 1)[-1] for u in have - want))}, which this release does not carry")
+    if want - have:
+        parts.append(f"it does not name {', '.join(sorted(u.rsplit('/', 1)[-1] for u in want - have))}")
+    return "; ".join(parts)
 
 
 def classify(paths: list[Path], version: str) -> dict[str, Path]:
@@ -257,13 +285,10 @@ def tag_exists(tag: str) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
     parser.add_argument("installers", nargs="+", type=Path, help="the built installers: a .dmg, a .exe, optionally a .msi and a Linux .AppImage")
-    parser.add_argument("--notes", help="what is new, as a bullet list")
-    parser.add_argument("--notes-file", type=Path, help="a file holding the bullet list instead")
     parser.add_argument("--tag", help="the release tag (default v<Cargo.toml version>)")
     parser.add_argument("--title", help="the release title (default Heeler <version as shown>)")
     parser.add_argument("--target", default=manifest.LIVE_BRANCH, help=f"the public repo branch the tag is cut on (default {manifest.LIVE_BRANCH})")
-    parser.add_argument("--branch", default=manifest.STAGE_BRANCH, help=f"the public repo branch latest.json is staged on (default {manifest.STAGE_BRANCH})")
-    parser.add_argument("--pre-release", action="store_true", help="mark the release a pre-release: not Latest, not staged")
+    parser.add_argument("--pre-release", action="store_true", help="mark the release a pre-release: not Latest")
     parser.add_argument("--one-platform", action="store_true", help="allow a release with only one of the .dmg and .exe")
     parser.add_argument("--out", type=Path, help="also keep a copy of the release body here")
     parser.add_argument("--dry-run", action="store_true", help="check everything and print the body and manifest; publish nothing")
@@ -275,15 +300,16 @@ def main() -> int:
     shown = manifest.display_version(version)
     title = args.title or f"Heeler {shown}"
 
-    if args.notes_file:
-        raw = args.notes_file.read_text(encoding="utf-8")
-    elif args.notes:
-        raw = args.notes
-    else:
-        sys.exit("say what is new: --notes \"- ...\" or --notes-file NOTES.md")
-    items, groups = bullets(raw), sections(raw)
+    doc = manifest.read_manifest()
+    if manifest.parse_version(str(doc["version"])) != manifest.parse_version(version):
+        sys.exit(f"latest.json is for {doc['version']}, not {version}: write it again with python scripts/latest_json.py")
+    problem = committed(manifest.MANIFEST_FILE)
+    if problem:
+        sys.exit(f"latest.json {problem}: review it and commit it first, since main serves the committed file")
+    items = bullets(str(doc["notes"]))
     if not items:
-        sys.exit("the notes are empty")
+        sys.exit("latest.json: the notes are empty")
+    groups = sections(items, manifest.WHATS_NEW.read_text(encoding="utf-8"), version)
 
     given = classify(args.installers, version)
     if not REQUIRED.intersection(given):
@@ -299,10 +325,11 @@ def main() -> int:
     if tag_exists(tag):
         sys.exit(f"the tag {tag} already exists on {manifest.PUBLIC_REPO} without a release; a number is never reused")
 
+    mismatch = platforms_match(doc, names, tag)
+    if mismatch:
+        sys.exit(f"latest.json does not match the installers given: {mismatch}; write it with --platforms to match, or give the installers it names")
     text = body(items, names, groups)
-    doc, strangers = manifest.manifest_for(tag, version, notes_text(items), list(names.values()))
-    assert not strangers, strangers
-    doc_body = json.dumps(doc, indent=2) + "\n"
+    doc_body = manifest.MANIFEST_FILE.read_text(encoding="utf-8")
 
     state = "pre-release" if args.pre_release else "release"
     print(text)
@@ -355,11 +382,9 @@ def main() -> int:
         return 1
 
     if args.pre_release:
-        print(f"# a pre-release is not staged on {args.branch}; the redirect skips it and {manifest.LIVE_BRANCH} keeps the current release", file=sys.stderr)
+        print(f"# a pre-release: the redirect skips it; keep this latest.json off {manifest.LIVE_BRANCH}, which serves the current release", file=sys.stderr)
         return 0
-    commit = manifest.stage_manifest(doc_body, args.branch, f"latest.json: Heeler {shown} ({tag})")
-    print(f"# staged latest.json on {args.branch}: {commit or 'already there'}", file=sys.stderr)
-    print(f"# next: merge {args.branch} into {manifest.LIVE_BRANCH} to make {shown} live for the app and the website: {manifest.COMPARE_URL}", file=sys.stderr)
+    print(f"# next: merge {manifest.STAGE_BRANCH} into {manifest.LIVE_BRANCH} to make {shown} live for the app and the website: {manifest.COMPARE_URL}", file=sys.stderr)
     print("#       then python scripts/latest_json.py --check, and Help > Check for Updates in the previous version", file=sys.stderr)
     return 0
 

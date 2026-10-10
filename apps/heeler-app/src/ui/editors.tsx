@@ -281,7 +281,7 @@ export function CurveEditor({
   const hueStable = node.textParams?.rgb_mode === "hue";
   const hueHint = hueStable
     ? "Hue stable: the RGB curve changes tone without shifting color. Click for classic, each channel on its own"
-    : "Classic: the RGB curve runs on each channel on its own, which can shift hue and saturation. Click for hue stable";
+    : "Classic: the RGB curve runs on each channel on its own, which can shift hue. Click for hue stable";
   // The slopes beside the points: the echo's while an edit is in
   // flight, the stored ones when they fit, the monotone seed otherwise
   // (which is also what a fresh conversion starts from, so toggling
@@ -966,7 +966,7 @@ the slopes go back to the automatic smooth ones.*/}
         <div style={{ justifySelf: "end", display: "inline-flex", gap: 4 }}>
           {/* Hue stable: the RGB curve moves the largest and smallest
 channels and the middle keeps its place between them, so contrast
-stops pushing hue and saturation. Off is classic, each channel on its
+stops pushing hue (saturation changes as in classic). Off is classic, each channel on its
 own, which every graph made before the mode renders as. A text param
 so it rides saves, undo, copies and presets with nothing of its own.*/}
           <button

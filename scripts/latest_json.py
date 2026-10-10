@@ -1,63 +1,58 @@
 #!/usr/bin/env python3
-"""Writes the update manifest for a release, attaches it, and stages it
-on the public repo's dev branch.
+"""Writes the update manifest for the next release, latest.json at the
+repository's root, for review before it is committed.
 
 The app and the website read one file at one fixed URL,
-https://raw.githubusercontent.com/vagabond-burro/heeler/main/latest.json,
-and that file goes live when dev is merged into main (2026-09-16: "a
-better way to work" than a workflow copying a release attachment, which
-ran at publish time, before the manifest existed). The release page stays
-the source of truth for what shipped: this script looks up the release
-for the version's tag through gh, takes the installers from what is
-actually attached, writes latest.json pointing at them, attaches it to
-the release, and commits it to the dev branch of the public repo through
-the GitHub contents API. Merging dev into main makes the release live for
-the website and for every app from 2026.2.1 on.
+https://raw.githubusercontent.com/vagabond-burro/heeler/main/latest.json.
+Everything is in this one public repository now, so the manifest is an
+ordinary file in it (2026-10-10: "a script that prepares the latest.json
+with what the files paths will look like for the next release ... This
+only creates the file, I have to manually review before committing").
+Nothing here needs the release to exist, and nothing is uploaded or
+committed:
 
-    python scripts/latest_json.py --notes-file NOTES.md
-    python scripts/latest_json.py --notes "What changed." --dry-run
-    python scripts/latest_json.py --check
-
-The flow: publish the release on GitHub with the installers attached,
-run this, then merge dev into main. In that order: a merge before the
-release is published points the website and the app at installers that
-are not public yet. --check confirms the order held: main serves this
-version and every installer it names answers.
-
-The attachment is for the apps already out. 2026.1 through 2026.2 read
-GitHub's releases/latest/download/latest.json redirect, so a release with
-no attached manifest is invisible to them; --no-attach skips it for the
-day that no longer matters. A release marked pre-release on GitHub is
-attached to and never staged: a beta manifest must not reach main.
+    python scripts/latest_json.py              write latest.json
+    python scripts/latest_json.py --print      show it, write nothing
+    python scripts/latest_json.py --check      confirm main serves it live
 
 The version is the workspace Cargo.toml's, the same one the binary
-carries, and the tag is v<version>; --tag names another release. The
-installers carry the release names dist.py gives them, with the version
-in the name; the two releases that shipped before 2026-09-14 carry the
-names without one, and both forms are read:
+carries, and the tag is v<version>. The download URLs name the installers
+the release will carry under the names dist.py and release.py give them:
 
-Heeler-26.1.1-macos.dmg Heeler-macos.dmg darwin-aarch64
-Heeler-26.1.1-windows.exe Heeler-windows.exe windows-x86_64
-Heeler-26.3.0-linux.AppImage linux-x86_64
+    Heeler-<version>-macos.dmg            darwin-aarch64
+    Heeler-<version>-windows.exe          windows-x86_64
+    Heeler-<version>-linux.AppImage       linux-x86_64
 
-plus -macos-intel, -windows-arm64 and -linux-arm64 for platforms not
-built yet. A
-version in a name that is not the release's is refused, as is a release
-with no installer or with a name this pattern does not know. gh must be
-installed and signed in to the account that owns the vagabond-burro
-organization.
+--platforms names another set (macos, windows, linux; and macos-intel,
+windows-arm64, linux-arm64 for platforms not built yet). release.py
+refuses to publish installers that do not match the manifest, so a
+platform left out here is one the release cannot carry by mistake.
+
+The notes are the version's section of the user guide's What's New
+(whats-new.md beside the guide), the same words Help > What's New shows:
+every bullet of every subsection, New first, as one list, since the
+update dialog draws a list only when every line is a bullet. A link into
+the guide becomes the page's address on the website. Edit latest.json
+freely before committing it: release.py takes the notes from it as they
+stand.
+
+The flow: run this, review latest.json, commit it; build the installers;
+run release.py, which publishes the release with latest.json attached;
+then merge dev into main, which is what makes the release live for the
+app and the website. In that order: a merge before the release is
+published points both at installers that are not public yet. --check
+confirms the order held: main serves this version and every installer it
+names answers.
 """
 
 from __future__ import annotations
 
 import argparse
-import base64
 import datetime as dt
 import json
 import re
 import subprocess
 import sys
-import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -67,9 +62,14 @@ PUBLIC_REPO = "vagabond-burro/heeler"
 LIVE_BRANCH = "main"
 STAGE_BRANCH = "dev"
 MANIFEST_PATH = "latest.json"
+MANIFEST_FILE = REPO_ROOT / MANIFEST_PATH
+WHATS_NEW = REPO_ROOT / "docs" / "whats-new.md"
+# Where the website serves the user guide: user-guide/legal/license.md is
+# the page legal/license/ under this address.
+GUIDE_SITE = "https://www.heeler.app/docs/"
 # What the app and the website read.
 RAW_URL = f"https://raw.githubusercontent.com/{PUBLIC_REPO}/{LIVE_BRANCH}/{MANIFEST_PATH}"
-# What the apps before 2026.2.1 read.
+# What the apps before 2026.2.1 read: the latest release's attachment.
 REDIRECT_URL = f"https://github.com/{PUBLIC_REPO}/releases/latest/download/{MANIFEST_PATH}"
 COMPARE_URL = f"https://github.com/{PUBLIC_REPO}/compare/{LIVE_BRANCH}...{STAGE_BRANCH}"
 
@@ -87,14 +87,19 @@ PLATFORMS = {
     "linux": "linux-x86_64",
     "linux-arm64": "linux-aarch64",
 }
-# Attached beside the installers and not an installer.
-COMPANIONS = {"latest.json", "models.json"}
+EXTENSION = {"macos": "dmg", "macos-intel": "dmg", "windows": "exe", "windows-arm64": "exe", "linux": "AppImage", "linux-arm64": "AppImage"}
+DEFAULT_PLATFORMS = ("macos", "windows", "linux")
+
+
+def installer_name(platform: str, version: str) -> str:
+    """The release name of a platform's installer."""
+    return f"Heeler-{version}-{platform}.{EXTENSION[platform]}"
 
 
 def installer_platform(name: str, version: str) -> str | None:
-    """The manifest key an attached file's name says it is for, None
-    for a file that is not an installer; a name carrying another
-    version is refused outright."""
+    """The manifest key an installer's name says it is for, None for a
+    file that is not an installer; a name carrying another version is
+    refused outright."""
     match = INSTALLER.match(name)
     if match is None:
         return None
@@ -131,6 +136,91 @@ def display_version(version: str) -> str:
     return f"{year}.{update}" if patch == 0 else f"{year}.{update}.{patch}"
 
 
+def whats_new_section(text: str, version: str) -> list[tuple[str | None, list[str]]]:
+    """The version's section of What's New as titled lists: each "### "
+    subsection one list, its bullets with their continuation lines joined.
+    Exits when the version has no section or the section no bullets."""
+    shown = display_version(version)
+    lines = text.splitlines()
+    start = next((i for i, line in enumerate(lines) if line.strip() == f"## {shown}"), None)
+    if start is None:
+        sys.exit(f"What's New has no '## {shown}' section; write the release's notes there first")
+    groups: list[tuple[str | None, list[str]]] = [(None, [])]
+    for line in lines[start + 1:]:
+        if line.startswith("## "):
+            break
+        stripped = line.strip()
+        if line.startswith("### "):
+            groups.append((stripped.lstrip("#").strip(), []))
+        elif stripped.startswith(("- ", "* ")):
+            groups[-1][1].append(stripped[2:].strip())
+        elif stripped and groups[-1][1]:
+            # A bullet wrapped onto the next line.
+            groups[-1][1][-1] += " " + stripped
+    groups = [(title, items) for title, items in groups if items]
+    if not groups:
+        sys.exit(f"What's New's '## {shown}' section has no bullets")
+    return groups
+
+
+def site_links(item: str) -> str:
+    """Links into the guide (relative, as What's New writes them) as the
+    pages' addresses on the website; any other link is left alone."""
+    def site(match: re.Match[str]) -> str:
+        label, target = match.group(1), match.group(2)
+        if re.match(r"^[a-z]+:", target) or target.startswith("#"):
+            return match.group(0)
+        path, _, anchor = target.partition("#")
+        if not path.startswith("user-guide/") or not path.endswith(".md"):
+            return match.group(0)
+        page = path[len("user-guide/"):-len(".md")]
+        page = page[: -len("README")] if page.endswith("README") else page + "/"
+        return f"[{label}]({GUIDE_SITE}{page}{'#' + anchor if anchor else ''})"
+    return re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", site, item)
+
+
+def notes_from_whats_new(text: str, version: str) -> str:
+    """The manifest's notes: every bullet of the section, one a line, as
+    the update dialog draws a list."""
+    return "\n".join(f"- {site_links(item)}" for _, items in whats_new_section(text, version) for item in items)
+
+
+def manifest_for(version: str, notes: str, platforms: list[str], now: dt.datetime | None = None) -> dict:
+    tag = f"v{version}"
+    entries = {
+        PLATFORMS[p]: {"url": f"https://github.com/{PUBLIC_REPO}/releases/download/{tag}/{installer_name(p, version)}", "signature": ""}
+        for p in platforms
+    }
+    stamp = (now or dt.datetime.now(dt.timezone.utc)).replace(microsecond=0)
+    return {
+        "version": version,
+        "notes": notes,
+        "pub_date": stamp.isoformat().replace("+00:00", "Z"),
+        "platforms": dict(sorted(entries.items())),
+    }
+
+
+def manifest_text(manifest: dict) -> str:
+    return json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
+
+
+def read_manifest(path: Path | None = None) -> dict:
+    """The committed manifest, checked enough for release.py to trust."""
+    path = path or MANIFEST_FILE
+    if not path.is_file():
+        sys.exit(f"{path.name} is missing: write it with python scripts/latest_json.py, review it and commit it")
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        sys.exit(f"{path.name}: not JSON ({error})")
+    for key in ("version", "notes", "platforms"):
+        if key not in manifest:
+            sys.exit(f"{path.name} has no {key}")
+    if not str(manifest["notes"]).strip():
+        sys.exit(f"{path.name}: the notes are empty")
+    return manifest
+
+
 def run_gh(args: list[str], *, input: str | None = None) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(["gh", *args], check=False, capture_output=True, text=True, encoding="utf-8", input=input)
@@ -146,7 +236,7 @@ def gh(*args: str) -> str:
     return done.stdout
 
 
-def gh_api(path: str, *fields: str, method: str = "GET", missing_ok: bool = False, payload: dict | None = None) -> dict | None:
+def gh_api(path: str, *fields: str, method: str = "GET", missing_ok: bool = False) -> dict | None:
     """One call to the GitHub REST API through gh, parsed. A 404 is None
     when the caller says it may be, an error otherwise; every other
     failure ends the run."""
@@ -155,87 +245,12 @@ def gh_api(path: str, *fields: str, method: str = "GET", missing_ok: bool = Fals
         args += ["-X", method]
     for field in fields:
         args += ["-f", field]
-    if payload is not None:
-        # A manifest's notes can exceed Windows' command-line limit once
-        # base64 encoded. Send the JSON body on stdin instead.
-        args += ["--input", "-"]
-        done = run_gh(args, input=json.dumps(payload))
-    else:
-        done = run_gh(args)
+    done = run_gh(args)
     if done.returncode != 0:
         if missing_ok and "HTTP 404" in done.stderr:
             return None
         sys.exit(f"gh api {path}: {done.stderr.strip() or done.stdout.strip()}")
     return json.loads(done.stdout) if done.stdout.strip() else {}
-
-
-def release(tag: str) -> dict:
-    """The release for the tag, draft or published; gh sees drafts when
-    signed in to the owning account."""
-    raw = gh("release", "view", tag, "--json", "tagName,isDraft,isPrerelease,url,assets")
-    return json.loads(raw)
-
-
-def manifest_for(tag: str, version: str, notes: str, assets: list[str]) -> tuple[dict, list[str]]:
-    platforms = {}
-    strangers = []
-    for name in assets:
-        # The MSI rides beside the setup exe for people who want it; the
-        # manifest points at the exe, which the in-place updater will want.
-        if name in COMPANIONS or name.lower().endswith(".msi"):
-            continue
-        key = installer_platform(name, version)
-        if key is None:
-            strangers.append(name)
-            continue
-        if key in platforms:
-            sys.exit(f"{tag} carries two installers for {key}; keep one")
-        platforms[key] = {
-            "url": f"https://github.com/{PUBLIC_REPO}/releases/download/{tag}/{name}",
-            "signature": "",
-        }
-    manifest = {
-        "version": version,
-        "notes": notes,
-        "pub_date": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-        "platforms": dict(sorted(platforms.items())),
-    }
-    return manifest, strangers
-
-
-def ensure_branch(branch: str) -> None:
-    """The staging branch, made from main the first time."""
-    if gh_api(f"branches/{branch}", missing_ok=True) is not None:
-        return
-    head = gh_api(f"git/ref/heads/{LIVE_BRANCH}")
-    sha = head["object"]["sha"] if head else ""
-    if not sha:
-        sys.exit(f"{PUBLIC_REPO} has no {LIVE_BRANCH} branch to make {branch} from")
-    gh_api("git/refs", f"ref=refs/heads/{branch}", f"sha={sha}", method="POST")
-    print(f"# made {branch} from {LIVE_BRANCH} ({sha[:7]}) in {PUBLIC_REPO}", file=sys.stderr)
-
-
-def stage_manifest(body: str, branch: str, message: str) -> str | None:
-    """Commits the manifest to the branch through the contents API,
-    replacing what is there; None when the branch already holds this
-    exact text. Returns the commit's URL."""
-    ensure_branch(branch)
-    current = gh_api(f"contents/{MANIFEST_PATH}?ref={branch}", missing_ok=True)
-    sha = None
-    if current:
-        sha = current.get("sha")
-        held = base64.b64decode(current.get("content", "")).decode("utf-8")
-        if held == body:
-            return None
-    payload = {
-        "branch": branch,
-        "message": message,
-        "content": base64.b64encode(body.encode("utf-8")).decode("ascii"),
-    }
-    if sha:
-        payload["sha"] = sha
-    result = gh_api(f"contents/{MANIFEST_PATH}", method="PUT", payload=payload)
-    return (result or {}).get("commit", {}).get("html_url", f"{branch} in {PUBLIC_REPO}")
 
 
 def fetch_json(url: str) -> tuple[dict | None, str | None]:
@@ -315,73 +330,29 @@ def check_live(version: str) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
-    parser.add_argument("--notes", help="what changed, one plain paragraph")
-    parser.add_argument("--notes-file", type=Path, help="a file holding the notes instead")
-    parser.add_argument("--tag", help="the release to write for (default v<Cargo.toml version>)")
-    parser.add_argument("--out", type=Path, help="also keep a copy of latest.json here")
-    parser.add_argument("--branch", default=STAGE_BRANCH, help=f"the public repo branch to stage on (default {STAGE_BRANCH})")
-    parser.add_argument("--no-attach", action="store_true", help="do not attach the manifest to the release (the apps before 2026.2.1 read it there)")
-    parser.add_argument("--dry-run", action="store_true", help="read the release and print the manifest, attach and stage nothing")
+    parser.add_argument("--platforms", default=",".join(DEFAULT_PLATFORMS), help=f"the installers the release will carry, comma separated (default {','.join(DEFAULT_PLATFORMS)}; also {', '.join(p for p in PLATFORMS if p not in DEFAULT_PLATFORMS)})")
+    parser.add_argument("--print", action="store_true", help="print the manifest, write nothing")
     parser.add_argument("--check", action="store_true", help=f"only confirm {LIVE_BRANCH} serves this version's manifest and its installers answer")
     args = parser.parse_args()
 
-    version = args.tag.lstrip("v") if args.tag else workspace_version()
+    version = workspace_version()
     parse_version(version)
-    tag = args.tag or f"v{version}"
     if args.check:
         return check_live(version)
 
-    if args.notes_file:
-        notes = args.notes_file.read_text(encoding="utf-8").strip()
-    elif args.notes:
-        notes = args.notes.strip()
-    else:
-        sys.exit("say what changed: --notes \"...\" or --notes-file NOTES.md")
-    if not notes:
-        sys.exit("the notes are empty")
-
-    rel = release(tag)
-    names = [a["name"] for a in rel.get("assets", [])]
-    manifest, strangers = manifest_for(tag, version, notes, names)
-    if strangers:
-        sys.exit(f"{tag} carries a file this script does not know: {', '.join(strangers)}; installers are named Heeler-<version>-macos.dmg, Heeler-<version>-windows.exe and Heeler-<version>-linux.AppImage")
-    if not manifest["platforms"]:
-        sys.exit(f"{tag} has no installer attached; attach Heeler-{version}-macos.dmg and Heeler-{version}-windows.exe to the release first")
-    body = json.dumps(manifest, indent=2) + "\n"
-
-    state = "draft" if rel.get("isDraft") else "pre-release" if rel.get("isPrerelease") else "published"
-    print(body, end="")
-    print(f"# {tag} ({state}): Heeler {display_version(version)}, {', '.join(sorted(manifest['platforms']))}", file=sys.stderr)
-    missing = {"darwin-aarch64", "windows-x86_64"} - set(manifest["platforms"])
-    if missing:
-        print(f"# no installer for {', '.join(sorted(missing))}: that platform will see no update from this release", file=sys.stderr)
-    if "latest.json" in names and not args.no_attach:
-        print("# the release already carries a latest.json; it will be replaced", file=sys.stderr)
-    if args.out:
-        args.out.write_text(body, encoding="utf-8")
-        print(f"# wrote {args.out}", file=sys.stderr)
-    if args.dry_run:
+    platforms = [p.strip() for p in args.platforms.split(",") if p.strip()]
+    unknown = [p for p in platforms if p not in PLATFORMS]
+    if unknown or not platforms:
+        sys.exit(f"unknown platform {', '.join(unknown) or '(none)'}: choose from {', '.join(PLATFORMS)}")
+    notes = notes_from_whats_new(WHATS_NEW.read_text(encoding="utf-8"), version)
+    body = manifest_text(manifest_for(version, notes, platforms))
+    if args.print:
+        print(body, end="")
         return 0
-
-    if not args.no_attach:
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / MANIFEST_PATH
-            path.write_text(body, encoding="utf-8")
-            gh("release", "upload", tag, str(path), "--clobber")
-        print(f"# attached latest.json to {rel.get('url', tag)}, for the apps before 2026.2.1", file=sys.stderr)
-
-    if rel.get("isPrerelease"):
-        print(f"# {tag} is a pre-release: not staged on {args.branch}, a beta manifest must not reach {LIVE_BRANCH}", file=sys.stderr)
-        return 0
-    commit = stage_manifest(body, args.branch, f"latest.json: Heeler {display_version(version)} ({tag})")
-    if commit is None:
-        print(f"# {args.branch} already holds this manifest", file=sys.stderr)
-    else:
-        print(f"# staged latest.json on {args.branch}: {commit}", file=sys.stderr)
-    if state == "draft":
-        print(f"# publish {tag} on GitHub FIRST, then merge {args.branch} into {LIVE_BRANCH}: {COMPARE_URL}", file=sys.stderr)
-    else:
-        print(f"# merge {args.branch} into {LIVE_BRANCH} to make it live: {COMPARE_URL}; then python scripts/latest_json.py --check", file=sys.stderr)
+    MANIFEST_FILE.write_text(body, encoding="utf-8")
+    count = notes.count("\n") + 1
+    print(f"# wrote {MANIFEST_FILE.name}: Heeler {display_version(version)} (v{version}), {', '.join(PLATFORMS[p] for p in platforms)}, {count} notes from What's New", file=sys.stderr)
+    print("# review it (the notes read as the update dialog shows them), then commit it", file=sys.stderr)
     return 0
 
 

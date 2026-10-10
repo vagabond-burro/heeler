@@ -42,6 +42,9 @@ function trackedFiles(): string[] {
 function excluded(file: string): boolean {
   return file.startsWith("third_party/")
     || file === "docs\/user-guide/legal/third-party-notices.md"
+    // The update manifest's notes link the website's guide pages, and
+    // change every release (latest_json.py writes them from What's New).
+    || file === "latest.json"
     || /\.lock$/.test(file)
     || (/\.json$/.test(file) && (/fixtures?\/|__tests__\//.test(file)
       || /\/(?:assistantworkspace|tourquestions)\.json$/.test(file)));
@@ -171,6 +174,8 @@ const RUNTIME: { file: string; text: string; why: string }[] = [
   {"file": "scripts/libraw_source.py", "text": "    print(\"Publish both files at the URL named in docs\/user-guide/legal/open-source.md,\")", "why": "prints the source publication destination required by the guide"},
   {"file": "scripts/linux-setup.sh", "text": "    no Linux equivalent wired up. See docs\/user-guide/legal/open-source.md.", "why": "prints the bundled license information location"},
   {"file": "scripts/release.py", "text": "    \"([how to use them](https://www.heeler.app/docs\/ask-an-ai/))\"", "why": "publishes a guide help link"},
+  {"file": "scripts/latest_json.py", "text": "GUIDE_SITE = \"https://www.heeler.app/docs\/\"", "why": "publishes guide links in the update notes"},
+  {"file": "scripts/test_release.py", "text": "        self.assertIn(\"[Curves](https://www.heeler.app/docs\/adjustments/curves/#hue-stable)\", notes)", "why": "verifies the update notes' guide links"},
 ];
 
 

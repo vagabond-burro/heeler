@@ -23,8 +23,8 @@ The editor keeps the first point at the left edge and the last at the right, but
 
 The **HUE** button under the plot's right corner, beside the interpolation button, sets how the RGB curve treats color.
 
-- **Off (classic):** the curve runs on red, green and blue one at a time, the way most editors' RGB curve does. A contrast curve also adds saturation and can shift hue: skin can turn orange and a blue sky cyan, because one channel reaches the bend in the curve before the others.
-- **On (hue stable):** the curve moves the brightest and darkest of the three channels, and the middle one keeps its place between them, the way the tone curve in common raw developers works. Contrast and brightness change; hue does not.
+- **Off (classic):** the curve runs on red, green and blue one at a time, the way most editors' RGB curve does. A contrast curve can shift hue: skin can turn orange and a blue sky cyan, because one channel reaches the bend in the curve before the others.
+- **On (hue stable):** the curve moves the brightest and darkest of the three channels, and the middle one keeps its place between them, the way the tone curve in common raw developers works. Contrast, brightness and saturation change just as they do in classic; hue does not. The difference shows in strong colors under a strong curve, a sky or skin, and is slight in muted ones.
 
 Grays look the same either way. The setting applies only to the RGB curve: the R, G and B curves always change their own channel, and LUM always keeps color. Curves start in classic, and a photograph edited before the button existed keeps rendering as it did. Turning it on or off is one undo step.
 

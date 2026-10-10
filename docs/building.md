@@ -210,17 +210,19 @@ certificate profile and region come from the environment too:
 `HEELER_SIGNING_REGION` (its Azure region, such as `eastus`).
 Signing happens only in the build scripts: a plain `npx tauri build`
 stays unsigned and offline.
-7. `python scripts/release.py <the .dmg> <the .exe> --notes-file NOTES.md`,
-   with the notes a bullet list of what is new. It creates and publishes
-   the GitHub release under `v<version>` with the installers under their
-   release names, `models.json` from `docs/`, and `latest.json` written
-   for those names, all in one step; then it checks every upload answers
-   and commits `latest.json` to the public repo's `dev` branch. Merge
-   `dev` into `main` when you want the release live: the app and the
-   website both read `latest.json` from `main`. Then
-   `python scripts/latest_json.py --check` confirms `main` serves the
-   new manifest and every installer it names answers. `--dry-run` shows
-   what would be published.
+7. `python scripts/release.py <the .dmg> <the .exe> <the .AppImage>`.
+   It takes the notes from the committed `latest.json` (written by
+   `python scripts/latest_json.py` from What's New and reviewed before it
+   was committed; see [Versioning](versioning.md#cutting-a-release)) and
+   refuses one with uncommitted changes, one for another version or one
+   naming other installers. It creates and publishes the GitHub release
+   under `v<version>` with the installers under their release names,
+   `models.json` from `docs/` and that `latest.json`, all in one step,
+   then checks every upload answers. Merge `dev` into `main` when you
+   want the release live: the app and the website both read
+   `latest.json` from `main`. Then `python scripts/latest_json.py --check`
+   confirms `main` serves the new manifest and every installer it names
+   answers. `--dry-run` shows what would be published.
 
 ## Gotchas that have actually happened
 

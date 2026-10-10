@@ -55,12 +55,12 @@ function walk(dir: string, exts: string[]): string[] {
 }
 
 describe("no other app is named", () => {
-  it("in the user guide, What's New, the release notes or the Store listing", () => {
+  it("in the user guide, What's New, the update manifest's notes or the Store listing", () => {
     const files = [
       ...walk(resolve(REPO, "docs/user-guide"), [".md"])
         // Other people's license texts, reproduced verbatim.
         .filter((f) => !f.endsWith("/legal/third-party-notices.md")),
-      resolve(REPO, "NOTES.md"),
+      resolve(REPO, "latest.json"),
       resolve(REPO, "docs/whats-new.md"),
       resolve(REPO, "docs/store-listing.md"),
     ];
