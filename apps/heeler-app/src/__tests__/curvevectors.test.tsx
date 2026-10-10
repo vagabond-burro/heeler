@@ -120,7 +120,33 @@ describe("the outline the Curves editor draws", () => {
         expect(y).toBeCloseTo(Math.min(1, Math.max(0, evalEq(eq, x))), 6);
       });
     }
-    expect(Math.min(...outline(curvesNode({ curves: { rgb: pts }, curveInterp: "tangent", curveHandles: { rgb: handles } })).map(([, y]) => y))).toBe(0);
+  });
+
+  it("keeps a handle that throws the curve out of the plot inside it", () => {
+    // Added in the refactor's mutation pass: the case above starts at
+    // (0, 0), so its lowest point was 0 with or without the clamp.
+    const pts: Pt[] = [[0, 0], [0.5, 0.05], [1, 1]];
+    const handles: (CurveHandle | null)[] = [null, { l: [-0.15, 0.4], r: [0.25, -0.6] }, null];
+    const eq = curveEqPoints(pts, handles);
+    const raw = Array.from({ length: 129 }, (_, i) => evalEq(eq, i / 128));
+    expect(Math.min(...raw)).toBeLessThan(-0.01);
+    const drawn = outline(curvesNode({ curves: { rgb: pts }, curveInterp: "tangent", curveHandles: { rgb: handles } }));
+    drawn.forEach(([, y], i) => expect(y).toBeCloseTo(Math.min(1, Math.max(0, raw[i])), 6));
+  });
+
+  it("ignores handle vectors outside tangent mode, as the engine does", () => {
+    // Added in the refactor's mutation pass.
+    const pts: Pt[] = [[0, 0], [0.5, 0.4], [1, 1]];
+    const handles: (CurveHandle | null)[] = [null, { l: [-0.2, -0.05], r: [0.1, 0.2] }, null];
+    for (const interp of ["smooth", "linear"] as const) {
+      const want = curvePath(pts, interp === "smooth");
+      const drawn = outline(curvesNode({ curves: { rgb: pts }, curveInterp: interp, curveHandles: { rgb: handles } }));
+      expect(drawn, interp).toHaveLength(want.length);
+      drawn.forEach(([x, y], i) => {
+        expect(x).toBeCloseTo(want[i][0], 6);
+        expect(y).toBeCloseTo(want[i][1], 6);
+      });
+    }
   });
 
   it("without handles, the sampled path in smooth and tangent and the points in linear", () => {
