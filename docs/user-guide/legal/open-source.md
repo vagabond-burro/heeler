@@ -66,9 +66,12 @@ GoPro, Inc., offered under the **Apache-2.0 or MIT** licenses at your
 option; Heeler takes the MIT option. Only the decoder is included, not
 the rest of the SDK.
 
-Heeler has changed it in one way: the decoder now checks that it stays
-inside the file it is reading, so a damaged GPR is reported as damaged
-instead of closing the app. What a sound file decodes to is unchanged.
+Heeler has changed it so that a damaged GPR is reported as damaged
+instead of closing the app: the decoder checks that it stays inside the
+file it is reading, that the sizes and counts in the file's own header
+are ones it can hold (its image size must match the one the GPR
+declares), and it frees what it allocated when it gives up. What a sound
+file decodes to is unchanged.
 The changes are listed beside the source, in
 `third_party/gpr-vc5/README.md` in Heeler's repository.
 

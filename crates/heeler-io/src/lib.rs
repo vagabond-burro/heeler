@@ -577,6 +577,12 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
         };
         let decoded = heeler_raw::decode_sensor_with(&bytes, dev);
         if let Err(heeler_raw::RawError::Memory(e)) = &decoded { return Err(e.clone().into()); }
+        // A GPR has no embedded preview or readable strip to fall back on:
+        // what follows would only misname the damage (a "JPEG SOF" or
+        // "photometric" error for a cut file). Say what went wrong.
+        if let (Err(e), true) = (&decoded, heeler_raw::is_gpr(&bytes)) {
+            return Err(IoError::Unsupported(e.to_string()));
+        }
         if let Ok(sensor) = decoded {
             let sensor_data = sensor.sensor_data;
             let mut img = sensor_to_imagebuf(sensor);
@@ -924,6 +930,12 @@ fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, p
         };
         let decoded = heeler_raw::decode_sensor_with(&bytes, dev);
         if let Err(heeler_raw::RawError::Memory(e)) = &decoded { return Err(e.clone().into()); }
+        // A GPR has no embedded preview or readable strip to fall back on:
+        // what follows would only misname the damage (a "JPEG SOF" or
+        // "photometric" error for a cut file). Say what went wrong.
+        if let (Err(e), true) = (&decoded, heeler_raw::is_gpr(&bytes)) {
+            return Err(IoError::Unsupported(e.to_string()));
+        }
         if let Ok(sensor) = decoded {
             let sensor_data = sensor.sensor_data;
             let mut img = sensor_to_imagebuf(sensor);
@@ -1047,6 +1059,17 @@ fn decode_thumbnail_inner(path: &Path) -> Result<ImageBuf, IoError> {
         }
         if is_jxl_dng(&bytes) {
             return decode_jxl_dng(&bytes).map(|img| unbake(as_the_file_renders(img, &bytes), &bytes));
+        }
+        // A GPR has no preview, and the TIFF reader below cannot read its
+        // VC-5 tile: develop it at half size (plenty for a thumbnail), and
+        // report a damaged one as itself.
+        #[cfg(feature = "libraw")]
+        if heeler_raw::is_gpr(&bytes) {
+            return match heeler_raw::decode_sensor_half(&bytes) {
+                Ok(sensor) => Ok(unbake(as_the_file_renders(sensor_to_imagebuf(sensor), &bytes), &bytes)),
+                Err(heeler_raw::RawError::Memory(e)) => Err(e.into()),
+                Err(e) => Err(IoError::Unsupported(e.to_string())),
+            };
         }
     }
     match decode_bytes(&bytes) {
@@ -1364,6 +1387,52 @@ mod tests {
         std::fs::write(&other, &theirs).unwrap();
         let why = decode_any(&other).unwrap_err().to_string();
         assert!(why.contains("read as noise"), "{why}");
+    }
+
+    /// A damaged GoPro GPR says it is a damaged GPR on every path. It has
+    /// no preview to fall back on, and the readers after the develop
+    /// misnamed the damage ("JPEG SOF ... 24 bits of precision" from the
+    /// full decode, "unknown photometric interpretation" from the
+    /// thumbnail, for a GPR cut short).
+    #[test]
+    #[cfg(feature = "libraw")]
+    fn a_damaged_gpr_reports_itself_on_every_path() {
+        let dir = tempfile::tempdir().unwrap();
+        // One IFD shaped like a GPR's: 64 by 48, 16 bits, compression 9
+        // (VC-5), one tile, RGGB, and a tile that is no VC-5 stream.
+        let tile = vec![0x5au8; 512];
+        let tags: [(u16, u16, u32); 9] = [
+            (256, 4, 64), (257, 4, 48), (258, 3, 16), (259, 3, 9), (322, 4, 64), (323, 4, 48),
+            (324, 4, 0), (325, 4, tile.len() as u32), (33422, 1, 0),
+        ];
+        let tile_at = 8 + 2 + 12 * tags.len() as u32 + 4;
+        let mut bytes = b"II*\0".to_vec();
+        bytes.extend_from_slice(&8u32.to_le_bytes());
+        bytes.extend_from_slice(&(tags.len() as u16).to_le_bytes());
+        for (id, kind, value) in tags {
+            bytes.extend_from_slice(&id.to_le_bytes());
+            bytes.extend_from_slice(&kind.to_le_bytes());
+            bytes.extend_from_slice(&(if id == 33422 { 4u32 } else { 1 }).to_le_bytes());
+            match (id, kind) {
+                (324, _) => bytes.extend_from_slice(&tile_at.to_le_bytes()),
+                (33422, _) => bytes.extend_from_slice(&[0, 1, 1, 2]),
+                (_, 3) => bytes.extend_from_slice(&[value as u8, (value >> 8) as u8, 0, 0]),
+                _ => bytes.extend_from_slice(&value.to_le_bytes()),
+            }
+        }
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+        bytes.extend_from_slice(&tile);
+        assert!(heeler_raw::is_gpr(&bytes));
+        let path = dir.path().join("GOPR0001.GPR");
+        std::fs::write(&path, &bytes).unwrap();
+        for (what, result) in [
+            ("decode_any", decode_any(&path)),
+            ("preview", decode_preview_at(&path, RawSourceOpts::default(), 64)),
+            ("thumbnail", decode_thumbnail(&path)),
+        ] {
+            let why = result.expect_err(what).to_string();
+            assert!(why.contains("GoPro GPR"), "{what}: {why}");
+        }
     }
 
     #[test]

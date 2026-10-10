@@ -14,7 +14,15 @@ use std::os::raw::c_int;
 use crate::RawError;
 
 extern "C" {
-    fn heeler_vc5_decode(data: *const c_void, len: usize, rggb: c_int, out: *mut *mut c_void, out_len: *mut usize) -> c_int;
+    fn heeler_vc5_decode(
+        data: *const c_void,
+        len: usize,
+        rggb: c_int,
+        width: c_int,
+        height: c_int,
+        out: *mut *mut c_void,
+        out_len: *mut usize,
+    ) -> c_int;
     fn heeler_vc5_free(block: *mut c_void);
 }
 
@@ -111,8 +119,12 @@ pub fn as_dng(bytes: &[u8]) -> Result<Option<Vec<u8>>, RawError> {
 }
 
 /// `as_dng` with the tile decoder passed in, so the rewrite can be tested
-/// on a synthetic file without a VC-5 bitstream.
-fn as_dng_with(bytes: &[u8], decode: impl Fn(&[u8], bool) -> Result<Vec<u8>, RawError>) -> Result<Option<Vec<u8>>, RawError> {
+/// on a synthetic file without a VC-5 bitstream. The decoder is handed
+/// the tile, whether the sensor is RGGB, and the image's width and height.
+fn as_dng_with<S: AsRef<[u8]>>(
+    bytes: &[u8],
+    decode: impl Fn(&[u8], bool, usize, usize) -> Result<S, RawError>,
+) -> Result<Option<Vec<u8>>, RawError> {
     let Some(t) = tiff(bytes) else { return Ok(None) };
     let Some(ifd) = t.ifd0() else { return Ok(None) };
     if !find(&ifd, COMPRESSION).is_some_and(|e| e.value == VC5) {
@@ -142,31 +154,36 @@ fn as_dng_with(bytes: &[u8], decode: impl Fn(&[u8], bool) -> Result<Vec<u8>, Raw
     let cfa = find(&ifd, CFA_PATTERN).filter(|e| e.count == 4 && e.kind == 1).ok_or_else(|| bad("no 2x2 CFA pattern"))?;
     let pattern = bytes.get(cfa.at + 8..cfa.at + 12).ok_or_else(|| bad("no 2x2 CFA pattern"))?;
     let rggb = pattern == [0, 1, 1, 2];
+    // The rewritten offsets are LONGs: refuse a file they cannot address
+    // before decoding anything.
+    let at = bytes.len().next_multiple_of(4);
+    let size = w.checked_mul(h).and_then(|n| n.checked_mul(2)).ok_or_else(|| bad("too large to rewrite"))?;
+    if at.checked_add(size).is_none_or(|end| end > u32::MAX as usize) {
+        return Err(bad("too large to rewrite"));
+    }
 
     // The decoder's wavelets and output peak near 6.6 bytes a pixel
     // (measured 2026-10-09: 196 MB for a 27 megapixel HERO11 frame with
     // its 14 MB tile), so eight, plus the file it reads.
     let needed = heeler_engine::memory::sum([heeler_engine::memory::bytes(w, h, 1, 8)?, bytes.len()])?;
     let _job = heeler_engine::memory::Job::admit(needed, "GoPro GPR decode")?;
-    let samples = decode(tile, rggb)?;
-    if samples.len() != w * h * 2 {
-        return Err(bad(&format!("the tile decoded to {} bytes, not {}", samples.len(), w * h * 2)));
+    let decoded = decode(tile, rggb, w, h)?;
+    let samples = decoded.as_ref();
+    if samples.len() != size {
+        return Err(bad(&format!("the tile decoded to {} bytes, not {size}", samples.len())));
     }
 
     // Appended on a four-byte boundary, in the file's own byte order (the
     // decoder writes the machine's).
-    let mut out = Vec::with_capacity(bytes.len() + 3 + samples.len());
+    let mut out = Vec::with_capacity(at + size);
     out.extend_from_slice(bytes);
-    out.resize(out.len().next_multiple_of(4), 0);
-    let at = out.len();
+    out.resize(at, 0);
     if t.big == cfg!(target_endian = "big") {
-        out.extend_from_slice(&samples);
+        out.extend_from_slice(samples);
     } else {
         out.extend(samples.chunks_exact(2).flat_map(|s| [s[1], s[0]]));
     }
-    if at + samples.len() > u32::MAX as usize {
-        return Err(bad("too large to rewrite"));
-    }
+    drop(decoded);
     let big = t.big;
     let put16 = |out: &mut Vec<u8>, at: usize, v: u16| {
         out[at..at + 2].copy_from_slice(&if big { v.to_be_bytes() } else { v.to_le_bytes() });
@@ -180,24 +197,44 @@ fn as_dng_with(bytes: &[u8], decode: impl Fn(&[u8], bool) -> Result<Vec<u8>, Raw
     put16(&mut out, compression.at + 2, 3);
     put32(&mut out, compression.at + 8, 0);
     put16(&mut out, compression.at + 8, 1);
-    for (entry, value) in [(offsets, at as u32), (counts, samples.len() as u32)] {
+    for (entry, value) in [(offsets, at as u32), (counts, size as u32)] {
         put16(&mut out, entry.at + 2, 4);
         put32(&mut out, entry.at + 8, value);
     }
     Ok(Some(out))
 }
 
-/// The tile's samples, two bytes each in the machine's byte order.
-fn decode(tile: &[u8], rggb: bool) -> Result<Vec<u8>, RawError> {
-    let mut out: *mut c_void = std::ptr::null_mut();
+/// The decoder's output, freed by the decoder's allocator when dropped.
+struct Decoded {
+    ptr: *mut c_void,
+    len: usize,
+}
+
+impl AsRef<[u8]> for Decoded {
+    fn as_ref(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts(self.ptr as *const u8, self.len) }
+    }
+}
+
+impl Drop for Decoded {
+    fn drop(&mut self) {
+        unsafe { heeler_vc5_free(self.ptr) };
+    }
+}
+
+/// The tile's samples, two bytes each in the machine's byte order. The
+/// width and height are the DNG's; a stream that says otherwise is refused.
+fn decode(tile: &[u8], rggb: bool, width: usize, height: usize) -> Result<Decoded, RawError> {
+    let (Ok(w), Ok(h)) = (c_int::try_from(width), c_int::try_from(height)) else {
+        return Err(bad("too large to decode"));
+    };
+    let mut ptr: *mut c_void = std::ptr::null_mut();
     let mut len = 0usize;
-    let code = unsafe { heeler_vc5_decode(tile.as_ptr() as *const c_void, tile.len(), rggb as c_int, &mut out, &mut len) };
-    if code != 0 || out.is_null() {
+    let code = unsafe { heeler_vc5_decode(tile.as_ptr() as *const c_void, tile.len(), rggb as c_int, w, h, &mut ptr, &mut len) };
+    if code != 0 || ptr.is_null() {
         return Err(bad(&format!("the VC-5 decoder failed ({code})")));
     }
-    let samples = unsafe { std::slice::from_raw_parts(out as *const u8, len) }.to_vec();
-    unsafe { heeler_vc5_free(out) };
-    Ok(samples)
+    Ok(Decoded { ptr, len })
 }
 
 
@@ -255,10 +292,11 @@ mod tests {
     }
 
     /// A stand-in decoder: eight samples 1..=8 in machine order, and the
-    /// sensor order it was asked for.
-    fn fake(seen: &std::cell::Cell<Option<bool>>) -> impl Fn(&[u8], bool) -> Result<Vec<u8>, RawError> + '_ {
-        move |_tile, rggb| {
-            seen.set(Some(rggb));
+    /// sensor order and size it was asked for.
+    type Seen = std::cell::Cell<Option<(bool, usize, usize)>>;
+    fn fake(seen: &Seen) -> impl Fn(&[u8], bool, usize, usize) -> Result<Vec<u8>, RawError> + '_ {
+        move |_tile, rggb, w, h| {
+            seen.set(Some((rggb, w, h)));
             Ok((1u16..=8).flat_map(|v| v.to_ne_bytes()).collect())
         }
     }
@@ -269,7 +307,7 @@ mod tests {
             let input = gpr(big, true, b"vc5 bits");
             let seen = std::cell::Cell::new(None);
             let out = as_dng_with(&input, fake(&seen)).unwrap().unwrap();
-            assert_eq!(seen.get(), Some(true), "RGGB asks for the 14-bit decode");
+            assert_eq!(seen.get(), Some((true, 4, 2)), "RGGB asks for the 14-bit decode, at the DNG's size");
             let t = tiff(&out).unwrap();
             let ifd = t.ifd0().unwrap();
             assert_eq!(find(&ifd, COMPRESSION).unwrap().value, 1, "uncompressed");
@@ -296,12 +334,12 @@ mod tests {
     fn a_gbrg_sensor_asks_for_the_12_bit_decode() {
         let seen = std::cell::Cell::new(None);
         as_dng_with(&gpr(false, false, b"vc5"), fake(&seen)).unwrap().unwrap();
-        assert_eq!(seen.get(), Some(false));
+        assert_eq!(seen.get(), Some((false, 4, 2)));
     }
 
     #[test]
     fn anything_but_a_gpr_passes_through_untouched() {
-        let never = |_: &[u8], _: bool| -> Result<Vec<u8>, RawError> { panic!("decoded a file that is not a GPR") };
+        let never = |_: &[u8], _: bool, _: usize, _: usize| -> Result<Vec<u8>, RawError> { panic!("decoded a file that is not a GPR") };
         let plain = tiff_with(false, &[(WIDTH, 4, 4), (LENGTH, 4, 2), (COMPRESSION, 3, 1)], b"");
         for bytes in [&b""[..], b"II*", b"\xff\xd8\xff\xe0 a jpeg", b"FUJIFILMCCD-RAW ", &plain] {
             assert!(!is_gpr(bytes));
@@ -312,13 +350,13 @@ mod tests {
 
     #[test]
     fn a_damaged_gpr_is_an_error_not_a_crash() {
-        let ok = |_: &[u8], _: bool| -> Result<Vec<u8>, RawError> { Ok(vec![0; 16]) };
+        let ok = |_: &[u8], _: bool, _: usize, _: usize| -> Result<Vec<u8>, RawError> { Ok(vec![0; 16]) };
         // The tile runs past the end of the file.
         let mut cut = gpr(false, true, b"vc5 bits");
         cut.truncate(cut.len() - 3);
         assert!(as_dng_with(&cut, ok).is_err());
         // A decode of the wrong size.
-        let short = |_: &[u8], _: bool| -> Result<Vec<u8>, RawError> { Ok(vec![0; 10]) };
+        let short = |_: &[u8], _: bool, _: usize, _: usize| -> Result<Vec<u8>, RawError> { Ok(vec![0; 10]) };
         assert!(as_dng_with(&gpr(false, true, b"vc5"), short).is_err());
         // Not the single 16-bit tile GoPro writes.
         let mut twelve = gpr(false, true, b"vc5");
@@ -333,8 +371,78 @@ mod tests {
             (seed >> 24) as u8
         }).collect();
         for tile in [&b""[..], &b"\0"[..], &junk[..16], &junk[..]] {
-            assert!(decode(tile, true).is_err(), "{} bytes", tile.len());
+            assert!(decode(tile, true, 4, 2).is_err(), "{} bytes", tile.len());
             assert!(as_dng(&gpr(false, true, tile)).is_err());
         }
+    }
+
+    #[test]
+    fn a_vc5_header_naming_another_size_is_refused_before_it_allocates() {
+        // The bitstream's own header, big-endian tag and value pairs after
+        // the "VC-5" marker: four channels, then a width and height. A
+        // damaged width of 0xFFFF once sized an 838 MB allocation.
+        let header = |w: u16, h: u16| -> Vec<u8> {
+            let mut v = b"VC-5".to_vec();
+            for (tag, value) in [(12u16, 4u16), (20, w), (21, h), (84, 4), (106, 2), (107, 2), (108, 1)] {
+                v.extend_from_slice(&tag.to_be_bytes());
+                v.extend_from_slice(&value.to_be_bytes());
+            }
+            v.resize(4096, 0);
+            v
+        };
+        for (w, h) in [(0xFFFF, 2), (4, 0xFFFF), (8, 2), (4, 4)] {
+            let Err(e) = decode(&header(w, h), true, 4, 2) else { panic!("{w}x{h} decoded") };
+            assert!(e.to_string().contains(&format!("({})", 6)), "{w}x{h}: {e}, not the image dimensions error");
+        }
+    }
+
+    #[test]
+    fn short_offset_and_count_entries_become_longs() {
+        // GoPro writes LONGs; a file that held its offset and count in
+        // SHORTs must still point LibRaw at the appended samples.
+        let input = tiff_with(
+            false,
+            &[
+                (WIDTH, 4, 4),
+                (LENGTH, 4, 2),
+                (BITS_PER_SAMPLE, 3, 16),
+                (COMPRESSION, 3, VC5),
+                (TILE_WIDTH, 4, 4),
+                (TILE_LENGTH, 4, 2),
+                (TILE_OFFSETS, 3, 0),
+                (TILE_BYTE_COUNTS, 3, 3),
+                (CFA_PATTERN, 1, 0x0001_0102),
+            ],
+            b"vc5",
+        );
+        let seen = Seen::new(None);
+        let out = as_dng_with(&input, fake(&seen)).unwrap().unwrap();
+        let ifd = tiff(&out).unwrap().ifd0().unwrap();
+        let (at, count) = (find(&ifd, TILE_OFFSETS).unwrap(), find(&ifd, TILE_BYTE_COUNTS).unwrap());
+        assert_eq!((at.kind, count.kind), (4, 4));
+        assert_eq!(count.value, 16);
+        assert_eq!(at.value as usize + 16, out.len());
+    }
+
+    #[test]
+    fn a_frame_the_rewrite_cannot_address_is_refused_before_decoding() {
+        let never = |_: &[u8], _: bool, _: usize, _: usize| -> Result<Vec<u8>, RawError> { panic!("decoded a frame too large to rewrite") };
+        // 70000 x 70000 at two bytes a sample is past what a LONG offset reaches.
+        let huge = tiff_with(
+            false,
+            &[
+                (WIDTH, 4, 70_000),
+                (LENGTH, 4, 70_000),
+                (BITS_PER_SAMPLE, 3, 16),
+                (COMPRESSION, 3, VC5),
+                (TILE_WIDTH, 4, 70_000),
+                (TILE_LENGTH, 4, 70_000),
+                (TILE_OFFSETS, 4, 0),
+                (TILE_BYTE_COUNTS, 4, 3),
+                (CFA_PATTERN, 1, 0x0001_0102),
+            ],
+            b"vc5",
+        );
+        assert!(as_dng_with(&huge, never).unwrap_err().to_string().contains("too large"));
     }
 }
