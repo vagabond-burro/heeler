@@ -69,6 +69,9 @@ describe("the Curves editor's curve is the engine's", () => {
     const pts: Pt[] = [[0, 0], [0.5, 0.5], [1, 1]];
     expect(curvePath(pts, true, [1, 0])).toEqual(curvePath(pts, true));
     for (const x of [0.1, 0.45, 0.8]) expect(curveValueAt(pts, true, x, [1, 0])).toBe(curveValueAt(pts, true, x));
+    // Too many slopes is as wrong as too few (the second reader's probe).
+    expect(curvePath(pts, true, [1, 0, 1, 5])).toEqual(curvePath(pts, true));
+    for (const x of [0.1, 0.45, 0.8]) expect(curveValueAt(pts, true, x, [1, 0, 1, 5])).toBe(curveValueAt(pts, true, x));
   });
 
   it("holds flat outside the points and is the identity with none", () => {
@@ -108,7 +111,7 @@ const curvesNode = (patch: Partial<NodeCard>): NodeCard => ({
 describe("the outline the Curves editor draws", () => {
   it("with handle vectors, 129 samples of the weighted curve, kept inside the plot", () => {
     const c = vectors.cases.find((c) => c.handles)!;
-    // A handle steep enough to throw the curve below zero, so the clamp shows.
+    // A second handle curve beside the shared case.
     const handles: (CurveHandle | null)[] = [null, { l: [-0.2, 0.3], r: [0.2, -0.3] }, null];
     const pts: Pt[] = [[0, 0], [0.5, 0.1], [1, 1]];
     for (const [p, h] of [[c.points, c.handles!], [pts, handles]] as const) {
@@ -120,6 +123,7 @@ describe("the outline the Curves editor draws", () => {
         expect(y).toBeCloseTo(Math.min(1, Math.max(0, evalEq(eq, x))), 6);
       });
     }
+    expect(Math.min(...outline(curvesNode({ curves: { rgb: pts }, curveInterp: "tangent", curveHandles: { rgb: handles } })).map(([, y]) => y))).toBe(0);
   });
 
   it("keeps a handle that throws the curve out of the plot inside it", () => {
@@ -166,5 +170,52 @@ describe("the outline the Curves editor draws", () => {
         expect(y).toBeCloseTo(want[i][1], 6);
       });
     }
+  });
+});
+
+/** Where the eyedropper's ghost sits, in curve units, for a hover at x. */
+function ghostAt(node: NodeCard, x: number): number {
+  const { container } = render(<CurveEditor node={node} dispatch={() => {}} channelMode="rgb" onTogglePick={() => {}} pickArmed hoverX={x} />);
+  const ghost = container.querySelector('[data-testid="curve-ghost"]')!;
+  const H = Number(ghost.querySelector("line")!.getAttribute("y2"));
+  const y = 1 - Number(ghost.querySelector("circle")!.getAttribute("cy")) / H;
+  cleanup();
+  return y;
+}
+
+/** The x in 0..1 (1/256 steps) where `f` is highest, and lowest. */
+function extremes(f: (x: number) => number): { hi: number; lo: number } {
+  const xs = Array.from({ length: 257 }, (_, i) => i / 256);
+  const hi = xs.reduce((a, b) => (f(b) > f(a) ? b : a));
+  const lo = xs.reduce((a, b) => (f(b) < f(a) ? b : a));
+  return { hi, lo };
+}
+
+// Added for the second reader (2026-10-09): the ghost's clamps on the
+// Hermite path, both ends, and the top of the handle path, were not
+// reached by any test.
+describe("the eyedropper ghost stays inside the plot", () => {
+  it("when tangent slopes throw the Hermite past both ends", () => {
+    const pts: Pt[] = [[0, 0], [0.5, 0.5], [1, 1]];
+    const slopes = [-3, 1, -3];
+    const raw = (x: number) => curveValueAt(pts, true, x, slopes);
+    const { hi, lo } = extremes(raw);
+    expect(raw(hi)).toBeGreaterThan(1.01);
+    expect(raw(lo)).toBeLessThan(-0.01);
+    const node = curvesNode({ curves: { rgb: pts }, curveInterp: "tangent", curveTangents: { rgb: slopes } });
+    expect(ghostAt(node, hi)).toBeCloseTo(1, 6);
+    expect(ghostAt(node, lo)).toBeCloseTo(0, 6);
+    // And follows the curve where it is inside.
+    expect(ghostAt(node, 0.5)).toBeCloseTo(0.5, 6);
+  });
+
+  it("when a handle throws the weighted curve above the top", () => {
+    const pts: Pt[] = [[0, 0], [0.5, 0.95], [1, 1]];
+    const handles: (CurveHandle | null)[] = [null, { l: [-0.15, -0.3], r: [0.25, 0.6] }, null];
+    const eq = curveEqPoints(pts, handles);
+    const { hi } = extremes((x) => evalEq(eq, x));
+    expect(evalEq(eq, hi)).toBeGreaterThan(1.01);
+    const node = curvesNode({ curves: { rgb: pts }, curveInterp: "tangent", curveHandles: { rgb: handles } });
+    expect(ghostAt(node, hi)).toBeCloseTo(1, 6);
   });
 });
