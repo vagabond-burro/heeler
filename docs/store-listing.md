@@ -94,7 +94,7 @@ renders.
 | 02-graph.png | Every slider is a real node: open the graph and rewire your edit |
 | 03-black-and-white.png | Black and white with film stocks, filters and a hue curve |
 | 04-finish.png | A layer stack after the develop: adjustments, gradients, warps, masks |
-| 05-relight.png | Relight reshapes tone zone by zone |
+| 05-relight.png | Tone Equalizer reshapes tone zone by zone |
 | 06-catalog.png | Browse, rate, flag and filter your library |
 | 07-color.png | Color wheels for shadows, midtones and highlights |
 | 08-detail.png | Texture, clarity, noise reduction and sharpening |

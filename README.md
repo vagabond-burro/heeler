@@ -48,7 +48,7 @@ The black and white treatment works the way a darkroom does: a film stock's curv
 
 ### Color tools that route, not just push
 
-**Recolor** is a channel-routing color equalizer: it routes one color component into another with curves, including a curve that reads the depth map. **Relight** reshapes the light across the tonal range with an edge-aware curve. **Color Sets** pick a range of color off the photograph and grade it on its own, and **Color Checker** calibrates the camera from a photographed chart.
+**Recolor** is a channel-routing color equalizer: it routes one color component into another with curves, including a curve that reads the depth map. **Tone Equalizer** reshapes the light across the tonal range with an edge-aware curve. **Color Sets** pick a range of color off the photograph and grade it on its own, and **Color Checker** calibrates the camera from a photographed chart.
 
 ![Recolor routing hue into saturation, with the photograph's own colors drawn behind the curve](docs/user-guide/assets/screenshots/section-recolor.png)
 

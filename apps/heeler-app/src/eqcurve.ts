@@ -1,4 +1,4 @@
-// The parametric EQ curve: the shared math under the Relight widget
+// The parametric EQ curve: the shared math under the Tone Equalizer widget
 // (and the Color EQ after it). The owner's design, settled
 // 2026-08-23: a parametric EQ in the audio sense, not a graphic one:
 // points move freely in x and y, tangent handles are optional per
@@ -30,7 +30,7 @@ export interface EqPoint {
   broken?: boolean;
 }
 
-/** Relight's fixed working window (fixed over broader, for
+/** Tone Equalizer's fixed working window (fixed over broader, for
  * muscle memory, portable presets, and pixels per stop; the Range
  * shift dial brings outliers into it, and the pop-out shows wider).*/
 export const TONE_EQ_DOMAIN: [number, number] = [-6, 3];
@@ -72,7 +72,7 @@ export function serializeEqPoints(pts: EqPoint[]): string {
  *
  * SHIFT-drag snapping. The step is a property of the UNIT, not of the
  * control: stops snap at 0.25, hue degrees at 10, saturation points at
- * 10. Stated that way, his five Recolor cases and both Relight axes are
+ * 10. Stated that way, his five Recolor cases and both Tone Equalizer axes are
  * two rules, and any future axis brings its step with its unit. Same
  * principle as the layout presets: the snap targets are the numbers a
  * person reads on the axis, not a geometric subdivision.*/
@@ -235,7 +235,7 @@ export function legacyZonePoints(params: Record<string, number>): EqPoint[] {
  * present, authoritative even when it parses to nothing (the Empty
  * layout writes "[]"); else the nine legacy zone sliders of a graph
  * saved before the widget; else the starting layout, every three stops.
- * The widget and Relight's on-image picker read it alike, so a pick
+ * The widget and Tone Equalizer's on-image picker read it alike, so a pick
  * edits the curve the picture is drawn from. */
 export function storedEqPoints(node: { params: Record<string, number>; textParams?: Record<string, string> }): EqPoint[] {
   if (node.textParams?.points !== undefined) return parseEqPoints(node.textParams.points);
@@ -322,7 +322,7 @@ export const RECOLOR_ADJUST: RecolorAdjust[] = ["hue", "sat", "lum", "pastel", "
 export type RecolorCellId = Exclude<`${RecolorBy}_${RecolorAdjust}`, "lum_lum">;
 
 /** The cells of the routing matrix: every BY row against every ADJUST
- * column, bar one. lum→lum is reserved on purpose (Relight and Curves
+ * column, bar one. lum→lum is reserved on purpose (Tone Equalizer and Curves
  * own that job). lum→hue is split toning as a curve (it retired the
  * Split Tone tool); sat→hue is film's dye drift, vivid warms and
  * muted cools. The depth and around rows and the pastel, temp, tint
@@ -354,7 +354,7 @@ export const EQ_PICK_GRAB = 0.01;
 
 /** Input axes: hue is a circle in degrees, sat is normalized percent
  * of full chroma (OkLab C = 0.3, the engine's C_FULL), lum is
- * Relight's EV window, depth is farness from NEAR (0) to FAR (100). */
+ * Tone Equalizer's EV window, depth is farness from NEAR (0) to FAR (100). */
 export const RECOLOR_AXIS: Record<
   RecolorBy,
   { domain: [number, number]; periodic: boolean; ticks: number[]; snap: number }
@@ -712,7 +712,7 @@ export function gradeDefaultPoints(): EqPoint[] {
  * So each axis offers steps in its own nameable units, gridline first
  * and finer after: hue by 60° and 30°, saturation by 50, 25 and 10 (the
  * half-grid his example asked for, then the snap unit), and the EV axis
- * simply IS Relight's window, so it borrows Relight's own layouts.
+ * simply IS Tone Equalizer's window, so it borrows Tone Equalizer's own layouts.
  * A periodic axis stops one step short of the top: 360° is 0° again,
  * and a point on each would be two handles fighting over one hue.
  */
@@ -749,7 +749,7 @@ export function recolorLayouts(
       { id: "tenth", label: "Every 10", points: across(10) },
     ];
   }
-  // The lum axis is Relight's window, so its layouts are Relight's,
+  // The lum axis is Tone Equalizer's window, so its layouts are Tone Equalizer's,
   // minus Empty: a Recolor cell below two points serializes away and
   // snaps back to its default, so empty is not a state a cell can hold.
   return EQ_PRESETS.filter((p) => p.points.length > 0);

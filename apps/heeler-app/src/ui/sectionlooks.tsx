@@ -1,4 +1,4 @@
-/** The looks menu of the Relight and Recolor sections (2026-09-30: "I
+/** The looks menu of the Tone Equalizer and Recolor sections (2026-09-30: "I
  * think the buttons take up too much room and are not laid out clean.
  * I think it should be a preview dropdown option menu to keep it
  * cleaner ... as the mouse hovers I think might be the cleanest").
@@ -195,7 +195,7 @@ export function SectionLooks({
 
   if (state.activeLayer) return null;
 
-  const slug = section.toLowerCase();
+  const slug = section.toLowerCase().replace(/[^a-z]+/g, "-");
   const tag = seat === "inspector" ? "-inspector" : "";
   const depthBlocked = depth !== "ready";
 

@@ -145,7 +145,7 @@ describe("the guard strip", () => {
     cleanup();
     await show(recolorState(DOWN), histOf([[0, 0.001, 1]]));
     expect(screen.getByTestId("guard-nudge")).toHaveTextContent("Almost no color here");
-    expect(screen.getByTestId("guard-nudge").getAttribute("data-hint")).toMatch(/Relight/);
+    expect(screen.getByTestId("guard-nudge").getAttribute("data-hint")).toMatch(/Tone Equalizer/);
     expect(screen.queryByTestId("guard-nudge-apply")).toBeNull();
   });
 

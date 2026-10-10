@@ -1,12 +1,12 @@
-# Relight
+# Tone Equalizer
 
-Relight is a tonal equalizer. Its graphical bands raise or lower brightness by zone, allowing more localized tonal shaping than a single contrast control. On an adjustment layer it follows the layer's mask, so a zone can be reshaped on one subject alone.
+Tone Equalizer is a tonal equalizer. Its graphical bands raise or lower brightness by zone, allowing more localized tonal shaping than a single contrast control. On an adjustment layer it follows the layer's mask, so a zone can be reshaped on one subject alone.
 
 ## Looks
 
-![Preview a look menu](../assets/screenshots/relight-looks-menu.png)
+![Preview a look menu](../assets/screenshots/tone-equalizer-looks-menu.png)
 
-A **Preview a look** menu sits at the top of the section when it is open, each look a whole Relight setting:
+A **Preview a look** menu sits at the top of the section when it is open, each look a whole Tone Equalizer setting:
 
 - **Open Shadows** lifts the shadows by most of a stop and leaves the highlights alone, the fill a reflector would give.
 - **Tame Highlights** brings bright skies and hot skin down by up to a stop while the shadows and midtones stay put.
@@ -15,9 +15,9 @@ A **Preview a look** menu sits at the top of the section when it is open, each l
 
 Open the menu and point at a look: the viewer shows it on your own photograph, and pointing at another look shows that one instead. Close the menu (Escape, or a click anywhere else) and the photograph comes back exactly as it was. Moving the pointer off the list does not close it, so the last look stays up while you study it. The arrow keys work too: Down on the closed menu opens it, and each look the arrows land on shows. A **PREVIEW** label sits over the picture while a look shows. Nothing is saved, nothing goes into undo or the history, and the look never reaches an export, a bake, a Take, copied edits or the thumbnail.
 
-Click a look to apply it. It replaces what the section held (the curve, Range shift and Smoothing) and switches Relight on, as one undo step, and every control stays yours to change from there.
+Click a look to apply it. It replaces what the section held (the curve, Range shift and Smoothing) and switches Tone Equalizer on, as one undo step, and every control stays yours to change from there.
 
-Looks work on the photograph's own chain. With an adjustment layer selected the menu steps aside, since a look is not written to a layer. The Relight node in the Graph inspector offers the same menu.
+Looks work on the photograph's own chain. With an adjustment layer selected the menu steps aside, since a look is not written to a layer. The Tone Equalizer node in the Graph inspector offers the same menu.
 
 ## Controls
 
@@ -42,6 +42,6 @@ One button below the plot's right edge wears the curve's face and cycles it with
 
 In Tangent mode, click a point and its handles appear at their true lengths; drag one to steer and stretch the slope, and a longer handle holds the curve to its line further. The sibling handle mirrors the drag, length included. `Option`-click or `Cmd`-click (`Alt`-click on Windows) a handle to break the pair so the two sides move independently; `Control`-click (`Ctrl`-click on Windows) a handle, or double-click the point, to return its tangents to automatic, pairing and all. Section Reset puts the starting layout back.
 
-![Relight widget](../assets/screenshots/relight-widget.png)
+![Tone Equalizer widget](../assets/screenshots/tone-equalizer-widget.png)
 
-Arm the on-image picker and move over the photograph: a ghost point rides the curve at the tone under the pointer, read the way Relight reads it, from the smoothed light of the area rather than the single pixel, so on foliage or a cloud edge it shows the tone the curve will actually move there. Click, and a point lands on the curve at that tone, at the height the curve already has there. On a **Smooth** or **Tangent handles** curve the segments beside it ease a little to pass through the new point, so the picture can shift slightly before you move it; on a **Straight** curve it changes nothing until you move it. Hold the click to drag the new point vertically. A click on a point already there takes that point instead. Releasing before the tone is read still places the point once, without starting a drag. The point sits where the curve reads that tone, so it follows **Range shift**. The picker reads the input of the Relight node you armed, including a separate instance in Graph. Changing that node while the read is pending keeps your newer settings.
+Arm the on-image picker and move over the photograph: a ghost point rides the curve at the tone under the pointer, read the way Tone Equalizer reads it, from the smoothed light of the area rather than the single pixel, so on foliage or a cloud edge it shows the tone the curve will actually move there. Click, and a point lands on the curve at that tone, at the height the curve already has there. On a **Smooth** or **Tangent handles** curve the segments beside it ease a little to pass through the new point, so the picture can shift slightly before you move it; on a **Straight** curve it changes nothing until you move it. Hold the click to drag the new point vertically. A click on a point already there takes that point instead. Releasing before the tone is read still places the point once, without starting a drag. The point sits where the curve reads that tone, so it follows **Range shift**. The picker reads the input of the Tone Equalizer node you armed, including a separate instance in Graph. Changing that node while the read is pending keeps your newer settings.

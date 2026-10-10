@@ -55,7 +55,7 @@ function monster(): State {
     { type: "set_param", id: "bend", param: "dst_hue", value: 120 },
     { type: "set_category", title: "Color Tune", on: true },
     { type: "set_text_param", id: "colorconsole", param: "bands", value: '[{"hue":30,"sat":20}]' },
-    { type: "set_category", title: "Relight", on: true },
+    { type: "set_category", title: "Tone Equalizer", on: true },
     { type: "set_param", id: "toneeq", param: "ev_0", value: 0.7 },
     { type: "set_category", title: "Detail", on: true },
     { type: "set_param", id: "detail", param: "texture", value: 25 },

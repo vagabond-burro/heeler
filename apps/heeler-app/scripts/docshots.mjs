@@ -437,10 +437,10 @@ const scenes = {
     await save(page, "finish-toolbar", union(boxes.filter(Boolean), 8));
   },
 
-  // ---------- relight, shaped ----------
-  "relight-widget": async (page) => {
-    await enable(page, "relight");
-    await openSection(page, "relight");
+  // ---------- tone equalizer, shaped ----------
+  "tone-equalizer-widget": async (page) => {
+    await enable(page, "tone-equalizer");
+    await openSection(page, "tone-equalizer");
     const svg = await page.waitForSelector(`${t("eq-editor")} svg`);
     const b = await svg.boundingBox();
     // Domain [-6,3], PAD l34 r8 t6 b15 at the panel's editor size.
@@ -455,7 +455,7 @@ const scenes = {
     };
     await drag(-3, 0, 0.8);
     await drag(0, 0, -0.4);
-    await save(page, "relight-widget", await sectionClip(page, "relight"));
+    await save(page, "tone-equalizer-widget", await sectionClip(page, "tone-equalizer"));
   },
 };
 
@@ -868,15 +868,15 @@ Object.assign(scenes, {
     });
     await save(page, "develop-mask-export", clip);
   },
-  "relight-looks-menu": async (page) => {
-    await openSection(page, "relight");
-    await page.evaluate(() => document.querySelector('[data-testid="collapse-relight"]').scrollIntoView({ block: "start" }));
+  "tone-equalizer-looks-menu": async (page) => {
+    await openSection(page, "tone-equalizer");
+    await page.evaluate(() => document.querySelector('[data-testid="collapse-tone-equalizer"]').scrollIntoView({ block: "start" }));
     await sleep(200);
-    await page.click(t("looks-relight-menu"));
+    await page.click(t("looks-tone-equalizer-menu"));
     await sleep(350);
-    const sec = await sectionClip(page, "relight");
+    const sec = await sectionClip(page, "tone-equalizer");
     const menu = await boxOf(page, '[role="listbox"]', 4);
-    await save(page, "relight-looks-menu", union([sec, menu], 0));
+    await save(page, "tone-equalizer-looks-menu", union([sec, menu], 0));
   },
   "bake-progress-dialog": async (page) => {
     await page.evaluate(async () => {

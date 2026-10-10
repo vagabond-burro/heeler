@@ -1,5 +1,5 @@
 //! The section looks probe (2026-09-30: "go with A for Relight, maybe
-//! a few as well for Recolor"). Renders each Relight and Recolor look
+//! a few as well for Recolor"). Renders each Tone Equalizer and Recolor look
 //! on repository photographs through the real engine, from the exact
 //! graphs a held look sends (written by the frontend's
 //! src/__tests__/sectionlooks.gated.test.ts), writes a before and an

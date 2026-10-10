@@ -10,10 +10,10 @@
 //! one curve for a family of looks), lum→sat, and lum→hue (split
 //! toning as a curve: arbitrary structure where Split Tone offered two
 //! soft zones; Split Tone retires in its favor). Reserved on purpose:
-//! lum→lum (Relight and Curves own it).
+//! lum→lum (Tone Equalizer and Curves own it).
 //!
 //! The honest-channels contract: hue and sat are OkLCh h and C, lum is
-//! the same EV axis Relight reads. Hue shifts rotate h at constant L
+//! the same EV axis Tone Equalizer reads. Hue shifts rotate h at constant L
 //! and C; sat is a chroma scale at constant L and h; lum output is an
 //! exposure multiply, chromaticity untouched. Evaluation is PARALLEL:
 //! every curve reads the ORIGINAL pixel's channels and the effects
@@ -129,7 +129,7 @@ impl Row {
 }
 
 /// Every row of the matrix, one per BY axis. Reserved on purpose:
-/// lum→lum (Relight and Curves own it), which parses like any other
+/// lum→lum (Tone Equalizer and Curves own it), which parses like any other
 /// cell but is never offered by the editor.
 pub(crate) struct Curves {
     hue: Row,

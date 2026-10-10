@@ -37,11 +37,11 @@ A freehand tone curve, per channel (RGB, red, green, blue). Adjustments' Curves 
 
 It sits after the Tone Profile on purpose: the curve's axis is the screen's tonality, so a point at 0.9 is a bright screen value.
 
-### Relight (`heeler.tone_eq`)
+### Tone Equalizer (`heeler.tone_eq`)
 
 Re-expose by brightness zone: nine zones one stop apart, each with its own lift or cut.
 
-- **Menu:** Color > Tone > Relight.
+- **Menu:** Color > Tone > Tone Equalizer.
 - **Ports:** rgb in, mask in, rgb out.
 - **Zones** from four stops under middle gray to four over, in stops; **Range shift** slides the zones; **Smoothing** blends between them.
 
@@ -181,7 +181,7 @@ Channel-mixer monochrome. Color's Treatment switch builds it.
 - **Menu:** Color > Looks > Black & White.
 - **Ports:** rgb in, mask in, rgb out.
 - **Red**, **Green**, **Blue** are the mixer weights; **Amount** fades between color and mono, so the switch is a fade, not a cut.
-- **Hue curve** is a periodic curve of hue (OkLCh degrees) to EV, in Relight's point format, scaling the mixed gray per hue, up to two stops either way; neutrals are gated out. Empty is the mixer alone.
+- **Hue curve** is a periodic curve of hue (OkLCh degrees) to EV, in Tone Equalizer's point format, scaling the mixed gray per hue, up to two stops either way; neutrals are gated out. Empty is the mixer alone.
 
 Raise Red for skin, Blue for skies going dark, the way a filter on a mono film would; shape the curve for a single color the mixer cannot reach alone. With the treatment on, a hue-keyed mask downstream (Hue Range, Color Range) is fed from this node's input in the rendered graph, so it can still select by color.
 

@@ -1244,7 +1244,7 @@ describe("graph state semantics", () => {
     const { migrateGraph } = await import("../state");
     let s = initialState();
     s = { ...s, nodes: structuredClone(NEUTRAL_NODES), wires: structuredClone(NEUTRAL_WIRES) };
-    for (const title of ["Lens", "Relight", "Color Bend", "Recolor", "Color Tune"]) {
+    for (const title of ["Lens", "Tone Equalizer", "Color Bend", "Recolor", "Color Tune"]) {
       s = run(s, { type: "set_category", title, on: true }, { type: "set_category", title, on: false });
     }
     const dark = ["lens", "toneeq", "bend", "recolor", "colorconsole"];
@@ -1274,9 +1274,9 @@ describe("graph state semantics", () => {
     s = { ...s, nodes: structuredClone(NEUTRAL_NODES), wires: structuredClone(NEUTRAL_WIRES) };
     s = run(
       s,
-      { type: "set_category", title: "Relight", on: true },
+      { type: "set_category", title: "Tone Equalizer", on: true },
       { type: "set_param", id: "toneeq", param: "ev_0", value: 0.5 },
-      { type: "set_category", title: "Relight", on: false },
+      { type: "set_category", title: "Tone Equalizer", on: false },
       { type: "set_category", title: "Lens", on: true },
       { type: "set_text_param", id: "lens", param: "dist_model", value: "poly3" },
       { type: "set_category", title: "Lens", on: false },
@@ -1372,7 +1372,7 @@ describe("graph state semantics", () => {
     let s = initialState();
     s = run(
       s,
-      { type: "set_category", title: "Relight", on: true },
+      { type: "set_category", title: "Tone Equalizer", on: true },
       { type: "set_category", title: "Lens", on: true },
       { type: "reset_image_edits", id: s.activeImage },
     );
@@ -1397,9 +1397,9 @@ describe("graph state semantics", () => {
     s = reduce(s, { type: "add_layer", maskType: "radial" });
     s = reduce(s, { type: "set_category", title: "Color Bend", on: true });
     s = reduce(s, { type: "set_param", id: "bend", param: "dst_hue", value: 90 });
-    s = reduce(s, { type: "set_category", title: "Relight", on: true });
+    s = reduce(s, { type: "set_category", title: "Tone Equalizer", on: true });
     s = reduce(s, { type: "set_param", id: "toneeq", param: "ev_m2", value: 1 });
-    s = reduce(s, { type: "set_category", title: "Relight", on: false });
+    s = reduce(s, { type: "set_category", title: "Tone Equalizer", on: false });
     const saved = { nodes: s.nodes, wires: s.wires };
 
     const out = migrateGraph(saved.nodes, saved.wires);

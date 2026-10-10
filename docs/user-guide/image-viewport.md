@@ -44,7 +44,7 @@ The calculator button at the right end of the crop bar opens the **aspect ratio 
 
 ## Picks and on-image controls
 
-Some adjustments arm an on-image picker, such as white balance, Curves, Relight, Color Tune, Recolor, and Color Sets. The active picker is shown in the viewport. Click or drag as instructed by the section; leave the picker to return to ordinary navigation.
+Some adjustments arm an on-image picker, such as white balance, Curves, Tone Equalizer, Color Tune, Recolor, and Color Sets. The active picker is shown in the viewport. Click or drag as instructed by the section; leave the picker to return to ordinary navigation.
 
 While the Color Sets picker is armed, hovering the photograph draws a faint marker on the set's color bar at the hue under the cursor, so you can see where a click would land; a gray keeps the marker where it was. The picker changes the selection only while the left button is held: click to center the band on the sampled color, or press and drag to sweep across a subject and gather it in one stroke. Turn on the set's mask eye first to watch the selection follow the drag. The status line shows which set you are picking for and what the modifiers do; press `Esc` (or the set's picker button) to turn the picker off.
 

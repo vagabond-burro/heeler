@@ -99,7 +99,7 @@ export function GuardStrip({
     ? `The Hue rows reach ${pct}% of this photo; the Neutral guard keeps the rest, its grays and near-grays, out of them.`
     : better !== null
       ? `This photo is mostly muted: the Neutral guard keeps ${100 - pct}% of it out of the Hue rows, so this curve barely shows. Lowering the guard to ${better} lets it land.`
-      : "This photo has almost no color for the Hue rows to read. The Lum row, or Relight, works by brightness instead.";
+      : "This photo has almost no color for the Hue rows to read. The Lum row, or Tone Equalizer, works by brightness instead.";
   const wasNudging = useRef(false);
   useEffect(() => {
     if (nudge && !wasNudging.current) flashStatus(story, 8000);

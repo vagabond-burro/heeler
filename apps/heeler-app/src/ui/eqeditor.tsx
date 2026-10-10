@@ -1,4 +1,4 @@
-// Relight's parametric EQ: the audio-EQ gesture aimed at the zone
+// Tone Equalizer's parametric EQ: the audio-EQ gesture aimed at the zone
 // system. One component, used identically in the Adjustments panel, the
 // graph inspector, and the pop-out window, which is the structural fix
 // for "the panel and the inspector show different controls".
@@ -209,7 +209,7 @@ function PointField({
         }}
         style={{
           // One width, stated once: both sections render this same component,
-          // so the fields cannot disagree between Relight and Recolor. 42 is
+          // so the fields cannot disagree between Tone Equalizer and Recolor. 42 is
           // the old 38 plus the ~10% the owner asked for.
           width: 42,
           boxSizing: "border-box",
@@ -283,7 +283,7 @@ export function EqEditor({
    * you want; sits beside Pick as a toggle pair, one seat per control*/
   matchArmed?: boolean;
   onToggleMatch?: () => void;
-  /** The eyedropper chip's identity for a host that is not Relight. */
+  /** The eyedropper chip's identity for a host that is not Tone Equalizer. */
   pickTestId?: string;
   pickLabel?: string;
   pickHint?: string;
@@ -330,7 +330,7 @@ export function EqEditor({
    * curve, review 2026-09-15, item 7); unset, the face is the node's
    * shared curveInterp */
   interpParam?: string;
-  /** what the Layout menu offers; Relight's stops by default, and
+  /** what the Layout menu offers; Tone Equalizer's stops by default, and
    * Recolor passes each cell's own axis-shaped layouts */
   presets?: { id: string; label: string; points: EqPoint[] }[];
   /** explicit x gridline positions; default is one per unit (the EV
@@ -1019,7 +1019,7 @@ words wide.*/}
       <div style={{ marginTop: 4 }}>
       {/* One row of controls, ordered by where the hand goes next: the
 picker sits far LEFT because the picture it picks from is to the
-left of this panel; the fields hold one fixed width so Relight and
+left of this panel; the fields hold one fixed width so Tone Equalizer and
 Recolor agree; and the Layout menu stretches to the plot's right
 edge, so it is the same size in every editor instead of
 shrink-wrapping its longest label. alignItems stretch is what keeps

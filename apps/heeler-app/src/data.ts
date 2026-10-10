@@ -489,7 +489,7 @@ export const SAMPLE_NODES: NodeCard[] = [
   {
     id: "toneeq",
     type: "heeler.tone_eq",
-    name: "Relight",
+    name: "Tone Equalizer",
     cat: "color",
     x: 812,
     y: 194,
@@ -716,10 +716,10 @@ export const SAMPLE_WIRES: Wire[] = [
  * is the half that decides what a reset photograph actually renders.
  */
 export const OFF_BY_DEFAULT_NODES: Record<string, string> = {
-  // Relight, on demand and off, like the tools it now sits under (The
+  // Tone Equalizer, on demand and off, like the tools it now sits under (The
   // report: "RELIGHT should be off by default (no nodes in the
   // graph)").
-  toneeq: "Relight",
+  toneeq: "Tone Equalizer",
   curves: "Curves",
   levels: "Levels",
   cbal: "Color Wheels",

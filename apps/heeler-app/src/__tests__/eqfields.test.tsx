@@ -10,7 +10,7 @@
 // The step is a property of the UNIT, not of the control: stops snap at
 // 0.25, hue degrees at 10, saturation points at 10. The owner's five
 // Recolor cases, the case his table left out (the BY-Lum x axis), and
-// both Relight axes are all two rules, and the snap targets are numbers
+// both Tone Equalizer axes are all two rules, and the snap targets are numbers
 // a person can read on the axis, which is the same principle the layout
 // presets settled on.
 
@@ -53,7 +53,7 @@ function toneNode(points?: EqPoint[]): NodeCard {
   return {
     id: "toneeq",
     type: "heeler.tone_eq",
-    name: "Relight",
+    name: "Tone Equalizer",
     cat: "color",
     x: 0,
     y: 0,
@@ -282,8 +282,8 @@ describe("Recolor's Layout menu follows its BY axis", () => {
     }
   });
 
-  it("borrows Relight's layouts for the EV axis, minus Empty", () => {
-    // The lum BY axis IS Relight's window. Empty stays out because a
+  it("borrows Tone Equalizer's layouts for the EV axis, minus Empty", () => {
+    // The lum BY axis IS Tone Equalizer's window. Empty stays out because a
     // Recolor cell below two points serializes away and snaps back to
     // its default: empty is not a state a cell can hold.
     const lum = recolorLayouts("lum");

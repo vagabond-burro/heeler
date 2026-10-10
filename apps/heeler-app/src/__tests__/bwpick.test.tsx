@@ -55,7 +55,7 @@ describe("the hue curve's eyedropper, end to end", () => {
     expect(screen.queryByTestId("bw-pick-overlay")).not.toBeNull();
   });
 
-  it("offers the hue layouts and the interpolation faces, as Relight and Recolor do (2026-09-14)", async () => {
+  it("offers the hue layouts and the interpolation faces, as Tone Equalizer and Recolor do (2026-09-14)", async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByTestId("bw-mode-bw"));

@@ -43,7 +43,7 @@ behavior that automated DOM tests cannot certify.
   hear the recovery notice as an alert and reach its available actions. Trigger
   a status flash and hear it without focus leaving the current control. Hover
   hints do not interrupt a pending flash.
-- [ ] **Pop-out faces:** open Color Wheels, Curves, Relight, Recolor, Color Tune,
+- [ ] **Pop-out faces:** open Color Wheels, Curves, Tone Equalizer, Recolor, Color Tune,
   Color Bend, Graph, Spectrums and Console. Hear the new window title, each
   control's name and each segmented button's state. Use Bring it back and the
   native close control separately. Focus returns to the control in the main

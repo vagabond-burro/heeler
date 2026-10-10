@@ -678,7 +678,7 @@ same place, so there is one thing to learn.*/}
             // line of help is not a state. "The help text in Color Bend
             // is using the accent color which is not correct", and then, on which
             // gray: "it should be the same font color used as the help text in
-            // Relight". That is --text-ghost (ui/eqeditor.tsx), so both branches of
+            // Relight" (now Tone Equalizer). That is --text-ghost (ui/eqeditor.tsx), so both branches of
             // this line wear it and the panel has one voice for help.
             style={{ fontSize: 9, color: "var(--text-ghost)", lineHeight: 1.5 }}
           >

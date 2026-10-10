@@ -41,7 +41,7 @@ function mount(points: EqPoint[], interp: "smooth" | "linear" | "tangent" = "tan
   const initial = {
     id: "toneeq",
     type: "heeler.tone_eq",
-    name: "Relight",
+    name: "Tone Equalizer",
     cat: "tone",
     x: 0,
     y: 0,

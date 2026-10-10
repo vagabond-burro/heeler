@@ -497,7 +497,7 @@ export const CATEGORY_PIECES: Record<string, CategoryPiece[]> = {
   // graph)"). Being a category piece is what makes that true: the node
   // leaves the default graph and comes back with its points intact when
   // the switch goes on.
-  Relight: [{ id: "toneeq", type: "heeler.tone_eq", name: "Relight", cat: "color" }],
+  "Tone Equalizer": [{ id: "toneeq", type: "heeler.tone_eq", name: "Tone Equalizer", cat: "color" }],
   // Its own section now, and on-demand like its neighbor: off means
   // not in the graph. "Remove the node from the default
   // graph since the Levels section is off."
@@ -649,7 +649,7 @@ export const CHAIN_ORDER = [
   "cbal",
   "exposure",
   // Directly after Exposure, which is where it was wired when it was
-  // always in the graph: Relight re-exposes brightness zones, and that
+  // always in the graph: Tone Equalizer re-exposes brightness zones, and that
   // is exposure work in the scene-linear stretch. Splicing it in
   // anywhere later would be a different operation wearing the same
   // name.

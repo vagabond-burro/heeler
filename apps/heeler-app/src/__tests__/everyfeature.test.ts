@@ -15,10 +15,10 @@ function fresh(): State {
 }
 
 describe("every feature on a fresh launch", () => {
-  it("builds an on-demand section that used to be Pro (Relight)", () => {
+  it("builds an on-demand section that used to be Pro (Tone Equalizer)", () => {
     const s = fresh();
     expect(s.nodes.some((n) => n.type === "heeler.tone_eq")).toBe(false);
-    const on = run(s, { type: "set_category", title: "Relight", on: true });
+    const on = run(s, { type: "set_category", title: "Tone Equalizer", on: true });
     expect(on.nodes.some((n) => n.type === "heeler.tone_eq")).toBe(true);
   });
 

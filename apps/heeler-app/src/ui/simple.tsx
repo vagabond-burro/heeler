@@ -181,7 +181,7 @@ type D = React.Dispatch<Command>;
 const TOOL_POPOUTS: Record<string, "wheels" | "curves" | "toneeq" | "recolor" | "colorconsole" | undefined> = {
   Curves: "curves",
   "Color Wheels": "wheels",
-  Relight: "toneeq",
+  "Tone Equalizer": "toneeq",
   Recolor: "recolor",
   "Color Tune": "colorconsole",
 };
@@ -3509,7 +3509,7 @@ interface SectionSpec {
    * the graph) or Model (the SCUNet answer blended in), with the
    * model's status line under it. */
   denoiseMethod?: boolean;
-  /** Relight's parametric EQ widget above the rows */
+  /** Tone Equalizer's parametric EQ widget above the rows */
   eqWidget?: boolean;
   /** Recolor's routing grid and curve widget above the rows */
   recolorWidget?: boolean;
@@ -3748,7 +3748,7 @@ function RecipeStub({
   hint?: string;
   /** the Interface preference: unfold the section as it switches on */
   expand: boolean;
-  /** drawn under the title: the section looks, for Relight and Recolor */
+  /** drawn under the title: the section looks, for Tone Equalizer and Recolor */
   extra?: React.ReactNode;
 }) {
   const slug = sec.title.toLowerCase().replace(/[^a-z]+/g, "-");
@@ -3805,7 +3805,7 @@ them.*/}
 
 /** The sections that offer looks (src/sectionlooks.ts): previewed from
  * a menu, applied with a click. */
-const LOOK_SECTION_TITLES = new Set(["Relight", "Recolor"]);
+const LOOK_SECTION_TITLES = new Set(["Tone Equalizer", "Recolor"]);
 
 /** Phase 1 of lens profiles: the panel NAMES the database profile the
  * photograph's lens matched, before any correction math exists, so
@@ -4185,7 +4185,7 @@ function LensPresetRow({ state, dispatch }: { state: State; dispatch: D }) {
 export const SECTION_BLURBS: Record<string, string> = {
   Source: "The RAW's own development: white balance as shot, the tone profile, and the baseline everything else builds on",
   Exposure: "The picture's light: overall brightness, contrast in luminance and chroma, and how much room highlights and shadows keep",
-  Relight: "Exposure by brightness zone: darken one zone, lift another, a graduated dodge over tones instead of places",
+  "Tone Equalizer": "Exposure by brightness zone: darken one zone, lift another, a graduated dodge over tones instead of places",
   Color: "White balance and color strength: temperature and tint, then saturation and vibrance's gentler hand",
   Levels: "Where black and white sit, and how the middle rises between them",
   Curves: "Tone as a drawn curve: points bend the picture's response, per channel or all at once",
@@ -4203,7 +4203,7 @@ export const SECTION_BLURBS: Record<string, string> = {
   Vignette: "A darkened or brightened falloff toward the corners, placed on purpose. The lens's own vignetting is corrected in Lens",
   Fog: "Atmosphere by distance, from the depth model: how thick, where it starts, how it rolls in, and what it looks like",
   "Depth Map": "How the depth every depth tool reads is drawn from the photograph: Fog, Depth Lighting, Depth of Field, Recolor and Lens Character all share it",
-  "Depth Lighting": "Synthetic lights over the scene's depth: suns and lamps, colored, bright or dark, with a rig in the viewer",
+  "Depth Lighting": "Relight the scene by its depth: suns and lamps, colored, bright or dark, with a rig in the viewer",
   "Depth of Field": "Focus that falls off with distance: pick the focal plane, open the aperture, and shape the lens's character",
   "Lens Flare": "The lens's flare for the rig's lights: glow, rays, aperture ghosts, streak and veil, hidden by what stands in front of the light",
   Halation: "Highlights bleed a colored mist into their dark surroundings, the film's own glow: what blooms, how far, what color, and a wider bloom with it",
@@ -4238,8 +4238,8 @@ export const ROW_TIPS: Record<string, string> = {
   "Exposure|Shadows": "Opens the dark areas up (right) or deepens them (left)",
   "Exposure|Whites": "Where the very brightest values sit: pull left to protect them from clipping",
   "Exposure|Blacks": "Where the very darkest values sit: pull left for solid blacks, right to lift them",
-  "Relight|Range shift": "Slides the zone boundaries so the zones grab brighter or darker parts of the picture",
-  "Relight|Smoothing": "Softens the transitions between zones so lifts and cuts blend instead of banding",
+  "Tone Equalizer|Range shift": "Slides the zone boundaries so the zones grab brighter or darker parts of the picture",
+  "Tone Equalizer|Smoothing": "Softens the transitions between zones so lifts and cuts blend instead of banding",
   "Color|Temp": "Warmer (right, toward amber) or cooler (left, toward blue)",
   "Color|Tint": "Green (left) against magenta (right): the other axis of white balance",
   "Color|Saturation": "All colors stronger or weaker, equally",
@@ -4484,14 +4484,14 @@ export const SECTIONS: SectionSpec[] = [
   },
   {
     // Below Curves. Both reshape tones, and this is the one you reach
-    // for second: Curves is the general instrument, Relight is the
+    // for second: Curves is the general instrument, Tone Equalizer is the
     // zone-by-zone re-exposure you do once the curve is settled.
     //
     // The zone system's simple face: three of the node's nine zones,
     // the ones people mean when they say shadows, midtones,
     // highlights. The graph inspector is the expert face with all
     // nine.
-    title: "Relight",
+    title: "Tone Equalizer",
     eqWidget: true,
     layerTool: "toneeq",
     node: (s) => toolNode(s, "toneeq"),
@@ -6039,7 +6039,7 @@ menu's search, one glass away from the list it searches.*/}
                   expand={state.prefs.expandSectionOnEnable}
                   extra={
                     LOOK_SECTION_TITLES.has(sec.title) ? (
-                      <SectionLooks section={sec.title as "Relight" | "Recolor"} state={state} dispatch={dispatch} />
+                      <SectionLooks section={sec.title as "Tone Equalizer" | "Recolor"} state={state} dispatch={dispatch} />
                     ) : undefined
                   }
                 />
@@ -6323,12 +6323,12 @@ consistency)."*/}
                         text: { lights: "" },
                       });
                     }
-                    // Relight owns the EQ curve: reset clears the legacy zones and puts the
+                    // Tone Equalizer owns the EQ curve: reset clears the legacy zones and puts the
                     // STARTING layout back rather than an empty plot
                     // ("Resetting Relight clears all points off, instead of the default 3
                     // stops layout" - reset should return to the default, the way every
                     // slider goes back to its default rather than vanishing).
-                    if (sec.title === "Relight") {
+                    if (sec.title === "Tone Equalizer") {
                       dispatch({
                         type: "set_params",
                         id: node.id,
@@ -6553,7 +6553,7 @@ toggle to Adjustment sections").*/}
               {/* The looks sit above the section's body (src/sectionlooks.ts). */}
               {LOOK_SECTION_TITLES.has(sec.title) && !closed && (
                 <div style={{ padding: "0 12px" }}>
-                  <SectionLooks section={sec.title as "Relight" | "Recolor"} state={state} dispatch={dispatch} />
+                  <SectionLooks section={sec.title as "Tone Equalizer" | "Recolor"} state={state} dispatch={dispatch} />
                 </div>
               )}
               <div
@@ -6630,7 +6630,7 @@ toggle to Adjustment sections").*/}
                         ));
                       })()}
                     </div>
-                    {/* 10, matching Relight's own point hint: the two lines do the same job
+                    {/* 10, matching Tone Equalizer's own point hint: the two lines do the same job
 one section apart, and this one was a pixel smaller for no reason.*/}
                     <div
                       data-testid="wheels-help"
@@ -7471,7 +7471,7 @@ side it reads like a tab view").*/}
                       As Shot
                     </button>
                     {/* The picture, not the word: it is the same gesture the Curves and
-Relight pickers offer, so it wears the same eyedropper. The chip
+Tone Equalizer pickers offer, so it wears the same eyedropper. The chip
 keeps its own padding, so it stays the height of Auto and As Shot
 beside it.*/}
                     <button

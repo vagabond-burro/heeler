@@ -39,7 +39,7 @@ export function followPopout(out: boolean, name: string, open: () => Promise<voi
 export const TOOL_WINDOWS = {
   wheels: { title: "Heeler Color Wheels", width: 900, height: 460 },
   curves: { title: "Heeler Curves", width: 760, height: 560 },
-  toneeq: { title: "Heeler Relight", width: 860, height: 540 },
+  toneeq: { title: "Heeler Tone Equalizer", width: 860, height: 540 },
   recolor: { title: "Heeler Recolor", width: 880, height: 600 },
   colorconsole: { title: "Heeler Color Tune", width: 920, height: 520 },
 } as const;

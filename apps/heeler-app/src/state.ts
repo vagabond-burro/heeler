@@ -2102,7 +2102,7 @@ function publishedDefaults(group: NodeCard): NodeCard[] | undefined {
 export const OFF_BY_DEFAULT = [
   "Geometry",
   "Detail",
-  "Relight",
+  "Tone Equalizer",
   "Levels",
   "Curves",
   "Color Wheels",
@@ -3754,7 +3754,7 @@ export interface State {
    * session, and above all must not ride the undo stack, where
    * rewinding it would make undo fire a model compute. */
   smartAsk: number;
-  /** Relight's in-image zone picker: the tone EQ node it is armed
+  /** Tone Equalizer's in-image zone picker: the tone EQ node it is armed
    * for, or null. Click a brightness on the photo, drag vertically,
    * and that zone re-exposes ON THAT NODE, so arming it from a second
    * instance in the graph edits the right one. */
@@ -3776,7 +3776,7 @@ export interface State {
    * cursor while it is armed, ridden as a ghost point (the Black & White
    * Hue curve's, brought here at the owner's word 2026-09-14).*/
   recolorHoverX: number | null;
-  /** Relight's eyedropper: the tone under the viewer cursor, in the
+  /** Tone Equalizer's eyedropper: the tone under the viewer cursor, in the
    * curve's EV (Range shift included), ridden as a ghost point while it
    * is armed, as the other curve eyedroppers do (2026-10-08: "I am
    * not getting the ghost on the relight curve with the eyedropper"). */
@@ -5624,7 +5624,7 @@ export const PARAM_RANGE: Record<string, [number, number]> = {
   bloom_radius: [5, 60],
   hue: [0, 360],
   mix: [0, 100],
-  // Relight (heeler.tone_eq): per-zone exposure in stops, and how widely the
+  // Tone Equalizer (heeler.tone_eq): per-zone exposure in stops, and how widely the
   // illuminance estimate averages.
   ev_m4: [-2, 2],
   ev_m3: [-2, 2],
@@ -6749,7 +6749,7 @@ export const LAYER_TOOLS: Record<
   // it writes its own.
   toneeq: {
     type: "heeler.tone_eq",
-    name: "Relight",
+    name: "Tone Equalizer",
     cat: "color",
     params: { ...NEUTRAL_PARAMS["heeler.tone_eq"] },
   },
@@ -7845,7 +7845,7 @@ export function gridWarpNode(s: State): NodeCard {
 
 /** The main-chain tools a write can conjure: the tool pieces and the
  * crop. Only these, and not every category piece: an on-demand section
- * (Relight, Recolor, Color Tune) is built by set_category, its own
+ * (Tone Equalizer, Recolor, Color Tune) is built by set_category, its own
  * switch, never by a write to its seat. */
 const MAIN_PIECES: Record<string, CategoryPiece> = {
   ...Object.fromEntries(Object.values(TOOL_PIECES).map((p) => [p.id, p])),
@@ -8279,6 +8279,11 @@ function migrateOne(n: NodeCard): NodeCard {
       const { sharpening, ...rest } = n.params;
       return { ...n, params: { ...rest, amount: rest.amount ?? sharpening } };
     }
+    // Relight is Tone Equalizer since 2026.5.1. Only the name this app
+    // gave it moves, as Blend Mode's did; a name somebody chose is theirs.
+    if (n.type === "heeler.tone_eq" && n.name === "Relight") {
+      return { ...n, name: "Tone Equalizer" };
+    }
     if (n.type === "heeler.blend") {
       let out = n;
       // "I see Vivid Light node still has the name even tho it should
@@ -8401,7 +8406,7 @@ const BACKFILL_IDENTITY: Record<
     params: { distortion: 0, ca_red: 0, ca_blue: 0, vignette: 0, vignette_mid: 50 },
   },
   "heeler.tone_eq": {
-    name: "Relight",
+    name: "Tone Equalizer",
     params: {
       ev_m4: 0,
       ev_m3: 0,
@@ -9424,7 +9429,16 @@ export function exportWritesDepth(n: NodeCard, wires: readonly Wire[]): boolean 
  * mask's card: Duplicate Layer copies that prefix, and a copy starts
  * with its boxes clear. */
 export const sectionExportId = (title: string, layer?: string | null): string =>
-  `dev_x_${layer ? `${layer}_` : ""}${title.toLowerCase().replace(/[^a-z]+/g, "_")}`;
+  `dev_x_${layer ? `${layer}_` : ""}${(SECTION_ID_SLUGS[title] ?? title).toLowerCase().replace(/[^a-z]+/g, "_")}`;
+
+/** A section's id under its old name, where a rename must not move the
+ * ids already saved in photographs: Tone Equalizer was Relight until
+ * 2026.5.1, and a photograph exporting it holds dev_x_relight. */
+const SECTION_ID_SLUGS: Record<string, string> = { "Tone Equalizer": "Relight" };
+
+/** Section titles a photograph's saved settings may still hold, by the
+ * name each goes by now. */
+export const RENAMED_SECTIONS: Record<string, string> = { Relight: "Tone Equalizer" };
 
 /** What a section's export is called: the section on Base, the layer
  * and the section on a Develop layer ("Sky Exposure"). */
@@ -19555,11 +19569,12 @@ function reduceInner(s: State, cmd: Command): State {
         backupFolder: typeof merged.backupFolder === "string" ? merged.backupFolder : DEFAULT_PREFS.backupFolder,
         keepBakedInBackups: typeof merged.keepBakedInBackups === "boolean" ? merged.keepBakedInBackups : DEFAULT_PREFS.keepBakedInBackups,
         // Titles only, once each: the settings file is hand editable.
+        // Under their names now (a renamed section keeps its pin).
         pinnedSections: Array.isArray(merged.pinnedSections)
-          ? merged.pinnedSections.filter((t, i, a): t is string => typeof t === "string" && a.indexOf(t) === i)
+          ? merged.pinnedSections.map((t) => RENAMED_SECTIONS[t as string] ?? t).filter((t, i, a): t is string => typeof t === "string" && a.indexOf(t) === i)
           : DEFAULT_PREFS.pinnedSections,
         hiddenSections: Array.isArray(merged.hiddenSections)
-          ? merged.hiddenSections.filter((t, i, a): t is string => typeof t === "string" && a.indexOf(t) === i)
+          ? merged.hiddenSections.map((t) => RENAMED_SECTIONS[t as string] ?? t).filter((t, i, a): t is string => typeof t === "string" && a.indexOf(t) === i)
           : DEFAULT_PREFS.hiddenSections,
         cropRatios: savedCropRatios(merged.cropRatios),
         maskOverlayColor: MASK_OVERLAY_COLORS.some((color) => color.id === merged.maskOverlayColor)

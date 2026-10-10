@@ -41,7 +41,7 @@ import { ColorConsoleBlock } from "./colorconsole";
 import { isLayerNode } from "../layerids";
 
 /** The live preview frame, pushed from the main window on every render
- * (the spectrums' channel; Relight's histogram reads the same one, and
+ * (the spectrums' channel; Tone Equalizer's histogram reads the same one, and
  * so does the popped-out graph window's Inspector). */
 export function useLiveFrame(want: boolean): string | null {
   const [frame, setFrame] = useState<string | null>(null);
@@ -61,7 +61,7 @@ export function useLiveFrame(want: boolean): string | null {
 const TOOL_SECTION: Record<ToolWindowKind, string> = {
   curves: "Curves",
   wheels: "Color Wheels",
-  toneeq: "Relight",
+  toneeq: "Tone Equalizer",
   recolor: "Recolor",
   colorconsole: "Color Tune",
 };
@@ -183,7 +183,7 @@ function ToolBody({
     );
   }
   if (kind === "toneeq") {
-    // Same layer rule as Color Tune's window: the layer's own Relight,
+    // Same layer rule as Color Tune's window: the layer's own Tone Equalizer,
     // not the first tone_eq in the graph.
     const node = toolNode(snap, "toneeq");
     if (!node || (!node.enabled && !isLayerNode(node.id)))

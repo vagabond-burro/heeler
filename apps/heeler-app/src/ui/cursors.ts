@@ -54,7 +54,7 @@ export const FEATHER_CURSOR = cursor(
 
 /** A ring around a dot: the thing under the pointer is a curve POINT,
  * and it will move where the hand goes. One cursor for Curves,
- * Relight and Recolor alike ("All 3 tools should use the
+ * Tone Equalizer and Recolor alike ("All 3 tools should use the
  * same cursor style for points and tangent handles").*/
 export const CURVE_POINT_CURSOR = cursor(
   `<g>

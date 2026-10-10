@@ -34,12 +34,12 @@ Alphabetical here, which is the order the guide's sidebar takes from this list. 
 - [Noise Reduction](noise-reduction.md)
 - [Print](print.md)
 - [Recolor](recolor.md)
-- [Relight](relight.md)
 - [Shape Warp](shape-warp.md)
 - [Sharpening](sharpening.md)
 - [Skin Softening](skin-softening.md)
 - [Sky Rescue](sky-rescue.md)
 - [Source](source.md)
+- [Tone Equalizer](tone-equalizer.md)
 - [Vignette](vignette.md)
 
 ## Section gestures
@@ -84,7 +84,7 @@ A small **Export** checkbox sits beside the switch of every section but Source, 
 
 With an adjustment layer selected, the box on a section that edits the layer belongs to that layer: ticked, the export carries the picture as that section leaves it on that layer, with the layer's edit applied through its mask, named for both, such as `Sky Exposure`. Each layer has its own boxes, apart from the ones on Base; a renamed layer renames its exports, removing the layer removes them, and a duplicated layer starts with its boxes clear. To export the layer's mask itself, use **Export Mask as Layer** under its Depth mask.
 
-Most sections can target a selected adjustment layer, and an icon in the section header says which: two stacked sheets for a section that edits the layer, a globe for one that applies to the whole photograph. Sharpening, Skin Softening, Relight, Color Tune and Recolor all follow a layer's mask. Noise Reduction and Sky Rescue are recipes built from several nodes and remain whole-photograph operations.
+Most sections can target a selected adjustment layer, and an icon in the section header says which: two stacked sheets for a section that edits the layer, a globe for one that applies to the whole photograph. Sharpening, Skin Softening, Tone Equalizer, Color Tune and Recolor all follow a layer's mask. Noise Reduction and Sky Rescue are recipes built from several nodes and remain whole-photograph operations.
 
 ## Auto, reset, and pickers
 

@@ -1,7 +1,7 @@
 // The engine's lookup for a curve eyedropper (bridge curveLookup), as the
 // picker tests stand it in: the tests queue color samples, and a "tone"
 // read answers the sample's tone in EV, an "around" read its hue and
-// chroma. Relight and Recolor's Around rows read curveLookup since the
+// chroma. Tone Equalizer and Recolor's Around rows read curveLookup since the
 // 26.4.3 latest review (R2, R4); the queue lets one test drive both.
 import { oklabHueChroma } from "../colorsets";
 

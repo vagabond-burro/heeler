@@ -495,7 +495,7 @@ export function CurveEditor({
   };
 
   /** CTRL-click on a handle, or double-click on the point: back to
-   * AUTOMATIC entirely, the same reset Relight and Recolor perform.
+   * AUTOMATIC entirely, the same reset Tone Equalizer and Recolor perform.
    * The first version kept the slope and restored a computed reach,
    * and the owner caught that it was not the reach the sticks start
    * at ("CTRL-CLICK is not resetting the tangents to the default
@@ -881,7 +881,7 @@ canvas"), then the channels, and the reset on the far end.*/}
                 if (removeClick(e)) removePoint(i);
                 else beginDrag(i);
               }}
-              // Same grammar as Relight and Recolor ("The tangents on
+              // Same grammar as Tone Equalizer and Recolor ("The tangents on
               // Curves are not behaving like Relight and Recolor"): double-click a
               // point and its tangents go back to automatic.
               onDoubleClick={(e) => {
@@ -896,7 +896,7 @@ canvas"), then the channels, and the reset on the far end.*/}
       {/* Label on the left, the removal chord centered, the faces on the
 plot's right edge (2026-09-02: "move the Linear/Smooth/ Tangent
 toggle buttons so they are aligned to the right of the graph and
-center the help text"), which also puts the faces where Relight and
+center the help text"), which also puts the faces where Tone Equalizer and
 Recolor keep theirs.*/}
       <div
         data-testid="curve-footer"

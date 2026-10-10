@@ -1,7 +1,7 @@
 // Recolor's routing grid (design settled with the owner 2026-08-23): rows
 // are what a curve selects BY, columns are what it ADJUSTS. Color grader
 // users find their six curves; everyone else finally gets told what these
-// curves are. The one reserved cell (lum→lum) is hidden: Relight and
+// curves are. The one reserved cell (lum→lum) is hidden: Tone Equalizer and
 // Curves own that job.
 
 import React from "react";
@@ -154,7 +154,7 @@ export function RecolorBlock({
   const isHueHue = cell === "hue_hue";
   const spread = isHueHue && (node.textParams?.hue_hue_mode ?? "") === "spread";
   // The picker's words follow the BY axis, naming what the chip reads;
-  // before this it wore Relight's, "click a brightness... to re-expose
+  // before this it wore Tone Equalizer's, "click a brightness... to re-expose
   // it", on every row. The Depth row's say the click drops a point to
   // hold a subject while the curve is worked around it (2026-09-16: "pick
   // a subject to lock in their adjustments then edit the curve around

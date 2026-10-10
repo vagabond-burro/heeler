@@ -1068,7 +1068,7 @@ struct CurveSampler {
     tangents: Option<Vec<f32>>,
     /// Handle-vector form, when the wire sent one: evaluated through
     /// eval_eq_points so handle LENGTH shapes the segment, the same
-    /// weighted math Relight and Recolor run.
+    /// weighted math Tone Equalizer and Recolor run.
     eq: Option<Vec<EqPoint>>,
     /// The curve's output at display 1.0, where over-range values pick
     /// it up (see `curves`). Set by `finished` once the shape is built.
@@ -2070,7 +2070,7 @@ pub(crate) fn eval_eq_points(pts: &[EqPoint], x: f32) -> f32 {
         + (t3 - t2) * w * m1
 }
 
-/// The illuminance Relight reads its curve at, per pixel, linear: an
+/// The illuminance Tone Equalizer reads its curve at, per pixel, linear: an
 /// edge-aware estimate of each pixel's light over the node's Smoothing.
 /// tone_eq and the on-image picker (tone_eq_lookup) share it, so a
 /// picked point lands at the tone the curve is applied to (the 26.4.3
@@ -2145,7 +2145,7 @@ pub fn tone_eq_illuminance(params: &std::collections::BTreeMap<String, heeler_gr
     illum
 }
 
-/// What Relight's curve is read at, per pixel: tone_eq_illuminance in EV
+/// What Tone Equalizer's curve is read at, per pixel: tone_eq_illuminance in EV
 /// from middle gray, clamped as the op clamps it. Range shift is not in
 /// it; the curve is read at this plus the shift.
 pub fn tone_eq_lookup(params: &std::collections::BTreeMap<String, heeler_graph::ParamValue>, src: &ImageBuf) -> Vec<f32> {
@@ -4325,7 +4325,7 @@ mod tests {
         assert_close(a.pixel(0, 0)[1], a.pixel(0, 0)[2]);
     }
 
-    /// The interpolation face rides as eq_interp, as Relight's and
+    /// The interpolation face rides as eq_interp, as Tone Equalizer's and
     /// Recolor's do: a straight-line curve between two points evaluates
     /// on the secant, where the smooth one bows.
     #[test]
@@ -4984,7 +4984,7 @@ mod tests {
         assert!(probe(80.0) > probe(-80.0));
     }
 
-    /// Relight's picker reads what the curve is applied at (the 26.4.3
+    /// Tone Equalizer's picker reads what the curve is applied at (the 26.4.3
     /// latest review's R2): on a textured picture, a pixel's gain is the
     /// curve at tone_eq_lookup plus Range shift, not at its own luma.
     #[test]

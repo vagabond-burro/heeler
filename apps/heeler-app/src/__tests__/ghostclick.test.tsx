@@ -3,7 +3,7 @@
 // did not reflect the ghost/preview"). Recolor's and Black & White's
 // hover read a 1% patch and their click a 2% one, two different averages
 // on busy detail; each picker's hover and click now read the same patch
-// from the same port. Relight's ghost (new the same day) stands at the
+// from the same port. Tone Equalizer's ghost (new the same day) stands at the
 // tone its click puts the point on.
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -47,9 +47,9 @@ const SITES: Record<string, { overlay: string; armed: () => State }> = {
     overlay: "bw-pick-overlay",
     armed: () => run(initialState(), { type: "toggle_bw_pick" }),
   },
-  Relight: {
+  "Tone Equalizer": {
     overlay: "tone-eq-pick-overlay",
-    armed: () => run(initialState(), { type: "set_category", title: "Relight", on: true }, { type: "toggle_tone_eq_pick", id: "toneeq" }),
+    armed: () => run(initialState(), { type: "set_category", title: "Tone Equalizer", on: true }, { type: "toggle_tone_eq_pick", id: "toneeq" }),
   },
 };
 
@@ -58,8 +58,8 @@ describe("a curve eyedropper's hover and click read the same patch", () => {
     it(site, async () => {
       render(pane(armed(), []));
       const target = screen.getByTestId(overlay);
-      // Relight reads the engine's lookup, the others a color patch.
-      const reader = site === "Relight" ? vi.mocked(curveLookup) : vi.mocked(sampleImage);
+      // Tone Equalizer reads the engine's lookup, the others a color patch.
+      const reader = site === "Tone Equalizer" ? vi.mocked(curveLookup) : vi.mocked(sampleImage);
       fireEvent.mouseMove(target, { clientX: 10, clientY: 10 });
       expect(reader).toHaveBeenCalledTimes(1);
       await act(async () => { pending[0].resolve(warm); });
@@ -68,16 +68,16 @@ describe("a curve eyedropper's hover and click read the same patch", () => {
       const [hover, click] = reader.mock.calls as unknown[][];
       // Position, patch or lookup, node and port: everything but the state.
       expect(click.slice(1), "the click reads what the hover read").toEqual(hover.slice(1));
-      if (site !== "Relight") expect(click[3]).toBe(CURVE_PICK_REACH);
+      if (site !== "Tone Equalizer") expect(click[3]).toBe(CURVE_PICK_REACH);
       fireEvent.mouseUp(window);
     });
   }
 });
 
-describe("Relight's ghost", () => {
+describe("Tone Equalizer's ghost", () => {
   it("stands at the tone the click puts its point on, and goes when the cursor leaves", async () => {
     const commands: Command[] = [];
-    const state = reduce(SITES.Relight.armed(), { type: "set_param", id: "toneeq", param: "range_shift", value: 0.5 });
+    const state = reduce(SITES["Tone Equalizer"].armed(), { type: "set_param", id: "toneeq", param: "range_shift", value: 0.5 });
     render(pane(state, commands));
     const target = screen.getByTestId("tone-eq-pick-overlay");
     fireEvent.mouseMove(target, { clientX: 10, clientY: 10 });
@@ -96,7 +96,7 @@ describe("Relight's ghost", () => {
   });
 
   it("is cleared when the picker is put away", () => {
-    let s = run(SITES.Relight.armed(), { type: "set_tone_eq_hover", x: 1.25 });
+    let s = run(SITES["Tone Equalizer"].armed(), { type: "set_tone_eq_hover", x: 1.25 });
     expect(s.toneEqHoverX).toBe(1.25);
     s = reduce(s, { type: "toggle_tone_eq_pick", id: "toneeq" });
     expect(s.toneEqHoverX).toBeNull();
@@ -154,9 +154,9 @@ describe("a click on a neutral spot", () => {
 });
 
 describe("quick picks on existing points", () => {
-  it("leaves an existing Relight point unchanged without an undo entry", async () => {
+  it("leaves an existing Tone Equalizer point unchanged without an undo entry", async () => {
     const commands: Command[] = [];
-    const state = SITES.Relight.armed();
+    const state = SITES["Tone Equalizer"].armed();
     render(pane(state, commands));
     fireEvent.mouseDown(screen.getByTestId("tone-eq-pick-overlay"), { button: 0 });
     fireEvent.mouseUp(window);
@@ -186,7 +186,7 @@ describe("quick picks on existing points", () => {
 describe("ghost lifetime", () => {
   it("clears every ghost when a preset replaces the graph", () => {
     const preset = capturePreset(initialState(), "Review look");
-    for (const armed of [SITES.Relight.armed(), SITES["Recolor's hue row"].armed(), SITES["the Black & White hue curve"].armed()]) {
+    for (const armed of [SITES["Tone Equalizer"].armed(), SITES["Recolor's hue row"].armed(), SITES["the Black & White hue curve"].armed()]) {
       const state = { ...armed, toneEqHoverX: 1, recolorHoverX: 212, bwHoverHue: 212 };
       const next = reduce(state, { type: "apply_preset", preset });
       expect(next.toneEqHoverX).toBeNull();
@@ -195,8 +195,8 @@ describe("ghost lifetime", () => {
       expect(next.bwPick).toBe(false);
     }
   });
-  it("drops ghosts when a Take is created and when the Relight pop-out closes", () => {
-    const state = { ...SITES.Relight.armed(), toneEqHoverX: 1, recolorHoverX: 212, bwHoverHue: 212 };
+  it("drops ghosts when a Take is created and when the Tone Equalizer pop-out closes", () => {
+    const state = { ...SITES["Tone Equalizer"].armed(), toneEqHoverX: 1, recolorHoverX: 212, bwHoverHue: 212 };
     const next = reduce(state, { type: "new_take" });
     expect(next.toneEqHoverX).toBeNull();
     expect(next.recolorHoverX).toBeNull();
@@ -215,15 +215,15 @@ describe("ghost lifetime", () => {
   });
 });
 
-// The 26.4.3 latest review's R2 and R4: Relight's and the Around rows'
+// The 26.4.3 latest review's R2 and R4: Tone Equalizer's and the Around rows'
 // eyedroppers read what the engine indexes the curve by (curveLookup),
-// not a patch's raw average, which was up to 2.3 stops (Relight) and 14
+// not a patch's raw average, which was up to 2.3 stops (Tone Equalizer) and 14
 // degrees at the median (Around) from it on a real photograph.
 describe("the engine's lookup places the point", () => {
-  it("Relight's point lands at the lookup's tone plus Range shift, not the patch's luma", async () => {
+  it("Tone Equalizer's point lands at the lookup's tone plus Range shift, not the patch's luma", async () => {
     vi.mocked(curveLookup).mockImplementationOnce(() => Promise.resolve({ value: 1.25, chroma: 0 }));
     const commands: Command[] = [];
-    const state = reduce(SITES.Relight.armed(), { type: "set_param", id: "toneeq", param: "range_shift", value: 0.5 });
+    const state = reduce(SITES["Tone Equalizer"].armed(), { type: "set_param", id: "toneeq", param: "range_shift", value: 0.5 });
     render(pane(state, commands));
     fireEvent.mouseDown(screen.getByTestId("tone-eq-pick-overlay"), { button: 0 });
     fireEvent.mouseUp(window);

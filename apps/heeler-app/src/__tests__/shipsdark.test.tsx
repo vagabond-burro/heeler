@@ -58,7 +58,7 @@ describe("a fresh adjustment layer keeps the dark sections dark", () => {
     render(<SimplePanel state={s} dispatch={(() => {}) as never} />);
     for (const slug of [
       "curves", "color-wheels", "color-bend", "grain", "vignette",
-      "fog", "depth-lighting", "depth-of-field", "levels", "relight",
+      "fog", "depth-lighting", "depth-of-field", "levels", "tone-equalizer",
     ]) {
       const toggle = screen.getByTestId(`toggle-${slug}`);
       expect(toggle.getAttribute("data-on"), `${slug} must read off`).toBe("false");

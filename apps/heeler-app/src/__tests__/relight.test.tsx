@@ -1,4 +1,4 @@
-// Relight: where it sits, when it exists, who may use it, and the
+// Tone Equalizer: where it sits, when it exists, who may use it, and the
 // Layout preset that never fitted its own axis.
 //
 // Four asks in one pass: "Why is it when Layout is set to 9 there are
@@ -126,7 +126,7 @@ describe("the Layout presets fit the axis they are drawn on", () => {
   });
 });
 
-describe("Relight ships off, with no node in the graph", () => {
+describe("Tone Equalizer ships off, with no node in the graph", () => {
   it("is not in a fresh photograph's graph at all", () => {
     // Not bypassed: absent. "off by default (no nodes in the
     // graph)". A disabled node is still a node in the file, and still a row
@@ -146,19 +146,19 @@ describe("Relight ships off, with no node in the graph", () => {
   });
 
   it("ships collapsed, like every other section that is off", () => {
-    expect(OFF_BY_DEFAULT).toContain("Relight");
-    expect(initialState().sectionsClosed).toContain("Relight");
+    expect(OFF_BY_DEFAULT).toContain("Tone Equalizer");
+    expect(initialState().sectionsClosed).toContain("Tone Equalizer");
   });
 
   it("comes back where it belongs when it is switched on", () => {
-    // Directly after Exposure. Relight re-exposes brightness zones, so
+    // Directly after Exposure. Tone Equalizer re-exposes brightness zones, so
     // splicing it in later would be a different operation under the
     // same name.
     expect(CHAIN_ORDER.indexOf("toneeq")).toBe(CHAIN_ORDER.indexOf("exposure") + 1);
     expect(CHAIN_ORDER.indexOf("toneeq")).toBeLessThan(CHAIN_ORDER.indexOf("bw"));
     expect(ON_DEMAND_IDS.has("toneeq")).toBe(true);
 
-    const s = run(initialState(), { type: "set_category", title: "Relight", on: true });
+    const s = run(initialState(), { type: "set_category", title: "Tone Equalizer", on: true });
     const node = s.nodes.find((n) => n.id === "toneeq");
     expect(node?.enabled).toBe(true);
     expect(s.wires.some((w) => w.from === "exposure" && w.to === "toneeq")).toBe(true);
@@ -167,10 +167,10 @@ describe("Relight ships off, with no node in the graph", () => {
 
   it("keeps the work when it is switched off again", () => {
     // The rule every other category follows: off does not mean gone.
-    let s = run(initialState(), { type: "set_category", title: "Relight", on: true });
+    let s = run(initialState(), { type: "set_category", title: "Tone Equalizer", on: true });
     const id = s.nodes.find((n) => n.id === "toneeq")!.id;
     s = run(s, { type: "set_text_param", id, param: "points", value: '[{"x":-2,"y":1}]' });
-    s = run(s, { type: "set_category", title: "Relight", on: false });
+    s = run(s, { type: "set_category", title: "Tone Equalizer", on: false });
     const node = s.nodes.find((n) => n.id === "toneeq")!;
     expect(node.enabled).toBe(false);
     expect(node.textParams?.points).toBe(String.raw`[{"x":-2,"y":1}]`);

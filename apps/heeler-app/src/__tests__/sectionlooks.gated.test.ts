@@ -23,7 +23,7 @@ it("every look serializes with its section switched on in the chain", () => {
   for (const look of SECTION_LOOKS) {
     const shown = lookPreviewState(reduce(fresh, { type: "preview_section_look", id: look.id }));
     const g = serializeGraph(shown);
-    const id = look.section === "Relight" ? "toneeq" : "recolor";
+    const id = look.section === "Tone Equalizer" ? "toneeq" : "recolor";
     const n = g.nodes.find((x) => x.id === id);
     expect(n?.enabled, look.id).toBe(true);
     expect(g.connections.some((c) => c.to[0] === id), look.id).toBe(true);

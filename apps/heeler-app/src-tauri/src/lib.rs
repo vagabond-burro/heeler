@@ -12729,7 +12729,7 @@ fn chroma_histogram_blocking(app: &tauri::AppHandle, graph: UiGraph, image_id: S
 }
 
 /// What a curve eyedropper reads where the engine indexes the curve
-/// (`curve_lookup`): Relight's illuminance in EV from middle gray
+/// (`curve_lookup`): Tone Equalizer's illuminance in EV from middle gray
 /// (`value`, chroma 0), or the Recolor Around rows' surroundings as a
 /// hue in degrees (`value`) and its OkLab chroma.
 #[derive(Serialize)]
@@ -12765,7 +12765,7 @@ impl CurveLookupCache {
 /// A curve eyedropper's read of what the engine indexes the curve by, at
 /// (x, y) of the node's input (the 26.4.3 latest review's R2 and R4): the
 /// ghost and the click land where the curve is applied, not at a patch's
-/// raw average. `kind` is "tone" (Relight) or "around" (Recolor's Around
+/// raw average. `kind` is "tone" (Tone Equalizer) or "around" (Recolor's Around
 /// rows).
 #[tauri::command]
 async fn curve_lookup(app: tauri::AppHandle, graph: UiGraph, image_id: String, node: String, x: f32, y: f32, kind: String) -> Result<CurveLookup, String> {
@@ -26357,7 +26357,7 @@ mod tests {
     }
 
     /// A curve eyedropper reads the engine's own lookup (the 26.4.3
-    /// latest review's R2 and R4): Relight's tone and the Around rows'
+    /// latest review's R2 and R4): Tone Equalizer's tone and the Around rows'
     /// surroundings at the pixel, computed once per picture and setting.
     #[test]
     fn a_curve_lookup_reads_the_engines_field_once_per_picture() {

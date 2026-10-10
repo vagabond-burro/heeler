@@ -446,8 +446,8 @@ export function HarmonyIcon({ mode, size = 13 }: { mode: HarmonyMode; size?: num
 
 /** The eyedropper, for every control that says "point at the photo".
  *
- * The Curves editor drew one and the Relight toolbar wrote "◎ PICK"
- * instead, which is two pictures for one gesture. On the Relight
+ * The Curves editor drew one and the Tone Equalizer toolbar wrote "◎ PICK"
+ * instead, which is two pictures for one gesture. On the Tone Equalizer
  * one: "The pick button only needs the icon, not the PICK label."
  */
 export function EyedropperIcon({ size = 10 }: { size?: number }) {

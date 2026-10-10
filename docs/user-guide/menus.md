@@ -140,7 +140,7 @@ Option-Shift-click (Alt+Shift-click on Windows) limits the gesture to sections w
 
 Heeler remembers the window as you left it: whether the Library is collapsed, the height of its Folders tree above Collections, the thumbnail strip's width and whether it shows thumbnails or a list, the workspace you were in, the panel sizes and tabs, and which pop-out windows were open. The next launch puts all of it back. This menu is the same set of switches by name, and the way home when a window has gone astray.
 
-- **Graph in its own window**, **Spectrums window**, **Takes window**, **Color Bend window**, the **Tool windows** submenu (Color Wheels, Curves, Relight, Recolor, Color Tune), and **Console** each open or close that window; a tick shows which are out. Opening Graph requires the Graph or Canvas workspace; an open Graph window can be brought back from Develop too.
+- **Graph in its own window**, **Spectrums window**, **Takes window**, **Color Bend window**, the **Tool windows** submenu (Color Wheels, Curves, Tone Equalizer, Recolor, Color Tune), and **Console** each open or close that window; a tick shows which are out. Opening Graph requires the Graph or Canvas workspace; an open Graph window can be brought back from Develop too.
 - **Bring all windows back** docks every pop-out into the main window. Use it when a window has been pushed off a display.
 - **Reset layout** puts the Library, thumbnails, panels and their sizes back to a fresh launch's. The pop-outs are left as they are.
 - **Library** and **Thumbnails** show or hide those panels, and **Thumbnail strip as** chooses thumbnails or a list.
@@ -320,7 +320,7 @@ These are the shipped menu choices. **None** means no default key; assign one in
 | Node > Color > Tone > Curves | None |
 | Node > Color > Tone > Exposure | None |
 | Node > Color > Tone > Levels | None |
-| Node > Color > Tone > Relight | None |
+| Node > Color > Tone > Tone Equalizer | None |
 | Node > Color > Tone > Technical Soft Clip | None |
 | Node > Color > Tone > Tone Profile | None |
 | Node > Color > Tone > View Transform | None |
@@ -442,7 +442,7 @@ These are the shipped menu choices. **None** means no default key; assign one in
 | Window > Tool windows > Color Wheels | None |
 | Window > Tool windows > Curves | None |
 | Window > Tool windows > Recolor | None |
-| Window > Tool windows > Relight | None |
+| Window > Tool windows > Tone Equalizer | None |
 | Help > About Heeler | None |
 | Help > Check for Updates… | None |
 | Help > Find a Control… | None |

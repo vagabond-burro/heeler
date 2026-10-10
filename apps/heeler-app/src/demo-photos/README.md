@@ -27,4 +27,4 @@ After adding files, re-run the affected screenshot scenes:
 
 or by scene name for a subset (main-window, library-panel,
 thumbnail-panel, viewport, expanded-catalog, workspace-graph,
-workspace-canvas, relight-widget, finish-dodge-burn, finish-isolate).
+workspace-canvas, tone-equalizer-widget, finish-dodge-burn, finish-isolate).

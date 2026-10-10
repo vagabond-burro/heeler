@@ -673,7 +673,7 @@ describe("a tool window before its node exists", () => {
 });
 
 describe("a tool window with a layer selected", () => {
-  /// Second-pass Color Tune review, 26.3.2: the Color Tune and Relight
+  /// Second-pass Color Tune review, 26.3.2: the Color Tune and Tone Equalizer
   /// windows found the FIRST node of their type in the graph, which is
   /// the main chain's, while the panel beside them worked the selected
   /// layer's own. An edit made out in the window landed on a node the
@@ -706,7 +706,7 @@ describe("a tool window with a layer selected", () => {
     expect(writes.every((c) => c.id === "layer_1_colorconsole")).toBe(true);
   });
 
-  it("the Relight window's dials are the layer's own too", async () => {
+  it("the Tone Equalizer window's dials are the layer's own too", async () => {
     const t = fakeTransport();
     render(<ToolWindow kind="toneeq" />);
     act(() => t.send(STATE_CHANNEL, layeredSnapshot("heeler.tone_eq")));

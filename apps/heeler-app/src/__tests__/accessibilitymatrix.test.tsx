@@ -239,7 +239,7 @@ describe("accessibility matrix: complete surfaces", () => {
     await user.click(screen.getByRole("button",{name:"Close tool"}));await waitFor(()=>expect(opener).toHaveFocus());
   });
   it.each(["wheels","curves","toneeq","recolor","colorconsole","graph","spectrum","bend","console"])("%s pop-out face has named reachable controls", async kind=>{
-    let s=initialState();for(const title of ["Color Wheels","Curves","Relight","Recolor","Color Tune","Color Bend"])s=reduce(s,{type:"set_category",title,on:true});
+    let s=initialState();for(const title of ["Color Wheels","Curves","Tone Equalizer","Recolor","Color Tune","Color Bend"])s=reduce(s,{type:"set_category",title,on:true});
     const listeners=new Map<string,((p:any)=>void)[]>();
     const bus:popout.Transport={send(channel,payload){for(const f of listeners.get(channel)??[])f(payload);if(channel===popout.STATE_REQUEST)for(const f of listeners.get(popout.STATE_CHANNEL)??[])f(popout.graphSnapshot(s));},subscribe(channel,f){listeners.set(channel,[...(listeners.get(channel)??[]),f]);return()=>listeners.set(channel,(listeners.get(channel)??[]).filter(x=>x!==f));}};
     popout.setTransport(bus);

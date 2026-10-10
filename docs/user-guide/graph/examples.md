@@ -135,6 +135,6 @@ The View Transform is the scene-to-display rendering, so the Tone Profile is lef
 ## Building your own
 
 - Start from the photograph's chain and branch: drag from any output to a second node, then bring the branches back together with Merge, Blend Mode or Conditional.
-- Keep linear work (Exposure, Color, Relight) before the Tone Profile and Curves after it.
+- Keep linear work (Exposure, Color, Tone Equalizer) before the Tone Profile and Curves after it.
 - A field can feed any number of mask ports; make it once.
 - Save a working branch as a group and publish the two or three controls that matter.

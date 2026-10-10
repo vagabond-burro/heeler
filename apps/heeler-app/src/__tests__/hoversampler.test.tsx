@@ -66,13 +66,13 @@ const SITES: Record<string, Site> = {
     resumesAfterLeave: false,
     heldGate: "drag",
   },
-  // Relight's ghost (2026-10-08: "I am not getting the ghost on the
+  // Tone Equalizer's ghost (2026-10-08: "I am not getting the ghost on the
   // relight curve with the eyedropper"), the same sampler as the rest.
-  Relight: {
+  "Tone Equalizer": {
     overlay: "tone-eq-pick-overlay",
     hover: "set_tone_eq_hover",
     cleared: { type: "set_tone_eq_hover", x: null },
-    armed: () => run(initialState(), { type: "set_category", title: "Relight", on: true }, { type: "toggle_tone_eq_pick", id: "toneeq" }),
+    armed: () => run(initialState(), { type: "set_category", title: "Tone Equalizer", on: true }, { type: "toggle_tone_eq_pick", id: "toneeq" }),
     disarm: { type: "toggle_tone_eq_pick", id: "toneeq" },
     resumesAfterLeave: false,
     heldGate: "drag",
@@ -117,7 +117,7 @@ for (const [name, site] of Object.entries(SITES)) {
       const move = (x: number, init: MouseEventInit = {}) => fireEvent.mouseMove(overlay(), { clientX: x, clientY: 50, ...init });
       return { commands, view, overlay, move };
     };
-    // Relight reads the engine's lookup (curveLookup), the others a
+    // Tone Equalizer reads the engine's lookup (curveLookup), the others a
     // color patch (sampleImage); a site uses one or the other.
     const xs = () => [
       ...vi.mocked(sampleImage).mock.calls.map((c) => c[1]),

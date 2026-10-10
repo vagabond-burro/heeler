@@ -93,8 +93,8 @@ The **Teal and Orange** look is a split tone made this way: apply it and read it
 
 - The **X** and **Y** fields under each curve show the selected point and follow it while you drag; type a value and press Enter to place it exactly.
 - Hold **Shift** while dragging to snap to each axis's own unit: 10° on hue, 10 points on saturation, quarter stops on the EV axis, on both the BY and ADJUST sides.
-- Hold **Option** or **Cmd** (**Alt** on Windows) while dragging to lock the drag to its dominant direction, exactly as in Relight, and combine it with Shift to step along one axis only.
-- The **Layout** menu is shaped by the BY axis: hue and Around offer every 60° or 30°, saturation every 50, 25, or 10, depth and mask every 25 or 10, and the EV axis borrows Relight's layouts.
+- Hold **Option** or **Cmd** (**Alt** on Windows) while dragging to lock the drag to its dominant direction, exactly as in Tone Equalizer, and combine it with Shift to step along one axis only.
+- The **Layout** menu is shaped by the BY axis: hue and Around offer every 60° or 30°, saturation every 50, 25, or 10, depth and mask every 25 or 10, and the EV axis borrows Tone Equalizer's layouts.
 
 ## Copying a curve
 
@@ -118,7 +118,7 @@ Hold the picker while the color or depth is read, then drag vertically to adjust
 
 ## Why a curve barely changes the picture
 
-- **A Hue row on a muted photograph.** A dusk scene, haze or an overcast day is mostly near-gray, and the Neutral guard keeps near-grays out of the Hue rows: on one such photograph the default guard let a whole Hue to Lum curve at -2 darken the picture by about a seventh of a stop. When a Hue row's curve is moved far and the guard holds most of the photograph back, the line under the strip says how much it holds back, with **Lower to**: the highest setting that reaches most of it, as one undo step. The status line explains why as the warning appears. A photograph with almost no color says that instead: the Lum row, or Relight, works by brightness.
+- **A Hue row on a muted photograph.** A dusk scene, haze or an overcast day is mostly near-gray, and the Neutral guard keeps near-grays out of the Hue rows: on one such photograph the default guard let a whole Hue to Lum curve at -2 darken the picture by about a seventh of a stop. When a Hue row's curve is moved far and the guard holds most of the photograph back, the line under the strip says how much it holds back, with **Lower to**: the highest setting that reaches most of it, as one undo step. The status line explains why as the warning appears. A photograph with almost no color says that instead: the Lum row, or Tone Equalizer, works by brightness.
 - **A Mask row with no mask chosen** does nothing until one is chosen under the curve.
 - **A Depth row before the depth map exists** reads the scene as flat. Ask for depth with **Read depth**.
 

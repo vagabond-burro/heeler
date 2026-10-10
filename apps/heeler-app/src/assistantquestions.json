@@ -14,7 +14,7 @@
     { "q": "How do I paint on a layer mask to hide part of a Finish layer?", "expect": ["finish/masks-selections.md"] },
     { "q": "How do I convert the photo to black and white?", "expect": [["adjustments/color.md", "adjustments/black-and-white.md"]] },
     { "q": "How do I sharpen the photo?", "expect": ["adjustments/sharpening.md"] },
-    { "q": "How can I brighten only the shadows?", "expect": [["adjustments/relight.md", "adjustments/curves.md", "adjustments/levels.md", "adjustments/exposure.md"]] },
+    { "q": "How can I brighten only the shadows?", "expect": [["adjustments/tone-equalizer.md", "adjustments/curves.md", "adjustments/levels.md", "adjustments/exposure.md"]] },
     { "q": "How do I blur the background like a wide open lens?", "expect": ["adjustments/depth-of-field.md"] },
     { "q": "How do I go back to an earlier version of my edit?", "expect": [["history.md", "image-viewport.md"]] },
     { "q": "How do I rate and flag my photos?", "expect": ["thumbnails.md"] },

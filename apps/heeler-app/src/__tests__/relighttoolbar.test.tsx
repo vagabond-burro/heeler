@@ -1,4 +1,4 @@
-// The Relight editor's toolbar (2026-08-27).
+// The Tone Equalizer editor's toolbar (2026-08-27).
 //
 // Three asks in one row: the Layout menu's text a size up, the pick
 // button reduced to its icon and matched to the menu's height, and the
@@ -18,7 +18,7 @@ function toneEq(): NodeCard {
   return initialState().nodes.find((n) => n.type === "heeler.tone_eq")!;
 }
 
-describe("the Relight toolbar", () => {
+describe("the Tone Equalizer toolbar", () => {
   it("shows the pick button as an icon, with its name where a reader can reach it", () => {
     render(<EqEditor node={toneEq()} dispatch={() => {}} onTogglePick={() => {}} />);
     const pick = screen.getByTestId("tone-eq-pick");

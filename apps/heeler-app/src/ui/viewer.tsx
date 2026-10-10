@@ -749,11 +749,11 @@ export function MultiView({
  * the ghost sat (2026-10-08: "when I clicked to add a point in recolor
  * the point added did not reflect the ghost"; Recolor's and Black &
  * White's hover read 1% and their click 2%, two different averages on
- * busy detail). Curves, Relight, Recolor and the Black & White hue curve
+ * busy detail). Curves, Tone Equalizer, Recolor and the Black & White hue curve
  * share it. */
 export const CURVE_PICK_REACH = 0.01;
 
-/** Where Relight's eyedropper puts a point on the curve: the engine's
+/** Where Tone Equalizer's eyedropper puts a point on the curve: the engine's
  * own lookup there (curveLookup "tone", the guided illuminance the curve
  * is applied at, in EV) plus Range shift, clamped to the curve's window.
  * It read a patch's raw luma, up to 2.3 stops from the tone the curve
@@ -2144,7 +2144,7 @@ report: "interactive handles in the viewport").*/}
                 }}
               />
             )}
-            {/* Relight's zone picker: click a brightness on the photo, drag up or
+            {/* Tone Equalizer's zone picker: click a brightness on the photo, drag up or
 down, and the ZONE that brightness lives in re-exposes: the
 targeted-adjustment gesture, aimed at the zone system. One drag is
 one gesture and one undo entry.*/}
@@ -2207,7 +2207,7 @@ one gesture and one undo entry.*/}
                 }}
               />
             )}
-            {/* Relight's picker: a click adds a point at the tone under
+            {/* Tone Equalizer's picker: a click adds a point at the tone under
                 the pointer (or takes the one there) and a held drag lifts
                 or drops it. Stays armed for the next tone, like Recolor
                 and the Black & White hue picker: a curve is shaped a
@@ -2263,7 +2263,7 @@ one gesture and one undo entry.*/}
                       return [n?.params, n?.textParams?.points, n?.curveInterp];
                     },
                   });
-                  // The Relight curve's points, the widget's own: a click
+                  // The Tone Equalizer curve's points, the widget's own: a click
                   // adds one at the tone under the cursor (one already
                   // there, within EQ_PICK_GRAB, is taken instead) and a
                   // held drag moves it, as Curves, Recolor and Black and
@@ -2435,7 +2435,7 @@ preset Skin band, because subjects vary.*/}
             )}
             {/* Recolor's picker: sample the pixel's channel for the
                 ACTIVE routing cell, then drag vertically to adjust the
-                curve there: the Relight gesture aimed at color
+                curve there: the Tone Equalizer gesture aimed at color
                 channels. Adds a point when none is near. Stays armed
                 for the next point, like the Black & White hue picker:
                 a row is shaped a point at a time, and Escape or the

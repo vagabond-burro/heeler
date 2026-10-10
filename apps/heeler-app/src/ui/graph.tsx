@@ -4066,13 +4066,13 @@ two controls Develop's treatment block has, on the node.*/}
               <ConsoleInspector node={node} dispatch={dispatch} width={widgetW} appState={appState} />
             )}
             {/* The section looks, the same row the Develop section draws
-                (features reach their nodes): on the chain's own Relight
+                (features reach their nodes): on the chain's own Tone Equalizer
                 and Recolor, not a layer's copy. */}
             {appState && node.id === "recolor" && node.type === "heeler.recolor" && (
               <SectionLooks section="Recolor" state={appState} dispatch={dispatch} seat="inspector" />
             )}
             {appState && node.id === "toneeq" && node.type === "heeler.tone_eq" && (
-              <SectionLooks section="Relight" state={appState} dispatch={dispatch} seat="inspector" />
+              <SectionLooks section="Tone Equalizer" state={appState} dispatch={dispatch} seat="inspector" />
             )}
             {node.type === "heeler.recolor" && (
               <RecolorInspector node={node} dispatch={dispatch} width={widgetW} appState={appState} histogramSrc={histSrc} />

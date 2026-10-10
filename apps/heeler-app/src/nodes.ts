@@ -83,7 +83,7 @@ export const NODE_CATALOG: NodeSpec[] = [
   // (Depth Anything V2 Small; passthrough until depth is computed).
   { type: "heeler.depth_map", name: "Depth Map", cat: "detail", blurb: "How the depth plane every depth tool reads is refined against the photograph: edges and flatten" },
   { type: "heeler.fog", name: "Fog", cat: "detail", blurb: "Atmosphere by distance, from the depth model" },
-  { type: "heeler.key_light", name: "Depth Lighting", cat: "detail", blurb: "Synthetic lights - suns and lamps - over the scene's depth" },
+  { type: "heeler.key_light", name: "Depth Lighting", cat: "detail", blurb: "Relight the scene by its depth: suns and lamps you place over it" },
   { type: "heeler.dof", name: "Depth of Field", cat: "detail", blurb: "Focus falls off with distance from a chosen plane" },
   { type: "heeler.flare", name: "Lens Flare", cat: "detail", blurb: "The lens's flare for the Depth Lighting rig's lights: glow, rays, ghosts, veil" },
   { type: "heeler.halation", name: "Halation", cat: "detail", blurb: "Highlights bleed a colored mist into their dark surroundings, the film's own glow" },
@@ -124,7 +124,7 @@ export const NODE_CATALOG: NodeSpec[] = [
   { type: "heeler.soft_clip", name: "Technical Soft Clip", cat: "color", blurb: "Values past a ceiling rolled smoothly into it, everything below the knee untouched" },
   { type: "heeler.chroma_key_despill", name: "Chroma Key (Despill)", cat: "color", blurb: "A key color's spill taken out of the picture, lightness kept: green fringes go neutral" },
   { type: "heeler.view_transform", name: "View Transform", cat: "color", blurb: "The scene-to-display rendering, chosen: sigmoid, filmic, AgX, ACES. Use instead of Tone Profile" },
-  { type: "heeler.tone_eq", name: "Relight", cat: "color", blurb: "Re-expose by brightness zone: lift the shadows without touching the sky" },
+  { type: "heeler.tone_eq", name: "Tone Equalizer", cat: "color", blurb: "Re-expose by brightness zone: lift the shadows without touching the sky" },
   { type: "heeler.recolor", name: "Recolor", cat: "color", blurb: "The channel-routing color EQ: select by hue, sat or lum; adjust the same" },
   { type: "heeler.color_console", name: "Color Tune", cat: "color", blurb: "Per-family grading strips: R G B C Y M plus bands you pick, each with a wheel" },
   { type: "heeler.lut", name: "3D LUT", cat: "color", blurb: "A .cube look-up table from disk, film emulations and grades included" },

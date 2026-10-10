@@ -20,7 +20,7 @@ const node = (s: State, id: string) => s.nodes.find((n) => n.id === id);
 const hold = (id: string): Command => ({ type: "preview_section_look", id });
 
 /** A fresh photograph's graph (the demo session's sample graph keeps
- * Relight's and Recolor's cards, switched off; a new photograph has
+ * Tone Equalizer's and Recolor's cards, switched off; a new photograph has
  * neither). */
 function fresh(): State {
   const s = initialState();
@@ -28,8 +28,8 @@ function fresh(): State {
 }
 
 describe("the looks, as data", () => {
-  it("four for Relight and six for Recolor, two of them reading depth", () => {
-    expect(looksFor("Relight")).toHaveLength(4);
+  it("four for Tone Equalizer and six for Recolor, two of them reading depth", () => {
+    expect(looksFor("Tone Equalizer")).toHaveLength(4);
     expect(looksFor("Recolor")).toHaveLength(6);
     expect(SECTION_LOOKS.filter((l) => l.depth).map((l) => l.id)).toEqual(["recolor-cool-distance", "recolor-warm-subject"]);
     expect(new Set(SECTION_LOOKS.map((l) => l.id)).size).toBe(SECTION_LOOKS.length);
@@ -38,7 +38,7 @@ describe("the looks, as data", () => {
   it("every number sits inside what the engine reads", () => {
     const cells = new Set<string>(RECOLOR_CELLS.map((c) => c.id));
     for (const look of SECTION_LOOKS) {
-      if (look.section === "Relight") {
+      if (look.section === "Tone Equalizer") {
         for (const p of JSON.parse(look.text.points) as { x: number; y: number }[]) {
           expect(p.x).toBeGreaterThanOrEqual(TONE_EQ_DOMAIN[0]);
           expect(p.x).toBeLessThanOrEqual(TONE_EQ_DOMAIN[1]);
@@ -77,7 +77,7 @@ describe("a Pro copy's look", () => {
   it("replaces what the section held rather than blending into it", () => {
     const s = run(
       fresh(),
-      { type: "set_category", title: "Relight", on: true },
+      { type: "set_category", title: "Tone Equalizer", on: true },
       { type: "set_param", id: "toneeq", param: "range_shift", value: 2 },
     );
     const applied = run(s, { type: "apply_section_look", id: "relight-tame-highlights" });
@@ -104,7 +104,7 @@ function Harness({
   onState,
   sent,
 }: {
-  section: "Relight" | "Recolor";
+  section: "Tone Equalizer" | "Recolor";
   onState: (s: State) => void;
   sent: Command[];
 }) {
@@ -119,17 +119,17 @@ function Harness({
   return <SectionLooks section={section} state={state} dispatch={counted} />;
 }
 
-function mount(section: "Relight" | "Recolor" = "Relight") {
+function mount(section: "Tone Equalizer" | "Recolor" = "Tone Equalizer") {
   const seen: { s: State | null } = { s: null };
   const sent: Command[] = [];
   const view = render(<Harness section={section} onState={(s) => (seen.s = s)} sent={sent} />);
   return { seen, view, sent };
 }
 
-const slugOf = (section: "Relight" | "Recolor") => section.toLowerCase();
-const openMenu = (section: "Relight" | "Recolor" = "Relight") =>
+const slugOf = (section: "Tone Equalizer" | "Recolor") => section.toLowerCase().replace(/[^a-z]+/g, "-");
+const openMenu = (section: "Tone Equalizer" | "Recolor" = "Tone Equalizer") =>
   fireEvent.click(screen.getByTestId(`looks-${slugOf(section)}-menu`));
-const row = (id: string, section: "Relight" | "Recolor" = "Relight") =>
+const row = (id: string, section: "Tone Equalizer" | "Recolor" = "Tone Equalizer") =>
   screen.getByTestId(`looks-${slugOf(section)}-menu-option-${id}`);
 /** The parts of the state an edit, a save or a Take would read. */
 const kept = (s: State) => ({
@@ -152,9 +152,9 @@ describe("the looks menu", () => {
 
   it("a Pro copy shows the same menu, no buttons and no Pro line", () => {
     mount();
-    expect(screen.getByTestId("looks-relight-menu")).toBeInTheDocument();
+    expect(screen.getByTestId("looks-tone-equalizer-menu")).toBeInTheDocument();
     expect(screen.queryByTestId("look-relight-low-key")).toBeNull();
-    expect(screen.queryByTestId("looks-relight-line")).toBeNull();
+    expect(screen.queryByTestId("looks-tone-equalizer-line")).toBeNull();
     openMenu();
     expect(row("relight-low-key").getAttribute("data-hint")).toMatch(/Click to apply it as one undo step$/);
   });
@@ -172,12 +172,12 @@ describe("the looks menu", () => {
     act(() => vi.advanceTimersByTime(LOOK_HOVER_MS));
     expect(seen.s!.lookPreview).toBe("relight-open-shadows");
     // The pointer leaving the list is not a close: the last row stays.
-    fireEvent.mouseLeave(screen.getByTestId("looks-relight-menu-menu"));
+    fireEvent.mouseLeave(screen.getByTestId("looks-tone-equalizer-menu-menu"));
     act(() => vi.advanceTimersByTime(500));
     expect(seen.s!.lookPreview).toBe("relight-open-shadows");
     // Escape closes, and the photograph is what it was.
     fireEvent.keyDown(row("relight-open-shadows"), { key: "Escape" });
-    expect(screen.queryByTestId("looks-relight-menu-menu")).toBeNull();
+    expect(screen.queryByTestId("looks-tone-equalizer-menu-menu")).toBeNull();
     expect(seen.s!.lookPreview).toBeNull();
     expect(kept(seen.s!)).toEqual(before);
     expect(seen.s!.nodes).toBe(before.nodes);
@@ -226,15 +226,15 @@ describe("the looks menu", () => {
   it("the keyboard previews too: the arrows walk the rows, Escape puts the photograph back", () => {
     vi.useFakeTimers();
     const { seen } = mount();
-    const field = screen.getByTestId("looks-relight-menu");
+    const field = screen.getByTestId("looks-tone-equalizer-menu");
     fireEvent.keyDown(field, { key: "ArrowDown" });
     act(() => vi.advanceTimersByTime(LOOK_HOVER_MS));
-    const first = looksFor("Relight")[0].id;
+    const first = looksFor("Tone Equalizer")[0].id;
     expect(document.activeElement).toBe(row(first));
     expect(seen.s!.lookPreview).toBe(first);
     fireEvent.keyDown(row(first), { key: "ArrowDown" });
     act(() => vi.advanceTimersByTime(LOOK_HOVER_MS));
-    expect(seen.s!.lookPreview).toBe(looksFor("Relight")[1].id);
+    expect(seen.s!.lookPreview).toBe(looksFor("Tone Equalizer")[1].id);
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
     expect(seen.s!.lookPreview).toBeNull();
     expect(document.activeElement).toBe(field);
@@ -248,7 +248,7 @@ describe("the looks menu", () => {
     fireEvent.mouseEnter(row("relight-low-key"));
     act(() => vi.advanceTimersByTime(LOOK_HOVER_MS));
     fireEvent.click(row("relight-low-key"));
-    expect(screen.queryByTestId("looks-relight-menu-menu")).toBeNull();
+    expect(screen.queryByTestId("looks-tone-equalizer-menu-menu")).toBeNull();
     expect(seen.s!.lookPreview).toBeNull();
     expect(seen.s!.undoStack).toHaveLength(undoBefore + 1);
     expect(node(seen.s!, "toneeq")?.textParams?.points).toBe(lookById("relight-low-key")!.text.points);
@@ -279,10 +279,10 @@ describe("the looks menu", () => {
       const [shown, set] = useReducer((_: boolean, v: boolean) => v, true);
       setShown = set;
       latest = state;
-      return shown ? <SectionLooks section="Relight" state={state} dispatch={dispatch} /> : null;
+      return shown ? <SectionLooks section="Tone Equalizer" state={state} dispatch={dispatch} /> : null;
     }
     render(<Outer />);
-    fireEvent.click(screen.getByTestId("looks-relight-menu"));
+    fireEvent.click(screen.getByTestId("looks-tone-equalizer-menu"));
     fireEvent.mouseEnter(row("relight-low-key"));
     act(() => vi.advanceTimersByTime(LOOK_HOVER_MS));
     expect(latest!.lookPreview).toBe("relight-low-key");

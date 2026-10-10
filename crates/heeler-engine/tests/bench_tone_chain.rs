@@ -2,7 +2,7 @@
 //!
 //! Sibling of bench_color_chain.rs, same conventions, covering the tone
 //! tools: heeler.exposure, heeler.levels, heeler.curves and
-//! heeler.tone_eq (the Relight tool). Measures per-op costs and chain
+//! heeler.tone_eq (the Tone Equalizer tool). Measures per-op costs and chain
 //! scaling (1, 2, 3, 4 tools) over the nine demo photos, and pins the
 //! full-frame f32 output bit for bit so a speed fix cannot quietly
 //! change a pixel.

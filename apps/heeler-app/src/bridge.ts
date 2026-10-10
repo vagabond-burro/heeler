@@ -3847,7 +3847,7 @@ export async function sampleImage(
 }
 
 /** What a curve eyedropper reads where the engine indexes the curve:
- * "tone" is Relight's illuminance in EV from middle gray (value); "around"
+ * "tone" is Tone Equalizer's illuminance in EV from middle gray (value); "around"
  * is the Recolor Around rows' surroundings, a hue in degrees (value) and
  * its OkLab chroma. Null in the browser build or on failure. */
 export async function curveLookup(
@@ -4533,7 +4533,7 @@ function serializeEditorGraph(
         ...(placePad.has(n.id) ? { place_pad: placePad.get(n.id)! } : {}),
         ...(n.type === "heeler.tone_profile" && !servedProfiles.has(n.id) ? { film: "", development: 0 } : {}),
         ...(n.type === "heeler.tone_profile" && developsRendered(n) && !n.enabled ? { baseline_ev: 0, colorfulness: 0 } : {}),
-        // The parametric editors' interpolation face (Relight and
+        // The parametric editors' interpolation face (Tone Equalizer and
         // Recolor) rides to the engine as a plain param. Curves keeps
         // its own copy INSIDE the curve JSON below; sending this too
         // would be a second voice.

@@ -34,7 +34,7 @@ const overlays = { curve: "curve-pick-overlay", tone: "tone-eq-pick-overlay", re
 function fixture(kind: Kind): State {
   let s = initialState();
   if (kind === "curve") return run(s, { type: "set_category", title: "Curves", on: true }, { type: "arm_curve_pick", nodeId: "curves", channel: "rgb" });
-  if (kind === "tone") return run(s, { type: "set_category", title: "Relight", on: true }, { type: "toggle_tone_eq_pick", id: "toneeq" });
+  if (kind === "tone") return run(s, { type: "set_category", title: "Tone Equalizer", on: true }, { type: "toggle_tone_eq_pick", id: "toneeq" });
   if (kind === "set") return run(s, { type: "add_color_set" }, { type: "arm_cset_dropper", n: 1 });
   s = run(s, { type: "set_category", title: "Recolor", on: true });
   return run(s, kind === "recolor" ? { type: "toggle_recolor_pick", id: "recolor" } : { type: "toggle_recolor_match", id: "recolor" });
@@ -117,7 +117,7 @@ describe("drag and hover boundaries", () => {
     expect(write.source!.hue).toBeCloseTo(oklabHueChroma(warm.r, warm.g, warm.b).hue);
     expect(write.source!.luma).toBeCloseTo(0.7);
   });
-  // Relight's picker edits the curve's own points, as the other curve
+  // Tone Equalizer's picker edits the curve's own points, as the other curve
   // pickers do (the 26.4.3 branch review's R4): a click adds a point at
   // the tone under the cursor, held or released, and a held drag moves
   // it. It used to write the legacy zone sliders, which the engine

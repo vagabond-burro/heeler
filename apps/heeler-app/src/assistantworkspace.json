@@ -9,7 +9,7 @@
     { "q": "What does the selected node do?", "selected": ["heeler.depth_map"], "develop": null, "graph": ["graph/nodes/detail.md"] },
     { "q": "How do I convert the photo to black and white?", "develop": [["adjustments/color.md", "adjustments/black-and-white.md"]], "graph": ["graph/nodes/color.md"] },
     { "q": "How do I sharpen the photo?", "develop": ["adjustments/sharpening.md"], "graph": ["graph/nodes/detail.md"] },
-    { "q": "How can I brighten only the shadows?", "develop": [["adjustments/relight.md", "adjustments/curves.md", "adjustments/levels.md", "adjustments/exposure.md"]], "graph": [["graph/nodes/color.md", "graph/examples.md"]] },
+    { "q": "How can I brighten only the shadows?", "develop": [["adjustments/tone-equalizer.md", "adjustments/curves.md", "adjustments/levels.md", "adjustments/exposure.md"]], "graph": [["graph/nodes/color.md", "graph/examples.md"]] },
     { "q": "How do I add a vignette?", "develop": ["adjustments/vignette.md"], "graph": ["graph/nodes/detail.md"] },
     { "q": "How do I warm up the white balance?", "develop": ["adjustments/color.md"], "graph": ["graph/nodes/color.md"] },
     { "q": "How do I reduce the noise?", "develop": ["adjustments/noise-reduction.md"], "graph": ["graph/nodes/detail.md"] }

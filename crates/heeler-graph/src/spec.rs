@@ -1816,7 +1816,7 @@ impl Registry {
             // A positioned main light over the depth heightfield: 2.5D
             // normals from the farness gradient, Lambert-shaded. Named
             // for the film set's key light - "Relight" was taken by
-            // the tone equalizer.
+            // the tone equalizer (itself renamed Tone Equalizer in 2026.5.1).
             type_name: "heeler.key_light".into(),
             version: 1,
             label: "Depth Lighting".into(),
@@ -2248,7 +2248,7 @@ impl Registry {
             // identity, like Lens Correction.
             type_name: "heeler.tone_eq".into(),
             version: 1,
-            label: "Relight".into(),
+            label: "Tone Equalizer".into(),
             params: vec![
                 num("ev_m4", 0.0, -2.0, 2.0),
                 num("ev_m3", 0.0, -2.0, 2.0),

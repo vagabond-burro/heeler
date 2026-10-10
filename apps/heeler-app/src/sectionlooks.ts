@@ -1,4 +1,4 @@
-/** The looks a Relight or Recolor section offers as one press
+/** The looks a Tone Equalizer or Recolor section offers as one press
  * (2026-09-30, from a tester's note: "you might get some mileage out
  * of having a 'free preview' of some of your more standout features
  * (like relight) ... maybe having some presets. the user can't change
@@ -18,19 +18,19 @@
  * held before.
  *
  * Axes, for reading the numbers below (src/eqcurve.ts):
- * - Relight's `points`: x is the tone in stops around middle gray,
+ * - Tone Equalizer's `points`: x is the tone in stops around middle gray,
  *   -6 (deep shadow) to +3 (bright highlight); y is the exposure change
  *   in stops, -2 to +2.
  * - Recolor's `curves`: "<by>_<adjust>" cells. By hue is the OkLCh hue
  *   circle in degrees (red about 30, orange 60, yellow 110, green 140,
  *   cyan 195, blue 260, magenta 330); by sat is 0 to 100 percent of
- *   full chroma; by lum is Relight's stops; by depth is 0 near to 100
+ *   full chroma; by lum is Tone Equalizer's stops; by depth is 0 near to 100
  *   far. Hue shifts are degrees (plus or minus 60), sat, temp, vib and
  *   pastel are percent (plus or minus 100, temp positive is warm), lum
  *   is stops (plus or minus 2).
  */
 
-export type LookSection = "Relight" | "Recolor";
+export type LookSection = "Tone Equalizer" | "Recolor";
 
 export interface SectionLook {
   id: string;
@@ -48,7 +48,7 @@ const pts = (list: [number, number][]): string => JSON.stringify(list.map(([x, y
 const cells = (map: Record<string, [number, number][]>): string =>
   JSON.stringify(Object.fromEntries(Object.entries(map).map(([k, v]) => [k, v.map(([x, y]) => ({ x, y }))])));
 
-/** Relight's settings at rest, which every look starts from. */
+/** Tone Equalizer's settings at rest, which every look starts from. */
 const RELIGHT_BASE = { values: { smoothing: 50, range_shift: 0 }, text: {} };
 /** Recolor's settings at rest: every curve, surface and choice empty. */
 const RECOLOR_BASE = {
@@ -58,7 +58,7 @@ const RECOLOR_BASE = {
 
 const relight = (id: string, name: string, does: string, points: [number, number][], values: Record<string, number> = {}): SectionLook => ({
   id,
-  section: "Relight",
+  section: "Tone Equalizer",
   name,
   does,
   depth: false,

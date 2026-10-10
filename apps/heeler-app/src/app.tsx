@@ -752,7 +752,7 @@ export function App() {
   const spectrumEngineRef = useRef(spectrumFromEngine);
   spectrumEngineRef.current = spectrumFromEngine;
   useEffect(() => {
-    // The Relight window's histogram reads the same live frame the
+    // The Tone Equalizer window's histogram reads the same live frame the
     // spectrums do, so both windows are on this push.
     if (state.spectrumsPoppedOut || state.toolPopouts.toneeq || state.toolPopouts.recolor)
       transport().send(FRAME_CHANNEL, { frame: spectrumFrame, engine: spectrumFromEngine });

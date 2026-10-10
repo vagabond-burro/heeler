@@ -38,7 +38,7 @@ function renderViewer(state: State) {
 const ARMED: { overlay: string; cmds: Command[] }[] = [
   { overlay: "wb-pick-overlay", cmds: [{ type: "arm_wb_pick", id: "stdcolor" }] },
   { overlay: "curve-pick-overlay", cmds: [{ type: "set_category", title: "Curves", on: true }, { type: "arm_curve_pick", nodeId: "curves", channel: "rgb" }] },
-  { overlay: "tone-eq-pick-overlay", cmds: [{ type: "set_category", title: "Relight", on: true }, { type: "toggle_tone_eq_pick", id: "toneeq" }] },
+  { overlay: "tone-eq-pick-overlay", cmds: [{ type: "set_category", title: "Tone Equalizer", on: true }, { type: "toggle_tone_eq_pick", id: "toneeq" }] },
   { overlay: "recolor-pick-overlay", cmds: [{ type: "set_category", title: "Recolor", on: true }, { type: "toggle_recolor_pick", id: "recolor" }] },
   { overlay: "recolor-match-overlay", cmds: [{ type: "set_category", title: "Recolor", on: true }, { type: "toggle_recolor_match", id: "recolor" }] },
   { overlay: "console-pick-overlay", cmds: [{ type: "set_category", title: "Color Tune", on: true }, { type: "toggle_console_pick", id: "colorconsole" }] },
