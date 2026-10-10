@@ -47,6 +47,7 @@ describe("the crop ratio bar", () => {
     fireEvent.keyDown(w, { key: "Enter" });
     expect(onRatio).not.toHaveBeenCalled();
     fireEvent.change(h, { target: { value: "wide" } });
+    expect(h.value, "letters never get into the field").toBe("");
     fireEvent.keyDown(h, { key: "Enter" });
     expect(onRatio).not.toHaveBeenCalled();
     fireEvent.change(h, { target: { value: "0" } });

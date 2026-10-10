@@ -951,7 +951,7 @@ so it rides saves, undo, copies and presets with nothing of its own.*/}
             aria-pressed={hueStable}
             aria-label={hueHint}
             data-hint={hueHint}
-            style={{ padding: "2px 6px", fontSize: 9, letterSpacing: ".08em" }}
+            style={{ padding: "1px 6px", fontSize: 11, letterSpacing: ".06em" }}
             onClick={() =>
               dispatch({ type: "set_text_param", id: node.id, param: "rgb_mode", value: hueStable ? "" : "hue" })
             }

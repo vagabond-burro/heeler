@@ -31,6 +31,9 @@ describe("hue stable Curves", () => {
     render(<CurvesHarness start={initialState()} />);
     const chip = screen.getByTestId("curve-hue");
     expect(chip).toHaveAttribute("aria-pressed", "false");
+    // The house's 11px floor, which editors.tsx's legacy allowlist entry
+    // keeps the global text-size test from checking here.
+    expect(chip.style.fontSize).toBe("11px");
     expect(curves(live).textParams?.rgb_mode ?? "").toBe("");
     fireEvent.click(chip);
     expect(curves(live).textParams?.rgb_mode).toBe("hue");

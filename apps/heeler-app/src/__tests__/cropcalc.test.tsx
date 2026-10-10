@@ -25,8 +25,14 @@ describe("resolutionRatio", () => {
 
   it("reads sides that are not whole numbers as the ratio to 1, and refuses nonsense", () => {
     expect(resolutionRatio(2.39, 1)?.label).toBe("2.39:1");
-    expect(resolutionRatio(16.5, 9)?.label).toBe("1.833:1");
+    expect(resolutionRatio(16.5, 9)?.label).toBe("1.8333:1");
+    // Four places, so a near-square decimal does not read as square.
+    expect(resolutionRatio(1000.4, 1000)?.label).toBe("1.0004:1");
     for (const [w, h] of [[0, 1080], [1920, 0], [-5, 3], [Number.NaN, 2], [Infinity, 2]]) expect(resolutionRatio(w, h)).toBeNull();
+    // Finite sides, but a ratio no crop can hold (1e308 over 1e-308 is
+    // Infinity, which collapsed the crop to no height).
+    for (const [w, h] of [[1e308, 1e-308], [1, 5000], [5000, 1]]) expect(resolutionRatio(w, h)).toBeNull();
+    expect(resolutionRatio(1000, 1)?.label).toBe("1000:1");
   });
 });
 
@@ -44,6 +50,10 @@ describe("saved crop ratios", () => {
         { name: "text", w: "4", h: 3 },
         null,
         { name: "x".repeat(50), w: 2, h: 1 },
+        { name: "huge", w: 1e308, h: 1e-308 },
+        { name: "16:9", w: 16, h: 9 },
+        { name: "Original", w: 3, h: 2 },
+        { name: "free", w: 3, h: 2 },
       ]),
     ).toEqual([
       { name: "HD", w: 1920, h: 1080 },
@@ -84,9 +94,12 @@ describe("the aspect ratio calculator", () => {
     expect(button).toHaveAccessibleName("Aspect ratio calculator");
     expect(button.querySelector("svg")).not.toBeNull();
     expect(screen.queryByTestId("crop-calc-panel")).toBeNull();
+    expect(button).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(button);
     expect(screen.getByTestId("crop-calc-panel")).toBeInTheDocument();
-    expect(button).toHaveAttribute("aria-pressed", "true");
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    expect(button).toHaveAttribute("aria-controls", screen.getByTestId("crop-calc-panel").id);
+    expect(screen.getByTestId("crop-calc-result")).toHaveAttribute("aria-live", "polite");
     fireEvent.click(button);
     expect(screen.queryByTestId("crop-calc-panel")).toBeNull();
   });
@@ -126,8 +139,24 @@ describe("the aspect ratio calculator", () => {
     fireEvent.click(screen.getByTestId("crop-calc-save"));
     expect(onSaved).toHaveBeenLastCalledWith([{ name: "HD video", w: 1920, h: 1080 }]);
     expect(screen.getByTestId("crop-calc-name")).toHaveValue("");
+    // Unnamed, a ratio a shipped label already offers is saved under its
+    // size, not as a second 16:9.
+    expect(screen.getByTestId("crop-calc-name")).toHaveAttribute("placeholder", "1920×1080");
     fireEvent.click(screen.getByTestId("crop-calc-save"));
-    expect(onSaved).toHaveBeenLastCalledWith([{ name: "16:9", w: 1920, h: 1080 }]);
+    expect(onSaved).toHaveBeenLastCalledWith([{ name: "1920×1080", w: 1920, h: 1080 }]);
+    // One no shipped label offers is saved under its ratio.
+    type("crop-calc-w", "1366");
+    type("crop-calc-h", "768");
+    fireEvent.click(screen.getByTestId("crop-calc-save"));
+    expect(onSaved).toHaveBeenLastCalledWith([{ name: "683:384", w: 1366, h: 768 }]);
+    // The crop menus' own names are refused.
+    for (const reserved of ["16:9", "Free", "original"]) {
+      type("crop-calc-name", reserved);
+      expect(screen.getByTestId("crop-calc-save"), reserved).toBeDisabled();
+    }
+    type("crop-calc-name", "");
+    type("crop-calc-w", "1920");
+    type("crop-calc-h", "1080");
 
     const saved = [{ name: "HD video", w: 1920, h: 1080 }];
     rerender(<CropRatioBar aspect={null} original={1.5} onRatio={onRatio} resolution={[6024, 4016]} saved={saved} onSaved={onSaved} />);
@@ -171,6 +200,55 @@ describe("the aspect ratio calculator", () => {
     expect(screen.queryByTestId("crop-calc-panel")).toBeNull();
     expect(outside).not.toHaveBeenCalled();
     window.removeEventListener("keydown", outside);
+  });
+
+  it("Escape closes it from anywhere, not only from inside, and gives focus back to its button", () => {
+    // On the Mac a clicked button does not take focus, so after opening
+    // the panel by click the key arrives at the page, not the panel; the
+    // app's Cancel Tool then put the crop away (the 26.5.1 review).
+    calc();
+    const outside = vi.fn();
+    window.addEventListener("keydown", outside);
+    fireEvent.click(screen.getByTestId("crop-calc"));
+    (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.queryByTestId("crop-calc-panel")).toBeNull();
+    expect(outside).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByTestId("crop-calc"));
+    // Closed, Escape is the app's again.
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(outside).toHaveBeenCalledTimes(1);
+    window.removeEventListener("keydown", outside);
+  });
+
+  it("takes only numbers in its size fields and the crop bar's W:H fields", () => {
+    calc();
+    fireEvent.click(screen.getByTestId("crop-calc"));
+    for (const id of ["crop-calc-w", "crop-calc-h", "crop-aspect-w", "crop-aspect-h"]) {
+      type(id, "12");
+      for (const bad of ["12a", "wide", "1.2.3", "-4", "1e5", "12 "]) {
+        type(id, bad);
+        expect(screen.getByTestId(id), `${id}: ${bad}`).toHaveValue("12");
+      }
+      type(id, "12.5");
+      expect(screen.getByTestId(id)).toHaveValue("12.5");
+      type(id, "");
+      expect(screen.getByTestId(id)).toHaveValue("");
+    }
+  });
+
+  it("keeps a saved ratio near a preset as itself, not as the preset", () => {
+    // 683:384 is within 0.001 of 16:9: it read as 16:9, and leaving the
+    // W:H fields put 16:9 back (the 26.5.1 review).
+    const onRatio = vi.fn();
+    const saved = [{ name: "1366", w: 1366, h: 768 }];
+    render(<CropRatioBar aspect={1366 / 768} original={1.5} onRatio={onRatio} saved={saved} onSaved={() => {}} />);
+    const select = screen.getByTestId("crop-aspect");
+    expect(new Map(menuRows(select)).get(menuValue(select))).toBe("1366");
+    expect(screen.getByTestId("crop-aspect-w")).toHaveValue("683");
+    expect(screen.getByTestId("crop-aspect-h")).toHaveValue("384");
+    fireEvent.blur(screen.getByTestId("crop-aspect-h"));
+    expect(onRatio).not.toHaveBeenCalled();
   });
 
   it("closes when the pointer goes down outside it", () => {

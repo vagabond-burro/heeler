@@ -9118,6 +9118,20 @@ export type SavedCropRatio = { name: string; w: number; h: number };
 /** The longest name a saved ratio keeps: the crop bar's menu is narrow. */
 export const CROP_RATIO_NAME_MAX = 32;
 
+/** A width over height a crop can be held to: finite and between 1:1000
+ * and 1000:1. Two finite sides can still make an infinite or vanishing
+ * ratio (1e308 over 1e-308), which collapsed the crop to no height. */
+export function cropRatioOk(ratio: number): boolean {
+  return Number.isFinite(ratio) && ratio >= 0.001 && ratio <= 1000;
+}
+
+/** Whether a name is the crop menus' own: Free, Original or a shipped
+ * ratio's label. A saved ratio under one of these reads as the built-in. */
+export function cropRatioNameReserved(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return n === "free" || n === "original" || CROP_RATIOS.some(([label]) => label === n);
+}
+
 /** Saved crop ratios as the settings file may hold them, made sound:
  * named, positive and finite on both sides, one per name (the first
  * kept). The file is hand editable, so anything else is dropped rather
@@ -9130,7 +9144,8 @@ export function savedCropRatios(value: unknown): SavedCropRatio[] {
     const { name, w, h } = r as Record<string, unknown>;
     if (typeof name !== "string" || typeof w !== "number" || typeof h !== "number") continue;
     const label = name.trim().slice(0, CROP_RATIO_NAME_MAX);
-    if (!label || !(Number.isFinite(w) && w > 0) || !(Number.isFinite(h) && h > 0)) continue;
+    if (!label || !(Number.isFinite(w) && w > 0) || !(Number.isFinite(h) && h > 0) || !cropRatioOk(w / h)) continue;
+    if (cropRatioNameReserved(label)) continue;
     if (out.some((o) => o.name === label)) continue;
     out.push({ name: label, w, h });
   }

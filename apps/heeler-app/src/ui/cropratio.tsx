@@ -6,7 +6,7 @@
 // fields its 11px.
 
 import React, { useEffect, useRef, useState } from "react";
-import { CROP_RATIOS, CROP_RATIO_NAME_MAX, cropRatioList, type SavedCropRatio } from "../state";
+import { CROP_RATIOS, CROP_RATIO_NAME_MAX, cropRatioList, cropRatioNameReserved, cropRatioOk, type SavedCropRatio } from "../state";
 import { MenuField } from "./menufield";
 import { useDismiss } from "./hooks";
 
@@ -14,12 +14,26 @@ import { useDismiss } from "./hooks";
  * (3 and 2), else the smallest whole pair that makes it (an original
  * frame of 6024 by 4016 is 3: 2), else the ratio to 1. Free shows
  * nothing. */
-export function ratioPair(aspect: number | null): [string, string] {
+/** How close a ratio must be to a preset to be that preset. It was 0.001,
+ * which a saved 1366 by 768 (683:384) is from 16:9: it read as 16:9 and
+ * leaving the fields put 16:9 back (the 26.5.1 review). */
+const SAME_RATIO = 1e-4;
+
+export function ratioPair(aspect: number | null, saved: SavedCropRatio[] = []): [string, string] {
   if (aspect === null || !Number.isFinite(aspect) || aspect <= 0) return ["", ""];
   for (const [label, ratio] of CROP_RATIOS) {
-    if (Math.abs(ratio - aspect) < 0.001) {
+    if (Math.abs(ratio - aspect) < SAME_RATIO) {
       const [w, h] = label.split(":");
       return [w, h];
+    }
+  }
+  // A saved ratio shows in its own lowest terms (1366 by 768 is 683:384),
+  // which the search below, capped at 32, would not find.
+  for (const r of saved) {
+    const own = resolutionRatio(r.w, r.h);
+    if (own && Math.abs(own.ratio - aspect) < SAME_RATIO) {
+      const [w, h] = own.label.split(":");
+      if (h !== "1" || Number.isInteger(r.w / r.h)) return [w, h];
     }
   }
   for (let h = 1; h <= 32; h++) {
@@ -38,7 +52,8 @@ export function ratioPair(aspect: number | null): [string, string] {
 export function resolutionRatio(w: number, h: number): { label: string; ratio: number } | null {
   if (!(Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0)) return null;
   const ratio = w / h;
-  if (!Number.isInteger(w) || !Number.isInteger(h)) return { label: `${Number(ratio.toFixed(3))}:1`, ratio };
+  if (!cropRatioOk(ratio)) return null;
+  if (!Number.isInteger(w) || !Number.isInteger(h)) return { label: `${Number(ratio.toFixed(4))}:1`, ratio };
   const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
   const d = gcd(w, h);
   return { label: `${w / d}:${h / d}`, ratio };
@@ -48,6 +63,13 @@ export function resolutionRatio(w: number, h: number): { label: string; ratio: n
 function side(text: string): number | null {
   const n = Number(text.trim());
   return text.trim() !== "" && Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Whether a field may hold this text: digits and at most one decimal
+ * point, so a letter never gets in (2026-10-10: "the aspect ratio
+ * calculator allowed me to type non numbers into it"). */
+function numericText(text: string): boolean {
+  return /^\d*\.?\d*$/.test(text);
 }
 
 const FIELD: React.CSSProperties = {
@@ -87,7 +109,7 @@ export function CropRatioBar({
 }) {
   const options: [string, number | null][] = [["Free", null], ["Original", original], ...cropRatioList({ cropRatios: saved })];
   const is = ([label, ratio]: [string, number | null]) =>
-    ratio === null ? aspect === null && label === "Free" : aspect !== null && Math.abs(aspect - ratio) < 0.001;
+    ratio === null ? aspect === null && label === "Free" : aspect !== null && Math.abs(aspect - ratio) < SAME_RATIO;
   // A named ratio before Original: on a 3:2 photograph, choosing 3:2
   // reads 3:2, not Original.
   const named = options.findIndex((o, i) => i !== 1 && is(o));
@@ -96,17 +118,17 @@ export function CropRatioBar({
   // rather than lying about which preset is active.
   const value = match >= 0 ? String(match) : "custom";
 
-  const [draft, setDraft] = useState<[string, string]>(() => ratioPair(aspect));
+  const [draft, setDraft] = useState<[string, string]>(() => ratioPair(aspect, saved));
   // The fields follow the ratio in force: a preset fills them with its
   // numbers, Free empties them.
-  useEffect(() => setDraft(ratioPair(aspect)), [aspect]);
+  useEffect(() => setDraft(ratioPair(aspect, saved)), [aspect]);
   const pair = useRef<HTMLSpanElement>(null);
 
   const apply = () => {
     const [w, h] = [side(draft[0]), side(draft[1])];
     // A typo or a half-typed pair leaves the crop alone rather than
     // collapsing it to a sliver.
-    if (w === null || h === null) return;
+    if (w === null || h === null || !cropRatioOk(w / h)) return;
     const ratio = w / h;
     if (aspect === null || Math.abs(ratio - aspect) >= 0.0005) onRatio(ratio);
   };
@@ -119,7 +141,7 @@ export function CropRatioBar({
       apply();
     } else if (e.key === "Escape") {
       e.preventDefault();
-      setDraft(ratioPair(aspect));
+      setDraft(ratioPair(aspect, saved));
       (e.target as HTMLInputElement).blur();
     }
   };
@@ -131,6 +153,7 @@ export function CropRatioBar({
       placeholder={placeholder}
       value={draft[i]}
       onChange={(e) => {
+        if (!numericText(e.target.value)) return;
         const next: [string, string] = [...draft];
         next[i] = e.target.value;
         setDraft(next);
@@ -149,7 +172,7 @@ export function CropRatioBar({
         label="Crop ratio"
         hint="Hold the crop to a ratio"
         value={value}
-        placeholder={aspect ? `${ratioPair(aspect).join(":")}` : "Custom"}
+        placeholder={aspect ? `${ratioPair(aspect, saved).join(":")}` : "Custom"}
         options={options.map(([label], i) => ({ id: String(i), label }))}
         onChange={(id) => onRatio(options[Number(id)][1])}
       />
@@ -205,13 +228,35 @@ function AspectCalculator({
   const [size, setSize] = useState<[string, string]>(["", ""]);
   const [name, setName] = useState("");
   const rootRef = useDismiss<HTMLSpanElement>(open, () => setOpen(false));
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  // Escape closes the panel and nothing else, wherever focus is. On the
+  // Mac a clicked button does not take focus, so a listener on the panel
+  // missed it and the app's Cancel Tool put the crop away (the 26.5.1
+  // review); this one hears it first, at the window in the capture phase.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false);
+      buttonRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open]);
   const [w, h] = [side(size[0]), side(size[1])];
   const result = w !== null && h !== null ? resolutionRatio(w, h) : null;
-  const nameTaken = saved.some((r) => r.name === (name.trim() || result?.label));
+  // Unnamed, a ratio is saved under its ratio, unless that is a shipped
+  // label (1920 by 1080 is 16:9, already offered): then under its size.
+  const fallbackName = result && w !== null && h !== null ? (cropRatioNameReserved(result.label) ? `${w}×${h}` : result.label) : "";
+  const wanted = (name.trim() || fallbackName).slice(0, CROP_RATIO_NAME_MAX);
+  const nameReserved = name.trim() !== "" && cropRatioNameReserved(name);
+  const nameTaken = saved.some((r) => r.name === wanted);
 
   const save = () => {
-    if (!result || w === null || h === null) return;
-    const label = (name.trim() || result.label).slice(0, CROP_RATIO_NAME_MAX);
+    if (!result || w === null || h === null || nameReserved) return;
+    const label = wanted;
     // The same name again replaces its ratio rather than listing two.
     onSaved([...saved.filter((r) => r.name !== label), { name: label, w, h }]);
     setName("");
@@ -234,6 +279,7 @@ function AspectCalculator({
       placeholder={resolution ? String(resolution[i]) : i === 0 ? "Width" : "Height"}
       value={size[i]}
       onChange={(e) => {
+        if (!numericText(e.target.value)) return;
         const next: [string, string] = [...size];
         next[i] = e.target.value;
         setSize(next);
@@ -245,25 +291,15 @@ function AspectCalculator({
   const heading: React.CSSProperties = { fontSize: 11, letterSpacing: ".1em", color: "var(--text-faint)" };
 
   return (
-    <span
-      ref={rootRef}
-      style={{ position: "relative", display: "inline-flex" }}
-      onKeyDown={(e) => {
-        // Escape closes the panel and nothing else: the app's Cancel Tool
-        // also listens for it, and would put the crop away with it. A
-        // prevented key is one the shortcuts leave alone.
-        if (open && e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation();
-          setOpen(false);
-        }
-      }}
-    >
+    <span ref={rootRef} style={{ position: "relative", display: "inline-flex" }}>
       <button
+        ref={buttonRef}
         className="chip"
         data-testid="crop-calc"
         data-active={open}
-        aria-pressed={open}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-controls="crop-calc-panel"
         aria-label="Aspect ratio calculator"
         data-hint="Aspect ratio calculator: work out a ratio from a resolution, apply it, or save it"
         onClick={() => setOpen(!open)}
@@ -273,6 +309,7 @@ function AspectCalculator({
       </button>
       {open && (
         <div
+          id="crop-calc-panel"
           data-testid="crop-calc-panel"
           role="dialog"
           aria-label="Aspect ratio calculator"
@@ -299,7 +336,7 @@ function AspectCalculator({
               </button>
             )}
           </span>
-          <span data-testid="crop-calc-result" style={{ fontSize: 13, color: result ? "var(--text-bright, var(--text-body))" : "var(--text-ghost)" }}>
+          <span data-testid="crop-calc-result" aria-live="polite" style={{ fontSize: 13, color: result ? "var(--text-bright, var(--text-body))" : "var(--text-ghost)" }}>
             {result ? (
               <>
                 {result.label}
@@ -323,7 +360,7 @@ function AspectCalculator({
             <input
               data-testid="crop-calc-name"
               aria-label="Name for the saved ratio"
-              placeholder={result ? result.label : "Name"}
+              placeholder={fallbackName || "Name"}
               maxLength={CROP_RATIO_NAME_MAX}
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -333,8 +370,14 @@ function AspectCalculator({
             <button
               className="chip"
               data-testid="crop-calc-save"
-              disabled={!result}
-              data-hint={nameTaken ? "Replace the saved ratio of this name" : "Save this ratio: it joins the crop ratio menus"}
+              disabled={!result || nameReserved}
+              data-hint={
+                nameReserved
+                  ? "That name is one of the crop menus' own; choose another"
+                  : nameTaken
+                    ? "Replace the saved ratio of this name"
+                    : "Save this ratio: it joins the crop ratio menus"
+              }
               onClick={save}
             >
               {nameTaken ? "Replace" : "Save"}
