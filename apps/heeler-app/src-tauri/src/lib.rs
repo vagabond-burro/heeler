@@ -16878,21 +16878,36 @@ async fn export_to(
                 return Err(format!("the original is missing or moved: {}", p.display()));
             }
         }
+        // Each stage's time, logged when the export is slow, so a slow one
+        // names the stage that made it so (2026-10-10: EXR and 16-bit TIFF
+        // exports "upwards of 30 seconds each").
+        let mut stages: Vec<(&'static str, u128)> = Vec::new();
+        let mut lap = std::time::Instant::now();
+        let mut mark = |what: &'static str| {
+            stages.push((what, lap.elapsed().as_millis()));
+            lap = std::time::Instant::now();
+        };
         let denoise_fingerprint = source_version_key(&app, &image_id, opts);
         let source = match &source_path {
             Some(_) => full_source(&app, &image_id, opts)?,
             None => preview_source(&app, &image_id, opts)?,
         };
+        mark("decode");
         let mut smart = export_sources_for(&app, &graph, &image_id)?;
+        mark("planted rasters");
         // The Depth Map's refinement, again at the export's own size; and
         // the noise model's full-frame answer, computed now if it must be.
         if let Some(base) = export_vision_base(vision_base(&app), &graph)? {
             let depth_input = with_session(&app, |s| Ok(depth_input_key_in_session(s, &graph, &image_id))).unwrap_or(None);
             refine_depth_for_export(&base, &graph, &image_id, &source, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input);
+            mark("depth refinement");
             let file_path = with_session(&app, |s| Ok(s.paths.get(&image_id).cloned()))?;
             mattes_for_export(&graph, &image_id, file_path.as_deref(), &source, &mut smart);
+            mark("mattes");
             normals_for_export(&graph, &image_id, file_path.as_deref(), &source, &mut smart);
+            mark("normals");
             denoise_for_export(&app, &base, &graph, &image_id, &denoise_fingerprint, &source, &mut smart)?;
+            mark("denoise");
         }
         let keywords = if keep_metadata.unwrap_or(true) {
             with_catalog(&app, |c| c.keywords_of(&image_id).map_err(|e| e.to_string()))
@@ -16903,6 +16918,7 @@ async fn export_to(
         let (alpha, layers) = render_export_layers(&graph, source.clone(), &smart, |level, msg| {
             emit_log(&app, level, format!("{image_id}: {msg}"));
         })?;
+        mark("export layers");
         let out = finish_export(
             crate::ExportInput {
                 graph: &graph,
@@ -16930,6 +16946,11 @@ async fn export_to(
             },
             |level, msg| emit_log(&app, level, format!("{image_id}: {msg}")),
         );
+        mark("render and write");
+        if export_t0.elapsed().as_secs_f32() > 3.0 {
+            let parts: Vec<String> = stages.iter().filter(|(_, ms)| *ms >= 50).map(|(what, ms)| format!("{what} {:.1} s", *ms as f32 / 1000.0)).collect();
+            emit_log(&app, "info", format!("{image_id}: exported in {:.1} s ({})", export_t0.elapsed().as_secs_f32(), parts.join(", ")));
+        }
         match &out {
             Ok(path) => debug_log!(&app, "export done: {image_id} -> {path} in {}ms", export_t0.elapsed().as_millis()),
             Err(e) => debug_log!(&app, "export FAILED: {image_id} in {}ms: {e}", export_t0.elapsed().as_millis()),
