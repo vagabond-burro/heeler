@@ -17067,8 +17067,11 @@ fn finish_export_admitted(
         return Ok(dest.to_string_lossy().to_string());
     }
     // A layer the chosen container cannot hold is dropped, named, and
-    // the export still runs (the panel warned at choice time).
-    if !layers.is_empty() && !matches!(format, "tiff" | "tiff32") {
+    // the export still runs (the panel warned at choice time). The
+    // container is the one the name picked, as for the main file below:
+    // asked by the format, a "tiff" export named .png wrote TIFF siblings
+    // under .png names and warned of nothing.
+    if !layers.is_empty() && !matches!(ext.as_str(), "tif" | "tiff") {
         for ch in &layers {
             log("warn", &format!("layer '{}' needs TIFF or EXR; not written", ch.name));
         }

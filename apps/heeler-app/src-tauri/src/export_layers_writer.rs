@@ -258,6 +258,31 @@ fn siblings_follow_the_destinations_extension_and_never_overwrite() {
     assert_eq!(w.log.iter().filter(|m| m.contains("already exists")).collect::<Vec<_>>(), vec![&moved], "{:?}", w.log);
 }
 
+/// The name's extension picks the main file's container (the format only
+/// fills in a name without one), so the layers follow the container that
+/// was written, not the format asked for. They followed the format: a
+/// "tiff" export named photo.png wrote a PNG beside TIFF bytes named
+/// photo.mask.png, and said nothing, while a "png" export named
+/// other.tif wrote a TIFF and dropped its layers as needing TIFF.
+#[test]
+fn layers_follow_the_container_the_name_picks() {
+    let dir = tempfile::tempdir().unwrap();
+    let one = || vec![layer("mask", mask(0.4), false, "alpha", None, None)];
+    let png = dir.path().join("photo.png");
+    let w = export(&png, "tiff", one(), false, false);
+    assert!(std::fs::read(&png).unwrap().starts_with(b"\x89PNG"), "the name picked PNG");
+    let mut names: Vec<String> = std::fs::read_dir(dir.path()).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    names.sort();
+    assert_eq!(names, vec!["photo.png".to_string()], "no TIFF bytes under a .png name");
+    assert!(w.log.contains(&"warn: layer 'mask' needs TIFF or EXR; not written".to_string()), "{:?}", w.log);
+
+    let tif = dir.path().join("other.tif");
+    let w = export(&tif, "png", one(), false, false);
+    assert!(std::fs::read(&tif).unwrap().starts_with(b"II*\0"), "the name picked TIFF");
+    close(&tiff(&dir.path().join("other.mask.tif")).values, &grey8(heeler_io::linear_to_srgb(0.4)), "the layer beside the TIFF");
+    assert!(!w.log.iter().any(|m| m.contains("needs TIFF")), "{:?}", w.log);
+}
+
 #[test]
 fn exr_layers_pack_each_kind_and_move_a_taken_name() {
     let dir = tempfile::tempdir().unwrap();

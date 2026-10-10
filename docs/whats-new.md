@@ -9,6 +9,7 @@
 
 ### Fixes
 
+- **Export layers follow the file you get.** The file name's extension decides an export's file type, but the extra layers went by the format chosen in the panel: a TIFF export saved as photo.png wrote a PNG with TIFF layer files named like PNGs beside it, and no warning. The layers now follow the file actually written: beside a TIFF they are written as before, and with any other type they are dropped and named in the log. [Export](user-guide/export.md).
 - **Curves has no step at the top of the range.** Highlights brighter than white skipped the curve, so a curve whose top point was lowered (a faded white, say) darkened everything up to white and left anything brighter where it was: a visible jump in skies and specular highlights, and a color shift where only one channel went past white. Those highlights now carry on from where the curve ends, lowered by the same amount and never clipped. A curve whose top stays at white renders as before. [Curves](user-guide/adjustments/curves.md).
 
 ## 2026.5

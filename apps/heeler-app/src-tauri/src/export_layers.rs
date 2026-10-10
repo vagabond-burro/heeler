@@ -472,7 +472,8 @@ pub(crate) fn write_exr(
 
 /// The export layers' TIFF form (26.3 Phase 8): one sibling per layer
 /// beside the main file at `dest`, named in the extension `ext` the main
-/// file was written by, at the main file's size. A sibling NEVER
+/// file was written by, at the main file's size, and only when that
+/// extension made the main file a TIFF. A sibling NEVER
 /// overwrites, even when the main file's Replace? was honored: that
 /// answer covered the one name, not names nobody was asked about.
 ///
@@ -488,7 +489,9 @@ pub(crate) fn write_tiff_siblings(
     options: &ExportOptions<'_>,
     log: &mut impl FnMut(&str, &str),
 ) -> Result<(), String> {
-    if !matches!(options.format, "tiff" | "tiff32") || layers.is_empty() {
+    // The container the main file was written in, which the name's
+    // extension picked; the format only says float or 16-bit.
+    if !matches!(ext, "tif" | "tiff") || layers.is_empty() {
         return Ok(());
     }
     let stem = dest.file_stem().and_then(|s| s.to_str()).unwrap_or("export");
