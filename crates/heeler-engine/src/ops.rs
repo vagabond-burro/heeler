@@ -1224,9 +1224,14 @@ fn curves(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError>
     let curve_d = |c: &CurveSampler, d: f32| -> f32 {
         if d >= 1.0 { c.top + (d - 1.0) } else { c.eval(d) }
     };
+    // Over range and under a curve whose top is (1, 1): passed through
+    // untouched. Asked of the scene value too, since 1.0 converts to a
+    // hair under 1.0 in the display domain and missed by one ulp (the
+    // 26.5.1 review).
+    let through = |c: &CurveSampler, v: f32, d: f32| c.top == 1.0 && (v >= 1.0 || d >= 1.0);
     let apply = |c: &CurveSampler, v: f32| -> f32 {
         let d = to_display(v.max(0.0));
-        if d >= 1.0 && c.top == 1.0 {
+        if through(c, v, d) {
             v
         } else {
             to_scene(curve_d(c, d).max(0.0))
@@ -1241,7 +1246,10 @@ fn curves(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError>
             order.sort_by(|&a, &b| d[a].partial_cmp(&d[b]).unwrap_or(std::cmp::Ordering::Equal));
             let [lo, mid, hi] = order;
             let spread = d[hi] - d[lo];
-            if hue_stable && spread > 1e-6 {
+            // Every channel passed through is the hue kept already: placing
+            // the middle one through the display round trip moved it an ulp.
+            let all_through = (0..3).all(|i| through(c, px[i], d[i]));
+            if hue_stable && spread > 1e-6 && !all_through {
                 // The middle channel sits at the same fraction of the
                 // way from the smallest to the largest after the curve
                 // as before, which is what holds the hue.
@@ -3993,6 +4001,23 @@ mod tests {
         // And the middle keeps its place between them, the brightest one
         // counted where it went: past white.
         assert!((hue_fraction(h) - hue_fraction(px)).abs() < 1e-4, "{} against {}", hue_fraction(h), hue_fraction(px));
+    }
+
+    #[test]
+    fn over_range_values_pass_a_white_topped_curve_bit_for_bit_in_both_modes() {
+        // 1.0 and a hair over convert to a hair under 1.0 for display, and
+        // came back as 1.0 or a hair under; hue stable's middle channel came
+        // back an ulp off (the 26.5.1 review).
+        for mode in ["", "hue"] {
+            let mut node = make_node("heeler.curves");
+            set_text(&mut node, "points", r#"{"rgb": [[0,0],[0.5,0.4],[1,1]]}"#);
+            set_text(&mut node, "rgb_mode", mode);
+            for v in [1.0f32, 1.0000001, 1.5, 2.0] {
+                assert_eq!(run_on(&node, gray(v)).unwrap().as_image().unwrap().pixel(0, 0)[0], v, "{mode:?} gray {v}");
+            }
+            let px = [1.5, 2.0, 2.5, 1.0];
+            assert_eq!(run_on(&node, ImageBuf::filled(1, 1, px)).unwrap().as_image().unwrap().pixel(0, 0), px, "{mode:?}");
+        }
     }
 
     #[test]
