@@ -153,6 +153,10 @@ export interface Prefs {
    * keeps rendering; only the panel, the Find a Control list and the
    * keyboard walk stop listing it.*/
   hiddenSections: string[];
+  /** crop ratios of the person's own, saved from the crop bar's aspect
+   * ratio calculator and offered after the shipped ones wherever a
+   * ratio is offered (cropRatioList) */
+  cropRatios: SavedCropRatio[];
   /** wheel zoom sensitivity, expressed as the exponent rate per delta */
   viewerZoomRate: number;
   /** degrees applied by one wheel rotation step */
@@ -265,6 +269,7 @@ export const DEFAULT_PREFS: Prefs = {
   expandSectionOnEnable: false,
   pinnedSections: [],
   hiddenSections: [],
+  cropRatios: [],
   viewerZoomRate: 0.0015,
   viewerRotationStep: 2,
   previewEdge: 2048,
@@ -9103,6 +9108,40 @@ export function filtersActive(s: State): boolean {
  * the original edit is a take, it just has no siblings yet. */
 export function takeCount(s: State, id: string): number {
   return s.takes[id]?.length ?? 1;
+}
+
+/** A crop ratio saved from the aspect ratio calculator: a name of the
+ * person's choosing and the two sides it was made from (1920 and 1080,
+ * not 16 and 9), so it reads back the way it was typed. */
+export type SavedCropRatio = { name: string; w: number; h: number };
+
+/** The longest name a saved ratio keeps: the crop bar's menu is narrow. */
+export const CROP_RATIO_NAME_MAX = 32;
+
+/** Saved crop ratios as the settings file may hold them, made sound:
+ * named, positive and finite on both sides, one per name (the first
+ * kept). The file is hand editable, so anything else is dropped rather
+ * than offered as a ratio that collapses the crop. */
+export function savedCropRatios(value: unknown): SavedCropRatio[] {
+  if (!Array.isArray(value)) return [];
+  const out: SavedCropRatio[] = [];
+  for (const r of value) {
+    if (!r || typeof r !== "object") continue;
+    const { name, w, h } = r as Record<string, unknown>;
+    if (typeof name !== "string" || typeof w !== "number" || typeof h !== "number") continue;
+    const label = name.trim().slice(0, CROP_RATIO_NAME_MAX);
+    if (!label || !(Number.isFinite(w) && w > 0) || !(Number.isFinite(h) && h > 0)) continue;
+    if (out.some((o) => o.name === label)) continue;
+    out.push({ name: label, w, h });
+  }
+  return out;
+}
+
+/** Every ratio offered: the shipped ones, then the person's saved ones,
+ * each as its label and width over height. The crop bar and the Photo
+ * menu both list this, so a saved ratio shows up in both. */
+export function cropRatioList(prefs: { cropRatios?: SavedCropRatio[] }): [string, number][] {
+  return [...CROP_RATIOS, ...(prefs.cropRatios ?? []).map((r): [string, number] => [r.name, r.w / r.h])];
 }
 
 /** Crop ratios, offered wherever a ratio is offered. One list, because
@@ -19496,6 +19535,7 @@ function reduceInner(s: State, cmd: Command): State {
         hiddenSections: Array.isArray(merged.hiddenSections)
           ? merged.hiddenSections.filter((t, i, a): t is string => typeof t === "string" && a.indexOf(t) === i)
           : DEFAULT_PREFS.hiddenSections,
+        cropRatios: savedCropRatios(merged.cropRatios),
         maskOverlayColor: MASK_OVERLAY_COLORS.some((color) => color.id === merged.maskOverlayColor)
           ? merged.maskOverlayColor
           : DEFAULT_PREFS.maskOverlayColor,

@@ -4,6 +4,7 @@
 
 ### New
 
+- **Aspect ratio calculator.** The calculator button at the right end of the crop bar works out the ratio of a resolution (1920 by 1080 is 16:9), holds the crop to it, and saves it under a name of your own. Saved ratios join the crop bar's menu and Photo > Crop / Straighten > Crop to Aspect Ratio, for every photograph. [Image viewport](user-guide/image-viewport.md).
 - **GoPro GPR files open.** Raw photos from the GoPro HERO5 Black through the HERO11 Black and the Fusion now show up in your library and develop like any other raw file. GPR compresses its pixels with GoPro's own codec, which Heeler now decodes. A damaged GPR says so and does not close the app. [Library](user-guide/library.md).
 - **Hue stable Curves.** The **HUE** button under the Curves plot makes the RGB curve change tone without shifting color: it moves the brightest and darkest channels and keeps the middle one in its place between them. Off, the curve runs on each channel on its own as before, which adds saturation and can shift hue under a contrast curve. Curves start with it off, so your edits render as they did. [Curves](user-guide/adjustments/curves.md#hue-stable).
 

@@ -1639,6 +1639,9 @@ armed has settings to show.*/}
             <CropRatioBar
               aspect={state.cropAspect}
               original={natural ? natural.w / natural.h : null}
+              resolution={srcDims ? [srcDims[0], srcDims[1]] : natural ? [natural.w, natural.h] : null}
+              saved={state.prefs.cropRatios}
+              onSaved={(cropRatios) => dispatch({ type: "set_prefs", prefs: { cropRatios } })}
               onRatio={(ratio) => {
                 dispatch({ type: "set_crop_aspect", aspect: ratio });
                 const dims = srcDims ? { w: srcDims[0], h: srcDims[1] } : natural;

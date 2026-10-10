@@ -8,7 +8,7 @@ import { panePropsEqual } from "./viewmemo";
 import { createPortal } from "react-dom";
 import type { Command, ImageEntry, Mode, State, TreeNode } from "../state";
 import { exportDpi, photoFlipBlocked, photoFlips, layerMaskToggleTarget } from "../state";
-import { ART_CONTENT_KINDS, ART_KINDS, CROP_RATIOS, DOC_SEL_ID, LAYER_MASK_TYPES, SELECT_METHODS, availableMaskTypes, activeSelectionMask, ancestorsBetween, bakeable, filtersActive, folderHasEdits, isPano, isStack, parseAspect, selectionHasContent, selectionLoadSource, stackAppendTargets, taggingTargets, thumbCell, visibleImages, duplicable } from "../state";
+import { ART_CONTENT_KINDS, ART_KINDS, CROP_RATIOS, DOC_SEL_ID, cropRatioList, LAYER_MASK_TYPES, SELECT_METHODS, availableMaskTypes, activeSelectionMask, ancestorsBetween, bakeable, filtersActive, folderHasEdits, isPano, isStack, parseAspect, selectionHasContent, selectionLoadSource, stackAppendTargets, taggingTargets, thumbCell, visibleImages, duplicable } from "../state";
 import { layerActionHint, layerActions, maskToggleItem } from "../layeractions";
 import { bakeMaskRaster, entryFromRow } from "../bridge";
 import { reportToolError } from "./hints";
@@ -1822,21 +1822,26 @@ export function MenuBar({ state, dispatch }: { state: State; dispatch: D }) {
               undefined,
               "Crop to any shape: no ratio held.",
             )}
-            {CROP_RATIOS.map(([label, ratio]) =>
-              item(
-                label,
-                () => {
-                  // Choosing a ratio without the crop tool up would
-                  // constrain something the user cannot see.
-                  dispatch({ type: "set_tool", tool: "crop" });
-                  dispatch({ type: "set_crop_aspect", aspect: ratio });
-                },
-                `menu-photo-aspect-${label.replace(":", "-")}`,
-                false,
-                undefined,
-                `Hold the crop to ${label}, and arm the crop tool if it is not already up.`,
-              )
-            )}
+            {cropRatioList(state.prefs).map(([label, ratio], i) => (
+              // The person's saved ratios follow the shipped ones, past a
+              // rule; their names are free text, so their ids count.
+              <React.Fragment key={`${i}-${label}`}>
+                {i === CROP_RATIOS.length && <div className="sep" />}
+                {item(
+                  label,
+                  () => {
+                    // Choosing a ratio without the crop tool up would
+                    // constrain something the user cannot see.
+                    dispatch({ type: "set_tool", tool: "crop" });
+                    dispatch({ type: "set_crop_aspect", aspect: ratio });
+                  },
+                  i < CROP_RATIOS.length ? `menu-photo-aspect-${label.replace(":", "-")}` : `menu-photo-aspect-saved-${i - CROP_RATIOS.length}`,
+                  false,
+                  undefined,
+                  `Hold the crop to ${label}, and arm the crop tool if it is not already up.`,
+                )}
+              </React.Fragment>
+            ))}
             <div className="sep" />
             <CustomAspect dispatch={dispatch} />
           </SubMenu>

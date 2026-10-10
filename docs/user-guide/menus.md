@@ -85,7 +85,7 @@ Depth Range has a depth view control beside its title, showing the depth map whi
 
 ### Framing
 
-**Crop / Straighten** contains **Straighten**, **Crop**, **Grid Warp**, **Shape Warp** and **Crop to Aspect Ratio**. The aspect submenu lists Free, 1:1, 3:2, 4:3, 5:4, 16:9, 2:3, 3:4 and 9:16. Type a custom ratio, such as 5:4, in the field at the foot of the submenu and press Enter, or in the viewport crop controls. Choosing an aspect also arms Crop.
+**Crop / Straighten** contains **Straighten**, **Crop**, **Grid Warp**, **Shape Warp** and **Crop to Aspect Ratio**. The aspect submenu lists Free, 1:1, 3:2, 4:3, 5:4, 16:9, 2:3, 3:4 and 9:16. Ratios you saved in the crop bar's aspect ratio calculator follow them, below a rule. Type a custom ratio, such as 5:4, in the field at the foot of the submenu and press Enter, or in the viewport crop controls. Choosing an aspect also arms Crop.
 
 **Flip Horizontal** and **Flip Vertical** mirror the whole photograph with every edit on it: masks, brush strokes, selections, Smart selections, the crop, Grid Warp and Shape Warp, Depth Lighting's lamps and every Finish layer stay on the subject they were made on, and the whole result mirrors. Each is one undo step and shows a tick while it is on; choosing it again puts the photograph back. They have no key by default; give them one in Preferences. See [Geometry](adjustments/geometry.md#flip).
 
