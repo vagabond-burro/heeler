@@ -1,5 +1,5 @@
 {
-  "about": "Curves evaluated inside the point range, pinned once for both sides: the engine's CurveSampler (ops.rs) and the Curves editor's own evaluation must both give these. Values from the engine at 2026.5.1. Outside the point range the two sides differ on purpose (the engine extends with slope 1, the editor holds flat), so no x here leaves it.",
+  "about": "Curves pinned once for both sides: the engine's CurveSampler (ops.rs) and the Curves editor's own evaluation must both give these. Values from the engine at 2026.5.1. Inside the point range every case; past an end point pulled in from its corner (the last two cases) the engine carries on at slope 1 and the editor reads it so, the run the plot draws dashed. With handle vectors the engine holds the ends level, which no x here tests past an end.",
   "x": [0.0, 0.05, 0.1, 0.2, 0.3, 0.35, 0.45, 0.5, 0.55, 0.65, 0.7, 0.8, 0.9, 0.95, 1.0],
   "cases": [
     {"name": "linear segments", "interp": "linear", "points": [[0, 0], [0.3, 0.5], [0.7, 0.6], [1, 1]], "y": [0.0, 0.083333, 0.166667, 0.333333, 0.5, 0.5125, 0.5375, 0.55, 0.5625, 0.5875, 0.6, 0.733333, 0.866667, 0.933333, 1.0]},
@@ -15,6 +15,8 @@
     {"name": "tangent handle vectors", "interp": "tangent", "points": [[0, 0], [0.5, 0.4], [1, 1]], "handles": [null, {"l": [-0.2, -0.05], "r": [0.1, 0.2]}, null], "y": [0.0, 0.043075, 0.091193, 0.193814, 0.288447, 0.327535, 0.383636, 0.4, 0.485061, 0.615401, 0.672477, 0.780385, 0.886918, 0.942024, 1.0]},
     {"name": "tangent slopes with every handle automatic (the slope curve, as the editor draws it)", "interp": "tangent", "points": [[0, 0], [0.5, 0.5], [1, 1]], "slopes": [1, 0, 1], "handles": [null, {}, null], "y": [0.0, 0.0545, 0.116, 0.248, 0.372, 0.4235, 0.4905, 0.5, 0.5095, 0.5765, 0.628, 0.752, 0.884, 0.9455, 1.0]},
     {"name": "a handle with only its right side set", "interp": "tangent", "points": [[0, 0], [0.5, 0.4], [1, 1]], "handles": [null, {"r": [0.15, 0.3]}, null], "y": [0.0, 0.0391, 0.0768, 0.1504, 0.2256, 0.2653, 0.3519, 0.4, 0.491072, 0.633207, 0.691169, 0.793483, 0.891208, 0.943186, 1.0]},
-    {"name": "a handle with only its left side set", "interp": "tangent", "points": [[0, 0], [0.5, 0.4], [1, 1]], "handles": [null, {"l": [-0.2, -0.02]}, null], "y": [0.0, 0.043914, 0.094245, 0.203035, 0.30166, 0.3405, 0.390082, 0.4, 0.4519, 0.5653, 0.6256, 0.7504, 0.8768, 0.9391, 1.0]}
+    {"name": "a handle with only its left side set", "interp": "tangent", "points": [[0, 0], [0.5, 0.4], [1, 1]], "handles": [null, {"l": [-0.2, -0.02]}, null], "y": [0.0, 0.043914, 0.094245, 0.203035, 0.30166, 0.3405, 0.390082, 0.4, 0.4519, 0.5653, 0.6256, 0.7504, 0.8768, 0.9391, 1.0]},
+    {"name": "linear with both ends pulled in, read past them", "interp": "linear", "points": [[0.1, 0.05], [0.5, 0.5], [0.85, 0.9]], "y": [-0.05, 0.0, 0.05, 0.1625, 0.275, 0.33125, 0.44375, 0.5, 0.557143, 0.671429, 0.728571, 0.842857, 0.95, 1.0, 1.05]},
+    {"name": "smooth with both ends pulled in, read past them", "interp": "smooth", "points": [[0.1, 0.05], [0.5, 0.5], [0.85, 0.9]], "y": [-0.05, 0.0, 0.05, 0.162333, 0.274554, 0.330727, 0.443408, 0.5, 0.556815, 0.670991, 0.728243, 0.842802, 0.95, 1.0, 1.05]}
   ]
 }

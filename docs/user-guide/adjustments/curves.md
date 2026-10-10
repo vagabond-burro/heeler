@@ -15,6 +15,10 @@ A gentle S-curve increases contrast; the opposite decreases it. Channel curves c
 
 ![Curves](../assets/screenshots/section-curves.png)
 
+## Past the end points
+
+An end point pulled in from its corner (the black point moved right, or the white point moved left) does not stop the curve there. Tones past it carry on at the same rate as the input, so a photograph keeps its gradation beyond the end point instead of clipping flat. The plot draws that run as a faint dashed line from each pulled-in end to the plot's edge, and the picker's ghost rides on it. With handles set in Tangent mode the curve holds the end point's value past it instead, and no dashed line is drawn.
+
 ## Hue stable
 
 The **HUE** button under the plot's right corner, beside the interpolation button, sets how the RGB curve treats color.

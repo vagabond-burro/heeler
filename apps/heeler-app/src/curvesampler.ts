@@ -6,8 +6,10 @@
 // (crates/heeler-engine/tests/curve_vectors.json, read by
 // curves_match_the_shared_vectors and curvevectors.test.tsx).
 //
-// Inside the point range the two sides agree. Outside it they differ:
-// the editor holds the end values flat, the engine extends with slope 1.
+// Past an end point pulled in from its corner the engine carries on at
+// slope 1 (curves and handle-free tangents; with handles it holds the
+// end's value), and the editor reads and draws it so: curveValueAt
+// extends, and curveTails is the dashed run the plot shows past each end.
 
 import { evalEq, type EqPoint } from "./eqcurve";
 import type { CurveHandle, NodeCard } from "./state";
@@ -79,11 +81,13 @@ export function curvePath(pts: Pt[], smooth: boolean, tangents?: number[]): Pt[]
 
 /** The curve's exact value at `x`, matching what the engine renders:
  * hermite through the same monotone tangents when smooth, straight
- * segments when linear. The eyedropper's point lands ON the curve. */
+ * segments when linear, and slope 1 past either end (the engine's run,
+ * which the plot held flat until 2026.5.1). The eyedropper's point lands
+ * ON the curve. */
 export function curveValueAt(pts: Pt[], smooth: boolean, x: number, tangents?: number[]): number {
   if (pts.length === 0) return x;
-  if (x <= pts[0][0]) return pts[0][1];
-  if (x >= pts[pts.length - 1][0]) return pts[pts.length - 1][1];
+  if (x <= pts[0][0]) return pts[0][1] + (x - pts[0][0]);
+  if (x >= pts[pts.length - 1][0]) return pts[pts.length - 1][1] + (x - pts[pts.length - 1][0]);
   let i = 0;
   while (i < pts.length - 2 && pts[i + 1][0] <= x) i++;
   const span = Math.max(1e-6, pts[i + 1][0] - pts[i][0]);
@@ -94,6 +98,28 @@ export function curveValueAt(pts: Pt[], smooth: boolean, x: number, tangents?: n
     return pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t;
   }
   return hermite(pts, slopesFor(pts, tangents), i, span, t);
+}
+
+/** What the photograph does past each end point pulled in from its
+ * corner, as the plot draws it (dashed): the engine's slope-1 run, held
+ * at black where it would go under it, and to the plot's top edge where
+ * it passes white (it goes on past white, beyond the plot). An end at
+ * its corner has none. In the stored curve's own terms; the CMY face
+ * turns the result over like the rest. */
+export function curveTails(pts: Pt[]): Pt[][] {
+  if (pts.length < 2) return [];
+  const tails: Pt[][] = [];
+  const [fx, fy] = pts[0];
+  if (fx > 1e-6) {
+    const y0 = fy - fx;
+    tails.push(y0 >= 0 ? [[0, y0], [fx, fy]] : [[0, 0], [fx - fy, 0], [fx, fy]]);
+  }
+  const [lx, ly] = pts[pts.length - 1];
+  if (lx < 1 - 1e-6) {
+    const y1 = ly + (1 - lx);
+    tails.push(y1 <= 1 ? [[lx, ly], [1, y1]] : [[lx, ly], [lx + (1 - ly), 1]]);
+  }
+  return tails;
 }
 
 /** The channel's points and manual handles as EqPoints, for the
@@ -126,7 +152,7 @@ export function curveShape(
   mode: CurveInterp,
   tangents: number[],
   handles: (CurveHandle | null)[],
-): { valueAt: (x: number) => number; outline: () => Pt[] } {
+): { valueAt: (x: number) => number; outline: () => Pt[]; weighted: boolean } {
   const tangentMode = mode === "tangent";
   const eqPts = tangentMode && handles.some((h) => h && (h.l || h.r)) ? curveEqPoints(pts, handles) : null;
   const smooth = mode !== "linear";
@@ -142,5 +168,5 @@ export function curveShape(
           return [x, valueAt(x)];
         })
       : curvePath(pts, smooth, slopes);
-  return { valueAt, outline };
+  return { valueAt, outline, weighted: eqPts !== null };
 }

@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { InterpCycle } from "./interpglyph";
 import type { Command, CurveChannel, CurveHandle, NodeCard } from "../state";
 import { EQ_PICK_GRAB } from "../eqcurve";
-import { curveShape, curveValueAt, monotoneTangents } from "../curvesampler";
+import { curveShape, curveTails, curveValueAt, monotoneTangents } from "../curvesampler";
 import { CURVE_POINT_CURSOR, CURVE_TANGENT_CURSOR } from "./cursors";
 import { HintKey } from "./hintkey";
 import { CHANNEL_CHIPS, ChannelChip, INK_CHIPS } from "./channelchips";
@@ -761,6 +761,26 @@ canvas"), then the channels, and the reset on the far end.*/}
           </React.Fragment>
         ))}
         <line x1={0} y1={H} x2={W} y2={0} stroke="#2c2a28" strokeDasharray="3 3" />
+        {/* Past an end point pulled in from its corner, what the photograph
+does there, dashed (2026-10-10, the owner's choice of an honest plot over
+a changed render): the engine carries on at slope 1. A weighted
+(handle) curve holds its ends level and draws them in its outline. */}
+        {!shape.weighted &&
+          curveTails(storedPts).map((tail, i) => (
+            <polyline
+              key={i}
+              data-testid={`curve-tail-${i}`}
+              points={tail
+                .map(([x, y]): [number, number] => (ink ? [1 - x, 1 - y] : [x, y]))
+                .map((p) => toSvg(p).join(","))
+                .join(" ")}
+              fill="none"
+              stroke={color}
+              strokeWidth={1.2 * m}
+              strokeDasharray={`${3 * m} ${3 * m}`}
+              opacity={0.5}
+            />
+          ))}
         <polyline
           points={shape
             .outline()

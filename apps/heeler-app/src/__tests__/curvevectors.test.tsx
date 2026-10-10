@@ -14,7 +14,7 @@ import { initialState } from "../data";
 import { evalEq } from "../eqcurve";
 import type { CurveHandle, NodeCard } from "../state";
 import { CurveEditor, curveEqPoints, curvePath, curveValueAt } from "../ui/editors";
-import { curveShape, monotoneTangents } from "../curvesampler";
+import { curveShape, curveTails, monotoneTangents } from "../curvesampler";
 
 afterEach(cleanup);
 
@@ -36,13 +36,15 @@ const vectors: { x: number[]; cases: Case[] } = JSON.parse(
  * evaluation when some handle is set, otherwise the Hermite through the
  * slopes, or the chord. Every vector lies inside the plot, so its clamp
  * changes nothing here. */
-const editorValue = (c: Case, x: number) =>
-  curveShape(
-    c.points,
-    c.interp,
-    c.slopes && c.slopes.length === c.points.length ? c.slopes : monotoneTangents(c.points),
-    c.handles && c.handles.length === c.points.length ? c.handles : c.points.map(() => null),
-  ).valueAt(x);
+const editorValue = (c: Case, x: number) => {
+  const handles = c.handles && c.handles.length === c.points.length ? c.handles : c.points.map(() => null);
+  const shape = curveShape(c.points, c.interp, c.slopes && c.slopes.length === c.points.length ? c.slopes : monotoneTangents(c.points), handles);
+  // The chooser's path, read unclipped: past an end the curve leaves the
+  // plot, which the ghost's valueAt keeps it inside of.
+  return shape.weighted
+    ? evalEq(curveEqPoints(c.points, handles), x)
+    : curveValueAt(c.points, c.interp !== "linear", x, c.interp === "tangent" ? c.slopes : undefined);
+};
 
 describe("the Curves editor's curve is the engine's", () => {
   it("matches the shared vectors in every interpolation", () => {
@@ -82,15 +84,38 @@ describe("the Curves editor's curve is the engine's", () => {
     for (const x of [0.1, 0.45, 0.8]) expect(curveValueAt(pts, true, x, [1, 0, 1, 5])).toBe(curveValueAt(pts, true, x));
   });
 
-  it("holds flat outside the points and is the identity with none", () => {
+  it("carries on at slope 1 past its ends, as the engine does, and is the identity with none", () => {
+    // It held flat there, where the engine rose, so the ghost and the
+    // picker read a value the photograph did not have (2026.5.1).
     const pts: Pt[] = [[0.2, 0.1], [0.8, 0.9]];
     for (const smooth of [true, false]) {
-      expect(curveValueAt(pts, smooth, 0)).toBe(0.1);
+      expect(curveValueAt(pts, smooth, 0)).toBeCloseTo(-0.1, 9);
       expect(curveValueAt(pts, smooth, 0.2)).toBe(0.1);
       expect(curveValueAt(pts, smooth, 0.8)).toBe(0.9);
-      expect(curveValueAt(pts, smooth, 1)).toBe(0.9);
+      expect(curveValueAt(pts, smooth, 1)).toBeCloseTo(1.1, 9);
     }
     expect(curveValueAt([], true, 0.37)).toBe(0.37);
+  });
+
+  it("draws the run past each pulled-in end, held at black and to the top edge at white", () => {
+    // At the corners, nothing past them.
+    expect(curveTails([[0, 0], [0.5, 0.5], [1, 1]])).toEqual([]);
+    // In from both: a slope-1 run each way.
+    const both = curveTails([[0.2, 0.3], [0.8, 0.6]]);
+    const want = [[[0, 0.1], [0.2, 0.3]], [[0.8, 0.6], [1, 0.8]]];
+    expect(both).toHaveLength(2);
+    both.forEach((tail, i) => tail.forEach((p, j) => p.forEach((v, k) => expect(v).toBeCloseTo(want[i][j][k], 9))));
+    // Under black at the left: level at black, then the rise.
+    const [left] = curveTails([[0.3, 0.1], [1, 1]]);
+    expect(left[0]).toEqual([0, 0]);
+    expect(left[1][0]).toBeCloseTo(0.2, 9);
+    expect(left[1][1]).toBe(0);
+    expect(left[2]).toEqual([0.3, 0.1]);
+    // Past white at the right: to the plot's top edge.
+    const [right] = curveTails([[0, 0], [0.7, 0.9]]);
+    expect(right[0]).toEqual([0.7, 0.9]);
+    expect(right[1][0]).toBeCloseTo(0.8, 9);
+    expect(right[1][1]).toBe(1);
   });
 
   it("two points with no slopes of their own are the straight chord, not a Hermite", () => {
@@ -225,5 +250,33 @@ describe("the eyedropper ghost stays inside the plot", () => {
     expect(evalEq(eq, hi)).toBeGreaterThan(1.01);
     const node = curvesNode({ curves: { rgb: pts }, curveInterp: "tangent", curveHandles: { rgb: handles } });
     expect(ghostAt(node, hi)).toBeCloseTo(1, 6);
+  });
+});
+
+describe("the plot shows what the photograph does past a pulled-in end", () => {
+  it("dashed, in each mode but a weighted one, and in the CMY face turned over", () => {
+    const pts: Pt[] = [[0.1, 0.05], [0.5, 0.5], [0.85, 0.9]];
+    const tails = (patch: Partial<NodeCard>, mode: "rgb" | "cmy" = "rgb") => {
+      const { container, unmount } = render(<CurveEditor node={curvesNode({ curves: { rgb: pts }, ...patch })} dispatch={() => {}} channelMode={mode} />);
+      const found = [...container.querySelectorAll('[data-testid^="curve-tail-"]')];
+      const dashed = found.every((t) => t.getAttribute("stroke-dasharray"));
+      unmount();
+      return { count: found.length, dashed };
+    };
+    for (const curveInterp of ["smooth", "linear", "tangent"] as const) {
+      expect(tails({ curveInterp }), curveInterp).toEqual({ count: 2, dashed: true });
+    }
+    expect(tails({ curveInterp: "smooth" }, "cmy").count).toBe(2);
+    // With a handle the ends hold level, drawn in the curve's own outline.
+    expect(tails({ curveInterp: "tangent", curveHandles: { rgb: [null, { r: [0.1, 0.1] }, null] } }).count).toBe(0);
+    // Ends at the corners: nothing past them.
+    const { container } = render(<CurveEditor node={curvesNode({ curves: { rgb: [[0, 0], [1, 1]] } })} dispatch={() => {}} channelMode="rgb" />);
+    expect(container.querySelectorAll('[data-testid^="curve-tail-"]')).toHaveLength(0);
+  });
+
+  it("the eyedropper's ghost rides the run, not a flat line", () => {
+    const pts: Pt[] = [[0.1, 0.05], [0.5, 0.5], [0.8, 0.7]];
+    // At 0.95 the run is at 0.7 + 0.15; a flat line read 0.7.
+    expect(ghostAt(curvesNode({ curves: { rgb: pts }, curveInterp: "smooth" }), 0.95)).toBeCloseTo(0.85, 6);
   });
 });
