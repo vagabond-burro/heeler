@@ -7,9 +7,9 @@ Source controls raw decoding and the base tone rendering applied before creative
 Highlights, Demosaic, Sharpening and Profile are dropdown menus, all one width. Click one, or focus it and press the Down arrow, to open its list; the arrow keys move through the choices, `Return` (`Enter` on Windows) picks one, and `Escape` closes the list unchanged. Resting the pointer on a choice shows what it does in the status bar.
 
 - **As-shot white balance** uses the camera's recorded white-balance multipliers. Turn it off when you want the later Color section to begin from a neutral decoder state.
-- **Highlights: Clip** cuts blown sensor channels at white.
-- **Highlights: Blend** fills a blown channel from the channels that survived.
-- **Highlights: Rebuild** reconstructs blown areas and rolls off their color.
+- **Highlights: Blend** (the default) fills a blown channel from the channels that survived. A blown sky stays neutral, white rather than pink, and pulling Exposure or Highlights down brings back what the other channels saw, such as the shape of clouds.
+- **Highlights: Clip** cuts blown sensor channels at white. Blown areas stay neutral too, but they are flat: pulled down, a blown sky turns an even gray.
+- **Highlights: Rebuild** reconstructs blown areas further, and is marked **Experimental** beside the menu while it is chosen: it can tint what it rebuilds, turning a blown sky cyan in testing. Use Blend unless Rebuild looks right on the photograph in front of you.
 - **Demosaic: Fast** uses the quickest, softest interpolation for culling.
 - **Demosaic: Standard** uses the decoder's normal quality.
 - **Demosaic: Fine** uses slower DHT processing to resolve fine detail.

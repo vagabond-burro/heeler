@@ -8485,11 +8485,12 @@ pub(crate) fn source_opts_of(ui: &UiGraph) -> heeler_io::RawSourceOpts {
                 camera_matrix: flag("camera_matrix"),
                 // The Source panel's Highlights choice, engine words:
                 // clip 0, blend 2, rebuild 5 (mid-strength of LibRaw's
-                // 3..9 rebuild range).
+                // 3..9 rebuild range). Absent is blend, the default
+                // (heeler_io::RawSourceOpts).
                 highlight: match n.params.get("highlights").and_then(|v| v.as_str()) {
-                    Some("blend") => 2,
+                    Some("clip") => 0,
                     Some("rebuild") => 5,
-                    _ => 0,
+                    _ => 2,
                 },
                 demosaic: match n.params.get("demosaic").and_then(|v| v.as_str()) {
                     Some("fast") => 0,
@@ -31448,7 +31449,13 @@ mod tests {
     #[test]
     fn source_opts_parse_from_the_ui_graph_with_camera_defaults() {
         let mut ui = ui_graph();
-        assert_eq!(source_opts_of(&ui), heeler_io::RawSourceOpts { camera_wb: true, camera_matrix: true, highlight: 0, demosaic: -1, ..Default::default() });
+        // Highlights absent is blend, LibRaw's 2 (the default since 2026-10-10).
+        assert_eq!(source_opts_of(&ui), heeler_io::RawSourceOpts { camera_wb: true, camera_matrix: true, highlight: 2, demosaic: -1, ..Default::default() });
+        for (choice, mode) in [("clip", 0), ("blend", 2), ("rebuild", 5)] {
+            let mut chosen = ui.clone();
+            chosen.nodes[0].params.insert("highlights".into(), serde_json::json!(choice));
+            assert_eq!(source_opts_of(&chosen).highlight, mode, "{choice}");
+        }
         ui.nodes[0]
             .params
             .insert("camera_wb".into(), serde_json::json!(0.0));
@@ -31457,7 +31464,7 @@ mod tests {
             .insert("camera_matrix".into(), serde_json::json!(1.0));
         assert_eq!(
             source_opts_of(&ui),
-            heeler_io::RawSourceOpts { camera_wb: false, camera_matrix: true, highlight: 0, demosaic: -1, ..Default::default() }
+            heeler_io::RawSourceOpts { camera_wb: false, camera_matrix: true, highlight: 2, demosaic: -1, ..Default::default() }
         );
         // Different toggles produce different cache keys and versions.
         assert_ne!(

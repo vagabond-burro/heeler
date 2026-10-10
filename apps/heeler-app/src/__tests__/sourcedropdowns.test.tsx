@@ -79,11 +79,11 @@ describe("Develop's Source section", () => {
     render(<App />);
     openSource();
     const field = screen.getByTestId("source-highlights");
-    expect(field).toHaveAttribute("data-value", "clip");
-    expect(field.getAttribute("data-hint")).toBe("Cut blown channels at sensor white");
+    expect(field).toHaveAttribute("data-value", "blend");
+    expect(field.getAttribute("data-hint")).toBe("Fill a blown channel from the two that survived: blown areas stay neutral and keep their detail (the default)");
     fireEvent.click(field);
     expect(screen.getByTestId("source-highlights-option-rebuild").getAttribute("data-hint")).toBe(
-      "Reconstruct blown areas, rolling their color off",
+      "Experimental: reconstruct blown areas further; it can tint a blown sky",
     );
   });
 });

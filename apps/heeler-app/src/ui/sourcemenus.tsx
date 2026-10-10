@@ -15,12 +15,14 @@ import { PARAM_OPTIONS } from "../state";
 import { MenuField } from "./menufield";
 import type React from "react";
 
-type Choice = { id: string; label: string; hint: string };
+/** A menu choice. `experimental` marks one that works but is not yet
+ * right: chosen, its row shows the Experimental chip beside the menu. */
+type Choice = { id: string; label: string; hint: string; experimental?: string };
 
 const HIGHLIGHT_HINTS: Record<string, string> = {
-  clip: "Cut blown channels at sensor white",
-  blend: "Fill a blown channel from the two that survived",
-  rebuild: "Reconstruct blown areas, rolling their color off",
+  clip: "Cut blown channels at sensor white: blown areas stay flat white",
+  blend: "Fill a blown channel from the two that survived: blown areas stay neutral and keep their detail (the default)",
+  rebuild: "Experimental: reconstruct blown areas further; it can tint a blown sky",
 };
 
 const DEMOSAIC_HINTS: Record<string, string> = {
@@ -59,7 +61,13 @@ export const PROFILE_CHOICES: Choice[] = withHints(
   PROFILE_HINTS,
 );
 
-export const HIGHLIGHT_CHOICES = withHints(sourceOptions("highlights"), HIGHLIGHT_HINTS);
+/** Rebuild is LibRaw's own reconstruction, and on a blown sky it tints
+ * what it rebuilds cyan at every strength (2026-10-10, measured on the
+ * fixture in heeler-raw's highlight_neutrality.rs), so it stays on offer
+ * marked experimental and blend is the default. */
+export const HIGHLIGHT_CHOICES: Choice[] = withHints(sourceOptions("highlights"), HIGHLIGHT_HINTS).map((o) =>
+  o.id === "rebuild" ? { ...o, experimental: "Rebuild is experimental: it can tint a blown sky (cyan, in testing). Blend keeps blown areas neutral." } : o,
+);
 export const DEMOSAIC_CHOICES = withHints(sourceOptions("demosaic"), DEMOSAIC_HINTS);
 export const SHARPENING_CHOICES = withHints(sourceOptions("sharpening"), SOURCE_SHARPENING_HINTS);
 
@@ -74,7 +82,7 @@ export const SOURCE_FIT = fitOf(HIGHLIGHT_CHOICES, DEMOSAIC_CHOICES, SHARPENING_
 /** The image source's three decoder rows, in the order both seats show
  * them: [label, param, default, choices, accessible name]. */
 export const SOURCE_MENU_ROWS = [
-  ["Highlights", "highlights", "clip", HIGHLIGHT_CHOICES, "Highlight reconstruction"],
+  ["Highlights", "highlights", "blend", HIGHLIGHT_CHOICES, "Highlight reconstruction"],
   ["Demosaic", "demosaic", "standard", DEMOSAIC_CHOICES, "Demosaic quality"],
   ["Sharpening", "sharpening", "standard", SHARPENING_CHOICES, "Capture sharpening"],
 ] as const;
@@ -123,7 +131,36 @@ export function SourceMenuRow({
         size="regular"
         fitLabels={fit}
       />
+      <ExperimentalChip why={choices.find((o) => o.id === value)?.experimental} testid={`${testid}-experimental`} />
       {after}
     </div>
+  );
+}
+
+/** The Experimental chip beside a menu whose chosen option is not yet
+ * right (2026-10-10: "keep Rebuild as experimental ... have the
+ * Experimental chip appear to the right of the option menu"). A label in
+ * the warning color, not a button; its hint says what is wrong. */
+export function ExperimentalChip({ why, testid }: { why?: string; testid?: string }) {
+  if (!why) return null;
+  return (
+    <span
+      data-testid={testid}
+      data-hint={why}
+      aria-label={why}
+      style={{
+        flex: "none",
+        padding: "1px 6px",
+        border: "1px solid var(--warn)",
+        borderRadius: "var(--radius-btn)",
+        color: "var(--warn)",
+        fontSize: 11,
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
+        whiteSpace: "nowrap",
+      }}
+    >
+      Experimental
+    </span>
   );
 }

@@ -272,9 +272,12 @@ impl Registry {
             // camera_wb / camera_matrix ride as UI flags the decode
             // reads; highlights is the RAW milestone's reconstruction
             // choice, resolved by the decoder (LibRaw clip/blend/
-            // rebuild). Lenient: clip is an honest default.
+            // rebuild). Blend is the default (2026-10-10): it keeps a blown
+            // sky neutral and brings back what one channel saw, where clip
+            // leaves flat white; rebuild is marked experimental, since
+            // LibRaw's rebuild tints a blown sky cyan.
             params: vec![
-                choice("highlights", "clip", &["clip", "blend", "rebuild"]),
+                choice("highlights", "blend", &["clip", "blend", "rebuild"]),
                 // Demosaic quality, resolved by the decoder: fast is
                 // linear interpolation, fine is DHT, standard leaves
                 // LibRaw's default AHD-class choice.

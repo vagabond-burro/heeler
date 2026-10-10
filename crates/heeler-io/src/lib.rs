@@ -823,7 +823,9 @@ pub const DEFAULT_CAPTURE_SHARPEN: u8 = 60;
 
 impl Default for RawSourceOpts {
     fn default() -> Self {
-        RawSourceOpts { camera_wb: true, camera_matrix: true, highlight: 0, demosaic: -1, capture_sharpen: DEFAULT_CAPTURE_SHARPEN }
+        // Highlights blend: a blown sky stays neutral and keeps what one
+        // channel saw (highlight_neutrality.rs in heeler-raw).
+        RawSourceOpts { camera_wb: true, camera_matrix: true, highlight: 2, demosaic: -1, capture_sharpen: DEFAULT_CAPTURE_SHARPEN }
     }
 }
 
