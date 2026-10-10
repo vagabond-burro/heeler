@@ -4152,7 +4152,7 @@ mounts. */}
                 <Slider key={p as string} label={label as string} param={p as string} node={node} dispatch={dispatch} centered={centered as boolean} />
               ))}
             {node.type === "heeler.crop_rotate" && appState && (
-              <div data-node={node.id} data-params="flip_h flip_v">
+              <div data-node={node.id} data-params="flip_h flip_v turn">
                 <FlipPhotoRow nodes={appState.nodes} activeImage={appState.activeImage} dispatch={dispatch} />
               </div>
             )}

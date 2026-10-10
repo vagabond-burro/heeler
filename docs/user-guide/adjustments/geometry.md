@@ -17,7 +17,13 @@ Geometry starts off, and a photograph carries no geometry node until it is used:
 
 The edits flip with the photograph. A brush stroke, a selection, a radial or linear mask, a Smart selection's clicks, the crop's rectangle and angle, Grid Warp and Shape Warp, Depth Lighting's lamps and every Finish layer all stay on the subject they were made on, so the whole result is the old one mirrored: the export, the view at Fit and at 1:1, the histogram and the thumbnail. A picture placed in Finish mirrors with it (a baked warp's kept warp too, so **Unbake** lands on the mirrored subject), and directions follow: a Gradient layer's angle, a Shadow's or Bevel's light, a motion Blur, a Flare's rays and streak. Grain and the Fog's texture are made fresh where they land and are not mirrored. The flip is applied with the crop, to the photograph before it is turned, so a Smart selection's model and the depth map read the photograph as it is. A depth map computed after the crop is computed again on the flipped frame.
 
-**Paste Edits** carries the flip with the crop, and **Reset** on this section puts the photograph back the right way round. While the Crop & Rotate node is bypassed in the graph the buttons gray: switch it on first.
+## Rotate
+
+**Rotate** (two buttons on the **Rotate** row under Flip: 90° Left and 90° Right, a picture on its side under an arrow turning that way) turns the photograph a quarter turn, the same as **Photo > Rotate > 90° Left** and **90° Right**; **Photo > Rotate > 180°** turns it upside down. Use it for a portrait shot the camera recorded lying on its side, or a picture taken upside down. Each press is one undo step, and four presses the same way put the photograph back where it started.
+
+The edits turn with the photograph, just as they flip with it: every mask, stroke, selection, the crop's rectangle and angle, the warps, Depth Lighting's lamps and every Finish layer stay on their subject, and a placed picture and the directions (a Gradient's angle, a Shadow's light, a motion Blur, a Flare) turn too. The crop's rectangle turns with the picture, so it frames the same part of the scene; an aspect ratio held in the crop bar reads the turned frame, so a 3:2 crop on a picture turned on its side is 3:2 across the new width. The turn is whole pixels, nothing resampled, and comes after Flip, so on a picture turned on its side **Flip Horizontal** still mirrors it left for right as you see it.
+
+**Paste Edits** carries the flip and the turn with the crop, and **Reset** on this section puts the photograph back the right way round and upright. While the Crop & Rotate node is bypassed in the graph the buttons gray: switch it on first.
 
 ## Following the crop
 

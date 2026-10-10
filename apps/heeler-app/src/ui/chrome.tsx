@@ -7,7 +7,7 @@ import React, { memo, useEffect, useLayoutEffect, useRef, useState } from "react
 import { panePropsEqual } from "./viewmemo";
 import { createPortal } from "react-dom";
 import type { Command, ImageEntry, Mode, State, TreeNode } from "../state";
-import { exportDpi, photoFlipBlocked, photoFlips, layerMaskToggleTarget } from "../state";
+import { exportDpi, photoFlipBlocked, photoFlips, photoTurnBlocked, layerMaskToggleTarget } from "../state";
 import { ART_CONTENT_KINDS, ART_KINDS, CROP_RATIOS, DOC_SEL_ID, cropRatioList, LAYER_MASK_TYPES, SELECT_METHODS, availableMaskTypes, activeSelectionMask, ancestorsBetween, bakeable, filtersActive, folderHasEdits, isPano, isStack, parseAspect, selectionHasContent, selectionLoadSource, stackAppendTargets, taggingTargets, thumbCell, visibleImages, duplicable } from "../state";
 import { layerActionHint, layerActions, maskToggleItem } from "../layeractions";
 import { bakeMaskRaster, entryFromRow } from "../bridge";
@@ -901,6 +901,11 @@ export function MenuBar({ state, dispatch }: { state: State; dispatch: D }) {
   /** Why Photo > Flip is grayed, as a sentence. */
   const flipWhy = (s: State): string | undefined => {
     const why = photoFlipBlocked(s);
+    return why ? `${why.charAt(0).toUpperCase()}${why.slice(1)}.` : undefined;
+  };
+  /** Why Photo > Rotate is grayed, as a sentence. */
+  const turnWhy = (s: State): string | undefined => {
+    const why = photoTurnBlocked(s);
     return why ? `${why.charAt(0).toUpperCase()}${why.slice(1)}.` : undefined;
   };
   const item = (
@@ -1845,6 +1850,39 @@ export function MenuBar({ state, dispatch }: { state: State; dispatch: D }) {
             <div className="sep" />
             <CustomAspect dispatch={dispatch} />
           </SubMenu>
+        </SubMenu>,
+        <SubMenu
+          key="rotate"
+          label="Rotate"
+          testid="menu-photo-rotate"
+          disabled={!!photoTurnBlocked(state)}
+          hint="Turn the photograph a quarter or a half turn with every edit on it: masks, strokes, the crop and the layers."
+          why={turnWhy(state)}
+        >
+          {item(
+            "90° Right",
+            () => dispatch({ type: "turn_photo", quarters: 1 }),
+            "menu-photo-rotate-right",
+            false,
+            "photo.rotate_right",
+            "Turn the photograph a quarter turn clockwise, with every edit on it. A portrait shot lying on its side stands up.",
+          )}
+          {item(
+            "90° Left",
+            () => dispatch({ type: "turn_photo", quarters: 3 }),
+            "menu-photo-rotate-left",
+            false,
+            "photo.rotate_left",
+            "Turn the photograph a quarter turn counterclockwise, with every edit on it.",
+          )}
+          {item(
+            "180°",
+            () => dispatch({ type: "turn_photo", quarters: 2 }),
+            "menu-photo-rotate-180",
+            false,
+            "photo.rotate_180",
+            "Turn the photograph upside down, with every edit on it.",
+          )}
         </SubMenu>,
         check(
           "Flip Horizontal",

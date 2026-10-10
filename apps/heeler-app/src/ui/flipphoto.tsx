@@ -8,7 +8,7 @@
 
 import React from "react";
 import type { Command, NodeCard } from "../state";
-import { photoFlipBlocked, photoFlips } from "../state";
+import { photoFlipBlocked, photoFlips, photoTurn, photoTurnBlocked } from "../state";
 import { XformIcon } from "./panelicons";
 
 const ICON_CHIP: React.CSSProperties = {
@@ -34,6 +34,7 @@ export function FlipPhotoRow({
   const flips = photoFlips({ nodes });
   const blocked = photoFlipBlocked({ nodes, activeImage });
   return (
+    <>
     <div data-testid="flip-photo-row" style={{ display: "flex", alignItems: "center", gap: 6 }}>
       <span className="lbl" style={{ fontSize: 11, flex: 1 }}>
         Flip
@@ -62,6 +63,43 @@ export function FlipPhotoRow({
             onClick={() => dispatch({ type: "flip_photo", axis })}
           >
             <XformIcon id={axis === "h" ? "flipH" : "flipV"} />
+          </button>
+        );
+      })}
+    </div>
+    <RotatePhotoRow nodes={nodes} activeImage={activeImage} dispatch={dispatch} />
+    </>
+  );
+}
+
+/** Photo > Rotate's quarter turns as two buttons under Flip: each press is
+ * turn_photo, one undo step, the photograph and every edit on it turned.
+ * The half turn is in the menu (or two presses). */
+function RotatePhotoRow({ nodes, activeImage, dispatch }: { nodes: NodeCard[]; activeImage: string; dispatch: React.Dispatch<Command> }) {
+  const blocked = photoTurnBlocked({ nodes, activeImage });
+  const turn = photoTurn({ nodes });
+  const state = turn ? ` Turned ${turn === 2 ? "180°" : turn === 1 ? "90° right" : "90° left"} now.` : "";
+  return (
+    <div data-testid="rotate-photo-row" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <span className="lbl" style={{ fontSize: 11, flex: 1 }}>
+        Rotate
+      </span>
+      {([3, 1] as const).map((quarters) => {
+        const name = quarters === 1 ? "Rotate 90° Right" : "Rotate 90° Left";
+        const way = quarters === 1 ? "clockwise" : "counterclockwise";
+        return (
+          <button
+            key={quarters}
+            className="chip"
+            data-testid={`rotate-photo-${quarters === 1 ? "right" : "left"}`}
+            aria-label={name}
+            data-tip={name}
+            data-hint={blocked ? `${name}: ${blocked}` : `${name}: turn the photograph a quarter turn ${way}, with every edit on it.${state}`}
+            disabled={!!blocked}
+            style={ICON_CHIP}
+            onClick={() => dispatch({ type: "turn_photo", quarters })}
+          >
+            <XformIcon id={quarters === 1 ? "rotateRight" : "rotateLeft"} />
           </button>
         );
       })}

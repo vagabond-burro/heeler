@@ -325,6 +325,9 @@ export const COMMANDS: CommandSpec[] = [
   { id: "photo.panorama", label: "Stitch to Panorama…", group: "Photo", scope: "global", binding: "" },
   { id: "photo.flip_h", label: "Flip Horizontal", group: "Photo", scope: "global", binding: "" },
   { id: "photo.flip_v", label: "Flip Vertical", group: "Photo", scope: "global", binding: "" },
+  { id: "photo.rotate_right", label: "Rotate 90° Right", group: "Photo", scope: "global", binding: "" },
+  { id: "photo.rotate_left", label: "Rotate 90° Left", group: "Photo", scope: "global", binding: "" },
+  { id: "photo.rotate_180", label: "Rotate 180°", group: "Photo", scope: "global", binding: "" },
   {
     id: "photo.bake",
     label: "Bake to Image…",

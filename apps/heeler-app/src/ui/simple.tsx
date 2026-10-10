@@ -83,7 +83,7 @@ import {
   reduce,
 } from "../state";
 import type { LayerMaskType, LayerToolKey, PanelTab, PickMode, PickTarget, SelectOp } from "../state";
-import { curveModeOf, photoFlips, pickMaskNode } from "../state";
+import { curveModeOf, photoFlips, photoTurn, pickMaskNode } from "../state";
 import { FlipPhotoRow } from "./flipphoto";
 import {
   CATEGORY_OF,
@@ -6437,6 +6437,9 @@ consistency)."*/}
                       const flips = photoFlips(state);
                       if (flips.h) dispatch({ type: "flip_photo", axis: "h" });
                       if (flips.v) dispatch({ type: "flip_photo", axis: "v" });
+                      // And upright: the turn back the other way round.
+                      const turn = photoTurn(state);
+                      if (turn) dispatch({ type: "turn_photo", quarters: (4 - turn) as 1 | 2 | 3 });
                     }
                     // Shape Warp's Reset: every shape's warp back to
                     // rest, the shapes and their placement kept.

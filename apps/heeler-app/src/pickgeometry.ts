@@ -48,6 +48,13 @@ export function sourceMapOf(graph: Graph, size: Pt): (point: Pt) => Pt | null {
       // Pushed first, so it runs after the crop's own undo.
       const fh = num("flip_h", 0) >= 0.5, fv = num("flip_v", 0) >= 0.5;
       if (fh || fv) undo.push(([u, v]) => [fh ? 1 - u : u, fv ? 1 - v : v]);
+      // Photo > Rotate turns after the flips, so its undo runs before
+      // theirs (pushed after them); an odd turn swaps the frame's sides.
+      const q = ((Math.round(num("turn", 0)) % 4) + 4) % 4;
+      if (q) {
+        undo.push(([u, v]) => (q === 1 ? [v, 1 - u] : q === 2 ? [1 - u, 1 - v] : [1 - v, u]));
+        if (q % 2) [width, height] = [height, width];
+      }
       const w = width, h = height;
       const x = clamp(num("crop_x", 0), 0, .95), y = clamp(num("crop_y", 0), 0, .95);
       const cw = clamp(num("crop_w", 1), .05, 1-x), ch = clamp(num("crop_h", 1), .05, 1-y);

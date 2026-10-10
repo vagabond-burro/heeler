@@ -197,7 +197,7 @@ import { maskOfLayer } from "./layerids";
 function cropSigOf(s: State): string {
   const n = s.nodes.find((nd) => nd.type === "heeler.crop_rotate");
   return n
-    ? `${n.enabled}|${n.params.angle ?? 0}|${n.params.crop_x ?? 0}|${n.params.crop_y ?? 0}|${n.params.crop_w ?? 1}|${n.params.crop_h ?? 1}`
+    ? `${n.enabled}|${n.params.angle ?? 0}|${n.params.crop_x ?? 0}|${n.params.crop_y ?? 0}|${n.params.crop_w ?? 1}|${n.params.crop_h ?? 1}|${n.params.flip_h ?? 0}|${n.params.flip_v ?? 0}|${n.params.turn ?? 0}`
     : "";
 }
 

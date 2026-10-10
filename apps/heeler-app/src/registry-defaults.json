@@ -149,7 +149,8 @@
     "crop_x": 0.0,
     "crop_y": 0.0,
     "flip_h": 0.0,
-    "flip_v": 0.0
+    "flip_v": 0.0,
+    "turn": 0.0
   },
   "heeler.denoise": {
     "strength": 0.0

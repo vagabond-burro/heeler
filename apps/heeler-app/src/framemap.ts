@@ -56,12 +56,16 @@ export interface CropGeom {
   h: number;
   flipH?: boolean;
   flipV?: boolean;
+  /** Photo > Rotate: quarter turns clockwise, 1 to 3, after the flips and
+   * before the angle and the rectangle (ops_geometry::crop_turn); absent
+   * for none. An odd turn swaps the frame's sides. */
+  turn?: number;
 }
 
 export const IDENTITY_CROP: CropGeom = { angle: 0, stretch: 0, x: 0, y: 0, w: 1, h: 1 };
 
 /** The geometry params the crop node carries. */
-export const CROP_GEOMETRY_KEYS = ["angle", "aspect", "crop_x", "crop_y", "crop_w", "crop_h", "flip_h", "flip_v"] as const;
+export const CROP_GEOMETRY_KEYS = ["angle", "aspect", "crop_x", "crop_y", "crop_w", "crop_h", "flip_h", "flip_v", "turn"] as const;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d);
@@ -72,6 +76,7 @@ export function cropGeomOfParams(p: Record<string, number | undefined>): CropGeo
   const y = clamp(num(p.crop_y, 0), 0, 0.95);
   const flipH = num(p.flip_h, 0) >= 0.5;
   const flipV = num(p.flip_v, 0) >= 0.5;
+  const turn = quarterTurns(num(p.turn, 0));
   return {
     angle: num(p.angle, 0),
     stretch: num(p.aspect, 0) / 100,
@@ -81,7 +86,25 @@ export function cropGeomOfParams(p: Record<string, number | undefined>): CropGeo
     h: clamp(num(p.crop_h, 1), 0.05, 1 - y),
     ...(flipH ? { flipH } : {}),
     ...(flipV ? { flipV } : {}),
+    ...(turn ? { turn } : {}),
   };
+}
+
+/** A turn value read as the engine reads it: whole quarters, 0 to 3. */
+export function quarterTurns(v: number): number {
+  return ((Math.round(v) % 4) + 4) % 4;
+}
+
+/** The photograph's aspect as the crop's rectangle sees it: after the
+ * turn, whose odd quarters swap its sides. */
+export function turnedAspect(g: CropGeom, a: number): number {
+  return (g.turn ?? 0) % 2 ? 1 / a : a;
+}
+
+/** A crop's frame size in photograph heights (of the photograph as it
+ * arrives, before any turn), the unit every remap measures in. */
+function frameSize(g: CropGeom, a: number): [number, number] {
+  return (g.turn ?? 0) % 2 ? [g.w, a * g.h] : [a * g.w, g.h];
 }
 
 /** The crop the render applies: the graph's crop node when it is on,
@@ -100,7 +123,8 @@ export function sameCrop(a: CropGeom, b: CropGeom): boolean {
     a.w === b.w &&
     a.h === b.h &&
     !!a.flipH === !!b.flipH &&
-    !!a.flipV === !!b.flipV
+    !!a.flipV === !!b.flipV &&
+    (a.turn ?? 0) === (b.turn ?? 0)
   );
 }
 
@@ -135,7 +159,7 @@ export function invertAffine(m: Affine): Affine {
  * the unrotated crop takes rounds its origin to a whole pixel; that is
  * under half a pixel at the render's size and is left to the render. */
 export function frameToSource(g: CropGeom, a: number): Affine {
-  const W = a;
+  const W = turnedAspect(g, a);
   const H = 1;
   const outW = W * g.w;
   const outH = H * g.h;
@@ -155,9 +179,16 @@ export function frameToSource(g: CropGeom, a: number): Affine {
   const cy = H / 2;
   const rot: Affine = [cos, -sin, cx - cx * cos + cy * sin, sin, cos, cy - cx * sin - cy * cos];
   const toFrac: Affine = [1 / W, 0, 0, 0, 1 / H, 0];
-  const onFlipped = composeAffine(toFrac, composeAffine(rot, toRot));
-  // The flips come first in the crop op, so the walk above lands on the
-  // flipped photograph; one more mirror lands on the photograph itself.
+  const onTurned = composeAffine(toFrac, composeAffine(rot, toRot));
+  // The turn comes after the flips in the crop op, so the walk above
+  // lands on the turned photograph; undoing the turn lands on the flipped
+  // one (turn_buf's own walk, in fractions).
+  const q = g.turn ?? 0;
+  const unturn: Affine | null =
+    q === 1 ? [0, 1, 0, -1, 0, 1] : q === 2 ? [-1, 0, 1, 0, -1, 1] : q === 3 ? [0, -1, 1, 1, 0, 0] : null;
+  const onFlipped = unturn ? composeAffine(unturn, onTurned) : onTurned;
+  // The flips come first in the crop op; one more mirror lands on the
+  // photograph itself.
   const unflip: Affine = [g.flipH ? -1 : 1, 0, g.flipH ? 1 : 0, 0, g.flipV ? -1 : 1, g.flipV ? 1 : 0];
   return g.flipH || g.flipV ? composeAffine(unflip, onFlipped) : onFlipped;
 }
@@ -195,15 +226,64 @@ export function flippedCropParams(
     const at = whole ? Math.min(Math.round(pos * px), px - n) : pos * px;
     next = (px - at - n) / px;
   }
+  // The switches act before Photo > Rotate's turn, so on a photograph
+  // turned on its side the frame's left-for-right is the photograph's
+  // top-for-bottom: a quarter turn trades the two.
+  const sideways = (g.turn ?? 0) % 2 === 1;
+  const switchH = across !== sideways;
   if (across) {
     out.crop_x = Math.max(0, next);
     out.crop_w = g.w;
-    out.flip_h = g.flipH ? 0 : 1;
   } else {
     out.crop_y = Math.max(0, next);
     out.crop_h = g.h;
-    out.flip_v = g.flipV ? 0 : 1;
   }
+  if (switchH) out.flip_h = g.flipH ? 0 : 1;
+  else out.flip_v = g.flipV ? 0 : 1;
+  return out;
+}
+
+/** The crop node's params after Photo > Rotate: `quarters` more quarter
+ * turns clockwise (1 right, 3 left, 2 a half turn). The rectangle turns
+ * with the picture, so the frame shows the same part of the scene,
+ * turned; the straighten angle turns about the center either way and
+ * keeps; the stretch dial reads along the frame's own axes, so an odd
+ * turn runs it the other way. Four turns give the first params back.
+ *
+ * `size`, the photograph's pixels when known, makes the turn exact at
+ * the render as flippedCropParams does: a side that comes out reversed
+ * is measured from the whole-pixel window the crop op cut. */
+export function turnedCropParams(
+  p: Record<string, number | undefined>,
+  quarters: number,
+  size?: readonly [number, number] | null,
+): Record<string, number> {
+  const g = cropGeomOfParams(p);
+  const q = quarterTurns(quarters);
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(p)) if (typeof v === "number") out[k] = v;
+  if (q === 0) return out;
+  // The frame the rectangle is measured on now, in pixels.
+  const px = size ? ((g.turn ?? 0) % 2 ? [size[1], size[0]] : [size[0], size[1]]) : null;
+  const whole = g.angle === 0 && g.stretch === 0;
+  // A side read from the other end: what flippedCropParams measures.
+  const far = (pos: number, len: number, n?: number): number => {
+    if (!n) return Math.max(0, 1 - pos - len);
+    const k = Math.min(Math.max(1, Math.round(n * len)), n);
+    const at = whole ? Math.min(Math.round(pos * n), n - k) : pos * n;
+    return Math.max(0, (n - at - k) / n);
+  };
+  let { x, y, w, h } = g;
+  if (q === 1) [x, y, w, h] = [far(g.y, g.h, px?.[1]), g.x, g.h, g.w];
+  else if (q === 3) [x, y, w, h] = [g.y, far(g.x, g.w, px?.[0]), g.h, g.w];
+  else [x, y] = [far(g.x, g.w, px?.[0]), far(g.y, g.h, px?.[1])];
+  out.crop_x = x;
+  out.crop_y = y;
+  out.crop_w = w;
+  out.crop_h = h;
+  if (q % 2 && g.stretch !== 0) out.aspect = -g.stretch * 100;
+  const turn = quarterTurns((g.turn ?? 0) + q);
+  if (turn || "turn" in out) out.turn = turn;
   return out;
 }
 
@@ -228,8 +308,8 @@ export interface FrameRemap {
 export function frameRemap(from: CropGeom, to: CropGeom, a: number): FrameRemap | null {
   if (sameCrop(from, to) || !(a > 0) || !Number.isFinite(a)) return null;
   const m = composeAffine(invertAffine(frameToSource(to, a)), frameToSource(from, a));
-  const f0: [number, number] = [a * from.w, from.h];
-  const f1: [number, number] = [a * to.w, to.h];
+  const f0 = frameSize(from, a);
+  const f1 = frameSize(to, a);
   // Pixels: scale the fraction map's linear part by the frames' sizes.
   const pix: [number, number, number, number] = [
     (m[0] * f1[0]) / f0[0],
@@ -254,6 +334,20 @@ export function mirrorRemap(axis: "h" | "v", a: number): FrameRemap {
   const pix: [number, number, number, number] = axis === "h" ? [-1, 0, 0, 1] : [1, 0, 0, -1];
   const size: [number, number] = [a > 0 && Number.isFinite(a) ? a : 1, 1];
   return { m, pix, from: size, to: [...size], len: 1, turn: 0 };
+}
+
+/** The frame turned `quarters` quarter turns clockwise about its
+ * center, as a remap: what Photo > Rotate carries everything painted on
+ * the frame through, exact as the turn itself is. Lengths keep their
+ * size; `a` is the frame's width over its height before the turn. */
+export function turnRemap(quarters: number, a: number): FrameRemap {
+  const q = quarterTurns(quarters);
+  const aspect = a > 0 && Number.isFinite(a) ? a : 1;
+  const m: Affine = q === 1 ? [0, -1, 1, 1, 0, 0] : q === 2 ? [-1, 0, 1, 0, -1, 1] : q === 3 ? [0, 1, 0, -1, 0, 1] : [1, 0, 0, 0, 1, 0];
+  const pix: [number, number, number, number] = q === 1 ? [0, -1, 1, 0] : q === 2 ? [-1, 0, 0, -1] : q === 3 ? [0, 1, -1, 0] : [1, 0, 0, 1];
+  const from: [number, number] = [aspect, 1];
+  const to: [number, number] = q % 2 ? [1, aspect] : [aspect, 1];
+  return { m, pix, from, to, len: 1, turn: q === 3 ? -90 : q * 90 };
 }
 
 /** Whether a map mirrors (turns the frame over), which a turn never

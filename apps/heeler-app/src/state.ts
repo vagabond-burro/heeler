@@ -9,7 +9,7 @@ import { isNameFormat, type NameFormat } from "./consolebands";
 import { logMsg } from "./log";
 import { cornersOf, mapPoint, solveHomography, type Pt } from "./quadmap";
 import { flipQuad, frameAspectFor, reframeQuad } from "./imagelayers";
-import { cropGeomOf, flippedCropParams, sourceSizeFor, frameRemap, mirrorRemap, remapNode, remapNodes, sameCrop, sourceAspectFor, type CropGeom, type FrameRemap } from "./framemap";
+import { cropGeomOf, flippedCropParams, sourceSizeFor, frameRemap, mirrorRemap, remapNode, remapNodes, sameCrop, sourceAspectFor, turnedCropParams, turnRemap, type CropGeom, type FrameRemap } from "./framemap";
 import type { NavState } from "./keynav";
 import {
   grow as growGridSelection,
@@ -5317,6 +5317,9 @@ export type Command =
   /** Photo > Flip Horizontal ("h") or Flip Vertical ("v"): the whole
    * photograph mirrored with every edit on it. One undo step. */
   | { type: "flip_photo"; axis: FlipAxis }
+  /** Photo > Rotate 90° Right (1), 180° (2) and 90° Left (3): the whole
+   * photograph turned with every edit on it. One undo step. */
+  | { type: "turn_photo"; quarters: 1 | 2 | 3 }
   | { type: "art_add_fx"; id: string; fx: string }
   /** an image layer's own warp on or off the layer (A, 2026-09-30): a
    * Finish warp in the picture's space, first on the layer's effect
@@ -8398,7 +8401,10 @@ const BACKFILL_IDENTITY: Record<
   },
   "heeler.crop_rotate": {
     name: "Crop & Rotate",
-    params: { angle: 0, aspect: 0, crop_x: 0, crop_y: 0, crop_w: 1, crop_h: 1 },
+    // The flips and the turn too: a photograph only flipped or rotated was
+    // read as untouched, since neither table knew those switches, and its
+    // node was dropped on the next open (2026-10-10: "Rotation is being lost").
+    params: { angle: 0, aspect: 0, crop_x: 0, crop_y: 0, crop_w: 1, crop_h: 1, flip_h: 0, flip_v: 0, turn: 0 },
     bornOn: true,
   },
   "heeler.lens_correct": {
@@ -12901,6 +12907,7 @@ const UNDOABLE = new Set([
   "art_set_quad",
   "art_flip_layer",
   "flip_photo",
+  "turn_photo",
   "art_add_mask",
   "art_remove_mask",
   "art_group_layers",
@@ -13412,10 +13419,12 @@ export function cropSourceAspect(s: State): number {
   if (noted) return noted;
   const frame = frameAspectFor(s.activeImage);
   if (frame) {
-    // The crop tool shows the whole rectangle (cropPreviewGraph).
-    if (s.tool === "crop") return frame;
+    // The crop tool shows the whole rectangle (cropPreviewGraph), turned
+    // as Photo > Rotate left it: an odd turn's frame is the photograph
+    // on its side.
     const g = cropGeomOf(s.nodes);
-    return (frame * g.h) / g.w;
+    const turned = s.tool === "crop" ? frame : (frame * g.h) / g.w;
+    return (g.turn ?? 0) % 2 ? 1 / turned : turned;
   }
   logDebug(() => `followCrop: no size known for ${s.activeImage}; turning on 3:2`);
   return 1.5;
@@ -13434,8 +13443,13 @@ function followCrop(s: State, next: State, cmd: Command): State {
   // A flip's frame is the old frame mirrored, pixel for pixel
   // (flippedCropParams): the map is that mirror exactly, where the
   // crops' fractions would carry the window's rounding along with it.
+  // A turn's frame is the old frame turned, pixel for pixel, the same way.
   const map =
-    cmd.type === "flip_photo" ? mirrorRemap(cmd.axis, frameAspectFor(s.activeImage) ?? cropSourceAspect(s)) : frameRemap(from, to, cropSourceAspect(s));
+    cmd.type === "flip_photo"
+      ? mirrorRemap(cmd.axis, frameAspectFor(s.activeImage) ?? cropSourceAspect(s))
+      : cmd.type === "turn_photo"
+        ? turnRemap(cmd.quarters, frameAspectFor(s.activeImage) ?? oldFrameAspect(s, from))
+        : frameRemap(from, to, cropSourceAspect(s));
   if (!map) return next;
   const before = new Map(s.nodes.map((n) => [n.id, n]));
   const written = (n: NodeCard): boolean => {
@@ -13452,7 +13466,21 @@ function followCrop(s: State, next: State, cmd: Command): State {
   };
   let nodes = remapNodes(next.nodes, map, written);
   if (cmd.type === "flip_photo") nodes = photoFlipExtras(nodes, cmd.axis);
+  if (cmd.type === "turn_photo") nodes = photoTurnExtras(nodes, cmd.quarters);
   return nodes === next.nodes ? next : { ...next, nodes };
+}
+
+/** The frame's shape under a crop when the viewer has not noted it:
+ * the photograph's, turned and cut as the crop cuts it. */
+function oldFrameAspect(s: State, g: CropGeom): number {
+  const a = cropSourceAspect(s);
+  const turned = (g.turn ?? 0) % 2 ? 1 / a : a;
+  return (turned * g.w) / g.h;
+}
+
+/** Which way the photograph is turned now: quarter turns clockwise. */
+export function photoTurn(s: Pick<State, "nodes">): number {
+  return cropGeomOf(s.nodes).turn ?? 0;
 }
 
 /** Whether Photo > Flip can act, or the outcome-first reason it cannot. */
@@ -13465,9 +13493,22 @@ export function photoFlipBlocked(s: Pick<State, "activeImage" | "nodes">): strin
   return null;
 }
 
+/** Whether Photo > Rotate can act, or the outcome-first reason it cannot. */
+export function photoTurnBlocked(s: Pick<State, "activeImage" | "nodes">): string | null {
+  if (!s.activeImage) return "open a photograph to rotate it";
+  const crop = s.nodes.find((n) => n.type === "heeler.crop_rotate");
+  if (crop && crop.enabled === false) {
+    return "the Crop & Rotate node is bypassed in the graph; switch it on and the photograph rotates with its crop";
+  }
+  return null;
+}
+
 /** Which ways the photograph is flipped now (the crop node's switches). */
 export function photoFlips(s: Pick<State, "nodes">): { h: boolean; v: boolean } {
   const g = cropGeomOf(s.nodes);
+  // As the frame shows it: a quarter turn trades the switches' axes
+  // (flippedCropParams).
+  if ((g.turn ?? 0) % 2) return { h: !!g.flipV, v: !!g.flipH };
   return { h: !!g.flipH, v: !!g.flipV };
 }
 
@@ -13493,6 +13534,81 @@ function mirrorDegrees(a: number, axis: FlipAxis, lo = -180): number {
  * along and across its own axis, so they follow the axis).
  * Procedural texture (grain, the fog's texture) is made fresh where it
  * lands and is not mirrored.*/
+function photoTurnExtras(nodes: NodeCard[], quarters: number): NodeCard[] {
+  let changed = false;
+  const q = ((quarters % 4) + 4) % 4;
+  // A direction in degrees, y down as the frame's pixels run: a turn
+  // clockwise adds to it.
+  const turned = (a: number, lo = -180) => {
+    let out = (((a + 90 * q - lo) % 360) + 360) % 360 + lo;
+    if (Math.abs(out - lo - 360) < 1e-9) out = lo;
+    return out;
+  };
+  const fix = (n: NodeCard): NodeCard => {
+    let out = n;
+    const p = n.params;
+    const set = (patch: Record<string, number>) => {
+      out = { ...out, params: { ...out.params, ...patch } };
+      changed = true;
+    };
+    if (n.type === "heeler.blend" && String(n.textParams?.fit ?? "") === "place" && n.textParams?.anchor !== "scene" && (p.warp_bw ?? 0) > 0) {
+      const bx = p.warp_bx ?? 0;
+      const by = p.warp_by ?? 0;
+      const rest: [number, number][] = [
+        [bx, by],
+        [bx + p.warp_bw, by],
+        [bx + p.warp_bw, by + (p.warp_bh ?? 0)],
+        [bx, by + (p.warp_bh ?? 0)],
+      ];
+      let corners = rest.map(([x, y], i) => [p[`warp_x${i}`] ?? x, p[`warp_y${i}`] ?? y] as [number, number]);
+      if (corners.every(([x, y]) => x === 0 && y === 0)) corners = rest;
+      const patch: Record<string, number> = {};
+      corners.forEach(([x, y], i) => {
+        const [tx, ty] = q === 1 ? [1 - y, x] : q === 2 ? [1 - x, 1 - y] : [y, 1 - x];
+        patch[`warp_x${i}`] = tx;
+        patch[`warp_y${i}`] = ty;
+      });
+      set(patch);
+    }
+    if (
+      ["heeler.gradient", "heeler.gradient_map", "heeler.fx_gradient_overlay", "heeler.fx_bevel", "heeler.fx_shadow", "heeler.blur"].includes(n.type) &&
+      typeof p.angle === "number"
+    ) {
+      set({ angle: turned(p.angle) });
+    }
+    if (n.type === "heeler.flare") {
+      const patch: Record<string, number> = {};
+      const rot = turned(p.rotation ?? 0, 0);
+      if (rot !== (p.rotation ?? 0)) patch.rotation = rot;
+      // The streak is a line, its angle in -90..90; each half turn that
+      // brings the turned angle there runs it the other way along itself,
+      // which turns both its offset (along) and its shift (across) over.
+      let t = (p.streak_angle ?? 0) + 90 * q;
+      let halves = 0;
+      while (t > 90) {
+        t -= 180;
+        halves++;
+      }
+      if (t !== (p.streak_angle ?? 0)) patch.streak_angle = t;
+      if (halves % 2) {
+        if (p.streak_offset) patch.streak_offset = -p.streak_offset;
+        if (p.streak_shift) patch.streak_shift = -p.streak_shift;
+      }
+      if (Object.keys(patch).length) set(patch);
+    }
+    if (n.groupNodes?.length) {
+      const inner = n.groupNodes.map(fix);
+      if (inner.some((m, i) => m !== n.groupNodes![i])) {
+        out = { ...out, groupNodes: inner };
+        changed = true;
+      }
+    }
+    return out;
+  };
+  const next = nodes.map(fix);
+  return changed ? next : nodes;
+}
+
 function photoFlipExtras(nodes: NodeCard[], axis: FlipAxis): NodeCard[] {
   let changed = false;
   const fix = (n: NodeCard): NodeCard => {
@@ -15942,6 +16058,29 @@ function reduceInner(s: State, cmd: Command): State {
       const size = sourceSizeFor(s.activeImage);
       nodes = nodes.map((n) =>
         n.type === "heeler.crop_rotate" ? { ...n, params: flippedCropParams(n.params, cmd.axis, size) } : n,
+      );
+      return withUndo({
+        nodes,
+        wires,
+        images: s.images.map((i) => (i.id === s.activeImage ? { ...i, edited: true } : i)),
+      });
+    }
+    case "turn_photo": {
+      // Photo > Rotate 90° Right, 180° and 90° Left: the crop node's quarter
+      // turn, after its flips and ahead of its angle and rectangle, as flip_photo
+      // is; followCrop carries everything drawn on the frame through the turn in
+      // this same step (photoTurnExtras).
+      if (photoTurnBlocked(s)) return s;
+      let nodes = s.nodes;
+      let wires = s.wires;
+      if (!nodes.some((n) => n.type === "heeler.crop_rotate")) {
+        const built = buildCategoryPiece(nodes, wires, CROP_PIECE);
+        nodes = built.nodes;
+        wires = built.wires;
+      }
+      const size = sourceSizeFor(s.activeImage);
+      nodes = nodes.map((n) =>
+        n.type === "heeler.crop_rotate" ? { ...n, params: turnedCropParams(n.params, cmd.quarters, size) } : n,
       );
       return withUndo({
         nodes,

@@ -89,6 +89,8 @@ Depth Range has a depth view control beside its title, showing the depth map whi
 
 **Flip Horizontal** and **Flip Vertical** mirror the whole photograph with every edit on it: masks, brush strokes, selections, Smart selections, the crop, Grid Warp and Shape Warp, Depth Lighting's lamps and every Finish layer stay on the subject they were made on, and the whole result mirrors. Each is one undo step and shows a tick while it is on; choosing it again puts the photograph back. They have no key by default; give them one in Preferences. See [Geometry](adjustments/geometry.md#flip).
 
+**Rotate** is a submenu: **90° Right**, **90° Left** and **180°** turn the whole photograph with every edit on it, as Flip mirrors it, each one undo step. They have no key by default either. See [Geometry](adjustments/geometry.md#rotate).
+
 ### Combining photographs
 
 - **Stacking** combines two or more photographs with the chosen stack method (a stack or panorama made only of JPEGs opens with the Tone Profile off, as a JPEG does): HDR for brackets (from RAW files; HDR from JPEGs or other finished pictures is approximate, since the camera's tone curve is still in them, and the Stack panel says so), Long Exposure (mean), Median to delete anything that moved, Light Trails (max), or Dark Trails (min) for dark subjects crossing a bright ground, such as birds against sky. A large stack merges in the background: the viewer shows which frame the merge has reached, how fast it is going and how long is left, the rest of the app stays usable meanwhile, and **Cancel merge** stops it without leaving a partial picture. A canceled stack stays unmerged, with the frame it last showed, until you click **Merge again** on the canvas or change its frames or method. The merge stays a recipe: its method and frame alignment can be changed later from the Stack panel, and alignment should be off when the moving subject is the picture (star trails, murmurations). The panel's frame list scrolls past ten frames and works like the ribbon: click, `Cmd` (`Ctrl` on Windows)-click, and `Shift`-click select frames, the right-click menu removes them from the merge (the files stay put) or highlights them in the thumbnail strip, and **+ ADD** appends more frames from the stack's own folder. Selected thumbnails can also join an existing stack from the ribbon's right-click menu: **Add to Stack** lists every stack in the folder.
@@ -252,6 +254,9 @@ These are the shipped menu choices. **None** means no default key; assign one in
 | Photo > Relink… | None |
 | Photo > Remove from All Collections | None |
 | Photo > Remove from "collection name" (Remove from Collection when no collection is open) | None |
+| Photo > Rotate > 180° | None |
+| Photo > Rotate > 90° Left | None |
+| Photo > Rotate > 90° Right | None |
 | Photo > Select Linked | None |
 | Photo > Stacking > Merge to Dark Trails… | None |
 | Photo > Stacking > Merge to HDR… | None |

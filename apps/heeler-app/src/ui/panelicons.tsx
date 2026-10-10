@@ -754,7 +754,7 @@ export const EXPAND_ON_SELECT_GLYPH: ReactNode = (
   </>
 );
 
-export type XformIconId = "flipH" | "flipV" | "transform" | "skew" | "perspective" | "distort" | "lock" | "unlock" | "choose" | "relink" | "meshWarp" | "unwarp";
+export type XformIconId = "flipH" | "flipV" | "rotateRight" | "rotateLeft" | "transform" | "skew" | "perspective" | "distort" | "lock" | "unlock" | "choose" | "relink" | "meshWarp" | "unwarp";
 
 const XFORM_GLYPHS: Record<XformIconId, ReactNode> = {
   flipH: (
@@ -769,6 +769,21 @@ const XFORM_GLYPHS: Record<XformIconId, ReactNode> = {
       <path d="M1.5 8h13" strokeDasharray="1.6 1.6" />
       <path d="M4 6l8-4v4z" fill="currentColor" />
       <path d="M4 10l8 4v-4z" />
+    </>
+  ),
+  // A picture on its side under a quarter arc, its arrow the way it turns.
+  rotateRight: (
+    <>
+      <rect x="2" y="8" width="7" height="6" rx="0.5" />
+      <path d="M4 5.5A5.5 5.5 0 0 1 13 8" />
+      <path d="M13.8 5.6L13 8l-2.4-1" />
+    </>
+  ),
+  rotateLeft: (
+    <>
+      <rect x="7" y="8" width="7" height="6" rx="0.5" />
+      <path d="M12 5.5A5.5 5.5 0 0 0 3 8" />
+      <path d="M2.2 5.6L3 8l2.4-1" />
     </>
   ),
   transform: TRANSFORM_GLYPH,

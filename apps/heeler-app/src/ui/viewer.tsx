@@ -5,7 +5,7 @@ import { usePickSessions } from "../picksession";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Command, CurveChannel, NodeCard, State, Take } from "../state";
-import { activeStackMerge, pickMaskNode, antsSources, artLayerName, artMaskNode, chainTerminalId, frameLook, renderedSource, mainConversion, previewTarget, shapeLineWidth, transformDragOf, isPlacedLayer, layerFlipBlocked } from "../state";
+import { activeStackMerge, pickMaskNode, antsSources, artLayerName, artMaskNode, chainTerminalId, frameLook, renderedSource, mainConversion, previewTarget, shapeLineWidth, transformDragOf, isPlacedLayer, layerFlipBlocked, photoTurn } from "../state";
 import { XformIcon } from "./panelicons";
 import { maskBrushTarget, maskOverlayRgb, BRUSH_TIPS, MULTI_MAX, POLISH_MODES, SELECT_OPS, activeSelectionMask, applyPick, artFindLayer, artToolbarVisible, cropNode, fitCropToAspect, layerQuad, multiGrid, transformBox, toolNode } from "../state";
 import { OpIcon } from "./selecticons";
@@ -1099,6 +1099,10 @@ export function Viewer({
   // The shape a crop turns the painting on (framemap.ts, followCrop):
   // the file's oriented size, the one the ratio lock below trusts.
   if (srcDims) noteSourceSize(state.activeImage, srcDims[0], srcDims[1]);
+  // The photograph the crop's rectangle is measured on: the file turned
+  // as Photo > Rotate turned it, an odd turn on its side.
+  const turnedOdd = photoTurn(state) % 2 === 1;
+  const cropSrc: [number, number] | null = srcDims ? (turnedOdd ? [srcDims[1], srcDims[0]] : [srcDims[0], srcDims[1]]) : null;
 
   // A held ratio applies the moment the crop tool comes up, not on the
   // first drag. "After I cropped one photo to 16:9, when I
@@ -1110,13 +1114,13 @@ export function Viewer({
   // still be the cropped render for a beat after the tool is armed.
   useEffect(() => {
     if (state.tool !== "crop" || state.cropAspect === null) return;
-    const dims = srcDims ? { w: srcDims[0], h: srcDims[1] } : natural;
+    const dims = cropSrc ? { w: cropSrc[0], h: cropSrc[1] } : natural;
     if (!dims) return;
     const crop = cropNode(state);
     const fit = fitCropToAspect(crop.params, state.cropAspect, dims);
     if (fit) dispatch({ type: "set_params", id: crop.id, values: fit });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.tool, state.cropAspect, srcDims, natural, state.activeImage]);
+  }, [state.tool, state.cropAspect, srcDims, turnedOdd, natural, state.activeImage]);
 
   /** Full-frame dims, most exact wins: the live patch's report, then
    * one remembered from an earlier patch, then the crop fraction over
@@ -1127,11 +1131,11 @@ export function Viewer({
   const knownFrame: [number, number] | null = (() => {
     const exact = patch?.frame ?? state.view.frameDims[state.activeImage];
     if (exact) return exact;
-    if (!srcDims) return null;
+    if (!cropSrc) return null;
     const crop = state.nodes.find((n) => n.type === "heeler.crop_rotate");
     const cw = Number(crop?.params.crop_w ?? 1) || 1;
     const ch = Number(crop?.params.crop_h ?? 1) || 1;
-    return [Math.max(1, Math.round(srcDims[0] * cw)), Math.max(1, Math.round(srcDims[1] * ch))];
+    return [Math.max(1, Math.round(cropSrc[0] * cw)), Math.max(1, Math.round(cropSrc[1] * ch))];
   })();
   // Magnification is carried by the LAYOUT box, not by the transform's
   // scale, for as long as there are real pixels to carry it with.
@@ -1352,10 +1356,10 @@ export function Viewer({
     const cropped = cw < 0.9995 || ch < 0.9995;
     const dims = cropped
       ? patch?.frame ??
-        (srcDims
-          ? [Math.max(1, Math.round(srcDims[0] * cw)), Math.max(1, Math.round(srcDims[1] * ch))]
+        (cropSrc
+          ? [Math.max(1, Math.round(cropSrc[0] * cw)), Math.max(1, Math.round(cropSrc[1] * ch))]
           : knownFrame)
-      : srcDims ?? knownFrame;
+      : cropSrc ?? knownFrame;
     return dims ? `${dims[0]} × ${dims[1]}` : natural ? `${natural.w} × ${natural.h}` : "-";
   })();
 
@@ -1639,7 +1643,7 @@ armed has settings to show.*/}
             <CropRatioBar
               aspect={state.cropAspect}
               original={natural ? natural.w / natural.h : null}
-              resolution={srcDims ? [srcDims[0], srcDims[1]] : natural ? [natural.w, natural.h] : null}
+              resolution={cropSrc ?? (natural ? [natural.w, natural.h] : null)}
               saved={state.prefs.cropRatios}
               onSaved={(cropRatios) => dispatch({ type: "set_prefs", prefs: { cropRatios } })}
               onRatio={(ratio) => {

@@ -7,7 +7,7 @@
 // stay in step.
 
 import type { Command, SelectRegion, State } from "./state";
-import { ART_ID, DEFAULT_PREFS, artMaskNode, DOC_SEL_ID, SELECT_METHODS, TEXTURED_TIPS, activeSelectionMask, selectShapeTarget, shapeActsOnNothing, shapeToolOf, photoFlipBlocked, artFindLayer, artToolbarVisible, bakeable, editOrigin, layerPixelRegions, layerViaCopySource, reduce, clampGrainStep, removalPending, selectionHasContent, taggingTargets, anyPickerArmed } from "./state";
+import { ART_ID, DEFAULT_PREFS, artMaskNode, DOC_SEL_ID, SELECT_METHODS, TEXTURED_TIPS, activeSelectionMask, selectShapeTarget, shapeActsOnNothing, shapeToolOf, photoFlipBlocked, photoTurnBlocked, artFindLayer, artToolbarVisible, bakeable, editOrigin, layerPixelRegions, layerViaCopySource, reduce, clampGrainStep, removalPending, selectionHasContent, taggingTargets, anyPickerArmed } from "./state";
 import { activeFillLayer } from "./ui/filltool";
 import { activeSmartMask } from "./ui/smarttool";
 import { openPolish } from "./polishdoor";
@@ -940,6 +940,12 @@ export function runCommand(
     case "photo.flip_v":
       if (photoFlipBlocked(state)) return false;
       dispatch({ type: "flip_photo", axis: id === "photo.flip_h" ? "h" : "v" });
+      return true;
+    case "photo.rotate_right":
+    case "photo.rotate_left":
+    case "photo.rotate_180":
+      if (photoTurnBlocked(state)) return false;
+      dispatch({ type: "turn_photo", quarters: id === "photo.rotate_right" ? 1 : id === "photo.rotate_left" ? 3 : 2 });
       return true;
     case "photo.bake": {
       // Declines when nothing selected is a merge, so the key falls

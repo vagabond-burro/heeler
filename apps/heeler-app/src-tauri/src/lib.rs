@@ -2105,6 +2105,7 @@ fn conform_rasters_to_geometry(
                 // dimensions so the ROI samples its exact pixel centers.
                 if n.node_type == "heeler.crop_rotate" {
                     dims = dims.map(|(w, h)| {
+                        let (w, h) = heeler_engine::turned_dims(w, h, crop_turn_of(n));
                         let (w, h, _, _) = heeler_engine::frame_window(w, h,
                             [num("crop_x", 0.0), num("crop_y", 0.0), num("crop_w", 1.0), num("crop_h", 1.0)]);
                         (w, h)
@@ -2166,6 +2167,14 @@ fn conform_rasters_to_geometry(
             if flip_h || flip_v {
                 image = heeler_engine::mirror_buf(&image, flip_h, flip_v);
                 stamp.push_str(&format!("|flip{flip_h}{flip_v}"));
+            }
+            // Photo > Rotate, after the flips as in the crop op: whole
+            // pixels moved, so a measured plane stays measured.
+            let turn = crop_turn_of(n);
+            if turn != 0 {
+                image = heeler_engine::turn_buf(&image, turn);
+                dims = dims.map(|(fw, fh)| heeler_engine::turned_dims(fw, fh, turn));
+                stamp.push_str(&format!("|turn{turn}"));
             }
             image = match dims {
                 Some((fw, fh)) if angle == 0.0 && aspect == 0.0 => heeler_engine::crop_raster_to_frame(&image, fw, fh, crop),
@@ -2396,12 +2405,20 @@ fn depth_plane_on_frame(graph: &UiGraph, terminal: &str, seat: &std::collections
 /// PLANE's size; reported as the frame, the viewer took that for the
 /// photograph's size and rebuilt its 1:1 canvas around it (the view
 /// jumped and asked for slice after slice).
+/// Photo > Rotate's quarter turns on a UI crop node, read as the engine
+/// reads them (ops_geometry::crop_turn).
+fn crop_turn_of(n: &UiNode) -> u8 {
+    let v = n.params.get("turn").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    (v.round() as i64).rem_euclid(4) as u8
+}
+
 fn geometry_frame_dims(graph: &UiGraph, terminal: &str, source: (usize, usize)) -> (usize, usize) {
     upstream_crops(graph, terminal)
         .into_iter()
         .filter(|n| n.node_type == "heeler.crop_rotate" && !is_roi_crop(n))
         .fold(source, |frame, n| {
             let num = |k: &str, d: f64| n.params.get(k).and_then(|v| v.as_f64()).unwrap_or(d) as f32;
+            let frame = heeler_engine::turned_dims(frame.0, frame.1, crop_turn_of(n));
             let (w, h, _, _) = heeler_engine::frame_window(frame.0, frame.1,
                 [num("crop_x", 0.0), num("crop_y", 0.0), num("crop_w", 1.0), num("crop_h", 1.0)]);
             (w, h)
@@ -11421,6 +11438,7 @@ fn inject_roi_frame(ui: &UiGraph, r: [f64; 4], source: (usize, usize)) -> Option
     for n in geometry {
         if n.node_type == "heeler.crop_rotate" {
             let num = |k: &str, d: f64| n.params.get(k).and_then(|v| v.as_f64()).unwrap_or(d) as f32;
+            frame = heeler_engine::turned_dims(frame.0, frame.1, crop_turn_of(n));
             let (w, h, _, _) = heeler_engine::frame_window(frame.0, frame.1,
                 [num("crop_x", 0.0), num("crop_y", 0.0), num("crop_w", 1.0), num("crop_h", 1.0)]);
             frame = (w, h);
@@ -33203,6 +33221,9 @@ mod layer_flip;
 
 #[cfg(test)]
 mod photo_flip;
+
+#[cfg(test)]
+mod photo_turn;
 
 #[cfg(test)]
 mod heal_slice_parity;

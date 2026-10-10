@@ -350,6 +350,7 @@ impl Executor {
                     if node.enabled && node.node_type == "heeler.crop_rotate" {
                         // Match crop_rotate_buf exactly. Downstream nodes and ROI
                         // patches reserve cropped pixels, not the entire sensor.
+                        (w, h) = crate::ops_geometry::turned_dims(w, h, crate::ops_geometry::crop_turn(&node.params));
                         let x = ops::p(&node.params, "crop_x", 0.0).clamp(0.0, 0.95);
                         let y = ops::p(&node.params, "crop_y", 0.0).clamp(0.0, 0.95);
                         let cw = ops::p(&node.params, "crop_w", 1.0).clamp(0.05, 1.0 - x);

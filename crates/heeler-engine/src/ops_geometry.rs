@@ -467,7 +467,7 @@ fn sample_mask(src: &MaskBuf, fx: f32, fy: f32) -> f32 {
     top + (bot - top) * ty
 }
 
-/// Mirror (flip_h, flip_v), then rotate about the source center (positive
+/// Mirror (flip_h, flip_v), then turn by quarters (turn), then rotate about the source center (positive
 /// angle = clockwise), then crop a normalized rect measured in the rotated
 /// frame. Output dimensions are the crop fraction of the source dimensions.
 pub(crate) fn crop_rotate(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError> {
@@ -481,7 +481,49 @@ pub(crate) fn crop_rotate(node: &Node, inputs: &[(String, Value)]) -> Result<Val
         p(&node.params, "crop_h", 1.0),
     ];
     let (fh, fv) = crop_flips(&node.params);
-    Ok(Value::Image(crop_rotate_buf(&mirror_buf(src, fh, fv), angle, aspect, crop)))
+    let turned = turn_buf(&mirror_buf(src, fh, fv), crop_turn(&node.params));
+    Ok(Value::Image(crop_rotate_buf(&turned, angle, aspect, crop)))
+}
+
+/// Photo > Rotate 90° Left, Right and 180°: whole quarter turns
+/// clockwise, 0 to 3, on the crop node. The turn comes after the flips
+/// and before the straighten angle and the rectangle, so the crop tool
+/// measures both on the photograph as it now stands; a quarter turn
+/// swaps the frame's width and height.
+pub fn crop_turn(params: &std::collections::BTreeMap<String, heeler_graph::ParamValue>) -> u8 {
+    (p(params, "turn", 0.0).round() as i64).rem_euclid(4) as u8
+}
+
+/// A frame's size after `quarter` turns: odd ones swap the sides.
+pub fn turned_dims(w: usize, h: usize, quarter: u8) -> (usize, usize) {
+    if quarter % 2 == 1 { (h, w) } else { (w, h) }
+}
+
+/// A picture turned `quarter` quarter turns clockwise: whole pixels
+/// moved, nothing resampled, so a turn is exact and four are none. The
+/// same buffer back for none.
+pub fn turn_buf(src: &Arc<ImageBuf>, quarter: u8) -> Arc<ImageBuf> {
+    let q = quarter % 4;
+    if q == 0 {
+        return src.clone();
+    }
+    let (w, h) = (src.width, src.height);
+    let (ow, oh) = turned_dims(w, h, q);
+    let mut out = ImageBuf::new(ow, oh);
+    use rayon::prelude::*;
+    out.data.par_chunks_mut(ow * 4).enumerate().for_each(|(y, row)| {
+        for x in 0..ow {
+            // Where output (x, y) comes from on the source.
+            let (sx, sy) = match q {
+                1 => (y, h - 1 - x),
+                2 => (w - 1 - x, h - 1 - y),
+                _ => (w - 1 - y, x),
+            };
+            let at = (sy * w + sx) * 4;
+            row[x * 4..x * 4 + 4].copy_from_slice(&src.data[at..at + 4]);
+        }
+    });
+    Arc::new(out)
 }
 
 /// Photo > Flip Horizontal and Flip Vertical (2026-10-01: "how hard is it to have a
@@ -662,6 +704,62 @@ mod tests {
     use super::Quad;
     use heeler_graph::ParamValue;
     use std::collections::BTreeMap;
+
+    /// A 3 by 2 picture whose every pixel is its own number.
+    fn numbered() -> std::sync::Arc<ImageBuf> {
+        let mut img = ImageBuf::new(3, 2);
+        for y in 0..2 {
+            for x in 0..3 {
+                let v = (y * 3 + x) as f32;
+                img.set_pixel(x, y, [v, v, v, 1.0]);
+            }
+        }
+        std::sync::Arc::new(img)
+    }
+
+    fn values(img: &ImageBuf) -> Vec<f32> {
+        (0..img.height).flat_map(|y| (0..img.width).map(move |x| (x, y))).map(|(x, y)| img.pixel(x, y)[0]).collect()
+    }
+
+    #[test]
+    fn a_quarter_turn_moves_whole_pixels_clockwise() {
+        // 0 1 2      3 0
+        // 3 4 5  ->  4 1
+        //            5 2
+        let right = super::turn_buf(&numbered(), 1);
+        assert_eq!((right.width, right.height), (2, 3));
+        assert_eq!(values(&right), vec![3.0, 0.0, 4.0, 1.0, 5.0, 2.0]);
+        let left = super::turn_buf(&numbered(), 3);
+        assert_eq!(values(&left), vec![2.0, 5.0, 1.0, 4.0, 0.0, 3.0]);
+        // A half turn is both flips, and four quarters are none.
+        assert_eq!(values(&super::turn_buf(&numbered(), 2)), values(&super::mirror_buf(&numbered(), true, true)));
+        let mut img = numbered();
+        for _ in 0..4 {
+            img = super::turn_buf(&img, 1);
+        }
+        assert_eq!((img.width, img.height, values(&img)), (3, 2, values(&numbered())));
+    }
+
+    #[test]
+    fn the_crop_node_turns_after_its_flips_and_crops_the_turned_frame() {
+        let mut node = make_node("heeler.crop_rotate");
+        set_num(&mut node, "turn", 1.0);
+        set_num(&mut node, "flip_h", 1.0);
+        let out = run_on(&node, (*numbered()).clone()).unwrap();
+        let out = out.as_image().unwrap();
+        // Flipped (2 1 0 / 5 4 3), then turned right.
+        assert_eq!((out.width, out.height), (2, 3));
+        assert_eq!(values(out), vec![5.0, 2.0, 4.0, 1.0, 3.0, 0.0]);
+        // The rectangle is measured on the turned frame: its top third.
+        set_num(&mut node, "crop_h", 1.0 / 3.0);
+        let top = run_on(&node, (*numbered()).clone()).unwrap();
+        assert_eq!(values(top.as_image().unwrap()), vec![5.0, 2.0]);
+        // Read whole, in either direction round.
+        for (v, q) in [(0.0, 0), (3.0, 3), (4.0, 0), (-1.0, 3), (1.4, 1)] {
+            set_num(&mut node, "turn", v);
+            assert_eq!(super::crop_turn(&node.params), q, "{v}");
+        }
+    }
 
     /// A quad's params as the Transform and Warp tools write them.
     fn quad_params(bbox: [f32; 4], dst: [[f32; 2]; 4]) -> BTreeMap<String, ParamValue> {

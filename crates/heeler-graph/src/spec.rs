@@ -575,6 +575,9 @@ impl Registry {
                 // (ops_geometry::crop_flips).
                 num("flip_h", 0.0, 0.0, 1.0),
                 num("flip_v", 0.0, 0.0, 1.0),
+                // Photo > Rotate: quarter turns clockwise, after the flips
+                // and before the angle and the crop (ops_geometry::crop_turn).
+                num("turn", 0.0, 0.0, 3.0),
             ],
             // Geometry nodes take no mask: they change pixel positions, not
             // values, so masking them is meaningless.
