@@ -42,6 +42,12 @@ async function freshPage() {
 
 async function save(page, name) {
   await page.mouse.move(2, 895);
+  // A histogram on screen waits for its frame: the Graph figure was
+  // taken while the inspector's scope still read "No frame yet".
+  await page.waitForFunction(
+    () => [...document.querySelectorAll('[data-testid="spectrums"]')].every((s) => !s.textContent.includes("No frame yet")),
+    { timeout: 20000 },
+  );
   await sleep(300);
   await page.screenshot({ path: `${OUT}/${name}.png` });
   console.log(`  ✓ ${name}`);

@@ -2174,11 +2174,15 @@ torn down: DONE puts the adjustments back exactly as they were.*/}
                     })
                   }
                 />
+                {/* The engine's frame, or until it lands the photograph's own
+thumbnail, the way Develop's panel reads it: on the engine's frame
+alone the inspector's histogram sat at "No frame yet" while Develop's
+already plotted (the README's Graph figure caught it).*/}
                 <Inspector
                   state={state}
                   dispatch={dispatch}
                   width={laid.panelSizes.right}
-                  frame={engineFrame}
+                  frame={engineFrame ?? state.images.find((i) => i.id === state.activeImage)?.src ?? null}
                 />
               </>
             ) : (
