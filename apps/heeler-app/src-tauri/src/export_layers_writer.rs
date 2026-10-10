@@ -73,6 +73,11 @@ struct Written {
 }
 
 fn export(dest: &Path, format: &str, layers: Vec<ExportLayer>, keep_metadata: bool, allow_overwrite: bool) -> Written {
+    export_alpha(dest, format, layers, keep_metadata, allow_overwrite, None)
+}
+
+/// `export` with the Output node's alpha port wired to `alpha`.
+fn export_alpha(dest: &Path, format: &str, layers: Vec<ExportLayer>, keep_metadata: bool, allow_overwrite: bool, alpha: Option<Value>) -> Written {
     let mut log = Vec::new();
     let keywords = vec!["kept".to_string()];
     let path = finish_export(
@@ -82,7 +87,7 @@ fn export(dest: &Path, format: &str, layers: Vec<ExportLayer>, keep_metadata: bo
             source: beauty(),
             smart: &HashMap::new(),
             keywords: &keywords,
-            alpha: None,
+            alpha,
             layers,
         },
         dest,
@@ -281,6 +286,42 @@ fn layers_follow_the_container_the_name_picks() {
     assert!(std::fs::read(&tif).unwrap().starts_with(b"II*\0"), "the name picked TIFF");
     close(&tiff(&dir.path().join("other.mask.tif")).values, &grey8(heeler_io::linear_to_srgb(0.4)), "the layer beside the TIFF");
     assert!(!w.log.iter().any(|m| m.contains("needs TIFF")), "{:?}", w.log);
+}
+
+/// .tif and .tiff are the one container: a guard that knew only one
+/// spelling passed every test before this (the 26.5.1 review's M1).
+#[test]
+fn layers_follow_either_spelling_of_a_tiff() {
+    let dir = tempfile::tempdir().unwrap();
+    for (format, name) in [("png", "a.tiff"), ("tiff", "b.TIFF"), ("jpeg", "c.Tif")] {
+        let dest = dir.path().join(name);
+        let w = export(&dest, format, vec![layer("mask", mask(0.4), false, "alpha", None, None)], false, false);
+        assert!(!w.log.iter().any(|m| m.contains("needs TIFF")), "{name}: {:?}", w.log);
+        let ext = dest.extension().unwrap().to_string_lossy().into_owned();
+        let stem = dest.file_stem().unwrap().to_string_lossy().into_owned();
+        close(&tiff(&dir.path().join(format!("{stem}.mask.{ext}"))).values, &grey8(heeler_io::linear_to_srgb(0.4)), name);
+    }
+}
+
+/// The wired alpha follows the container the name picks too. Asked by
+/// the format, a "jpeg" export named .tif wrote a TIFF without its alpha
+/// and logged that the format carried none, and a "tiff" export named
+/// .jpg never said its alpha was dropped (the 26.5.1 review).
+#[test]
+fn the_wired_alpha_follows_the_container_the_name_picks() {
+    let dir = tempfile::tempdir().unwrap();
+    let alpha = || Some(Value::Mask(Arc::new(MaskBuf { width: 4, height: 2, data: vec![0.5; 8] })));
+    let tif = dir.path().join("cut.tif");
+    let w = export_alpha(&tif, "jpeg", Vec::new(), false, false, alpha());
+    let t = tiff(&tif);
+    assert_eq!(t.samples, 4, "the TIFF carries the alpha");
+    assert!((t.values[3] - 0.5).abs() < 0.01, "at the wired value: {:?}", &t.values[..4]);
+    assert!(!w.log.iter().any(|m| m.contains("carries no alpha")), "{:?}", w.log);
+
+    let jpg = dir.path().join("flat.jpg");
+    let w = export_alpha(&jpg, "tiff", Vec::new(), false, false, alpha());
+    assert!(std::fs::read(&jpg).unwrap().starts_with(&[0xFF, 0xD8]), "the name picked JPEG");
+    assert!(w.log.iter().any(|m| m.contains("carries no alpha")), "{:?}", w.log);
 }
 
 #[test]

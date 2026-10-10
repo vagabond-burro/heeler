@@ -16992,9 +16992,27 @@ fn finish_export_admitted(
     // the beauty's alpha. Wired, it wins over the Transparent matte
     // toggle below; unwired, the toggle behaves as it always did. A
     // format with no fourth sample drops the port and says so.
+    // The destination decides the encoder where it carries an
+    // extension: the bytes must match the name every other program will
+    // read the file by. With no extension there is nothing to override
+    // the setting, so the format decides -- through the same table the
+    // save dialog seeds its suggested name from, because `format` is
+    // not itself an extension. It used to fall through raw, and
+    // "png16" matches no arm below, so a 16-bit PNG asked for by a
+    // name with no extension was written as a JPEG.
+    let ext = dest
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_else(|| extension_for(format).to_string());
+    // Whether the file written can hold an alpha: by its container, which
+    // the extension picks, as the layers go. Asked by the format, a
+    // "jpeg" export named .tif wrote a TIFF without its alpha and said
+    // the format carried none (the 26.5.1 review).
+    let holds_alpha = matches!(ext.as_str(), "png" | "tif" | "tiff" | "exr");
     let alpha_wired = alpha.is_some();
     if let Some(a) = &alpha {
-        if matches!(format, "png" | "png16" | "tiff" | "tiff32" | "exr") {
+        if holds_alpha {
             apply_alpha(&mut image, a);
         } else {
             log(
@@ -17008,7 +17026,7 @@ fn finish_export_admitted(
     // whatever alpha the render produced; a graph without a smart mask (or
     // without its raster) exports opaque and says so in the log, never
     // silently different.
-    if matte && !alpha_wired && matches!(format, "png" | "png16" | "tiff" | "tiff32" | "exr") {
+    if matte && !alpha_wired && holds_alpha {
         let node = graph.nodes.iter().find(|n| n.node_type == "heeler.smart_mask");
         match node.and_then(|n| smart.get(&n.id)) {
             Some(sr) => apply_matte(&mut image, &sr.image),
@@ -17034,19 +17052,6 @@ fn finish_export_admitted(
             }
         }
     }
-    // The destination decides the encoder where it carries an
-    // extension: the bytes must match the name every other program will
-    // read the file by. With no extension there is nothing to override
-    // the setting, so the format decides -- through the same table the
-    // save dialog seeds its suggested name from, because `format` is
-    // not itself an extension. It used to fall through raw, and
-    // "png16" matches no arm below, so a 16-bit PNG asked for by a
-    // name with no extension was written as a JPEG.
-    let ext = dest
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_ascii_lowercase())
-        .unwrap_or_else(|| extension_for(format).to_string());
     // The catalog's keywords go into the TIFF containers at encode time,
     // not spliced on after: a directory grown after the fact has to move,
     // and a TIFF whose directory sits past the pixels is the one file the
