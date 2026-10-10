@@ -1070,12 +1070,15 @@ struct CurveSampler {
     /// eval_eq_points so handle LENGTH shapes the segment, the same
     /// weighted math Relight and Recolor run.
     eq: Option<Vec<EqPoint>>,
+    /// The curve's output at display 1.0, where over-range values pick
+    /// it up (see `curves`). Set by `finished` once the shape is built.
+    top: f32,
 }
 
 impl CurveSampler {
     fn new(points: Vec<[f32; 2]>, smooth: bool) -> Self {
         let tangents = (smooth && points.len() >= 2).then(|| monotone_tangents(&points));
-        CurveSampler { points, tangents, eq: None }
+        CurveSampler { points, tangents, eq: None, top: 1.0 }
     }
 
     /// Tangent mode: hermite through the user's slopes, sorted together
@@ -1087,7 +1090,7 @@ impl CurveSampler {
                 let mut z: Vec<([f32; 2], f32)> = points.into_iter().zip(m).collect();
                 z.sort_by(|a, b| a.0[0].partial_cmp(&b.0[0]).unwrap_or(std::cmp::Ordering::Equal));
                 let (points, tangents): (Vec<_>, Vec<_>) = z.into_iter().unzip();
-                CurveSampler { points, tangents: Some(tangents), eq: None }
+                CurveSampler { points, tangents: Some(tangents), eq: None, top: 1.0 }
             }
             _ => CurveSampler::new(points, true),
         }
@@ -1117,10 +1120,15 @@ impl CurveSampler {
                     })
                     .collect();
                 let points: Vec<[f32; 2]> = z.into_iter().map(|(p, _)| p).collect();
-                CurveSampler { points, tangents: None, eq: Some(eq) }
+                CurveSampler { points, tangents: None, eq: Some(eq), top: 1.0 }
             }
             _ => CurveSampler::with_user_tangents(points, user),
         }
+    }
+
+    fn finished(mut self) -> Self {
+        self.top = self.eval(1.0);
+        self
     }
 
     fn eval(&self, x: f32) -> f32 {
@@ -1145,8 +1153,11 @@ fn sorted(points: Option<Vec<[f32; 2]>>) -> Option<Vec<[f32; 2]>> {
 /// Curves run in display space (sRGB-encoded), the domain the curve
 /// editor's axis, its histogram underlay, and every photographer's
 /// mental model already use: 0.5 on the axis is middle gray on screen,
-/// not 50% linear light. Values at or above display 1.0 pass through
-/// untouched; over-range recovery is the tone profile shoulder's job.
+/// not 50% linear light. Values above display 1.0 are never clamped
+/// (over-range recovery is the tone profile shoulder's job): they carry
+/// on from the curve's output at 1.0 with slope 1, so a curve whose top
+/// is (1, 1) passes them through untouched and one that lowers its top
+/// lowers them by the same amount, with no step at 1.0.
 fn curves(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError> {
     let src = image_input(inputs, "in", &node.id)?;
     let raw = node
@@ -1165,9 +1176,9 @@ fn curves(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError>
         if tangent {
             // Sorting happens inside, keeping each slope and handle
             // with its point.
-            pts.map(|p| CurveSampler::with_user_handles(p, user, handles))
+            pts.map(|p| CurveSampler::with_user_handles(p, user, handles).finished())
         } else {
-            sorted(pts).map(|p| CurveSampler::new(p, smooth))
+            sorted(pts).map(|p| CurveSampler::new(p, smooth).finished())
         }
     };
     let rgb = prep(set.rgb, set.rgb_m, set.rgb_h);
@@ -1186,11 +1197,20 @@ fn curves(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError>
         return Ok(Value::Image(src.clone()));
     }
 
-    // One channel through one curve, display domain in and out.
+    // One channel through one curve, display domain in and out. Above
+    // 1.0 the value continues from the curve's top rather than skipping
+    // the curve: the skip left a step at 1.0 whenever the top was not
+    // at 1.0 (a faded white sent 0.999 to 0.9 and 1.0 to 1.0), and a
+    // pixel with one channel just over 1.0 had only the others curved,
+    // which shifted its hue.
     let apply = |c: &CurveSampler, v: f32| -> f32 {
         let d = to_display(v.max(0.0));
         if d >= 1.0 {
-            v
+            if c.top == 1.0 {
+                v
+            } else {
+                to_scene((c.top + (d - 1.0)).max(0.0))
+            }
         } else {
             to_scene(c.eval(d).max(0.0))
         }
@@ -3871,18 +3891,49 @@ mod tests {
     }
 
     #[test]
-    fn curve_passes_over_range_values_through() {
-        // Above display 1.0 the curve steps aside even when it darkens
-        // everything below: highlight recovery belongs to the shoulder,
+    fn curve_passes_over_range_values_through_when_its_top_is_white() {
+        // Above display 1.0 a curve whose top stays at (1, 1) steps
+        // aside bit for bit: highlight recovery belongs to the shoulder,
         // and a curve that clamped specular values would destroy the
         // over-range gradients the profile still needs.
         let mut node = make_node("heeler.curves");
-        set_text(&mut node, "points", r#"{"rgb": [[0,0],[1,0.5]]}"#);
+        set_text(&mut node, "points", r#"{"rgb": [[0,0],[0.5,0.3],[1,1]]}"#);
         let out = run_on(&node, gray(2.5)).unwrap();
-        assert_close(out.as_image().unwrap().pixel(0, 0)[0], 2.5);
-        // ...while a value just inside range is still curved.
-        let out = run_on(&node, gray(to_scene(0.9))).unwrap();
-        assert_close(out.as_image().unwrap().pixel(0, 0)[0], to_scene(0.45));
+        assert_eq!(out.as_image().unwrap().pixel(0, 0)[0], 2.5);
+    }
+
+    #[test]
+    fn curve_continues_over_range_values_from_its_top_without_a_step() {
+        // A lowered top used to apply only below 1.0: 0.999 went to
+        // about 0.5 and 1.0 stayed 1.0. Over-range values now carry on
+        // from the curve's output at 1.0, in every interpolation mode.
+        for points in [
+            r#"{"rgb": [[0,0],[1,0.5]]}"#,
+            r#"{"interp": "smooth", "rgb": [[0,0],[0.5,0.4],[1,0.5]]}"#,
+            r#"{"interp": "tangent", "rgb": [[0,0],[1,0.5]], "rgb_h": [null, {"l": [-0.2, -0.05]}]}"#,
+        ] {
+            let mut node = make_node("heeler.curves");
+            set_text(&mut node, "points", points);
+            let at = |v: f32| run_on(&node, gray(v)).unwrap().as_image().unwrap().pixel(0, 0)[0];
+            let below = at(to_scene(0.9999));
+            let above = at(to_scene(1.0001));
+            assert!((above - below).abs() < 1e-3, "{points}: step at 1.0, {below} then {above}");
+            // Still unclamped and still rising, so gradients survive.
+            assert!(at(2.5) > at(1.5) && at(1.5) > above, "{points}: over-range flattened");
+            assert_close(at(2.5), to_scene(0.5 + (to_display(2.5) - 1.0)));
+        }
+    }
+
+    #[test]
+    fn curve_keeps_a_highlight_neutral_when_one_channel_crosses_one() {
+        // A near-white pixel with red a hair over 1.0: before, red
+        // skipped the curve while green and blue were halved, turning
+        // the highlight red.
+        let mut node = make_node("heeler.curves");
+        set_text(&mut node, "points", r#"{"rgb": [[0,0],[1,0.5]]}"#);
+        let out = run_on(&node, ImageBuf::filled(1, 1, [1.001, 0.999, 0.999, 1.0])).unwrap();
+        let px = out.as_image().unwrap().pixel(0, 0);
+        assert!(px[0] / px[1] < 1.01, "highlight tinted: {px:?}");
     }
 
     #[test]
