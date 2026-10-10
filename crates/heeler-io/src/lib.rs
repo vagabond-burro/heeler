@@ -331,7 +331,15 @@ fn estimate_from(bytes: &[u8], file_len: usize, raw_ext: bool, prefix: bool) -> 
     let dims = raw.or_else(|| source_dimensions(bytes).map(|(w, h)| (w as usize, h as usize)));
     let Some((w, h)) = dims else { return Ok(None); };
     // Small pictures still need codec tables, metadata and inflate storage.
-    Ok(Some(DecodeEstimate { width: w, height: h, encoded: file_len, retained: memory::bytes(w, h, 1, 16)?, workspace: memory::sum([memory::bytes(w, h, 1, 32)?, file_len, 64 << 10])? }))
+    // A GoPro GPR is developed from a rewritten copy carrying its decoded
+    // samples, two bytes a pixel more than the file, which LibRaw's own
+    // admission counts: without them a stack's fixed slice per frame came
+    // up short and a full-size GPR stack was refused (the 26.5.1 review).
+    #[cfg(feature = "libraw")]
+    let rewritten = if raw_ext && heeler_raw::is_gpr(bytes) { memory::bytes(w, h, 1, 2)? } else { 0 };
+    #[cfg(not(feature = "libraw"))]
+    let rewritten = 0;
+    Ok(Some(DecodeEstimate { width: w, height: h, encoded: file_len, retained: memory::bytes(w, h, 1, 16)?, workspace: memory::sum([memory::bytes(w, h, 1, 32)?, file_len, 64 << 10, rewritten])? }))
 }
 
 /// Header-only sizing for admission. Reads a capped prefix rather than
@@ -1389,20 +1397,29 @@ mod tests {
         assert!(why.contains("read as noise"), "{why}");
     }
 
-    /// A damaged GoPro GPR says it is a damaged GPR on every path. It has
-    /// no preview to fall back on, and the readers after the develop
-    /// misnamed the damage ("JPEG SOF ... 24 bits of precision" from the
-    /// full decode, "unknown photometric interpretation" from the
-    /// thumbnail, for a GPR cut short).
+    /// A GoPro GPR's estimate counts the rewritten copy LibRaw develops
+    /// from, two bytes a pixel past the file: a stack lends each frame
+    /// exactly its estimate, and a full-size GPR stack was refused for the
+    /// difference (the 26.5.1 review).
     #[test]
     #[cfg(feature = "libraw")]
-    fn a_damaged_gpr_reports_itself_on_every_path() {
-        let dir = tempfile::tempdir().unwrap();
-        // One IFD shaped like a GPR's: 64 by 48, 16 bits, compression 9
-        // (VC-5), one tile, RGGB, and a tile that is no VC-5 stream.
-        let tile = vec![0x5au8; 512];
+    fn a_gpr_estimate_counts_the_rewritten_copy() {
+        let gpr = synthetic_gpr(64, 48, &[0x5a; 512]);
+        let mut plain = gpr.clone();
+        plain[10 + 12 * 3 + 8] = 1; // the fourth entry, Compression, set to 1: not a GPR
+        assert!(heeler_raw::is_gpr(&gpr) && !heeler_raw::is_gpr(&plain));
+        let g = estimate_from(&gpr, gpr.len(), true, false).unwrap().unwrap();
+        assert_eq!((g.width, g.height), (64, 48));
+        let base = memory::sum([memory::bytes(64, 48, 1, 32).unwrap(), gpr.len(), 64 << 10]).unwrap();
+        assert_eq!(g.workspace, base + 64 * 48 * 2);
+    }
+
+    /// One IFD shaped like a GPR's: w by h, 16 bits, compression 9
+    /// (VC-5), one tile, RGGB, with `tile` as its contents.
+    #[cfg(feature = "libraw")]
+    fn synthetic_gpr(w: u32, h: u32, tile: &[u8]) -> Vec<u8> {
         let tags: [(u16, u16, u32); 9] = [
-            (256, 4, 64), (257, 4, 48), (258, 3, 16), (259, 3, 9), (322, 4, 64), (323, 4, 48),
+            (256, 4, w), (257, 4, h), (258, 3, 16), (259, 3, 9), (322, 4, w), (323, 4, h),
             (324, 4, 0), (325, 4, tile.len() as u32), (33422, 1, 0),
         ];
         let tile_at = 8 + 2 + 12 * tags.len() as u32 + 4;
@@ -1421,7 +1438,21 @@ mod tests {
             }
         }
         bytes.extend_from_slice(&0u32.to_le_bytes());
-        bytes.extend_from_slice(&tile);
+        bytes.extend_from_slice(tile);
+        bytes
+    }
+
+    /// A damaged GoPro GPR says it is a damaged GPR on every path. It has
+    /// no preview to fall back on, and the readers after the develop
+    /// misnamed the damage ("JPEG SOF ... 24 bits of precision" from the
+    /// full decode, "unknown photometric interpretation" from the
+    /// thumbnail, for a GPR cut short).
+    #[test]
+    #[cfg(feature = "libraw")]
+    fn a_damaged_gpr_reports_itself_on_every_path() {
+        let dir = tempfile::tempdir().unwrap();
+        // A GPR's header over a tile that is no VC-5 stream.
+        let bytes = synthetic_gpr(64, 48, &[0x5a; 512]);
         assert!(heeler_raw::is_gpr(&bytes));
         let path = dir.path().join("GOPR0001.GPR");
         std::fs::write(&path, &bytes).unwrap();

@@ -151,7 +151,8 @@ fn as_dng_with<S: AsRef<[u8]>>(
     let tile = bytes.get(start..start + counts.value as usize).ok_or_else(|| bad("the tile runs past the end of the file"))?;
     // The SDK's choice: an RGGB sensor (HERO5 to HERO7, Fusion) is 14-bit,
     // any other (GBRG, HERO8 on) 12-bit.
-    let cfa = find(&ifd, CFA_PATTERN).filter(|e| e.count == 4 && e.kind == 1).ok_or_else(|| bad("no 2x2 CFA pattern"))?;
+    // BYTE as GoPro writes it, or UNDEFINED as other tools rewrite it.
+    let cfa = find(&ifd, CFA_PATTERN).filter(|e| e.count == 4 && (e.kind == 1 || e.kind == 7)).ok_or_else(|| bad("no 2x2 CFA pattern"))?;
     let pattern = bytes.get(cfa.at + 8..cfa.at + 12).ok_or_else(|| bad("no 2x2 CFA pattern"))?;
     let rggb = pattern == [0, 1, 1, 2];
     // The rewritten offsets are LONGs: refuse a file they cannot address
@@ -175,7 +176,9 @@ fn as_dng_with<S: AsRef<[u8]>>(
 
     // Appended on a four-byte boundary, in the file's own byte order (the
     // decoder writes the machine's).
-    let mut out = Vec::with_capacity(at + size);
+    // Out of memory is an error to report, not an abort.
+    let mut out = Vec::new();
+    out.try_reserve_exact(at + size).map_err(|_| bad("not enough memory to rewrite the file"))?;
     out.extend_from_slice(bytes);
     out.resize(at, 0);
     if t.big == cfg!(target_endian = "big") {
@@ -394,6 +397,23 @@ mod tests {
             let Err(e) = decode(&header(w, h), true, 4, 2) else { panic!("{w}x{h} decoded") };
             assert!(e.to_string().contains(&format!("({})", 6)), "{w}x{h}: {e}, not the image dimensions error");
         }
+        // A pattern other than 2x2 is refused as such (28), where its error
+        // was once dropped and decoding went on with wrong sizes.
+        let mut pattern = header(4, 2);
+        pattern[22..24].copy_from_slice(&3u16.to_be_bytes());
+        let Err(e) = decode(&pattern, true, 4, 2) else { panic!("a 3x2 pattern decoded") };
+        assert!(e.to_string().contains("(28)"), "{e}, not the pattern dimensions error");
+    }
+
+    #[test]
+    fn a_cfa_pattern_stored_as_undefined_reads_as_one_stored_as_bytes() {
+        let mut input = gpr(false, true, b"vc5");
+        let ifd = tiff(&input).unwrap().ifd0().unwrap();
+        let cfa = find(&ifd, CFA_PATTERN).unwrap().at;
+        input[cfa + 2..cfa + 4].copy_from_slice(&7u16.to_le_bytes());
+        let seen = Seen::new(None);
+        assert!(as_dng_with(&input, fake(&seen)).unwrap().is_some());
+        assert_eq!(seen.get(), Some((true, 4, 2)));
     }
 
     #[test]

@@ -108,7 +108,10 @@ further review by software agents closes it.
 
 zlib and libjpeg (via `libz-sys` and `mozjpeg-sys`) are permissive and
 ask only for their notices to be carried, which
-`docs/user-guide/legal/open-source.md` does. The Rust and JavaScript
+`docs/user-guide/legal/open-source.md` does. So is GoPro's VC-5 decoder
+(`third_party/gpr-vc5`, taken under its MIT option, with Heeler's changes
+listed in its README): its notice is on the same page, and MIT asks for no
+source to be published. The Rust and JavaScript
 dependency
 trees are essentially all MIT or Apache-2.0 and are covered in the same
 place by category rather than package. If a full per-package inventory
