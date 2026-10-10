@@ -28,6 +28,10 @@ void vc5_decoder_parameters_set_default(vc5_decoder_parameters* decoding_paramet
     decoding_parameters->rgb_bits = 8;
     
     gpr_rgb_gain_set_defaults(&decoding_parameters->rgb_gain);
+    
+    // Heeler: no expected size unless the caller names one.
+    decoding_parameters->expected_width = 0;
+    decoding_parameters->expected_height = 0;
 }
 
 CODEC_ERROR vc5_decoder_process(const vc5_decoder_parameters*   decoding_parameters,    /* vc5 decoding parameters */
@@ -58,6 +62,8 @@ CODEC_ERROR vc5_decoder_process(const vc5_decoder_parameters*   decoding_paramet
         parameters.rgb_resolution = GPR_RGB_RESOLUTION_NONE;
     }
         
+    parameters.expected_width = decoding_parameters->expected_width;
+    parameters.expected_height = decoding_parameters->expected_height;
     parameters.allocator.Alloc = decoding_parameters->mem_alloc;
     parameters.allocator.Free  = decoding_parameters->mem_free;
     
@@ -91,7 +97,6 @@ CODEC_ERROR vc5_decoder_process(const vc5_decoder_parameters*   decoding_paramet
 
     error = OpenStreamBuffer(&input, vc5_buffer->buffer, vc5_buffer->size );
     if (error != CODEC_ERROR_OKAY) {
-        fprintf(stderr, "Could not open input vc5 stream\n" );
         return error;
     }
 
@@ -99,12 +104,19 @@ CODEC_ERROR vc5_decoder_process(const vc5_decoder_parameters*   decoding_paramet
     InitRGBImage(&rgb_image);
     
     error = DecodeImage(&input, &output_image, &rgb_image, &parameters);
-    // Heeler: a stream that ran out decoded zeros, not the picture.
+    // Heeler: a stream that ran out decoded zeros, not the picture, and
+    // the image it made is released rather than returned.
     if (error == CODEC_ERROR_OKAY && input.overrun) {
         error = CODEC_ERROR_FILE_READ;
+        if (output_image.buffer) {
+            parameters.allocator.Free(output_image.buffer);
+        }
+        if (rgb_image.buffer) {
+            parameters.allocator.Free(rgb_image.buffer);
+        }
     }
+    // Heeler: no message on stderr; the caller reports the error code.
     if (error != CODEC_ERROR_OKAY) {
-        fprintf(stderr, "Could not decode input vc5 bitstream. Error number %d\n", error );
         return error;
     }
     

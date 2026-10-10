@@ -40,16 +40,30 @@ decodes to:
 - `vc5_common/stream.h`, `stream.c`: memory reads (`GetWord`, `GetByte`,
   `GetBlockMemory`) are bounds checked. A read past the end returns zeros
   and sets the new `overrun` flag.
-- `vc5_decoder/vc5_decoder.c`: a decode whose stream overran returns
-  `CODEC_ERROR_FILE_READ`.
+- `vc5_decoder/vc5_decoder.c`, `vc5_decoder.h`, `parameters.h`,
+  `decoder.h`: the caller can name the image size the container declares
+  (`expected_width`, `expected_height`; zero accepts any), and the
+  bitstream's ImageWidth and ImageHeight must match it wherever they
+  appear, so a damaged header cannot size an allocation (a width of 0xFFFF
+  asked for 838 MB). A decode whose stream overran returns
+  `CODEC_ERROR_FILE_READ` and releases the image it made. The decoder no
+  longer prints to stderr; the caller reports the error code.
 - `vc5_decoder/decoder.c`:
   - the channel count, channel number and subband number from the header
     are range checked before they index fixed arrays;
   - a run that would extend past its band, or a band wider than its
     pitch, returns `CODEC_ERROR_DECODING_SUBBAND`;
   - a wavelet the header never sized is skipped when the transforms are
-    reset, and decoding into it returns `CODEC_ERROR_UNEXPECTED`.
+    reset, and decoding into it returns `CODEC_ERROR_UNEXPECTED`;
+  - a pattern other than 2x2 returns `CODEC_ERROR_PATTERN_DIMENSIONS`;
+  - `DecodeImage` releases the wavelets and component arrays when decoding
+    fails (the reference returned and leaked them, about 71 MB a try on a
+    HERO11 frame), and the component arrays are counted from the start so
+    a failure partway releases the ones already made.
+- `vc5_common/wavelet.c`: `DeleteWavelet` skips a wavelet never allocated.
 
 These were found by decoding thousands of damaged copies of real HERO7
-and HERO11 tiles under AddressSanitizer, and each case that crashed
-before now returns an error.
+and HERO11 tiles under AddressSanitizer, and an independent review that
+measured the leaks and the header-sized allocations. Each case that
+crashed, leaked or over-allocated before now returns an error. A sound
+tile decodes to the same bytes as upstream.

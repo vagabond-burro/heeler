@@ -195,6 +195,11 @@ CODEC_ERROR DecodeImage(STREAM *stream, IMAGE *packed_image, RGB_IMAGE *rgb_imag
     
     if( error != CODEC_ERROR_OKAY )
     {
+        // Heeler: release what the failed decode allocated; the reference
+        // returned here and leaked the wavelets and component arrays.
+        ReleaseComponentArrays( &parameters->allocator, &unpacked_image, unpacked_image.component_count );
+        ReleaseDecoder(&decoder);
+        ReleaseBitstream(&bitstream);
         return error;
     }
 
@@ -240,6 +245,10 @@ CODEC_ERROR DecodeImage(STREAM *stream, IMAGE *packed_image, RGB_IMAGE *rgb_imag
             break;
             
         default:
+            // Heeler: released here too.
+            ReleaseComponentArrays( &parameters->allocator, &unpacked_image, unpacked_image.component_count );
+            ReleaseDecoder(&decoder);
+            ReleaseBitstream(&bitstream);
             return CODEC_ERROR_UNSUPPORTED_FORMAT;
             break;
     }
@@ -323,6 +332,9 @@ CODEC_ERROR DecodingProcess(DECODER *decoder, BITSTREAM *stream, UNPACKED_IMAGE 
     
     // Initialize the decoder with a default allocator
     PrepareDecoder(decoder, parameters);
+    // Heeler: after PrepareDecoder, which clears the decoder.
+    decoder->expected_width = parameters->expected_width;
+    decoder->expected_height = parameters->expected_height;
     
     // Get the bitstream start marker
     segment = GetSegment(stream);
@@ -539,6 +551,10 @@ CODEC_ERROR SetImageChannelParameters(DECODER *decoder, int channel_number)
         case IMAGE_FORMAT_RAW:
             // The pattern width and height must be two
             assert(pattern_width == 2 && pattern_height == 2);
+            // Heeler: an error in a release build, where the assert is gone.
+            if (!(pattern_width == 2 && pattern_height == 2)) {
+                return CODEC_ERROR_PATTERN_DIMENSIONS;
+            }
             
             // The image dimensions must be divisible by the pattern dimensions
             //assert((image_width % 2) == 0 && (image_height % 2) == 0);
@@ -1159,6 +1175,11 @@ CODEC_ERROR UpdateCodecState(DECODER *decoder, BITSTREAM *stream, TAGVALUE segme
             break;
             
         case CODEC_TAG_ImageWidth:			// Width of the image
+            // Heeler: the width sizes every allocation; it must be the one
+            // the container declares, wherever in the stream it appears.
+            if (decoder->expected_width != 0 && value != decoder->expected_width) {
+                return CODEC_ERROR_IMAGE_DIMENSIONS;
+            }
             codec->image_width = value;
             codec->header = true;
             
@@ -1167,6 +1188,10 @@ CODEC_ERROR UpdateCodecState(DECODER *decoder, BITSTREAM *stream, TAGVALUE segme
             break;
             
         case CODEC_TAG_ImageHeight:			// Height of the image
+            // Heeler: as the width.
+            if (decoder->expected_height != 0 && value != decoder->expected_height) {
+                return CODEC_ERROR_IMAGE_DIMENSIONS;
+            }
             codec->image_height = value;
             codec->header = true;
             
@@ -2213,6 +2238,9 @@ CODEC_ERROR ReconstructUnpackedImage(DECODER *decoder, UNPACKED_IMAGE *image)
     // Clear the component array information so that the state is consistent
     image->component_count = 0;
     memset(image->component_array_list, 0, size);
+    // Heeler: counted from the start, so a failure partway releases the
+    // arrays already made (the rest are NULL, which Free accepts).
+    image->component_count = channel_count;
     
     for (channel_number = 0; channel_number < channel_count; channel_number++)
     {

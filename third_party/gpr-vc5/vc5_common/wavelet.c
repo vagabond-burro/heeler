@@ -143,6 +143,10 @@ WAVELET *CreateWavelet(gpr_allocator *allocator, DIMENSION width, DIMENSION heig
 */
 CODEC_ERROR DeleteWavelet(gpr_allocator *allocator, WAVELET *wavelet)
 {
+	// Heeler: a wavelet never allocated (a damaged header) is skipped.
+	if (wavelet == NULL) {
+		return CODEC_ERROR_OKAY;
+	}
 	ReleaseWavelet(allocator, wavelet);
 	allocator->Free(wavelet);
 	return CODEC_ERROR_OKAY;

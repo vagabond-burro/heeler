@@ -67,6 +67,12 @@
         
         gpr_free                        mem_free;               // Callback function to free memory
         
+        // Heeler: the image size the container declares. When set, a
+        // bitstream header naming any other size is refused before it
+        // sizes an allocation. Zero accepts any size.
+        int                             expected_width;
+        int                             expected_height;
+        
     } vc5_decoder_parameters;
         
     void vc5_decoder_parameters_set_default(vc5_decoder_parameters* decoding_parameters);

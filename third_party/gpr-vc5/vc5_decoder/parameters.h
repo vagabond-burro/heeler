@@ -104,6 +104,10 @@ typedef struct _decoder_parameters
     
     gpr_allocator allocator;
     
+    // Heeler: see vc5_decoder_parameters; zero accepts any size.
+    int expected_width;
+    int expected_height;
+    
 } DECODER_PARAMETERS;
 
 #ifdef __cplusplus

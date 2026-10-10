@@ -147,6 +147,10 @@ typedef struct _decoder
     FILE *section_logfile;      //!< Log file for writing section information
 #endif
     
+    // Heeler: copied from the parameters; zero accepts any size.
+    int expected_width;
+    int expected_height;
+    
 } DECODER;
 
 /*!
