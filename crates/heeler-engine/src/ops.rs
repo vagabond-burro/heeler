@@ -3960,6 +3960,42 @@ mod tests {
     }
 
     #[test]
+    fn a_curve_ending_short_of_white_continues_from_its_value_at_white() {
+        // The last point at x 0.8: the curve's value at 1.0 is 0.5 + 0.2
+        // by the slope-1 run past its last point, and over-range values
+        // carry on from there, not from the last point's 0.5 (the 26.5.1
+        // review's mutant M3 took the last point's y and passed).
+        let mut node = make_node("heeler.curves");
+        set_text(&mut node, "points", r#"{"rgb": [[0,0],[0.8,0.5]]}"#);
+        let at = |v: f32| run_on(&node, gray(v)).unwrap().as_image().unwrap().pixel(0, 0)[0];
+        assert!((at(to_scene(1.0001)) - at(to_scene(0.9999))).abs() < 1e-3);
+        assert_close(at(2.5), to_scene(0.7 + (to_display(2.5) - 1.0)));
+    }
+
+    #[test]
+    fn hue_stable_carries_an_over_range_channel_on_as_classic_does() {
+        // The brightest channel past white goes on from the curve's top in
+        // both modes (the review's mutant M8 evaluated it as if in range).
+        // A curve with a handle, whose evaluator holds flat past its last
+        // point: for the others the slope-1 run makes the two the same.
+        let points = r#"{"interp": "tangent", "rgb": [[0,0],[0.5,0.3],[1,0.8]], "rgb_h": [null, {"r": [0.2, 0.25]}, null]}"#;
+        let mut classic = make_node("heeler.curves");
+        set_text(&mut classic, "points", points);
+        let mut stable = make_node("heeler.curves");
+        set_text(&mut stable, "points", points);
+        set_text(&mut stable, "rgb_mode", "hue");
+        let px = [2.0, to_scene(0.6), to_scene(0.3), 1.0];
+        let c = run_on(&classic, ImageBuf::filled(1, 1, px)).unwrap().as_image().unwrap().pixel(0, 0);
+        let h = run_on(&stable, ImageBuf::filled(1, 1, px)).unwrap().as_image().unwrap().pixel(0, 0);
+        assert_close(h[0], c[0]);
+        assert_close(h[0], to_scene(0.8 + (to_display(2.0) - 1.0)));
+        assert_close(h[2], c[2]);
+        // And the middle keeps its place between them, the brightest one
+        // counted where it went: past white.
+        assert!((hue_fraction(h) - hue_fraction(px)).abs() < 1e-4, "{} against {}", hue_fraction(h), hue_fraction(px));
+    }
+
+    #[test]
     fn curve_keeps_a_highlight_neutral_when_one_channel_crosses_one() {
         // A near-white pixel with red a hair over 1.0: before, red
         // skipped the curve while green and blue were halved, turning
