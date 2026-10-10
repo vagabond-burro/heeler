@@ -15,6 +15,15 @@ A gentle S-curve increases contrast; the opposite decreases it. Channel curves c
 
 ![Curves](../assets/screenshots/section-curves.png)
 
+## Hue stable
+
+The **HUE** button under the plot's right corner, beside the interpolation button, sets how the RGB curve treats color.
+
+- **Off (classic):** the curve runs on red, green and blue one at a time, the way most editors' RGB curve does. A contrast curve also adds saturation and can shift hue: skin can turn orange and a blue sky cyan, because one channel reaches the bend in the curve before the others.
+- **On (hue stable):** the curve moves the brightest and darkest of the three channels, and the middle one keeps its place between them, the way the tone curve in common raw developers works. Contrast and brightness change; hue does not.
+
+Grays look the same either way. The setting applies only to the RGB curve: the R, G and B curves always change their own channel, and LUM always keeps color. Curves start in classic, and a photograph edited before the button existed keeps rendering as it did. Turning it on or off is one undo step.
+
 ## Copying a curve to another channel
 
 The two buttons under the plot's left corner copy and paste a curve. **Copy** takes the curve on screen, points, slopes and handles. Pick another channel and **Paste** replaces its curve with the copy; it is one undo step. Paste stays dimmed until something is copied.

@@ -2,6 +2,10 @@
 
 ## 2026.5.1
 
+### New
+
+- **Hue stable Curves.** The **HUE** button under the Curves plot makes the RGB curve change tone without shifting color: it moves the brightest and darkest channels and keeps the middle one in its place between them. Off, the curve runs on each channel on its own as before, which adds saturation and can shift hue under a contrast curve. Curves start with it off, so your edits render as they did. [Curves](user-guide/adjustments/curves.md#hue-stable).
+
 ### Fixes
 
 - **Curves has no step at the top of the range.** Highlights brighter than white skipped the curve, so a curve whose top point was lowered (a faded white, say) darkened everything up to white and left anything brighter where it was: a visible jump in skies and specular highlights, and a color shift where only one channel went past white. Those highlights now carry on from where the curve ends, lowered by the same amount and never clipped. A curve whose top stays at white renders as before. [Curves](user-guide/adjustments/curves.md).

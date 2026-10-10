@@ -377,6 +377,10 @@ export function CurveEditor({
   storedPtsRef.current = storedPts;
   const mode = node.curveInterp ?? "smooth";
   const tangentMode = mode === "tangent";
+  const hueStable = node.textParams?.rgb_mode === "hue";
+  const hueHint = hueStable
+    ? "Hue stable: the RGB curve changes tone without shifting color. Click for classic, each channel on its own"
+    : "Classic: the RGB curve runs on each channel on its own, which can shift hue and saturation. Click for hue stable";
   // The slopes beside the points: the echo's while an edit is in
   // flight, the stored ones when they fit, the monotone seed otherwise
   // (which is also what a fresh conversion starts from, so toggling
@@ -1046,7 +1050,26 @@ mode for the whole curve: on, every point wears its handles; off,
 the slopes go back to the automatic smooth ones.*/}
         {/* Not a segmented control any more: one button that cycles is
             not "pressed", so it wears the chip, not the zoom-seg. */}
-        <div style={{ justifySelf: "end", display: "inline-flex" }}>
+        <div style={{ justifySelf: "end", display: "inline-flex", gap: 4 }}>
+          {/* Hue stable: the RGB curve moves the largest and smallest
+channels and the middle keeps its place between them, so contrast
+stops pushing hue and saturation. Off is classic, each channel on its
+own, which every graph made before the mode renders as. A text param
+so it rides saves, undo, copies and presets with nothing of its own.*/}
+          <button
+            className="chip"
+            data-testid="curve-hue"
+            data-active={hueStable}
+            aria-pressed={hueStable}
+            aria-label={hueHint}
+            data-hint={hueHint}
+            style={{ padding: "2px 6px", fontSize: 9, letterSpacing: ".08em" }}
+            onClick={() =>
+              dispatch({ type: "set_text_param", id: node.id, param: "rgb_mode", value: hueStable ? "" : "hue" })
+            }
+          >
+            HUE
+          </button>
           <InterpCycle
             mode={mode}
             testid="curve-interp"

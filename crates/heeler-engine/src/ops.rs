@@ -1150,6 +1150,16 @@ fn sorted(points: Option<Vec<[f32; 2]>>) -> Option<Vec<[f32; 2]>> {
 /// "b": ..., "luma": ...}, all channels optional. Applied in order: master
 /// rgb curve, per-channel curves, then luma curve as a ratio scale.
 ///
+/// The master curve has two modes, chosen by the `rgb_mode` text param.
+/// Absent (classic, what every graph made before it had) runs the curve
+/// on each channel alone, as most editors do: contrast pushes saturation
+/// and shifts hue as one channel reaches the bend before the others.
+/// "hue" is hue stable, the way Adobe's raw tone curve works (the DNG
+/// SDK's RefBaselineRGBTone): the curve moves the largest and smallest
+/// channels and the middle one keeps its place between them, so the
+/// tone changes and the hue does not. A neutral pixel renders the same
+/// in both. The per-channel and luma curves are untouched by the mode.
+///
 /// Curves run in display space (sRGB-encoded), the domain the curve
 /// editor's axis, its histogram underlay, and every photographer's
 /// mental model already use: 0.5 on the axis is middle gray on screen,
@@ -1203,23 +1213,40 @@ fn curves(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError>
     // at 1.0 (a faded white sent 0.999 to 0.9 and 1.0 to 1.0), and a
     // pixel with one channel just over 1.0 had only the others curved,
     // which shifted its hue.
+    let curve_d = |c: &CurveSampler, d: f32| -> f32 {
+        if d >= 1.0 { c.top + (d - 1.0) } else { c.eval(d) }
+    };
     let apply = |c: &CurveSampler, v: f32| -> f32 {
         let d = to_display(v.max(0.0));
-        if d >= 1.0 {
-            if c.top == 1.0 {
-                v
-            } else {
-                to_scene((c.top + (d - 1.0)).max(0.0))
-            }
+        if d >= 1.0 && c.top == 1.0 {
+            v
         } else {
-            to_scene(c.eval(d).max(0.0))
+            to_scene(curve_d(c, d).max(0.0))
         }
     };
+    let hue_stable = node.params.get("rgb_mode").and_then(|v| v.as_str()) == Some("hue");
     let out = map_rgb(src, |r, g, b| {
         let mut px = [r, g, b];
         if let Some(c) = &rgb {
-            for v in &mut px {
-                *v = apply(c, *v);
+            let d = px.map(|v| to_display(v.max(0.0)));
+            let mut order = [0usize, 1, 2];
+            order.sort_by(|&a, &b| d[a].partial_cmp(&d[b]).unwrap_or(std::cmp::Ordering::Equal));
+            let [lo, mid, hi] = order;
+            let spread = d[hi] - d[lo];
+            if hue_stable && spread > 1e-6 {
+                // The middle channel sits at the same fraction of the
+                // way from the smallest to the largest after the curve
+                // as before, which is what holds the hue.
+                let at = (d[mid] - d[lo]) / spread;
+                let out_lo = curve_d(c, d[lo]).max(0.0);
+                let out_hi = curve_d(c, d[hi]).max(0.0);
+                px[mid] = to_scene((out_lo + (out_hi - out_lo) * at).max(0.0));
+                px[lo] = apply(c, px[lo]);
+                px[hi] = apply(c, px[hi]);
+            } else {
+                for v in &mut px {
+                    *v = apply(c, *v);
+                }
             }
         }
         if let Some(c) = &cr {
@@ -3934,6 +3961,57 @@ mod tests {
         let out = run_on(&node, ImageBuf::filled(1, 1, [1.001, 0.999, 0.999, 1.0])).unwrap();
         let px = out.as_image().unwrap().pixel(0, 0);
         assert!(px[0] / px[1] < 1.01, "highlight tinted: {px:?}");
+    }
+
+    /// Where the middle channel sits between the smallest and largest,
+    /// in the curve's display domain: the hue's fingerprint.
+    fn hue_fraction(px: [f32; 4]) -> f32 {
+        let mut d = [to_display(px[0]), to_display(px[1]), to_display(px[2])];
+        d.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        (d[1] - d[0]) / (d[2] - d[0])
+    }
+
+    #[test]
+    fn hue_stable_rgb_curve_keeps_the_hue_classic_shifts() {
+        let s_curve = r#"{"interp": "smooth", "rgb": [[0,0],[0.25,0.15],[0.75,0.85],[1,1]]}"#;
+        let mut classic = make_node("heeler.curves");
+        set_text(&mut classic, "points", s_curve);
+        let mut stable = make_node("heeler.curves");
+        set_text(&mut stable, "points", s_curve);
+        set_text(&mut stable, "rgb_mode", "hue");
+        // A skin tone: red over green over blue.
+        let skin = [to_scene(0.85), to_scene(0.6), to_scene(0.45), 1.0];
+        let run = |n: &Node| run_on(n, ImageBuf::filled(1, 1, skin)).unwrap().as_image().unwrap().pixel(0, 0);
+        let (c, h) = (run(&classic), run(&stable));
+        let before = hue_fraction(skin);
+        assert!((hue_fraction(h) - before).abs() < 1e-4, "hue moved: {before} to {}", hue_fraction(h));
+        assert!((hue_fraction(c) - before).abs() > 0.02, "classic should shift this hue, {before} to {}", hue_fraction(c));
+        // The largest and smallest channels follow the curve exactly as
+        // classic does; only the middle one is placed.
+        assert_close(h[0], c[0]);
+        assert_close(h[2], c[2]);
+    }
+
+    #[test]
+    fn hue_stable_matches_classic_on_neutrals_and_leaves_channel_curves_alone() {
+        let points = r#"{"interp": "smooth", "rgb": [[0,0],[0.5,0.3],[1,0.9]], "r": [[0,0],[0.5,0.6],[1,1]]}"#;
+        let mut classic = make_node("heeler.curves");
+        set_text(&mut classic, "points", points);
+        let mut stable = make_node("heeler.curves");
+        set_text(&mut stable, "points", points);
+        set_text(&mut stable, "rgb_mode", "hue");
+        for v in [0.0, 0.02, 0.18, 0.6, 1.0, 2.5] {
+            let a = run_on(&classic, gray(v)).unwrap().as_image().unwrap().pixel(0, 0);
+            let b = run_on(&stable, gray(v)).unwrap().as_image().unwrap().pixel(0, 0);
+            assert_eq!(a, b, "gray {v}");
+        }
+        // Over range, hue stable has no step at 1.0 either.
+        let at = |v: [f32; 4]| run_on(&stable, ImageBuf::filled(1, 1, v)).unwrap().as_image().unwrap().pixel(0, 0);
+        let below = at([to_scene(0.9999), to_scene(0.7), to_scene(0.5), 1.0]);
+        let above = at([to_scene(1.0001), to_scene(0.7), to_scene(0.5), 1.0]);
+        for i in 0..3 {
+            assert!((above[i] - below[i]).abs() < 1e-3, "step at 1.0 in channel {i}: {below:?} then {above:?}");
+        }
     }
 
     #[test]

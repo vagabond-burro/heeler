@@ -4513,6 +4513,7 @@ function describe(cmd: Command, s: State): string {
     case "set_curve_interp":
       return `Curves: ${cmd.interp}`;
     case "set_text_param":
+      if (cmd.param === "rgb_mode") return `${name(cmd.id)}: ${cmd.value === "hue" ? "hue stable" : "classic"}`;
       return `${name(cmd.id)}: ${cmd.param.replace(/_/g, " ")}`;
     case "add_gamut_map_after":
       return "Add Gamut Map";
