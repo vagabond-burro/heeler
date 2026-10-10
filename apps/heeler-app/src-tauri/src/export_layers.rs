@@ -290,6 +290,288 @@ fn unique_layer_name(layers: &[ExportLayer], named: &str, log: &mut impl FnMut(&
     name
 }
 
+/// A layer's value as one gray plane at the frame's size (26.3 Phase
+/// 8): a mask resamples; an image layer's alpha half reads the fourth
+/// sample; its rgb half reads as luma, the honest gray of a color
+/// plane. EXR's rgb layers do not come through here - they keep their
+/// three planes.
+fn grey_plane_of(value: &Value, part: &str, w: usize, h: usize) -> Vec<f32> {
+    let (plane, sw, sh) = match value {
+        Value::Mask(m) => (m.data.clone(), m.width, m.height),
+        Value::Image(i) if part == "alpha" => {
+            (i.data.chunks_exact(4).map(|px| px[3]).collect(), i.width, i.height)
+        }
+        Value::Image(i) => (
+            i.data
+                .chunks_exact(4)
+                .map(|px| 0.2126 * px[0] + 0.7152 * px[1] + 0.0722 * px[2])
+                .collect(),
+            i.width,
+            i.height,
+        ),
+    };
+    if sw == 0 || sh == 0 {
+        return vec![0.0; w * h];
+    }
+    heeler_vision::resize_plane(&plane, sw, sh, w, h)
+}
+
+/// The alpha an export layer writes (26.3 Phase 8): the wired alpha
+/// input when the node names one, the tapped image's own fourth sample
+/// otherwise; a mask tap has no alpha beyond itself. One plane at the
+/// frame's size.
+fn layer_alpha(ch: &ExportLayer, w: usize, h: usize) -> Option<Vec<f32>> {
+    match (&ch.alpha, &ch.value) {
+        (Some(a), _) => Some(grey_plane_of(a, "alpha", w, h)),
+        (None, Value::Image(i)) => Some(heeler_vision::resize_plane(
+            &i.data.chunks_exact(4).map(|px| px[3]).collect::<Vec<f32>>(),
+            i.width,
+            i.height,
+            w,
+            h,
+        )),
+        (None, Value::Mask(_)) => None,
+    }
+}
+
+/// An image tap's picture at the frame's size, RGBA (26.3 Phase 8):
+/// the tapped image resampled, its alpha the wired alpha input when
+/// the node names one.
+fn layer_image_of(ch: &ExportLayer, w: usize, h: usize) -> ImageBuf {
+    let Value::Image(i) = &ch.value else {
+        return ImageBuf::new(w, h);
+    };
+    let plane = |c: usize| {
+        heeler_vision::resize_plane(
+            &i.data.chunks_exact(4).map(|px| px[c]).collect::<Vec<f32>>(),
+            i.width,
+            i.height,
+            w,
+            h,
+        )
+    };
+    let (r, g, b) = (plane(0), plane(1), plane(2));
+    let a = layer_alpha(ch, w, h).unwrap_or_else(|| vec![1.0; w * h]);
+    let mut buf = ImageBuf::new(w, h);
+    for px in 0..w * h {
+        buf.data[px * 4] = r[px];
+        buf.data[px * 4 + 1] = g[px];
+        buf.data[px * 4 + 2] = b[px];
+        buf.data[px * 4 + 3] = a[px];
+    }
+    buf
+}
+
+/// An export layer's EXR layer (26.3 Phase 8): depth-fed is the layer
+/// `mist` with the leaf Z (f32, the writer's rule); a mask is one
+/// `<name>.A`; an image's rgb half is `<name>.R/G/B` with `<name>.A`
+/// alongside - the wired alpha input when the node names one, the
+/// image's own alpha otherwise; an image's alpha half is the same A
+/// alone.
+fn exr_layer_of(ch: &ExportLayer, w: usize, h: usize) -> heeler_io::exr_passes::Layer {
+    if ch.depth {
+        // Heeler's plane is farness, 0 near to 1 far, not a metric
+        // distance: written under the mist name, which readers (this
+        // one included) take as a normalized depth, where a depth.Z
+        // would be inverted as 1/z on the way back in.
+        return heeler_io::exr_passes::Layer {
+            name: "mist".into(),
+            channels: vec![("Z".into(), grey_plane_of(&ch.value, "alpha", w, h))],
+        };
+    }
+    match &ch.value {
+        Value::Image(i) if ch.part != "alpha" => {
+            let plane = |c: usize| {
+                let p: Vec<f32> = i.data.chunks_exact(4).map(|px| px[c]).collect();
+                heeler_vision::resize_plane(&p, i.width, i.height, w, h)
+            };
+            let (mut r, mut g, mut b) = (plane(0), plane(1), plane(2));
+            // A Finish-sourced layer is display-referred and the EXR is
+            // scene-linear, so its color planes linearize on the way
+            // in. Alpha is coverage, not color, and stays as it is.
+            if ch.finish.is_some() {
+                for px in r.iter_mut().chain(g.iter_mut()).chain(b.iter_mut()) {
+                    *px = heeler_io::srgb_to_linear(px.clamp(0.0, 1.0));
+                }
+            }
+            let mut channels = vec![("R".into(), r), ("G".into(), g), ("B".into(), b)];
+            if let Some(a) = layer_alpha(ch, w, h) {
+                channels.push(("A".into(), a));
+            }
+            heeler_io::exr_passes::Layer {
+                name: ch.name.clone(),
+                channels,
+            }
+        }
+        Value::Image(_) => heeler_io::exr_passes::Layer {
+            name: ch.name.clone(),
+            channels: vec![("A".into(), layer_alpha(ch, w, h).unwrap_or_else(|| grey_plane_of(&ch.value, "alpha", w, h)))],
+        },
+        _ => heeler_io::exr_passes::Layer {
+            name: ch.name.clone(),
+            channels: vec![("A".into(), grey_plane_of(&ch.value, &ch.part, w, h))],
+        },
+    }
+}
+
+/// The EXR (26.3 Phase 8): one file with everything packed - the beauty
+/// as rgba (A is the alpha port's, 1.0 unwired), each Export Layer node
+/// a layer, a depth-fed layer as mist.Z. Scene-linear, unbounded, no
+/// OETF; the header says Rec.709 and which Heeler wrote it.
+/// write_layers takes the path, not bytes, so this container stands
+/// alone; siblings and metadata splices do not apply.
+pub(crate) fn write_exr(
+    dest: &Path,
+    image: &ImageBuf,
+    layers: &[ExportLayer],
+    log: &mut impl FnMut(&str, &str),
+) -> Result<(), String> {
+    let (w, h) = (image.width, image.height);
+    let mut packed = vec![heeler_io::exr_passes::Layer {
+        name: String::new(),
+        channels: vec![
+            ("R".into(), image.data.chunks_exact(4).map(|px| px[0]).collect()),
+            ("G".into(), image.data.chunks_exact(4).map(|px| px[1]).collect()),
+            ("B".into(), image.data.chunks_exact(4).map(|px| px[2]).collect()),
+            ("A".into(), image.data.chunks_exact(4).map(|px| px[3]).collect()),
+        ],
+    }];
+    // Two layers resolving to one name (two depth-fed layers both
+    // become mist) would refuse the whole file; the second is
+    // suffixed and the log says so.
+    let mut taken: std::collections::HashSet<String> = packed.iter().map(|l| l.name.clone()).collect();
+    for ch in layers {
+        let mut layer = exr_layer_of(ch, w, h);
+        if !taken.insert(layer.name.clone()) {
+            let mut n = 2;
+            while taken.contains(&format!("{}-{n}", layer.name)) {
+                n += 1;
+            }
+            let renamed = format!("{}-{n}", layer.name);
+            log("info", &format!("export layer '{}' is written as '{renamed}': the name was taken", layer.name));
+            layer.name = renamed;
+            taken.insert(layer.name.clone());
+        }
+        packed.push(layer);
+    }
+    // A Finish layer's mode, opacity and group ride in the header
+    // as a record (26.3 Phase 8); no reader acts on them, and the
+    // docs say so. The display-space composite is not reproducible
+    // by a linear merge, which is exactly what the record is for.
+    let mut attrs: Vec<(String, String)> = Vec::new();
+    for ch in layers {
+        let Some(f) = &ch.finish else { continue };
+        attrs.push((format!("heeler.layer.{}.mode", ch.name), f.mode.clone()));
+        attrs.push((format!("heeler.layer.{}.opacity", ch.name), format!("{}", f.opacity)));
+        if !f.group.is_empty() {
+            attrs.push((format!("heeler.layer.{}.group", ch.name), f.group.clone()));
+        }
+    }
+    heeler_io::exr_passes::write_layers_with_attributes(dest, w, h, &packed, &attrs).map_err(|e| e.to_string())
+}
+
+/// The export layers' TIFF form (26.3 Phase 8): one sibling per layer
+/// beside the main file at `dest`, named in the extension `ext` the main
+/// file was written by, at the main file's size. A sibling NEVER
+/// overwrites, even when the main file's Replace? was honored: that
+/// answer covered the one name, not names nobody was asked about.
+///
+/// The siblings take the same ExportOptions the main file was written
+/// from, so a setting the main file honors is already in hand here; the
+/// print resolution once reached the main file and missed its siblings
+/// (26.4.2).
+pub(crate) fn write_tiff_siblings(
+    dest: &Path,
+    ext: &str,
+    (w, h): (usize, usize),
+    layers: &[ExportLayer],
+    options: &ExportOptions<'_>,
+    log: &mut impl FnMut(&str, &str),
+) -> Result<(), String> {
+    if !matches!(options.format, "tiff" | "tiff32") || layers.is_empty() {
+        return Ok(());
+    }
+    let stem = dest.file_stem().and_then(|s| s.to_str()).unwrap_or("export");
+    let parent = dest.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    for ch in layers {
+        let bytes = tiff_sibling(ch, w, h, options)?;
+        // A layer label can contain path separators. It remains
+        // verbatim in metadata, but its sibling is one filename.
+        let want = parent.join(format!("{stem}.{}.{}", safe_file_name(&ch.name), ext));
+        // unclobbered assumes a taken name (the main file only calls
+        // it once Replace? is settled), so a free name is kept here.
+        let path = if want.exists() { unclobbered(&want) } else { want.clone() };
+        if path != want {
+            log("info", &format!("{} already exists; writing {} instead", want.display(), path.display()));
+        }
+        write_named(&path, &bytes)?;
+    }
+    Ok(())
+}
+
+/// One layer's sibling, 16-bit display-encoded for a 16-bit main file,
+/// 32-bit scene-linear float for a float one. A mask tap is a gray, the
+/// depth layer a gray like any other; an image tap writes its picture as
+/// RGBA through the layer encoders, the wired alpha input replacing the
+/// image's own fourth sample when the node names one. Every setting the
+/// encoders take is read from `options` here, once, for every kind.
+fn tiff_sibling(ch: &ExportLayer, w: usize, h: usize, options: &ExportOptions<'_>) -> Result<Vec<u8>, String> {
+    let float = options.format == "tiff32";
+    let dpi = Some(options.dpi);
+    match &ch.value {
+        Value::Image(_) if !ch.depth && ch.part != "alpha" => {
+            let mut buf = layer_image_of(ch, w, h);
+            // A Finish-sourced layer is display-referred (26.3
+            // Phase 8 milestone 3): the 16-bit sibling keeps the
+            // values as they are, no curve; the float sibling
+            // linearizes, the way the EXR does. The description
+            // records mode, opacity and group and says no reader
+            // acts on them - a linear merge will not reproduce
+            // the display-space composite. The space words match
+            // the pixels: the float sibling was linearized, so
+            // only the 16-bit one is called display-referred.
+            let description = |space: &str| match &ch.finish {
+                Some(f) => format!(
+                    "Heeler Finish layer '{}': mode={}, opacity={}, group={} - record only, no reader acts on it; {space}, a linear merge will not reproduce the composite",
+                    ch.name, f.mode, f.opacity, f.group
+                ),
+                None => format!("Heeler export layer: {}", ch.name),
+            };
+            if float {
+                if ch.finish.is_some() {
+                    for px in buf.data.chunks_exact_mut(4) {
+                        px[0] = heeler_io::srgb_to_linear(px[0].clamp(0.0, 1.0));
+                        px[1] = heeler_io::srgb_to_linear(px[1].clamp(0.0, 1.0));
+                        px[2] = heeler_io::srgb_to_linear(px[2].clamp(0.0, 1.0));
+                    }
+                }
+                heeler_io::encode_tiff32f_layer(&buf, &description("painted display-referred, linearized into scene-linear here"), dpi)
+            } else if ch.finish.is_some() {
+                heeler_io::encode_tiff16_layer_display(&buf, &description("display-referred"), dpi)
+            } else {
+                heeler_io::encode_tiff16_layer(&buf, &description(""), dpi)
+            }
+        }
+        _ => {
+            let plane = grey_plane_of(&ch.value, &ch.part, w, h);
+            // An image tap on its alpha part writes the wired
+            // alpha when the node names one.
+            let plane = match (&ch.value, ch.alpha.is_some()) {
+                (Value::Image(_), true) if ch.part == "alpha" => {
+                    layer_alpha(ch, w, h).unwrap_or(plane)
+                }
+                _ => plane,
+            };
+            if float {
+                heeler_io::encode_tiff32f_grey(&plane, w, h, dpi)
+            } else {
+                heeler_io::encode_tiff16_grey(&plane, w, h, dpi)
+            }
+        }
+    }
+    .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 #[path = "export_layers_characterization.rs"]
 mod characterization;
