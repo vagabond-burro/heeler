@@ -215,14 +215,19 @@ stays unsigned and offline.
    `python scripts/latest_json.py` from What's New and reviewed before it
    was committed; see [Versioning](versioning.md#cutting-a-release)) and
    refuses one with uncommitted changes, one for another version or one
-   naming other installers. It creates and publishes the GitHub release
-   under `v<version>` with the installers under their release names,
-   `models.json` from `docs/` and that `latest.json`, all in one step,
-   then checks every upload answers. Merge `dev` into `main` when you
-   want the release live: the app and the website both read
-   `latest.json` from `main`. Then `python scripts/latest_json.py --check`
-   confirms `main` serves the new manifest and every installer it names
-   answers. `--dry-run` shows what would be published.
+   naming other installers. It tags the commit this checkout is at (the
+   one you built from: clean, and pushed to `origin/dev`), creates and
+   publishes the GitHub release under `v<version>` with the installers
+   under their release names, `models.json` from `docs/` and that
+   `latest.json`, all in one step, then checks every upload answers.
+   Last, it fast-forwards `main` to that commit and pushes it, which
+   makes the release live: the app and the website both read
+   `latest.json` from `main`. A `main` that cannot fast-forward stops the
+   release before anything is published; `--no-merge` leaves `main` to
+   you, and a pre-release never moves it. Then
+   `python scripts/latest_json.py --check` confirms `main` serves the new
+   manifest and every installer it names answers. `--dry-run` shows what
+   would be published.
 
 ## Gotchas that have actually happened
 

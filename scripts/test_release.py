@@ -62,7 +62,14 @@ def committed_manifest(path: Path, whats_new: str = WHATS_NEW):
         patch.object(release.manifest, "MANIFEST_FILE", path),
         patch.object(release.manifest, "WHATS_NEW", whats),
         patch.object(release, "committed", return_value=None),
+        # The release's commit, clean and pushed, and main's fast-forward:
+        # git, stood in for (ReleaseCommit tests them against a fake git).
+        patch.object(release, "release_commit", return_value=RELEASE_SHA),
+        patch.object(release, "fast_forward_live", return_value=None),
     ]
+
+
+RELEASE_SHA = "abc1234def5678abc1234def5678abc1234def56"
 
 
 class Prune(unittest.TestCase):
@@ -424,7 +431,8 @@ class OfflineFlow(unittest.TestCase):
         self.assertIn("Heeler-26.2.1-macos.dmg", uploaded)
         self.assertIn("`heeler-help-kit.zip` for Claude", out.getvalue())
         self.assertIn("**New**\n- **A feature.**", out.getvalue())
-        self.assertIn("next: merge dev into main", err.getvalue())
+        # main follows the release itself now (ReleaseCommit).
+        self.assertIn("main is at abc1234de", err.getvalue())
 
     def test_the_release_refuses_a_manifest_it_cannot_trust(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -996,6 +1004,126 @@ class PipelineScriptModes(unittest.TestCase):
         for name in ["macos-release.zsh", "linux-stage.sh", "linux-test.sh", "linux-setup.sh"]:
             listed = subprocess.run(["git", "ls-files", "--stage", f"scripts/{name}"], cwd=heeler_build.REPO_ROOT, capture_output=True, text=True).stdout
             self.assertTrue(listed.startswith("100755 "), f"{name}: {listed!r}")
+
+
+
+class ReleaseCommit(unittest.TestCase):
+    """The release is tagged on the commit the installers were built from,
+    checked before anything is published, and main follows it only once
+    the release is up (2026-10-10: "main is behind until I merge")."""
+
+    def fake_git(self, dirty="", on_dev=True, main_behind=True, fetch_ok=True):
+        calls: list[tuple[str, ...]] = []
+
+        def git(*args):
+            calls.append(args)
+            out = lambda code, stdout="", stderr="": subprocess.CompletedProcess(["git", *args], code, stdout, stderr)
+            if args[:2] == ("rev-parse", "HEAD"):
+                return out(0, RELEASE_SHA + "\n")
+            if args[0] == "status":
+                return out(0, dirty)
+            if args[0] == "fetch":
+                return out(0 if fetch_ok else 1, "", "" if fetch_ok else "could not read from remote")
+            if args[:2] == ("merge-base", "--is-ancestor"):
+                if args[2] == RELEASE_SHA:
+                    return out(0 if on_dev else 1)
+                return out(0 if main_behind else 1)
+            if args[0] == "push":
+                return out(0)
+            raise AssertionError(f"unexpected git {args}")
+
+        return git, calls
+
+    def test_the_commit_must_be_clean_pushed_and_ahead_of_main(self):
+        git, calls = self.fake_git()
+        with patch.object(release, "git", side_effect=git):
+            self.assertEqual(release.release_commit(True), RELEASE_SHA)
+        self.assertIn(("fetch", "--quiet", "origin", "main"), calls)
+        for kwargs, message in (
+            ({"dirty": " M apps/heeler-app/src/state.ts\n"}, "uncommitted changes"),
+            ({"on_dev": False}, "is not on origin/dev: push it first"),
+            ({"main_behind": False}, "origin/main has commits abc1234de lacks"),
+            ({"fetch_ok": False}, "git fetch origin dev"),
+        ):
+            with self.subTest(**kwargs):
+                git, _ = self.fake_git(**kwargs)
+                with patch.object(release, "git", side_effect=git), self.assertRaisesRegex(SystemExit, message):
+                    release.release_commit(True)
+        # Without the merge, main is neither fetched nor asked about.
+        git, calls = self.fake_git(main_behind=False)
+        with patch.object(release, "git", side_effect=git):
+            self.assertEqual(release.release_commit(False), RELEASE_SHA)
+        self.assertNotIn(("fetch", "--quiet", "origin", "main"), calls)
+
+    def test_main_moves_by_a_fast_forward_push_of_that_commit(self):
+        git, calls = self.fake_git()
+        with patch.object(release, "git", side_effect=git):
+            self.assertIsNone(release.fast_forward_live(RELEASE_SHA))
+        self.assertEqual(calls, [("push", "origin", f"{RELEASE_SHA}:refs/heads/main")])
+
+    def run_release(self, *flags, push=None, answers=None):
+        """The release run with gh and the HEAD checks stood in for; the
+        order of what happened, and the exit code."""
+        order: list[str] = []
+        created: list[tuple] = []
+
+        def gh(*args):
+            created.append(args)
+            order.append("publish")
+            return "https://example.invalid/release"
+
+        with tempfile.TemporaryDirectory() as folder:
+            paths = [Path(folder) / name for name in ("Heeler-26.2.1-macos.dmg", "Heeler-26.2.1-windows.exe")]
+            for path in paths:
+                path.write_bytes(b"stand-in")
+            mf = manifest_file(folder)
+            with ExitStack() as stack:
+                for p in committed_manifest(mf):
+                    stack.enter_context(p)
+                stack.enter_context(patch.object(sys, "argv", ["release.py", *map(str, paths), "--tag", "v26.2.1", *flags]))
+                stack.enter_context(patch.object(release, "release_exists", return_value=False))
+                stack.enter_context(patch.object(release, "tag_exists", return_value=False))
+                stack.enter_context(patch.object(release.manifest, "gh", side_effect=gh))
+                stack.enter_context(patch.object(release.manifest, "answers", side_effect=answers or (lambda url: None)))
+                commit = stack.enter_context(patch.object(release, "release_commit", return_value=RELEASE_SHA))
+                ff = stack.enter_context(patch.object(release, "fast_forward_live", side_effect=lambda sha: order.append("main") or push))
+                err = io.StringIO()
+                stack.enter_context(redirect_stdout(io.StringIO()))
+                stack.enter_context(redirect_stderr(err))
+                code = release.main()
+        return code, order, created, commit, ff, err.getvalue()
+
+    def test_the_tag_is_the_commit_and_main_follows_only_after_every_upload_answers(self):
+        code, order, created, commit, ff, err = self.run_release()
+        self.assertEqual(code, 0)
+        self.assertEqual(order, ["publish", "main"])
+        flags = list(created[0])
+        self.assertEqual(flags[flags.index("--target") + 1], RELEASE_SHA)
+        commit.assert_called_once_with(True)
+        ff.assert_called_once_with(RELEASE_SHA)
+        self.assertIn("main is at abc1234de", err)
+        # An upload that does not answer leaves main where it is.
+        code, order, *_ = self.run_release(answers=lambda url: "HTTP 404" if url.endswith(".dmg") else None)
+        self.assertEqual((code, order), (1, ["publish"]))
+
+    def test_a_pre_release_and_no_merge_leave_main_and_a_failed_push_says_how_to_finish(self):
+        for flag in ("--pre-release", "--no-merge"):
+            with self.subTest(flag):
+                code, order, _, commit, ff, _ = self.run_release(flag)
+                self.assertEqual((code, order), (0, ["publish"]))
+                commit.assert_called_once_with(False)
+                ff.assert_not_called()
+        code, order, _, _, _, err = self.run_release(push="rejected: non-fast-forward")
+        self.assertEqual((code, order), (1, ["publish", "main"]))
+        self.assertIn(f"git push origin {RELEASE_SHA}:refs/heads/main", err)
+
+    def test_a_dry_run_checks_the_commit_and_says_main_will_follow(self):
+        code, order, created, commit, ff, err = self.run_release("--dry-run")
+        self.assertEqual((code, order, created), (0, [], []))
+        commit.assert_called_once_with(True)
+        ff.assert_not_called()
+        self.assertIn(f"tagged on {RELEASE_SHA}", err)
+        self.assertIn("then main fast-forwards to abc1234de", err)
 
 
 if __name__ == "__main__":

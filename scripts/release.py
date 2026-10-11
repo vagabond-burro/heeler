@@ -43,9 +43,20 @@ the guide of the latest release. The release is marked Latest;
 --pre-release marks it a pre-release instead, which the redirect skips.
 models.json comes from the published model manifest and must name no
 releases/latest/download URL. After publishing, every uploaded file is
-fetched by HEAD. The last step stays yours: merge dev into main when the
-release is checked, which is what makes it live for the app and the
-website (a pre-release's latest.json must not reach main).
+fetched by HEAD.
+
+The release is tagged on the commit this checkout is at, the one the
+installers were built from (dist.py stamps its hash into them), not on a
+branch: main is behind until the release is live, and a branch moves
+(2026-10-10: "main is used as the bundle for a release, but the problem is
+main is behind until I merge"). That commit must be clean and pushed to
+origin's dev, or GitHub has nothing to tag. Last, once every upload
+answers, main is fast-forwarded to that commit and pushed, which is what
+makes the release live: the app and the website read latest.json from
+main, so main moves only after the installers it names are up. main never
+merges: if it has commits that commit lacks, the release stops before
+publishing and says so. --no-merge leaves that last step to you; a
+pre-release never moves main, since its latest.json must not reach it.
 
 gh must be installed and signed in to the account that owns the
 vagabond-burro organization.
@@ -269,6 +280,43 @@ def models_manifest() -> str:
     return text
 
 
+def git(*args: str) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(["git", *args], cwd=REPO_ROOT, capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        sys.exit("git is not installed, or not on PATH")
+
+
+def release_commit(merge: bool) -> str:
+    """The commit this checkout is at, checked before anything is
+    published: no uncommitted change to a tracked file, on origin's dev
+    (GitHub tags only what it has), and, when main is to follow it,
+    main able to fast-forward to it. Exits with the reason otherwise."""
+    head = git("rev-parse", "HEAD")
+    if head.returncode != 0:
+        sys.exit(f"git rev-parse HEAD: {head.stderr.strip() or 'not in a git repository'}")
+    sha = head.stdout.strip()
+    dirty = git("status", "--porcelain", "--untracked-files=no")
+    if dirty.stdout.strip():
+        sys.exit("this checkout has uncommitted changes: commit them, rebuild if they reach the app, then release; the tag is the commit the installers were built from")
+    for branch in (manifest.STAGE_BRANCH, *( [manifest.LIVE_BRANCH] if merge else [])):
+        fetched = git("fetch", "--quiet", "origin", branch)
+        if fetched.returncode != 0:
+            sys.exit(f"git fetch origin {branch}: {fetched.stderr.strip()}")
+    if git("merge-base", "--is-ancestor", sha, f"origin/{manifest.STAGE_BRANCH}").returncode != 0:
+        sys.exit(f"{sha[:9]} is not on origin/{manifest.STAGE_BRANCH}: push it first (git push), since the tag is cut on GitHub")
+    if merge and git("merge-base", "--is-ancestor", f"origin/{manifest.LIVE_BRANCH}", sha).returncode != 0:
+        sys.exit(f"origin/{manifest.LIVE_BRANCH} has commits {sha[:9]} lacks, so it cannot fast-forward to the release: bring them into {manifest.STAGE_BRANCH} first, or release with --no-merge and merge by hand")
+    return sha
+
+
+def fast_forward_live(sha: str) -> str | None:
+    """Pushes the release's commit to origin's main, a fast-forward only
+    (git refuses anything else); None when it went, else why not."""
+    done = git("push", "origin", f"{sha}:refs/heads/{manifest.LIVE_BRANCH}")
+    return None if done.returncode == 0 else (done.stderr.strip() or "git push failed")
+
+
 def release_exists(tag: str) -> bool:
     done = manifest.run_gh(["release", "view", tag, "--repo", manifest.PUBLIC_REPO, "--json", "tagName"])
     if done.returncode == 0:
@@ -287,7 +335,8 @@ def main() -> int:
     parser.add_argument("installers", nargs="+", type=Path, help="the built installers: a .dmg, a .exe, optionally a .msi and a Linux .AppImage")
     parser.add_argument("--tag", help="the release tag (default v<Cargo.toml version>)")
     parser.add_argument("--title", help="the release title (default Heeler <version as shown>)")
-    parser.add_argument("--target", default=manifest.LIVE_BRANCH, help=f"the public repo branch the tag is cut on (default {manifest.LIVE_BRANCH})")
+    parser.add_argument("--target", help="the commit or branch the tag is cut on (default: the commit this checkout is at, which must be clean and on origin/dev)")
+    parser.add_argument("--no-merge", action="store_true", help=f"leave {manifest.LIVE_BRANCH} where it is; by default it is fast-forwarded to the release's commit once the release is up, which makes it live")
     parser.add_argument("--pre-release", action="store_true", help="mark the release a pre-release: not Latest")
     parser.add_argument("--one-platform", action="store_true", help="allow a release with only one of the .dmg and .exe")
     parser.add_argument("--out", type=Path, help="also keep a copy of the release body here")
@@ -325,6 +374,11 @@ def main() -> int:
     if tag_exists(tag):
         sys.exit(f"the tag {tag} already exists on {manifest.PUBLIC_REPO} without a release; a number is never reused")
 
+    # Pinned before anything is published: a release that could not then
+    # move main stops here, not after the installers are up.
+    merge = not args.pre_release and not args.no_merge
+    target = args.target or release_commit(merge)
+
     mismatch = platforms_match(doc, names, tag)
     if mismatch:
         sys.exit(f"latest.json does not match the installers given: {mismatch}; write it with --platforms to match, or give the installers it names")
@@ -334,7 +388,7 @@ def main() -> int:
     state = "pre-release" if args.pre_release else "release"
     print(text)
     print(doc_body, end="")
-    print(f"# {tag} ({state}) \"{title}\" on {manifest.PUBLIC_REPO}, tagged on {args.target}:", file=sys.stderr)
+    print(f"# {tag} ({state}) \"{title}\" on {manifest.PUBLIC_REPO}, tagged on {target}:", file=sys.stderr)
     for ext, path in given.items():
         print(f"#   {names[ext]}  <- {path}  ({path.stat().st_size / 1e6:.1f} MB)", file=sys.stderr)
     print(f"#   latest.json ({', '.join(sorted(doc['platforms']))}), models.json <- {MODELS.relative_to(REPO_ROOT)}", file=sys.stderr)
@@ -346,6 +400,8 @@ def main() -> int:
     if args.out:
         args.out.write_text(text, encoding="utf-8")
         print(f"# wrote {args.out}", file=sys.stderr)
+    if merge:
+        print(f"# then {manifest.LIVE_BRANCH} fast-forwards to {target[:9]}, which makes {shown} live", file=sys.stderr)
     if args.dry_run:
         print("# dry run: nothing published", file=sys.stderr)
         return 0
@@ -363,7 +419,7 @@ def main() -> int:
         uploads += help_kit.build(stage, version).values()
         notes_path = stage / "body.md"
         notes_path.write_text(text, encoding="utf-8")
-        flags = ["--title", title, "--notes-file", str(notes_path), "--target", args.target]
+        flags = ["--title", title, "--notes-file", str(notes_path), "--target", target]
         flags += ["--prerelease"] if args.pre_release else ["--latest"]
         url = manifest.gh("release", "create", tag, *map(str, uploads), *flags).strip()
     print(f"# published {url or tag}", file=sys.stderr)
@@ -384,8 +440,17 @@ def main() -> int:
     if args.pre_release:
         print(f"# a pre-release: the redirect skips it; keep this latest.json off {manifest.LIVE_BRANCH}, which serves the current release", file=sys.stderr)
         return 0
-    print(f"# next: merge {manifest.STAGE_BRANCH} into {manifest.LIVE_BRANCH} to make {shown} live for the app and the website: {manifest.COMPARE_URL}", file=sys.stderr)
-    print("#       then python scripts/latest_json.py --check, and Help > Check for Updates in the previous version", file=sys.stderr)
+    if not merge:
+        print(f"# next: merge {manifest.STAGE_BRANCH} into {manifest.LIVE_BRANCH} to make {shown} live for the app and the website: {manifest.COMPARE_URL}", file=sys.stderr)
+        print("#       then python scripts/latest_json.py --check, and Help > Check for Updates in the previous version", file=sys.stderr)
+        return 0
+    why = fast_forward_live(target)
+    if why:
+        print(f"# the release is up, but {manifest.LIVE_BRANCH} did not move: {why}", file=sys.stderr)
+        print(f"#   fast-forward it by hand to make {shown} live: git push origin {target}:refs/heads/{manifest.LIVE_BRANCH}", file=sys.stderr)
+        return 1
+    print(f"# {manifest.LIVE_BRANCH} is at {target[:9]}: {shown} is live for the app and the website (raw can lag by five minutes)", file=sys.stderr)
+    print("#   check with python scripts/latest_json.py --check, and Help > Check for Updates in the previous version", file=sys.stderr)
     return 0
 
 
