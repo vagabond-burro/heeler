@@ -297,7 +297,12 @@ fn layers_follow_either_spelling_of_a_tiff() {
         let dest = dir.path().join(name);
         let w = export(&dest, format, vec![layer("mask", mask(0.4), false, "alpha", None, None)], false, false);
         assert!(!w.log.iter().any(|m| m.contains("needs TIFF")), "{name}: {:?}", w.log);
-        let ext = dest.extension().unwrap().to_string_lossy().into_owned();
+        // The sibling takes the extension lowercased, as
+        // siblings_follow_the_destinations_extension_and_never_overwrite
+        // pins: b.TIFF gives b.mask.tiff. Read here in the main file's own
+        // spelling, it passed only on a case-insensitive file system and
+        // failed on Linux.
+        let ext = dest.extension().unwrap().to_string_lossy().to_ascii_lowercase();
         let stem = dest.file_stem().unwrap().to_string_lossy().into_owned();
         close(&tiff(&dir.path().join(format!("{stem}.mask.{ext}"))).values, &grey8(heeler_io::linear_to_srgb(0.4)), name);
     }
