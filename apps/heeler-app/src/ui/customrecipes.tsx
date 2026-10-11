@@ -60,6 +60,12 @@ const ICON_BUTTON: React.CSSProperties = {
  * that cannot be read is grayed with its reason, and keeps Remove. */
 export function CustomRecipeItems({ recipes, dispatch, add, testPrefix }: { recipes: NodeRecipe[]; dispatch: D; add: (r: NodeRecipe) => void; testPrefix: string }) {
   const [naming, setNaming] = useState<{ id: string; name: string } | null>(null);
+  // Rename done or canceled, the focus goes back to that row's Rename
+  // rather than to nowhere (the field it was in is gone).
+  const finish = (id: string) => {
+    setNaming(null);
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-testid="${testPrefix}-rename-${CSS.escape(id)}"]`)?.focus({ preventScroll: true }));
+  };
   return (
     <>
       <div data-hint="Add recipe files (.heelerrecipe) to your recipes; a file that cannot be read says why">
@@ -92,9 +98,9 @@ export function CustomRecipeItems({ recipes, dispatch, add, testPrefix }: { reci
                   e.stopPropagation();
                   if (e.key === "Enter") {
                     if (naming!.name.trim()) dispatch({ type: "rename_recipe", id: r.id, name: naming!.name.trim() });
-                    setNaming(null);
+                    finish(r.id);
                   }
-                  if (e.key === "Escape") setNaming(null);
+                  if (e.key === "Escape") finish(r.id);
                 }}
                 onBlur={() => setNaming(null)}
                 style={{ flex: 1, minWidth: 0, background: "var(--bg-app)", border: "none", color: "var(--text-hi)", font: "inherit", padding: "4px 6px", outline: "none" }}

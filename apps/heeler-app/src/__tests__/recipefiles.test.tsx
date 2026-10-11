@@ -483,3 +483,40 @@ describe("the palette's Recipes", () => {
     expect(sent).toContainEqual({ type: "remove_recipe", id: broken.id });
   });
 });
+
+describe("reading the folder while an edit is written", () => {
+  const entry = (name: string) => ({ path: `/r/Personal/${name}.heelerrecipe`, category: "Personal", file: name, parsed: { doc: { ...(guideExample as unknown as ParsedRecipeFile).doc, name }, lines: {} }, error: null });
+
+  it("an older read that lands after a rename does not put the old name back", async () => {
+    // The 2026-10-10 review: a menu opened before a rename started a
+    // read; the rename finished and listed the new name; the old read
+    // landed last and listed the old one again.
+    let release: () => void = () => {};
+    m.recipeList.mockImplementationOnce(() => new Promise((ok) => (release = () => ok([entry("Soft")]))));
+    const sent: Command[] = [];
+    const slow = refreshRecipeFiles((c) => sent.push(c));
+    m.recipeList.mockResolvedValue([entry("Softer")]);
+    m.recipeRename.mockResolvedValue(undefined as never);
+    await runRecipeOps([{ kind: "rename", recipe: recipeFromEntry(entry("Soft")), name: "Softer" }], (c) => sent.push(c));
+    release();
+    await slow;
+    const lists = sent.filter((c) => c.type === "set_user_recipes");
+    const last = lists[lists.length - 1];
+    expect(last && last.type === "set_user_recipes" && last.recipes.map((r) => r.name)).toEqual(["Softer"]);
+  });
+
+  it("a read that lands while an edit is still being written leaves the list alone", async () => {
+    let write: () => void = () => {};
+    m.recipeRename.mockImplementationOnce(() => new Promise((ok) => (write = () => ok(undefined as never))));
+    m.recipeList.mockResolvedValue([entry("Soft")]);
+    const sent: Command[] = [];
+    const editing = runRecipeOps([{ kind: "rename", recipe: recipeFromEntry(entry("Soft")), name: "Softer" }], (c) => sent.push(c));
+    await refreshRecipeFiles((c) => sent.push(c));
+    expect(sent.some((c) => c.type === "set_user_recipes")).toBe(false);
+    m.recipeList.mockResolvedValue([entry("Softer")]);
+    write();
+    await editing;
+    const last = sent.filter((c) => c.type === "set_user_recipes").pop();
+    expect(last && last.type === "set_user_recipes" && last.recipes.map((r) => r.name)).toEqual(["Softer"]);
+  });
+});

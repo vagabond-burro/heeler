@@ -501,9 +501,21 @@ type D = (cmd: Command) => void;
  * takes one away. */
 let unsaved: NodeRecipe[] = [];
 
+/** Which read of the folder is the newest, and how many edits are being
+ * written. A read lands only if nothing newer started and no edit is in
+ * flight: the Node menu, the palette and the Add menu each read the folder
+ * when they open, and a read begun before a rename that landed after it
+ * put the old name back (the 2026-10-10 review). An edit bumps the
+ * generation as it starts, so every read already under way is stale, and
+ * its own read afterwards is the one that lands. */
+let readGeneration = 0;
+let editsInFlight = 0;
+
 /** The list again, from the folder, after a file changed. */
 async function reload(dispatch: D): Promise<void> {
+  const mine = ++readGeneration;
   const files = await loadRecipeFiles();
+  if (mine !== readGeneration || editsInFlight > 0) return;
   if (files) dispatch({ type: "set_user_recipes", recipes: [...files, ...stillInCatalog, ...unsaved] });
 }
 
@@ -517,7 +529,19 @@ const say = (dispatch: D, text: string) => dispatch({ type: "set_notice", text }
  * reducer has already changed the list on screen; the folder follows
  * and the list is read back. */
 export async function runRecipeOps(ops: RecipeOp[], dispatch: D): Promise<void> {
+  if (!ops.length) return;
   let touched = false;
+  readGeneration++;
+  editsInFlight++;
+  try {
+    await runRecipeOpsWriting(ops, dispatch, () => (touched = true));
+  } finally {
+    editsInFlight--;
+  }
+  if (touched) await reload(dispatch);
+}
+
+async function runRecipeOpsWriting(ops: RecipeOp[], dispatch: D, touch: () => void): Promise<void> {
   // A save that fails stays in the list as unsaved, grayed with the
   // reason, and is said in plain words; only a written file is "Saved".
   const notSaved = (recipe: NodeRecipe, why: string) => {
@@ -544,22 +568,21 @@ export async function runRecipeOps(ops: RecipeOp[], dispatch: D): Promise<void> 
           notSaved(op.recipe, e instanceof Error ? e.message : String(e));
           continue;
         }
-        touched = true;
+        touch();
         say(dispatch, `Saved recipe "${op.recipe.name}": it is in the node palette under Recipes`);
       } else if (op.recipe.path) {
         if (op.kind === "rename") await recipeRename(op.recipe.path, op.name);
         else await recipeTrash(op.recipe.path);
-        touched = true;
+        touch();
       } else if (op.kind === "remove" && unsaved.some((r) => r.id === op.recipe.id)) {
         // An unsaved one has no file: removing it forgets it.
         unsaved = unsaved.filter((r) => r.id !== op.recipe.id);
-        touched = true;
+        touch();
       }
     } catch (e) {
       say(dispatch, `${op.recipe.name}: ${String(e)}`);
     }
   }
-  if (touched) await reload(dispatch);
 }
 
 /** The palette's Import: pick files, copy the readable ones in, say

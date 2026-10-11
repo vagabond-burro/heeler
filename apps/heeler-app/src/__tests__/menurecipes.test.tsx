@@ -6,7 +6,7 @@
 // opens, as the palette and the Add menu do, or it listed none of the
 // person's until one of those had opened.
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("../recipefiles", async (actual) => ({
   ...(await actual<typeof import("../recipefiles")>()),
@@ -104,6 +104,28 @@ describe("Node > Recipes in the menubar", () => {
     expect(screen.queryByTestId("menu-node-export-user:Mine/Broken")).toBeNull();
     expect(screen.queryByTestId("menu-node-rename-user:Mine/Broken")).toBeNull();
     expect(screen.getByTestId("menu-node-remove-user:Mine/Broken")).toBeTruthy();
+  });
+});
+
+describe("renaming in the menu", () => {
+  it("keeps the draft through the menu's navigation keys, and hands the focus back to the row", async () => {
+    // The 2026-10-10 review: Down, Up, Home and End moved the focus to a
+    // row and the draft was lost; Escape left the focus nowhere.
+    render(<MenuBar state={withRecipes([own("user:Mine/Soft", "Soft look")])} dispatch={() => {}} />);
+    fireEvent.click(screen.getByTestId("menu-node"));
+    fireEvent.mouseEnter(screen.getByTestId("menu-node-recipes").parentElement!);
+    fireEvent.mouseEnter(screen.getByTestId("menu-node-recipes-custom").parentElement!);
+    fireEvent.click(screen.getByTestId("menu-node-rename-user:Mine/Soft"));
+    const input = screen.getByTestId("menu-node-name-input") as HTMLInputElement;
+    input.focus();
+    fireEvent.change(input, { target: { value: "Unsaved draft" } });
+    for (const key of ["ArrowDown", "ArrowUp", "Home", "End"]) {
+      fireEvent.keyDown(input, { key });
+      expect(document.activeElement, key).toBe(input);
+      expect(input.value, key).toBe("Unsaved draft");
+    }
+    fireEvent.keyDown(input, { key: "Escape" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId("menu-node-rename-user:Mine/Soft")));
   });
 });
 

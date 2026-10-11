@@ -58,13 +58,19 @@ describe("Ungroup", () => {
     expect(out.nodes.find((n) => n.id === "lv")).toMatchObject({ x: 900, y: 120 });
   });
 
-  it("a bypassed group comes apart bypassed, still passing the picture through", () => {
+  it("a bypassed group is not taken apart: no setting of its members passes what it passes", () => {
+    // The review's case: a two-input group whose exit takes its second
+    // picture from inside. Bypassed, the group passes its first input;
+    // its members bypassed one by one would pass the exit's own first
+    // input, another picture. So Ungroup asks for the group on first.
     let g = grouped();
     const id = groupId(g);
     g = run(g, { type: "set_enabled", id, enabled: false });
-    const out = run(g, { type: "ungroup_node", id });
-    expect(out.nodes.filter((n) => ["soft", "lv"].includes(n.id)).every((n) => n.enabled === false)).toBe(true);
-    expect(keys(out.wires)).toEqual(keys(chain().wires));
+    expect(ungroupBlocked(g, id)).toMatch(/bypassed; switch it on/);
+    expect(run(g, { type: "ungroup_node", id })).toBe(g);
+    expect(runCommand("graph.ungroup", g, () => {})).toBe(false);
+    const on = run(g, { type: "set_enabled", id, enabled: true });
+    expect(run(on, { type: "ungroup_node", id }).nodes.some((n) => n.isGroup)).toBe(false);
   });
 
   it("is one undo step", () => {

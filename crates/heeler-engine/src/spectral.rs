@@ -565,29 +565,52 @@ mod reference_factors {
     /// how many times the exposure each filter asks for.
     const FACTORS: [(&str, &[(&str, f32)]); 1] = [("trix", &[("w8", 2.0), ("w11", 4.0), ("w15", 2.5), ("w25", 8.0), ("w47", 6.0), ("w58", 6.0)])];
 
-    /// A stock's sensitivity behind the filters reproduces its reference's
-    /// filter factors within half a stop, the published factors' own
-    /// rounding. One scale shared by every filter is fitted out first: a
-    /// real filter passes less than all of its band, and the conversion
-    /// keeps a neutral's value whatever the pair, so only how the factors
-    /// stand to one another reaches the picture.
+    /// Each filter's offset from the published factor, in stops, after
+    /// the shared scale is fitted out (`offsets`).
+    fn offsets(key: &str, published: &[(&str, f32)]) -> Vec<f32> {
+        let film = sensitivity(key).unwrap();
+        let open: f32 = (0..D65.len()).map(|i| D65[i] * film.response(lambda(i))).sum();
+        let stops: Vec<f32> = published
+            .iter()
+            .map(|(f, factor)| {
+                let f = filter(f).unwrap();
+                let through: f32 = (0..D65.len()).map(|i| D65[i] * f.transmission(lambda(i)) * film.response(lambda(i))).sum();
+                (open / through / factor).log2()
+            })
+            .collect();
+        let shared = stops.iter().sum::<f32>() / stops.len() as f32;
+        stops.iter().map(|s| s - shared).collect()
+    }
+
+    /// A coarse check against published figures: a stock's sensitivity
+    /// behind the filters reproduces its reference's filter factors within
+    /// half a stop, a tolerance chosen for factors published in thirds and
+    /// halves of a stop. One scale shared by every filter is fitted out
+    /// first: a real filter passes less than all of its band, and the
+    /// conversion keeps a neutral's value whatever the pair, so only how
+    /// the factors stand to one another reaches the picture. Coarse by
+    /// design: a flat response passes it (worst 0.48 stop, the 2026-10-10
+    /// review), so the model's own shape is held by the next test.
     #[test]
     fn a_stock_reproduces_its_references_filter_factors() {
         for (key, published) in FACTORS {
-            let film = sensitivity(key).unwrap();
-            let open: f32 = (0..D65.len()).map(|i| D65[i] * film.response(lambda(i))).sum();
-            let stops: Vec<f32> = published
-                .iter()
-                .map(|(f, factor)| {
-                    let f = filter(f).unwrap();
-                    let through: f32 = (0..D65.len()).map(|i| D65[i] * f.transmission(lambda(i)) * film.response(lambda(i))).sum();
-                    (open / through / factor).log2()
-                })
-                .collect();
-            let shared = stops.iter().sum::<f32>() / stops.len() as f32;
-            for ((f, factor), s) in published.iter().zip(&stops) {
-                assert!((s - shared).abs() < 0.5, "{key} behind {f}: {:+.2} stops from the published x{factor}", s - shared);
+            for ((f, factor), s) in published.iter().zip(offsets(key, published)) {
+                assert!(s.abs() < 0.5, "{key} behind {f}: {s:+.2} stops from the published x{factor}");
             }
+        }
+    }
+
+    /// The model's shape held tightly: the same offsets as modeled when
+    /// the coarse check was added, within 0.03 stop. A change to the
+    /// stock's response or to a filter's transmission moves them (a flat
+    /// response fails it, which the coarse check let through); a
+    /// deliberate one updates these numbers with the reason.
+    #[test]
+    fn the_stocks_filter_offsets_hold_as_modeled() {
+        const AS_MODELED: [f32; 6] = [0.3903, -0.2281, 0.3175, -0.0962, -0.2818, -0.1016];
+        let (key, published) = FACTORS[0];
+        for (((f, _), got), want) in published.iter().zip(offsets(key, published)).zip(AS_MODELED) {
+            assert!((got - want).abs() < 0.03, "{key} behind {f}: {got:+.4} stops, modeled {want:+.4}");
         }
     }
 }

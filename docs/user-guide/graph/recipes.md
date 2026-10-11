@@ -82,7 +82,7 @@ The recipe is saved as a file in your recipes folder (see **Recipe files** below
 
 A recipe is a copy of the group as it was when you saved it. Changing a dropped group later does not change the recipe, and saving again makes a second recipe.
 
-Groups that belong to Develop (Sharpening, Skin Softening) and the Finish stack are not offered: their controls live in Develop and Finish. A group holding brush strokes or selections is not saved either: those belong to a photograph. Neither is a group with another group inside it, since a recipe holds one level of nodes; the status line says which node stopped it. The status line says **Saved** only once the file is written. A recipe whose file could not be written (one of the groups above, or a recipes folder Heeler cannot write to) stays in the palette grayed, with **Not saved** and the reason under its name, until you **Remove** it.
+Groups that belong to Develop (Sharpening, Skin Softening) and the Finish stack are not offered: their controls live in Develop and Finish. A group holding brush strokes or selections is not saved either: those belong to a photograph. Neither is a group with another group inside it, since a recipe holds one level of nodes; the status line says which node stopped it. The status line says **Saved** only once the file is written. A group like those above is not saved at all: **Save as Recipe…** is grayed with the reason, and it is never listed. Only a recipe whose file could not be written (a recipes folder Heeler cannot write to, say) stays in the palette grayed, with **Not saved** and the reason under its name, until you **Remove** it.
 
 ## Recipe files
 

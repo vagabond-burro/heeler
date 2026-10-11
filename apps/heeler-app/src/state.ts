@@ -13549,6 +13549,11 @@ export function ungroupBlocked(s: Pick<State, "nodes">, id: string): string | nu
   if (!g.groupNodes?.length) return "this group is empty";
   if (g.tool) return `${g.name} is a layer tool's group, kept in step with its section; edit it there`;
   if (g.id === ART_ID || g.id.startsWith("art_")) return "the Finish stack's groups belong to their layers; ungroup layers in Finish";
+  // A bypassed group passes its first picture straight through, and no
+  // setting of its members does the same: a member bypassed on its own
+  // passes ITS first picture, which for a two-input group's exit can be
+  // the other input (the 2026-10-10 review rendered the change).
+  if (!g.enabled) return "the group is bypassed; switch it on, then ungroup it";
   return null;
 }
 
@@ -21260,11 +21265,9 @@ function reduceInner(s: State, cmd: Command): State {
       const minY = Math.min(...g.groupNodes!.map((n) => n.y));
       const dx = g.x - minX;
       const dy = g.y - minY;
-      // A bypassed group passes its picture through; the engine's expand
-      // drops its insides for that, which Ungroup must not, so its members
-      // come out bypassed instead and the chain still passes through.
-      const members = g.groupNodes!.map((n) => ({ ...n, x: n.x + dx, y: n.y + dy, ...(g.enabled ? {} : { enabled: false }) }));
-      const open = s.nodes.map((n) => (n.id === g.id ? { ...g, enabled: true, groupNodes: members } : n));
+      // ungroupBlocked refuses a bypassed group, so the group is on here.
+      const members = g.groupNodes!.map((n) => ({ ...n, x: n.x + dx, y: n.y + dy }));
+      const open = s.nodes.map((n) => (n.id === g.id ? { ...g, groupNodes: members } : n));
       // The engine's own expand, of this group alone: the boundary wires go
       // back to the members they came from, as the render already reads them.
       const flat = flattenOnce(open, s.wires, g.id);

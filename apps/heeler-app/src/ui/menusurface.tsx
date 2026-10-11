@@ -87,6 +87,11 @@ export const MenuSurface = forwardRef<
     buttons().find(b => !b.disabled)?.focus({ preventScroll: true });
     const key = (event: KeyboardEvent) => {
       if ((event.target as HTMLElement).closest('[role="menu"]') !== root) return;
+      // Keys typed into a field in the menu are the field's: a recipe's
+      // Rename field lost its draft to Down, Up, Home and End, which moved
+      // the focus to a row (the 2026-10-10 review).
+      const target = event.target as HTMLElement;
+      if (target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT") return;
       const items = buttons().filter(b => !b.disabled);
       const at = items.indexOf(document.activeElement as HTMLButtonElement);
       let next: number | null = null;

@@ -404,12 +404,19 @@ photograph"; Amount stays as the fade. Nothing in Color changes.
   stock is now fitted to it and a test holds it (2026-10-10):
   - the development target: the reference's contrast index for normal
     development, 0.56 for the 400-speed cubic-grain stock, read on the
-    model's own curve the way the figure is defined (from 0.1 above
-    base fog across 2.0 in log exposure; `Stock::contrast_index`,
-    `DEVELOPMENT_TARGETS`). Its straight-line gamma went from 0.60 to
-    0.651: measured as a contrast index, 0.60 with that long toe was
-    0.52, a little flat. Its toe's foot moved a tenth later so its deep
-    shadows stay softer than the T-grain stock's.
+    model's own curve by the common horizontal approximation (from 0.1
+    above base fog across 2.0 in log exposure; `Stock::contrast_index`,
+    `DEVELOPMENT_TARGETS`). The original definition is a construction
+    with two concentric arcs (radii 0.2 and 2.2) about a point on the
+    base-fog line, which on the fitted curve reads about 0.015 lower
+    (0.545); the reference does not say which it used, so the fit is
+    good to about 0.02, not to the test's 0.005. Its straight-line gamma
+    went from 0.60 to 0.651: by the same measure, 0.60 with that long
+    toe was 0.52, a little flat. Its middle gray renders about a fifth
+    of a stop darker for it (0.187 to 0.162 display-linear). Its toe's
+    foot moved a tenth later so its deep shadows stay softer than the
+    T-grain stock's; that keeps the toe test, and the reference's curves,
+    once read off, will say whether it is right.
 
   The invariant "each film fit hits its datasheet points within 0.05
   density" is still not written: the references give their curves as
@@ -448,12 +455,16 @@ photograph"; Amount stays as the fade. Nothing in Color changes.
   check against published figures holds already (2026-10-10): behind
   the 8, 11, 15, 25, 47 and 58, the 400-speed cubic-grain stock's model
   reproduces its reference's daylight filter factors within half a
-  stop, the factors' own rounding, once one scale shared by every
-  filter is fitted out (a real filter passes less than all of its band,
-  and the conversion keeps a neutral's value, so only how the factors
-  stand to one another reaches the picture). It does so as modeled, at
-  0.39 stop worst: refitting the sensitivity to six rounded factors
-  would have fitted their rounding (`a_stock_reproduces_its_references_filter_factors`).
+  stop, a tolerance chosen for factors published in thirds and halves
+  of a stop, once one scale shared by every filter is fitted out (a
+  real filter passes less than all of its band, and the conversion
+  keeps a neutral's value, so only how the factors stand to one
+  another reaches the picture). It does so as modeled, at 0.39 stop
+  worst, and is left as modeled: six rounded factors cannot pin four
+  parameters (`a_stock_reproduces_its_references_filter_factors`).
+  That check is coarse (a flat response passes it), so a second test
+  holds the model's own offsets within 0.03 stop
+  (`the_stocks_filter_offsets_hold_as_modeled`).
 
 ## One component, two hosts (2026-09-14)
 

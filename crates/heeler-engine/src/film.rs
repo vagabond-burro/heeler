@@ -91,7 +91,12 @@ pub const STOCKS: [Stock; 7] = [
         gamma_per_n: 0.20,
         // A tenth later than the first guess, so the steeper fitted line
         // keeps this cubic-grain stock's deep shadows softer than the
-        // T-grain stock's (the toe test); speed and middle gray hold.
+        // T-grain stock's (the toe test). The move itself barely shifts
+        // middle gray; the fitted gamma does: middle gray renders darker
+        // than before the fit (0.187 to 0.162 display-linear, about a fifth
+        // of a stop), and the 0.1 density point sits about a fifth of a
+        // stop later. Kept by the toe test, not by the reference's curves,
+        // which are not read off yet.
         toe_foot: -1.40,
         toe_soft: 0.30,
         speed_per_n: 0.12,
@@ -147,7 +152,9 @@ pub const STOCKS: [Stock; 7] = [
 
 /// The contrast index a stock's published reference aims normal
 /// development at, where the reference gives one. The stock's gamma is
-/// fitted so its own contrast_index matches.
+/// fitted so its own contrast_index, the horizontal approximation,
+/// matches; see contrast_index for how far that can differ from the
+/// arc construction.
 pub const DEVELOPMENT_TARGETS: [(&str, f32); 1] = [("trix", 0.56)];
 
 pub fn stock(key: &str) -> Option<&'static Stock> {
@@ -178,11 +185,17 @@ impl Stock {
         -SOFT * ((-line / SOFT).exp() + (-self.range / SOFT).exp()).ln()
     }
 
-    /// The contrast index at development `n`: the average slope across
-    /// the part of the curve a print uses, from the point 0.1 above base
-    /// fog to the point 2.0 further along in log exposure. It is the
-    /// figure published development targets are given in, and it sits
-    /// below the straight line's gamma by as much as the toe is long.
+    /// The contrast index at development `n`, by the common horizontal
+    /// approximation: the average slope from the point 0.1 above base fog
+    /// to the point 2.0 further along in log exposure. Published
+    /// development targets are given as a contrast index, and the
+    /// original definition is a construction with two concentric arcs
+    /// (radii 0.2 and 2.2) about a point on the base-fog line; on the
+    /// fitted stock's curve that construction reads about 0.015 lower
+    /// than this (0.545 against 0.560, the 2026-10-10 review), and the
+    /// reference does not say which it used. So the fit is to the target
+    /// by this approximation, good to about 0.02. Either way the index
+    /// sits below the straight line's gamma by as much as the toe is long.
     pub fn contrast_index(&self, n: f32) -> f32 {
         // The first log exposure where density reaches 0.1, by bisection
         // (density rises monotonically).
