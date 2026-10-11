@@ -395,7 +395,10 @@ describe("the recipes folder", () => {
     save.mockReset();
   });
 
-  it("a group a recipe file cannot hold stays listed as unsaved with the reason", async () => {
+  it("a group a recipe file cannot hold leaves the list, and the reason is said", async () => {
+    // It used to stay listed, grayed as unsaved (2026-10-10: "it listed an
+    // unsaved group in the recipe menu?"); only a file that could not be
+    // written stays, to be tried again.
     let s: State = { ...initialState(), activeImage: "x", openedGroup: null, undoStack: [], redoStack: [] };
     const g = handGroup();
     const painted = { ...g, groupNodes: g.groupNodes!.map((n, i) => (i === 0 ? { ...n, strokes: [{ points: [[0, 0]] }] as unknown as NodeCard["strokes"] } : n)) };
@@ -406,10 +409,8 @@ describe("the recipes folder", () => {
     await runRecipeOps(s.recipeOps, (c) => sent.push(c));
     expect(save).not.toHaveBeenCalled();
     s = run(s, ...sent);
-    expect(s.userRecipes.find((r) => r.id === "user_painted")?.error).toMatch(/^Not saved: .*brush strokes/);
-    expect(sent.some((c) => c.type === "set_notice" && /^Recipe "Painted" was not saved: /.test(c.text ?? ""))).toBe(true);
-    s = run(s, { type: "remove_recipe", id: "user_painted" });
-    await runRecipeOps(s.recipeOps.slice(-1), () => {});
+    expect(s.userRecipes.some((r) => r.id === "user_painted")).toBe(false);
+    expect(sent.some((c) => c.type === "set_notice" && /^Recipe "Painted" was not saved: .*brush strokes/.test(c.text ?? ""))).toBe(true);
   });
 });
 
@@ -447,12 +448,15 @@ describe("the palette's Recipes", () => {
     expect(read && read.type === "set_user_recipes" && read.recipes.map((r) => r.name)).toEqual(["New"]);
     fireEvent.click(screen.getByTestId("menu-add"));
     fireEvent.click(screen.getByTestId("menu-add-recipes"));
+    // The person's own are under Custom (2026-10-10), after the shipped ones.
+    fireEvent.click(screen.getByTestId("menu-add-recipes-custom"));
     const list = screen.getByTestId("menu-add-recipes-list");
     const shown = [...list.querySelectorAll<HTMLButtonElement>("[data-testid^='menu-add-recipe-']")];
     expect(shown.map((b) => b.dataset.testid)).toEqual(paletteRecipes("", state.userRecipes).map((r) => `menu-add-recipe-${r.id}`));
     const bad = screen.getByTestId(`menu-add-recipe-${broken.id}`) as HTMLButtonElement;
     expect(bad.disabled).toBe(true);
-    expect(bad.dataset.hint).toBe(broken.error);
+    // Under Custom the reason is the row's hint, beside its Remove icon.
+    expect(screen.getByTestId(`menu-add-row-${broken.id}`).dataset.hint).toBe(broken.error);
     fireEvent.click(bad);
     expect(sent.some((c) => c.type === "add_recipe")).toBe(false);
     fireEvent.click(screen.getByTestId(`menu-add-recipe-${good.id}`));

@@ -531,7 +531,11 @@ export async function runRecipeOps(ops: RecipeOp[], dispatch: D): Promise<void> 
       if (op.kind === "save") {
         const made = docFromRecipe({ ...op.recipe, category: op.recipe.category ?? "Personal" });
         if ("error" in made) {
-          notSaved(op.recipe, made.error);
+          // Not a recipe at all (two outputs, say): nothing to try again,
+          // so it leaves the list rather than standing in it grayed
+          // (2026-10-10: "it listed an unsaved group in the recipe menu?").
+          dispatch({ type: "recipe_refused", id: op.recipe.id });
+          say(dispatch, `Recipe "${op.recipe.name}" was not saved: ${made.error}`);
           continue;
         }
         try {

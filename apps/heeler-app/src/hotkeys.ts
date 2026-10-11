@@ -58,6 +58,7 @@ export const COMMANDS: CommandSpec[] = [
   { id: "edit.delete", label: "Delete Selected Nodes", group: "Edit", scope: "graph", binding: "Delete" },
   { id: "edit.deleteKeep", label: "Delete Nodes (invert reconnect)", group: "Edit", scope: "graph", binding: "Shift+Delete" },
   { id: "graph.group", label: "Group Selection", group: "Edit", scope: "graph", binding: "Ctrl+G" },
+  { id: "graph.ungroup", label: "Ungroup", group: "Edit", scope: "graph", binding: "Ctrl+Shift+G" },
   { id: "edit.duplicate", label: "Duplicate Selected Nodes", group: "Edit", scope: "graph", binding: "Ctrl+D" },
 
   // Layers. Brush, not Paint: the mask type underneath has always been

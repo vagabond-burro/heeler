@@ -13,6 +13,12 @@ import { BUILTIN_RECIPES, searchRecipes, type NodeRecipe } from "../noderecipes"
 import { useDialogFocus } from "./dialogfocus";
 import { addRecipeAt } from "./addnode";
 import { exportRecipeFile, importRecipeFiles, refreshRecipeFiles } from "../recipefiles";
+import { ExportIcon, ImportIcon, RenameIcon } from "./customrecipes";
+import { TrashIcon } from "./takeicons";
+
+/** The recipe actions as icons, the menus' Recipes > Custom's (2026-10-10:
+ * "make sure the icons are used here as well"); the word is the tip. */
+const RECIPE_ICON: React.CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", width: 26, height: 22, padding: 0 };
 import { scrollItemIntoList } from "./hooks";
 
 type D = React.Dispatch<Command>;
@@ -241,11 +247,13 @@ export function NodePalette({
                 className="chip"
                 tabIndex={-1}
                 data-testid="palette-recipe-import"
+                aria-label="Import recipe files"
+                data-tip="Import…"
                 data-hint="Add recipe files (.heelerrecipe) to your recipes; a file that cannot be read says why"
                 onClick={() => void importRecipeFiles(dispatch)}
-                style={{ fontSize: 11 }}
+                style={RECIPE_ICON}
               >
-                Import…
+                <ImportIcon />
               </button>
             </div>
           )}
@@ -305,11 +313,13 @@ export function NodePalette({
                     className="chip"
                     tabIndex={-1}
                     data-testid={`palette-recipe-export-${r.id}`}
+                    aria-label={`Export ${r.name}`}
+                    data-tip="Export…"
                     data-hint="Save this recipe as a .heelerrecipe file to share or edit by hand"
                     onClick={() => void exportRecipeFile(r, dispatch)}
-                    style={{ fontSize: 11 }}
+                    style={RECIPE_ICON}
                   >
-                    Export…
+                    <ExportIcon />
                   </button>
                 )}
                 {/* A person's own recipes can be renamed and taken off
@@ -322,22 +332,26 @@ export function NodePalette({
                         className="chip"
                         tabIndex={-1}
                         data-testid={`palette-recipe-rename-${r.id}`}
+                        aria-label={`Rename ${r.name}`}
+                        data-tip="Rename"
                         data-hint="Give this recipe a new name"
                         onClick={() => setNaming({ id: r.id, name: r.name })}
-                        style={{ fontSize: 11 }}
+                        style={RECIPE_ICON}
                       >
-                        Rename
+                        <RenameIcon />
                       </button>
                     )}
                     <button
                       className="chip"
                       tabIndex={-1}
                       data-testid={`palette-recipe-remove-${r.id}`}
+                      aria-label={`Remove ${r.name}`}
+                      data-tip="Remove"
                       data-hint="Take this recipe off the list (its file moves to the recipes folder's .trash); groups already dropped stay in their graphs"
                       onClick={() => dispatch({ type: "remove_recipe", id: r.id })}
-                      style={{ fontSize: 11 }}
+                      style={RECIPE_ICON}
                     >
-                      Remove
+                      <TrashIcon size={14} />
                     </button>
                   </>
                 )}

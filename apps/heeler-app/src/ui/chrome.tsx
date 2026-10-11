@@ -53,6 +53,8 @@ import { centerMainWindow, toggleFullscreen } from "../windowops";
 import { menuTree } from "../nodes";
 import { addNodeAt, addRecipeAt } from "./addnode";
 import { paletteRecipes } from "./nodepalette";
+import { refreshRecipeFiles } from "../recipefiles";
+import { CustomRecipeItems } from "./customrecipes";
 import { polishEnabled } from "../features";
 import { flashStatus } from "./hints";
 import { isMac, isMacControlClick, modLabel } from "../platform";
@@ -841,6 +843,14 @@ function FixedMenu({ children }: { children: React.ReactNode }) {
 export function MenuBar({ state, dispatch }: { state: State; dispatch: D }) {
   const [open, setOpen] = useState<string | null>(null);
   const close = () => setOpen(null);
+  // The Node menu's Recipes > Custom lists the recipes folder as it is
+  // now, the read the palette and the graph's Add menu make when they
+  // open: without it the menu showed none until one of those had
+  // (2026-10-10: "Custom Node Recipes are not in the Node menu").
+  useEffect(() => {
+    if (open === "node") void refreshRecipeFiles(dispatch).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   // The recent catalogs, read when the File menu opens (2026-09-08: "a
   // Recent Catalogs in the file menu"). Read again on every open: a drive
   // plugged in since the last look changes availability. Keep the previous
@@ -2242,18 +2252,32 @@ export function MenuBar({ state, dispatch }: { state: State; dispatch: D }) {
                 key="recipes"
                 label="Recipes"
                 testid="menu-node-recipes"
-                hint="Add a node recipe, a saved group of nodes, to the graph: the ones Heeler ships and the ones you saved."
+                hint="Add a node recipe, a saved group of nodes, to the graph: the ones Heeler ships, and your own under Custom."
+                scroll={false}
               >
-                {paletteRecipes("", state.userRecipes).map((r) =>
-                  item(
-                    r.name,
-                    () => addRecipeAt(state, dispatch, r),
-                    `menu-node-recipe-${r.id}`,
-                    !!r.error,
-                    undefined,
-                    r.error ?? r.blurb,
-                  ),
-                )}
+                {paletteRecipes("", state.userRecipes)
+                  .filter((r) => r.builtin)
+                  .map((r) =>
+                    item(r.name, () => addRecipeAt(state, dispatch, r), `menu-node-recipe-${r.id}`, !!r.error, undefined, r.error ?? r.blurb),
+                  )}
+                <div className="sep" />
+                {/* The person's own, under Custom (2026-10-10: "They should
+                    be under Recipes > Custom sub menu"). */}
+                <SubMenu
+                  label="Custom"
+                  testid="menu-node-recipes-custom"
+                  hint="Your own recipes: groups you kept with Save as Recipe, from the recipes folder."
+                >
+                  <CustomRecipeItems
+                    recipes={paletteRecipes("", state.userRecipes).filter((r) => !r.builtin)}
+                    dispatch={dispatch}
+                    add={(r) => {
+                      addRecipeAt(state, dispatch, r);
+                      close();
+                    }}
+                    testPrefix="menu-node"
+                  />
+                </SubMenu>
               </SubMenu>,
             ],
           },

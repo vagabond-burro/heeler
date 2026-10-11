@@ -128,7 +128,7 @@ Rename is available from a Finish layer row's right-click menu because it edits 
 
 - **Find a Node…** opens the searchable node palette.
 - Category submenus (Source, Color, Detail, Masking, Utility) open sections, such as **Utility > Channels** or **Detail > Noise**, and each section adds operations from the node catalog, alphabetically. The graph's right-click **Add** menu lists the same. A list too long for the window scrolls, by the mouse wheel or the arrow keys. The available categories and nodes reflect the current build. See the [node reference](graph/nodes/README.md).
-- **Recipes** adds a node recipe, a group of nodes saved under a name: the ones Heeler ships and the ones you saved yourself, the same list as the graph's right-click **Add > Recipes** and the node palette. A recipe file Heeler cannot read is listed grayed, with the reason in its hint. See [Recipes](graph/recipes.md).
+- **Recipes** adds a node recipe, a group of nodes saved under a name: the ones Heeler ships, and the ones you saved yourself under **Recipes > Custom**, the same as the graph's right-click **Add > Recipes**. It reads your recipes folder each time the Node menu opens. A recipe file Heeler cannot read is listed grayed, with the reason in its hint. See [Recipes](graph/recipes.md).
 
 For operations on existing nodes, use the graph context menu. See [Graph canvas](graph/canvas.md).
 

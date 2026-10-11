@@ -7,7 +7,7 @@
 // stay in step.
 
 import type { Command, SelectRegion, State } from "./state";
-import { ART_ID, DEFAULT_PREFS, artMaskNode, DOC_SEL_ID, SELECT_METHODS, TEXTURED_TIPS, activeSelectionMask, selectShapeTarget, shapeActsOnNothing, shapeToolOf, photoFlipBlocked, photoTurnBlocked, artFindLayer, artToolbarVisible, bakeable, editOrigin, layerPixelRegions, layerViaCopySource, reduce, clampGrainStep, removalPending, selectionHasContent, taggingTargets, anyPickerArmed } from "./state";
+import { ART_ID, DEFAULT_PREFS, artMaskNode, DOC_SEL_ID, SELECT_METHODS, TEXTURED_TIPS, activeSelectionMask, selectShapeTarget, shapeActsOnNothing, shapeToolOf, photoFlipBlocked, photoTurnBlocked, ungroupBlocked, artFindLayer, artToolbarVisible, bakeable, editOrigin, layerPixelRegions, layerViaCopySource, reduce, clampGrainStep, removalPending, selectionHasContent, taggingTargets, anyPickerArmed } from "./state";
 import { activeFillLayer } from "./ui/filltool";
 import { activeSmartMask } from "./ui/smarttool";
 import { openPolish } from "./polishdoor";
@@ -259,6 +259,11 @@ export function runCommand(
       // Two or more, because a group of one is the node it came from.
       if (state.selection.length < 2) return false;
       dispatch({ type: "open_group_dialog", open: true });
+      return true;
+
+    case "graph.ungroup":
+      if (state.selection.length !== 1 || ungroupBlocked(state, state.selection[0])) return false;
+      dispatch({ type: "ungroup_node", id: state.selection[0] });
       return true;
 
     case "layer.range":

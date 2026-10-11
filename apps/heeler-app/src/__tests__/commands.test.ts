@@ -30,6 +30,9 @@ describe("every command does something", () => {
       if (c.id === "edit.delete" || c.id === "edit.deleteKeep" || c.id === "edit.duplicate")
         s = reduce(s, { type: "select_nodes", ids: ["cbal"] });
       if (c.id === "graph.group") s = reduce(s, { type: "select_nodes", ids: ["cbal", "curves"] });
+      // Ungroup needs a group selected: grouping leaves the new one selected.
+      if (c.id === "graph.ungroup")
+        s = reduce(reduce(s, { type: "select_nodes", ids: ["cbal", "curves"] }), { type: "group_selection", name: "Pair", note: "" });
       if (c.id === "tool.cancel" || c.id === "tool.apply")
         s = reduce(s, { type: "set_tool", tool: "crop" });
       // D and N act on the graph selection, so they need one.

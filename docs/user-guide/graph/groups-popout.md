@@ -4,7 +4,7 @@ Groups make a graph region reusable; backdrops organize without changing process
 
 ## Groups
 
-Select two or more nodes and choose **Save selection as group…**. Enter a name and description. The group becomes one card with internal image and mask connections preserved.
+Select two or more nodes and choose **Save selection as group…**. The name starts as the selected nodes' names, left to right (such as "Blur + Levels"); type over it, and add a description if you like. The group becomes one card with internal image and mask connections preserved.
 
 Double-click a group to open it. Its internal nodes and wires replace the outer graph until you click the leave-group control. Published parameters remain available from the outer Inspector, while the full controls remain inside.
 
@@ -13,6 +13,8 @@ To keep a group for other graphs, right-click it and choose **Save as Recipe…*
 The Finish layer stack is itself a group. Opening it reveals the compositing nodes created by layers, masks, clipping, and effects: each layer's content, its effects and its blend, and each layer's mask wired to its blend's mask port with a dashed mask wire. Everything Finish makes lives in this group. The photograph the masks read (after the crop, the lens correction and the warps) comes in on the group card's second input, and a Depth mask's depth map on its depth input; inside, each mask takes them from there. To shape a layer's mask in the graph, drag a **Morphology** or a **Guided Filter (Mask)** onto the mask's wire inside the group: it renders at Fit, 1:1 and in the export, and the layer's mask buttons, brush and eye keep working on the mask behind it. **Remove layer mask** leaves such a node in the group but unwires it from the layer.
 
 Press `Cmd`+`G` (`Ctrl`+`G` on Windows) to open the same dialog for the current selection.
+
+To take a group apart, right-click it and choose **Ungroup**, or press `Cmd`+`Shift`+`G` (`Ctrl`+`Shift`+`G` on Windows). Its nodes come back into the graph where the group card stands, wired as they were inside, and stay selected; a bypassed group's nodes come back bypassed. Ungroup is one undo step. A layer tool's group (Sharpening, Skin Softening) and the Finish stack's groups do not come apart this way: the tool's section and the Finish layers keep them.
 
 For reusable groups with published controls, see [Node recipes](recipes.md#making-your-own).
 

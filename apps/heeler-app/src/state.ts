@@ -1770,11 +1770,13 @@ function dedupeWires(wires: Wire[]): Wire[] {
 function flattenOnce(
   nodes: NodeCard[],
   wires: Wire[],
+  /** Only this group (Ungroup); every group when absent (the engine). */
+  only?: string,
 ): { nodes: NodeCard[]; wires: Wire[] } {
-  const groups = nodes.filter((n) => n.isGroup && n.groupNodes?.length);
+  const groups = nodes.filter((n) => n.isGroup && n.groupNodes?.length && (only === undefined || n.id === only));
   if (!groups.length) return { nodes, wires };
 
-  let outNodes = nodes.filter((n) => !n.isGroup || !n.groupNodes?.length);
+  let outNodes = nodes.filter((n) => !groups.includes(n));
   let outWires = [...wires];
 
   for (const group of groups) {
@@ -4802,6 +4804,10 @@ export type Command =
   /** Save as Recipe's file could not be written: the listed recipe is
    * kept, grayed with the reason (its `error`), instead of vanishing. */
   | { type: "recipe_not_saved"; recipe: NodeRecipe }
+  /** A group that cannot be a recipe (two outputs, say): taken off the
+   * list the save put it on. Only a recipe whose file could not be
+   * written stays listed, grayed, to be tried again. */
+  | { type: "recipe_refused"; id: string }
   | { type: "rename_recipe"; id: string; name: string }
   /** Take a user recipe off the list. A list edit: nothing on disk is
    * deleted, the stored list is written again without it. */
@@ -5320,6 +5326,10 @@ export type Command =
   /** Photo > Rotate 90° Right (1), 180° (2) and 90° Left (3): the whole
    * photograph turned with every edit on it. One undo step. */
   | { type: "turn_photo"; quarters: 1 | 2 | 3 }
+  /** Ungroup (2026-10-10: "Missing an option to ungroup a group"): the
+   * group's members back in the graph where the group stands, wired as
+   * the engine wires them. One undo step. */
+  | { type: "ungroup_node"; id: string }
   | { type: "art_add_fx"; id: string; fx: string }
   /** an image layer's own warp on or off the layer (A, 2026-09-30): a
    * Finish warp in the picture's space, first on the layer's effect
@@ -13503,6 +13513,45 @@ export function photoTurnBlocked(s: Pick<State, "activeImage" | "nodes">): strin
   return null;
 }
 
+/** What Save selection as group offers as the name: the selected nodes'
+ * names left to right, three at most and a count of the rest, made unique
+ * among the groups already there; "Group N" when nothing selected has a
+ * name. It started as the mockup's "Cinematic Portrait Grade" for every
+ * group, and Save as Recipe offers the group's name, so every recipe did
+ * too (2026-10-10: "why does the node recipe name when saving always
+ * default to 'Cinematic Portrait Grade'?"). */
+export function defaultGroupName(s: Pick<State, "nodes" | "selection">): string {
+  const picked = s.nodes
+    .filter((n) => s.selection.includes(n.id) && n.name?.trim())
+    .sort((a, b) => a.x - b.x || a.y - b.y)
+    .map((n) => n.name.trim());
+  const taken = new Set(s.nodes.filter((n) => n.isGroup).map((n) => n.name));
+  if (!picked.length) {
+    let k = 1;
+    while (taken.has(`Group ${k}`)) k++;
+    return `Group ${k}`;
+  }
+  const base = picked.length > 3 ? `${picked.slice(0, 3).join(" + ")} + ${picked.length - 3} more` : picked.join(" + ");
+  if (!taken.has(base)) return base;
+  let k = 2;
+  while (taken.has(`${base} ${k}`)) k++;
+  return `${base} ${k}`;
+}
+
+/** Whether Ungroup can take this node apart, or why not, outcome first.
+ * A group of the graph's own (made with Save selection as group, or
+ * dropped from a recipe) comes apart; a layer tool's group (Sharpening,
+ * Skin Softening) is kept in step with its section, and the Finish
+ * stack's groups belong to their layers, so neither does. */
+export function ungroupBlocked(s: Pick<State, "nodes">, id: string): string | null {
+  const g = s.nodes.find((n) => n.id === id);
+  if (!g || !g.isGroup) return "select a group to ungroup it";
+  if (!g.groupNodes?.length) return "this group is empty";
+  if (g.tool) return `${g.name} is a layer tool's group, kept in step with its section; edit it there`;
+  if (g.id === ART_ID || g.id.startsWith("art_")) return "the Finish stack's groups belong to their layers; ungroup layers in Finish";
+  return null;
+}
+
 /** Which ways the photograph is flipped now (the crop node's switches). */
 export function photoFlips(s: Pick<State, "nodes">): { h: boolean; v: boolean } {
   const g = cropGeomOf(s.nodes);
@@ -19814,6 +19863,8 @@ function reduceInner(s: State, cmd: Command): State {
         recipeOps: [...s.recipeOps, { kind: "save", recipe }],
       };
     }
+    case "recipe_refused":
+      return { ...s, userRecipes: s.userRecipes.filter((r) => r.id !== cmd.id) };
     case "recipe_not_saved": {
       const r = cmd.recipe;
       const listed = s.userRecipes.some((x) => x.id === r.id);
@@ -21197,6 +21248,33 @@ function reduceInner(s: State, cmd: Command): State {
         undoStack: [...s.undoStack, snapshot(s, `Group: ${cmd.name}`)].slice(
           -100,
         ),
+        redoStack: [],
+      };
+    }
+    case "ungroup_node": {
+      if (ungroupBlocked(s, cmd.id)) return s;
+      const g = s.nodes.find((n) => n.id === cmd.id)!;
+      // The members come out where the card stands now: they were stored
+      // at the places they had, and the card may have moved since.
+      const minX = Math.min(...g.groupNodes!.map((n) => n.x));
+      const minY = Math.min(...g.groupNodes!.map((n) => n.y));
+      const dx = g.x - minX;
+      const dy = g.y - minY;
+      // A bypassed group passes its picture through; the engine's expand
+      // drops its insides for that, which Ungroup must not, so its members
+      // come out bypassed instead and the chain still passes through.
+      const members = g.groupNodes!.map((n) => ({ ...n, x: n.x + dx, y: n.y + dy, ...(g.enabled ? {} : { enabled: false }) }));
+      const open = s.nodes.map((n) => (n.id === g.id ? { ...g, enabled: true, groupNodes: members } : n));
+      // The engine's own expand, of this group alone: the boundary wires go
+      // back to the members they came from, as the render already reads them.
+      const flat = flattenOnce(open, s.wires, g.id);
+      return {
+        ...s,
+        nodes: flat.nodes,
+        wires: flat.wires,
+        selection: members.map((n) => n.id),
+        openedGroup: s.openedGroup === g.id ? null : s.openedGroup,
+        undoStack: [...s.undoStack, snapshot(s, `Ungroup: ${g.name}`)].slice(-100),
         redoStack: [],
       };
     }

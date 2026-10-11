@@ -7,7 +7,8 @@ A dropped recipe is an ordinary group. Its published controls are in the Inspect
 ## Drop a recipe
 
 - **The node palette.** Press `Shift+Space` (or click the `+` above the color key) and look under **Recipes**, below the nodes. Typing searches recipes too: "subtract" finds Image Arithmetic, "clean plate" finds Difference Key. Click one, or move to it with the arrow keys and press `Enter`.
-- **Right-click the graph.** **Add > Recipes** lists the same recipes.
+- **Right-click the graph.** **Add > Recipes** lists the same recipes: the ones Heeler ships, and your own under **Custom**.
+- **The Node menu.** **Node > Recipes** in the menubar lists them the same way, your own under **Custom**. It reads your recipes folder each time it opens, so a file you added by hand lists without a relaunch.
 
 The group lands where you pointed or right-clicked, or beside that spot when a card is already there. Wire it like any node: drag a picture onto its input (a two-input recipe takes its second picture on the lower input), and drag from its output. Recipes drop into the main graph; while a group is open, leave it first. Dropping a recipe is one undo step.
 
@@ -77,7 +78,7 @@ Unpublishing never changes a value: the nodes inside keep the settings they have
 
 Select the group, right-click, and choose **Save as Recipe…**. Type a name and press `Enter`. The group's description becomes the recipe's line in the palette.
 
-The recipe is saved as a file in your recipes folder (see **Recipe files** below) and lists under **Recipes** with the built-ins, on every photograph and in every catalog. In the palette each of your recipes has **Export…**, **Rename** (which renames its file too) and **Remove**, which moves its file into the folder's `.trash`; nothing is erased, and groups you already dropped stay in their graphs.
+The recipe is saved as a file in your recipes folder (see **Recipe files** below) and lists under **Recipes** with the built-ins in the palette, and under **Recipes > Custom** in the Node menu and the graph's **Add** menu, on every photograph and in every catalog. Each of your recipes carries three icons, in the palette and under **Custom** in the menus: **Export** (a tray with an arrow leaving it), **Rename** (a pencil; it renames the file too) and **Remove** (a bin), which moves its file into the folder's `.trash`; nothing is erased, and groups you already dropped stay in their graphs. Hover an icon for its name. A group that cannot be a recipe (one with two outputs, say) has **Save as Recipe…** grayed, with the reason in its hint.
 
 A recipe is a copy of the group as it was when you saved it. Changing a dropped group later does not change the recipe, and saving again makes a second recipe.
 
@@ -99,8 +100,8 @@ A recipe you save from a group goes in `Personal`; an imported file goes in the 
 
 ### Import and export
 
-- **Import…**, beside the **Recipes** heading in the node palette (`Shift+Space`), adds one or more `.heelerrecipe` files. Each is checked first; a file that cannot be read is not added, and the status line says which and why. An imported file keeps its comments.
-- **Export…** on any recipe, the built-ins included, saves it as a file wherever you choose. Exporting a built-in is a good way to start your own: it is a working example.
+- **Import** (a tray with an arrow coming in), beside the **Recipes** heading in the node palette (`Shift+Space`) and at the top of **Recipes > Custom** in the menus, adds one or more `.heelerrecipe` files. Each is checked first; a file that cannot be read is not added, and the status line says which and why. An imported file keeps its comments.
+- **Export** on any recipe, the built-ins included, saves it as a file wherever you choose. Exporting a built-in is a good way to start your own: it is a working example.
 
 A file in the folder that Heeler cannot read is not hidden: it lists grayed under **Recipes**, with the reason and the line, until you fix it or remove it. The graph's right-click **Add > Recipes** lists the same recipes, read from the folder each time the menu opens, with such a file grayed there too (point at it and the status line gives the reason).
 

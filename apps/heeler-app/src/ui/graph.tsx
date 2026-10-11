@@ -24,7 +24,7 @@ import { panePropsEqual } from "./viewmemo";
 import { SpectrumBar, Spectrums } from "./spectrum";
 import type { Backdrop, Category, Command, NodeCard, State, Wire } from "../state";
 import { FlipPhotoRow } from "./flipphoto";
-import { artMaskView, BACKDROP_COLORS, CAT_COLOR, NODE_H, NODE_W, createsCycle, duplicable, nameMatches, PARAM_OPTIONS, REGISTRY_DEFAULTS, hasParamRange, TYPE_NUM_PARAMS, PARAM_TEXT_DEFAULT, paramRange, publishedValue, publishedChoice, FLAG_PARAMS, ART_KINDS, isLayerEffect, artLayers, warpNodeById, isPlacedLayer, wireLacksPort, curveModeOf, LAYER_WARP, WIRE_GESTURE, exportWrittenName, exportWritesDepth, DEPTH_EXPORT_CONVENTION, DEPTH_MAP_CARD_CONVENTION, depthMapShowsDepth, seatTakes, PARAM_CHOICE_HINTS, maskIsOff, MASK_OFF_GESTURE } from "../state";
+import { artMaskView, BACKDROP_COLORS, CAT_COLOR, NODE_H, NODE_W, createsCycle, duplicable, nameMatches, PARAM_OPTIONS, REGISTRY_DEFAULTS, hasParamRange, TYPE_NUM_PARAMS, PARAM_TEXT_DEFAULT, paramRange, publishedValue, publishedChoice, FLAG_PARAMS, ART_KINDS, isLayerEffect, artLayers, warpNodeById, isPlacedLayer, wireLacksPort, curveModeOf, LAYER_WARP, WIRE_GESTURE, exportWrittenName, exportWritesDepth, DEPTH_EXPORT_CONVENTION, DEPTH_MAP_CARD_CONVENTION, depthMapShowsDepth, seatTakes, PARAM_CHOICE_HINTS, maskIsOff, MASK_OFF_GESTURE, defaultGroupName, ungroupBlocked } from "../state";
 import { GridWarpControls } from "./gridwarp";
 import { ShapeWarpControls } from "./shapewarp";
 import { FinishWarpControls } from "./finishwarp";
@@ -144,8 +144,9 @@ function RecolorInspector({
 }
 import { GroupGlyph } from "./chrome";
 import { addNodeAt, addRecipeAt } from "./addnode";
-import { savableAsRecipe } from "../noderecipes";
-import { refreshRecipeFiles } from "../recipefiles";
+import { savableAsRecipe, type NodeRecipe } from "../noderecipes";
+import { docFromGroup, refreshRecipeFiles } from "../recipefiles";
+import { CustomRecipeItems } from "./customrecipes";
 import { paletteRecipes } from "./nodepalette";
 import { menuTree } from "../nodes";
 import { colorSetOf } from "../colorsets";
@@ -2394,22 +2395,45 @@ window cannot hold it.*/}
                   that cannot be read is listed grayed, as in the palette,
                   its reason on the status line. */}
               <GraphSubMenu label="Recipes" testid="menu-add-recipes">
-                {paletteRecipes("", state.userRecipes).map((r) => (
-                  <button
-                    key={r.id}
-                    data-testid={`menu-add-recipe-${r.id}`}
-                    data-hint={r.error ?? r.blurb}
-                    disabled={!!r.error}
-                    style={r.error ? { opacity: 0.4 } : undefined}
-                    onClick={() => {
-                      if (r.error) return;
-                      addRecipeAt(state, dispatch, r, menu.x, menu.y);
-                      setMenu(null);
-                    }}
-                  >
-                    {r.name}
-                  </button>
-                ))}
+                {(() => {
+                  const recipeButton = (r: NodeRecipe) => (
+                    <button
+                      key={r.id}
+                      data-testid={`menu-add-recipe-${r.id}`}
+                      data-hint={r.error ?? r.blurb}
+                      disabled={!!r.error}
+                      style={r.error ? { opacity: 0.4 } : undefined}
+                      onClick={() => {
+                        if (r.error) return;
+                        addRecipeAt(state, dispatch, r, menu.x, menu.y);
+                        setMenu(null);
+                      }}
+                    >
+                      {r.name}
+                    </button>
+                  );
+                  const listed = paletteRecipes("", state.userRecipes);
+                  const own = listed.filter((r) => !r.builtin);
+                  return (
+                    <>
+                      {listed.filter((r) => r.builtin).map(recipeButton)}
+                      <div className="sep" />
+                      {/* The person's own under Custom, as in the menubar's
+                          Node > Recipes (2026-10-10). */}
+                      <GraphSubMenu label="Custom" testid="menu-add-recipes-custom">
+                        <CustomRecipeItems
+                          recipes={own}
+                          dispatch={dispatch}
+                          add={(r) => {
+                            addRecipeAt(state, dispatch, r, menu.x, menu.y);
+                            setMenu(null);
+                          }}
+                          testPrefix="menu-add"
+                        />
+                      </GraphSubMenu>
+                    </>
+                  );
+                })()}
               </GraphSubMenu>
             </GraphSubMenu>
             <div className="sep" />
@@ -2616,14 +2640,41 @@ read it, because they read whatever is on screen.*/}
               Save selection as group…
             </button>
             {(() => {
+              // Ungroup (2026-10-10): the selected group's members back in
+              // the graph, wired as they render. Grayed with the reason
+              // when the one selected is not a group that comes apart.
+              const id = state.selection.length === 1 ? state.selection[0] : "";
+              const why = id ? ungroupBlocked(state, id) : "select one group to ungroup it";
+              return (
+                <button
+                  data-testid="menu-ungroup"
+                  disabled={!!why}
+                  style={why ? { opacity: 0.4 } : undefined}
+                  data-hint={why ? `Ungroup: ${why}` : "Put the group's nodes back in the graph, wired as they were inside"}
+                  data-hint-cmd="graph.ungroup"
+                  onClick={() => {
+                    if (!why) dispatch({ type: "ungroup_node", id });
+                    setMenu(null);
+                  }}
+                >
+                  Ungroup
+                </button>
+              );
+            })()}
+            {(() => {
               const group = state.selection.length === 1 ? nodeById(state.selection[0]) : undefined;
-              const ok = savableAsRecipe(group);
+              // The file's own check, asked before the name: a group that
+              // cannot be a recipe (two outputs, say) is grayed with the
+              // reason rather than refused after it was named.
+              const made = group && savableAsRecipe(group) ? docFromGroup(group, { name: group.name }) : null;
+              const why = made && "error" in made ? made.error : null;
+              const ok = savableAsRecipe(group) && !why;
               return (
                 <button
                   data-testid="menu-save-recipe"
                   disabled={!ok}
                   style={!ok ? { opacity: 0.4 } : undefined}
-                  data-hint="Keep this group as a recipe: it lists in the node palette, ready to drop into any graph"
+                  data-hint={why ? `Save as Recipe: ${why}` : "Keep this group as a recipe: it lists in the node palette, ready to drop into any graph"}
                   onClick={() => {
                     if (group && ok) {
                       setRenameAt({ x: menu.x, y: menu.y });
@@ -4895,9 +4946,18 @@ Develop shows under the Depth mask: one node, two seats.*/}
 }
 
 export function GroupDialog({ state, dispatch }: { state: State; dispatch: D }) {
-  const [name, setName] = useState("Cinematic Portrait Grade");
+  const [name, setName] = useState("");
   const [note, setNote] = useState("");
   const focus = useDialogFocus(state.groupDialogOpen);
+  // Fresh each time it opens: named for what is selected, no description
+  // left over from the last group (defaultGroupName says why).
+  useEffect(() => {
+    if (!state.groupDialogOpen) return;
+    setName(defaultGroupName(state));
+    setNote("");
+    // Only the opening matters; the selection is fixed while it is up.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.groupDialogOpen]);
   if (!state.groupDialogOpen) return null;
   const count = state.selection.length;
   return (
@@ -4911,7 +4971,7 @@ export function GroupDialog({ state, dispatch }: { state: State; dispatch: D }) 
         <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <div className="kicker" style={{ marginBottom: 6 }}>Name</div>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} aria-label="Group name" />
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} onFocus={(e) => e.currentTarget.select()} aria-label="Group name" data-testid="group-name" />
           </div>
           <div>
             <div className="kicker" style={{ marginBottom: 6 }}>Description</div>
