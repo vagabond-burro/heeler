@@ -51,7 +51,8 @@ import { TOOL_WINDOWS, rememberPopoutOpener, type ToolWindowKind } from "../popo
 import { CHROME_ZOOM_DEFAULT, CHROME_ZOOM_STEPS, applyChromeZoom, chromeZoomFactor, setUiPref, uiPref } from "../uiprefs";
 import { centerMainWindow, toggleFullscreen } from "../windowops";
 import { menuTree } from "../nodes";
-import { addNodeAt } from "./addnode";
+import { addNodeAt, addRecipeAt } from "./addnode";
+import { paletteRecipes } from "./nodepalette";
 import { polishEnabled } from "../features";
 import { flashStatus } from "./hints";
 import { isMac, isMacControlClick, modLabel } from "../platform";
@@ -2231,6 +2232,29 @@ export function MenuBar({ state, dispatch }: { state: State; dispatch: D }) {
                   ))}
                 </SubMenu>
               )),
+              // Node recipes, the shipped ones and the person's own: the
+              // graph's Add menu's Recipes, the same list (paletteRecipes),
+              // so a recipe saved from a group is in both doors (2026-10-10:
+              // "custom node recipes ... are not available from the Nodes
+              // menu"). A recipe file that cannot be read is grayed, its
+              // reason in the hint, as in the palette.
+              <SubMenu
+                key="recipes"
+                label="Recipes"
+                testid="menu-node-recipes"
+                hint="Add a node recipe, a saved group of nodes, to the graph: the ones Heeler ships and the ones you saved."
+              >
+                {paletteRecipes("", state.userRecipes).map((r) =>
+                  item(
+                    r.name,
+                    () => addRecipeAt(state, dispatch, r),
+                    `menu-node-recipe-${r.id}`,
+                    !!r.error,
+                    undefined,
+                    r.error ?? r.blurb,
+                  ),
+                )}
+              </SubMenu>,
             ],
           },
         ]

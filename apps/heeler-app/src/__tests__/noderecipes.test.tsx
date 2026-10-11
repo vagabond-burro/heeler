@@ -44,6 +44,7 @@ import {
 import registryDefaults from "../registry-defaults.json";
 import { NodePalette, paletteRecipes } from "../ui/nodepalette";
 import { NodeEditor } from "../ui/graph";
+import { MenuBar } from "../ui/chrome";
 
 const run = (s: State, ...cmds: Command[]): State => cmds.reduce(reduce, s);
 const recipe = (id: string): NodeRecipe => BUILTIN_RECIPES.find((r) => r.id === id)!;
@@ -288,6 +289,30 @@ describe("user recipes", () => {
     s = run(s, { type: "select_nodes", ids: ["soft", "lv"] }, { type: "group_selection", name: "Soft levels", note: "Softens and lifts" });
     return s;
   }
+
+  it("the menubar's Node menu lists them under Recipes, beside the shipped ones, and adds one", () => {
+    // 2026-10-10: "custom node recipes ... are not available from the
+    // Nodes menu". The graph's Add menu had them; the menubar did not.
+    const s = grouped();
+    const g = s.nodes.find((n) => n.isGroup)!;
+    const saved = run(s, { type: "save_recipe", id: g.id, name: "My soft look", recipeId: "user_test" });
+    const broken = { ...saved.userRecipes[0], id: "user_broken", name: "Broken", error: "line 3: unknown node type heeler.nope" };
+    const state = { ...saved, mode: "advanced" as const, userRecipes: [...saved.userRecipes, broken] };
+    const sent: Command[] = [];
+    render(<MenuBar state={state} dispatch={(c: Command) => sent.push(c)} />);
+    fireEvent.click(screen.getByTestId("menu-node"));
+    fireEvent.mouseEnter(screen.getByTestId("menu-node-recipes").parentElement!);
+    const list = screen.getByTestId("menu-node-recipes-list");
+    const ids = [...list.querySelectorAll<HTMLElement>('[data-testid^="menu-node-recipe-"]')].map((b) => b.dataset.testid!.slice("menu-node-recipe-".length));
+    // The same list as the graph's Add menu and the palette.
+    expect(ids).toEqual(paletteRecipes("", state.userRecipes).map((r) => r.id));
+    expect(ids).toContain("image_arithmetic");
+    expect(screen.getByTestId("menu-node-recipe-user_broken")).toBeDisabled();
+    expect(screen.getByTestId("menu-node-recipe-user_broken").parentElement!.getAttribute("data-hint")).toMatch(/unknown node type/);
+    fireEvent.click(screen.getByTestId("menu-node-recipe-user_test"));
+    const add = sent.find((c) => c.type === "add_recipe");
+    expect(add && add.type === "add_recipe" && add.recipe.id).toBe("user_test");
+  });
 
   it("Save as Recipe round-trips through the stored list and drops a copy", () => {
     const s = grouped();
