@@ -306,6 +306,11 @@ def release_commit(merge: bool) -> str:
     if git("merge-base", "--is-ancestor", sha, f"origin/{manifest.STAGE_BRANCH}").returncode != 0:
         sys.exit(f"{sha[:9]} is not on origin/{manifest.STAGE_BRANCH}: push it first (git push), since the tag is cut on GitHub")
     if merge and git("merge-base", "--is-ancestor", f"origin/{manifest.LIVE_BRANCH}", sha).returncode != 0:
+        # Merge commits left on main by the pull requests of releases
+        # before release.py moved main itself carry no change, and one
+        # merge into dev brings them in (2026-10-10, the first run).
+        if git("diff", "--quiet", f"{sha}...origin/{manifest.LIVE_BRANCH}").returncode == 0:
+            sys.exit(f"origin/{manifest.LIVE_BRANCH} has commits {sha[:9]} lacks, but they change nothing (merges from earlier releases): bring them in with git merge origin/{manifest.LIVE_BRANCH}, then git push, and run this again")
         sys.exit(f"origin/{manifest.LIVE_BRANCH} has commits {sha[:9]} lacks, so it cannot fast-forward to the release: bring them into {manifest.STAGE_BRANCH} first, or release with --no-merge and merge by hand")
     return sha
 

@@ -1012,7 +1012,7 @@ class ReleaseCommit(unittest.TestCase):
     checked before anything is published, and main follows it only once
     the release is up (2026-10-10: "main is behind until I merge")."""
 
-    def fake_git(self, dirty="", on_dev=True, main_behind=True, fetch_ok=True):
+    def fake_git(self, dirty="", on_dev=True, main_behind=True, fetch_ok=True, main_adds=True):
         calls: list[tuple[str, ...]] = []
 
         def git(*args):
@@ -1030,6 +1030,8 @@ class ReleaseCommit(unittest.TestCase):
                 return out(0 if main_behind else 1)
             if args[0] == "push":
                 return out(0)
+            if args[:2] == ("diff", "--quiet"):
+                return out(1 if main_adds else 0)
             raise AssertionError(f"unexpected git {args}")
 
         return git, calls
@@ -1042,7 +1044,8 @@ class ReleaseCommit(unittest.TestCase):
         for kwargs, message in (
             ({"dirty": " M apps/heeler-app/src/state.ts\n"}, "uncommitted changes"),
             ({"on_dev": False}, "is not on origin/dev: push it first"),
-            ({"main_behind": False}, "origin/main has commits abc1234de lacks"),
+            ({"main_behind": False}, "origin/main has commits abc1234de lacks, so it cannot fast-forward"),
+            ({"main_behind": False, "main_adds": False}, "they change nothing .*git merge origin/main, then git push"),
             ({"fetch_ok": False}, "git fetch origin dev"),
         ):
             with self.subTest(**kwargs):
