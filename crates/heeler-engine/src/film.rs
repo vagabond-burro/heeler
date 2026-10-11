@@ -5,7 +5,7 @@
 //! a toe where the emulsion starts to respond, a straight line whose
 //! slope is the gamma, a shoulder where it saturates. Development time
 //! moves the family: longer development is a steeper line and a little
-//! more speed. Ilford and Kodak publish these families for their stocks
+//! more speed. Film makers publish these families for their stocks
 //! at several development times. Here each stock is a parametric fit of
 //! that shape, and Development in N steps (N-2 to N+2) walks the family.
 //!
@@ -23,11 +23,13 @@
 //! HONESTY: the numbers in STOCKS describe the published families'
 //! shapes from general knowledge of them (speed, the gamma a normal
 //! development gives, how long the toe is, how straight the line runs,
-//! how the family fans with time). They are NOT yet fitted to the
-//! sheets' points; that fit, and the test that holds each stock within
-//! 0.05 density of its sheet at every published development, is the
-//! follow-up once the sheets are in hand. Every stock is labeled
-//! "modeled on" for that reason, in the panel as in the docs.
+//! how the family fans with time). Where a stock's published reference
+//! gives a figure, the stock is fitted to it and a test holds it there
+//! (DEVELOPMENT_TARGETS: the contrast index normal development aims
+//! at). The full fit, every stock within 0.05 density of its reference's
+//! curves at every published development, still waits on those curves
+//! being read off; every stock is labeled "modeled on" for that reason,
+//! in the panel as in the docs.
 
 /// One stock's parametric characteristic curve, in relative log
 /// exposure x = log10(E / E_middle_gray).
@@ -83,9 +85,14 @@ pub const STOCKS: [Stock; 7] = [
         key: "trix",
         name: "Tri-X 400",
         modelled_on: "Kodak Tri-X 400, cubic grain: the longest toe and a line that keeps running",
-        gamma: 0.60,
+        // Fitted: the gamma whose contrast index at normal development is
+        // the reference's published target, 0.56 (DEVELOPMENT_TARGETS).
+        gamma: 0.651,
         gamma_per_n: 0.20,
-        toe_foot: -1.50,
+        // A tenth later than the first guess, so the steeper fitted line
+        // keeps this cubic-grain stock's deep shadows softer than the
+        // T-grain stock's (the toe test); speed and middle gray hold.
+        toe_foot: -1.40,
         toe_soft: 0.30,
         speed_per_n: 0.12,
         range: 2.8,
@@ -138,6 +145,11 @@ pub const STOCKS: [Stock; 7] = [
     },
 ];
 
+/// The contrast index a stock's published reference aims normal
+/// development at, where the reference gives one. The stock's gamma is
+/// fitted so its own contrast_index matches.
+pub const DEVELOPMENT_TARGETS: [(&str, f32); 1] = [("trix", 0.56)];
+
 pub fn stock(key: &str) -> Option<&'static Stock> {
     STOCKS.iter().find(|s| s.key == key)
 }
@@ -166,6 +178,23 @@ impl Stock {
         -SOFT * ((-line / SOFT).exp() + (-self.range / SOFT).exp()).ln()
     }
 
+    /// The contrast index at development `n`: the average slope across
+    /// the part of the curve a print uses, from the point 0.1 above base
+    /// fog to the point 2.0 further along in log exposure. It is the
+    /// figure published development targets are given in, and it sits
+    /// below the straight line's gamma by as much as the toe is long.
+    pub fn contrast_index(&self, n: f32) -> f32 {
+        // The first log exposure where density reaches 0.1, by bisection
+        // (density rises monotonically).
+        let (mut lo, mut hi) = (-6.0f32, 3.0f32);
+        for _ in 0..60 {
+            let mid = 0.5 * (lo + hi);
+            if self.density(mid, n, 1.0) < 0.1 { lo = mid } else { hi = mid }
+        }
+        let x1 = 0.5 * (lo + hi);
+        (self.density(x1 + 2.0, n, 1.0) - self.density(x1, n, 1.0)) / 2.0
+    }
+
     /// The display-linear value a scene-linear luminance renders to:
     /// the negative on a grade 2 paper, scene white on paper white.
     pub fn display(&self, scene: f32, n: f32, gamma_scale: f32) -> f32 {
@@ -179,6 +208,20 @@ impl Stock {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A stock fitted to a published development target meets it, read
+    /// the way the target is defined (Stock::contrast_index).
+    #[test]
+    fn a_stock_with_a_published_development_target_meets_it() {
+        for (key, target) in DEVELOPMENT_TARGETS {
+            let ci = stock(key).unwrap().contrast_index(0.0);
+            assert!((ci - target).abs() < 0.005, "{key}: contrast index {ci:.3} against the published {target}");
+        }
+        // The index sits under the straight line's gamma by the toe.
+        for s in STOCKS.iter() {
+            assert!(s.contrast_index(0.0) < s.gamma, "{}", s.key);
+        }
+    }
 
     #[test]
     fn every_stock_is_monotone_at_every_development() {

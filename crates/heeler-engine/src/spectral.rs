@@ -552,3 +552,42 @@ mod tests {
         assert!((c.gray(0.6, 1.0, 0.4) - 2.0 * a).abs() < 1e-5);
     }
 }
+
+#[cfg(test)]
+mod reference_factors {
+    use super::*;
+
+    /// CIE D65, 380 to 700 nm by 10: the daylight published filter
+    /// factors are measured in.
+    const D65: [f32; 33] = [50.0, 54.6, 82.8, 91.5, 93.4, 86.7, 104.9, 117.0, 117.8, 114.9, 115.9, 108.8, 109.4, 107.8, 104.8, 107.7, 104.4, 104.0, 100.0, 96.3, 95.8, 88.7, 90.0, 89.6, 87.7, 83.3, 83.7, 80.0, 80.2, 82.3, 78.3, 69.7, 71.6];
+
+    /// The daylight filter factors a stock's published reference gives:
+    /// how many times the exposure each filter asks for.
+    const FACTORS: [(&str, &[(&str, f32)]); 1] = [("trix", &[("w8", 2.0), ("w11", 4.0), ("w15", 2.5), ("w25", 8.0), ("w47", 6.0), ("w58", 6.0)])];
+
+    /// A stock's sensitivity behind the filters reproduces its reference's
+    /// filter factors within half a stop, the published factors' own
+    /// rounding. One scale shared by every filter is fitted out first: a
+    /// real filter passes less than all of its band, and the conversion
+    /// keeps a neutral's value whatever the pair, so only how the factors
+    /// stand to one another reaches the picture.
+    #[test]
+    fn a_stock_reproduces_its_references_filter_factors() {
+        for (key, published) in FACTORS {
+            let film = sensitivity(key).unwrap();
+            let open: f32 = (0..D65.len()).map(|i| D65[i] * film.response(lambda(i))).sum();
+            let stops: Vec<f32> = published
+                .iter()
+                .map(|(f, factor)| {
+                    let f = filter(f).unwrap();
+                    let through: f32 = (0..D65.len()).map(|i| D65[i] * f.transmission(lambda(i)) * film.response(lambda(i))).sum();
+                    (open / through / factor).log2()
+                })
+                .collect();
+            let shared = stops.iter().sum::<f32>() / stops.len() as f32;
+            for ((f, factor), s) in published.iter().zip(&stops) {
+                assert!((s - shared).abs() < 0.5, "{key} behind {f}: {:+.2} stops from the published x{factor}", s - shared);
+            }
+        }
+    }
+}

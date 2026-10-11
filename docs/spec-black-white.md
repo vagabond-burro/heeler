@@ -120,7 +120,7 @@ highlights land. The digital equivalent is two clicks.
 
 ### 4. Development: characteristic curves from the datasheets
 
-Ilford and Kodak publish density-against-log-exposure curves for
+Film makers publish density-against-log-exposure curves for
 their stocks at several development times each; the first cut is the
 five films of idea 5 (HP5 Plus, FP4 Plus, Tri-X, T-Max 400, Ortho
 Plus), the same list in both places so a film is one choice. A **mono mode of the
@@ -400,15 +400,24 @@ photograph"; Amount stays as the fade. Nothing in Color changes.
 - HONESTY: the five stocks' parameters describe the published
   families' shapes from general knowledge of them (speed, normal
   gamma, toe length, how straight the line runs, how the family fans
-  with time). They are not fitted to the sheets' points, and the
-  invariant test "each film fit hits its datasheet points within
-  0.05 density" is not written, because the points are not in hand.
-  That fit is the first follow-up: the owner supplies the sheets (Ilford and
-  Kodak publish them), the points are digitized, the parameters
-  refitted, the test added. Until then every stock says "modeled
-  on" in the panel and the guide, and the tests hold only the shape:
-  monotone, white to white, a push steeper, a toe that compresses,
-  cubic grain's toe longer than T-grain's.
+  with time). Where a stock's published reference gives a figure, the
+  stock is now fitted to it and a test holds it (2026-10-10):
+  - the development target: the reference's contrast index for normal
+    development, 0.56 for the 400-speed cubic-grain stock, read on the
+    model's own curve the way the figure is defined (from 0.1 above
+    base fog across 2.0 in log exposure; `Stock::contrast_index`,
+    `DEVELOPMENT_TARGETS`). Its straight-line gamma went from 0.60 to
+    0.651: measured as a contrast index, 0.60 with that long toe was
+    0.52, a little flat. Its toe's foot moved a tenth later so its deep
+    shadows stay softer than the T-grain stock's.
+
+  The invariant "each film fit hits its datasheet points within 0.05
+  density" is still not written: the references give their curves as
+  plots, and reading them off is the remaining follow-up. Until then
+  every stock says "modeled on" in the panel and the guide, and the
+  other tests hold the shape: monotone, white to white, a push
+  steeper, a toe that compresses, cubic grain's toe longer than
+  T-grain's.
 
 ## Phase 4 as built (2026-09-14)
 
@@ -435,7 +444,16 @@ photograph"; Amount stays as the fade. Nothing in Color changes.
   from light to dark; linearity.
 - HONESTY: as with the stocks, the basis spectra, the transmissions
   and the sensitivities are smooth models of the published shapes,
-  labeled "modeled on"; digitizing them is the same follow-up.
+  labeled "modeled on"; digitizing them is the same follow-up. One
+  check against published figures holds already (2026-10-10): behind
+  the 8, 11, 15, 25, 47 and 58, the 400-speed cubic-grain stock's model
+  reproduces its reference's daylight filter factors within half a
+  stop, the factors' own rounding, once one scale shared by every
+  filter is fitted out (a real filter passes less than all of its band,
+  and the conversion keeps a neutral's value, so only how the factors
+  stand to one another reaches the picture). It does so as modeled, at
+  0.39 stop worst: refitting the sensitivity to six rounded factors
+  would have fitted their rounding (`a_stock_reproduces_its_references_filter_factors`).
 
 ## One component, two hosts (2026-09-14)
 
