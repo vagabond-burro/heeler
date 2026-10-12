@@ -1,5 +1,16 @@
 # What's new
 
+## 2026.5.2
+
+### New
+
+- **Depth progress wherever you are.** A depth read is mostly started from somewhere other than the Depth Map section: a Fog or Key Light dial, Depth of Field, the View depth eye. A card above the status bar now shows the read's progress and time left wherever you are, without stopping you from editing, and closes when the read is done. Quick reads never show it, and it stays out of the way while the Depth Map section's own bar is on screen. If a read fails, the card shows why until you dismiss it. [Depth Map](user-guide/adjustments/depth-map.md).
+
+### Fixes
+
+- **Fujifilm X-Trans previews match the export.** On some X-Trans files, mostly X-Trans II bodies such as the X100S and X70 with a dark top-left corner, the Fit preview was greener than the 1:1 view and the export, so white balance set at Fit came out magenta. The half-size develop the preview uses now fills in color on the right pixels; every other file previews exactly as before.
+- **The Tone Equalizer's Empty layout is empty.** On a photograph edited before the curve existed, choosing **Empty** flattened the curve but the picture kept the old zone adjustment. The picture now follows the curve. [Tone Equalizer](user-guide/adjustments/tone-equalizer.md).
+
 ## 2026.5.1
 
 ### New
