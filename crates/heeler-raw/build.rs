@@ -203,6 +203,10 @@ fn main() {
     }
     build.file("src/shim.cpp");
     build.compile("raw");
+    // The vendored tree is not read-only any more (HEELER-CHANGES.md):
+    // an edit there has to rebuild, which the rerun lines below alone
+    // never asked for. A directory is scanned whole.
+    println!("cargo:rerun-if-changed={}", root.display());
 
     build_vc5(&target);
 

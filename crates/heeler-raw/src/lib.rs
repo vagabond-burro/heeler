@@ -328,6 +328,14 @@ mod tests {
             .join(format!("../../third_party/LibRaw-{version}"));
         let licence = tree.join("LICENSE.CDDL");
         assert!(licence.is_file(), "no LICENSE.CDDL in {}", tree.display());
+        // A tree with local changes lists them beside the source, and the
+        // page must not call it unmodified.
+        if tree.join("HEELER-CHANGES.md").is_file() {
+            assert!(
+                text.contains("HEELER-CHANGES.md") && !text.contains("unmodified from the upstream"),
+                "the vendored LibRaw carries Heeler changes; the notice must point at HEELER-CHANGES.md"
+            );
+        }
 
         // The license text is IN the app, not merely linked from it.
         // The obligation is to carry it with the software it covers,

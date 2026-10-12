@@ -18,12 +18,15 @@ Copyright © 2008-2024 LibRaw LLC (info@libraw.org).
 
 The CDDL asks that the source for the covered code be available to
 anyone who receives a binary built from it. The exact source Heeler
-compiles, unmodified from the upstream 0.22.2 release, is published at:
+compiles is published at:
 
 > **https://www.heeler.app/source/libraw/**
 
 That archive is the tree this build was made from, not a pointer at
-whatever upstream happens to be today. Its SHA-256 is published beside
+whatever upstream happens to be today. It is the upstream 0.22.2 release
+with one fix by Heeler, to how a half-size preview of a Fujifilm X-Trans
+file fills in color. `HEELER-CHANGES.md` in the archive lists it, and
+the changed code is marked with a `Heeler:` comment. Its SHA-256 is published beside
 it so you can check the two match.
 
 The full license text is in this app, on the [CDDL 1.0](cddl.md) page

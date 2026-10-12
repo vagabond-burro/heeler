@@ -31,6 +31,31 @@ void LibRaw::pre_interpolate()
       width = iwidth;
       if (filters == 9)
       {
+        // Heeler: find the half-size pixel whose 2x2 block is all green
+        // from the CFA layout, not from the pixel values. Upstream takes
+        // the first pixel in the top-left corner whose R and B are both
+        // 0, and in a dark, noisy corner an ordinary pixel can read 0 for
+        // both: the wrong ninth of the image was then filled and the real
+        // all-green ninth kept R = B = 0, which the camera matrix turned
+        // into a green cast over the whole frame. The fill below reads
+        // img[-1], so a column-0 phase starts at column 3, as upstream's
+        // scan would have found it. Without an all-green block (no known
+        // X-Trans layout) upstream's scan stands.
+        int grow = -1, gcol = -1;
+        for (int r = 0; r < 3 && grow < 0; r++)
+          for (int k = 0; k < 3 && grow < 0; k++)
+            if (fcol(2 * r, 2 * k) == 1 && fcol(2 * r, 2 * k + 1) == 1 &&
+                fcol(2 * r + 1, 2 * k) == 1 && fcol(2 * r + 1, 2 * k + 1) == 1)
+            {
+              grow = r;
+              gcol = k ? k : 3;
+            }
+        if (grow >= 0)
+        {
+          row = grow;
+          col = gcol;
+          goto break2;
+        }
         for (row = 0; row < 3; row++)
           for (col = 1; col < 4; col++)
             if (!(image[row * width + col][0] | image[row * width + col][2]))
