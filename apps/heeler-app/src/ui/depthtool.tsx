@@ -56,6 +56,46 @@ export function depthProgressNow(): DepthProgress | null {
   return progress;
 }
 
+// --- the floating sheet's half of the store ---------------------------
+//
+// A read is mostly started from somewhere other than the Depth Map
+// section (a Fog dial, the View eye, Set focus), where the inline bar
+// is not on screen. The sheet shows the same progress there, and the
+// error when a read fails, and stands down while an inline bar is
+// visible so the two never show at once.
+
+let failure: string | null = null;
+let inlineShown = 0;
+
+function publishFailure(next: string | null) {
+  if (failure === next) return;
+  failure = next;
+  progressSubs.forEach((f) => f());
+}
+
+/** The last read's error, until it is dismissed or the next read starts. */
+export function depthFailureNow(): string | null {
+  return failure;
+}
+
+export function dismissDepthFailure(): void {
+  publishFailure(null);
+}
+
+/** How many inline bars are on screen now. */
+export function depthInlineShown(): number {
+  return inlineShown;
+}
+
+function shiftInline(by: number) {
+  inlineShown += by;
+  progressSubs.forEach((f) => f());
+}
+
+/** How long a read runs before the sheet appears: a cache confirm or a
+ * refine-only pass lands well inside it, so neither flashes a sheet. */
+export const DEPTH_SHEET_DELAY_MS = 500;
+
 /** Remembers a finished read for the estimate; exported for tests. */
 export function recordDepthTiming(size: string, ms: number): void {
   recent[size] = recent[size] === undefined ? ms : recent[size] * 0.6 + ms * 0.4;
@@ -208,6 +248,7 @@ export function DepthRunner({ state, dispatch }: { state: State; dispatch: D }) 
         : "Reading and refining the depth map";
     publishBusy(`DEPTH · ${label.toLowerCase()}`);
     const startedAt = Date.now();
+    publishFailure(null);
     publishProgress({ startedAt, estimateMs: depthEstimate(sizeKey), label });
     void depthMap(state)
       .then((answer) => {
@@ -232,6 +273,7 @@ export function DepthRunner({ state, dispatch }: { state: State; dispatch: D }) 
           setNeedModel(true);
         } else {
           done.current[mark] = true; // no retry loop on a broken photo
+          publishFailure(String(err));
           reportToolError("Depth", err);
         }
       })
@@ -242,10 +284,10 @@ export function DepthRunner({ state, dispatch }: { state: State; dispatch: D }) 
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wanted, mark, busy, needModel, state.gesture, fromFile]);
-  if (!wanted) return null;
   return (
     <>
-      {needModel && models && (
+      <DepthProgressSheet />
+      {wanted && needModel && models && (
         <ModelConsentCard
           title="THE DEPTH TOOLS NEED THEIR MODEL"
           model={models.depth}
@@ -277,8 +319,43 @@ export function DepthRunner({ state, dispatch }: { state: State; dispatch: D }) 
  * the longest label beside "first read at this size" is wider than a
  * narrow panel, and a second line while reading is a resize. The
  * label gives way with an ellipsis; the time never does.*/
-export function DepthProgressBar() {
+export function DepthProgressBar({
+  testid = "depth-progress",
+  inline = true,
+  fontSize = 7.65,
+}: {
+  /** prefix for every testid inside, so the sheet's copy keeps its own */
+  testid?: string;
+  /** the Depth Map section's own bar, which stands the sheet down while
+   * it is on screen; the sheet's copy is not */
+  inline?: boolean;
+  fontSize?: number;
+} = {}) {
   const p = React.useSyncExternalStore(subscribeDepthProgress, depthProgressNow, depthProgressNow);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!inline) return;
+    const el = root.current;
+    // Without an IntersectionObserver (the test runner's DOM) a mounted
+    // bar counts as seen.
+    if (!el || typeof IntersectionObserver === "undefined") {
+      shiftInline(1);
+      return () => shiftInline(-1);
+    }
+    let seen = false;
+    const io = new IntersectionObserver((entries) => {
+      const now = entries.some((e) => e.isIntersecting);
+      if (now !== seen) {
+        seen = now;
+        shiftInline(now ? 1 : -1);
+      }
+    });
+    io.observe(el);
+    return () => {
+      io.disconnect();
+      if (seen) shiftInline(-1);
+    };
+  }, [inline]);
   const [now, setNow] = useState(Date.now());
   const [last, setLast] = useState<number | null>(null);
   useEffect(() => {
@@ -295,6 +372,8 @@ export function DepthProgressBar() {
   const fraction = p && p.estimateMs ? Math.min(0.9, elapsed / p.estimateMs) : null;
   const remaining = p && p.estimateMs !== null ? Math.max(0, p.estimateMs - elapsed) : null;
   const left = p ? p.label : "Depth map ready";
+  // 11px at the section's 7.65px caption, in proportion at any size.
+  const line = Math.round((fontSize * 11) / 7.65);
   const right = p
     ? remaining === null
       ? "first read at this size"
@@ -304,7 +383,8 @@ export function DepthProgressBar() {
       : `last read ${seconds(last)}`;
   return (
     <div
-      data-testid="depth-progress"
+      ref={root}
+      data-testid={testid}
       data-state={p ? "busy" : "idle"}
       role="progressbar"
       aria-label={left}
@@ -312,18 +392,18 @@ export function DepthProgressBar() {
       aria-valuemax={100}
       aria-valuenow={fraction === null ? undefined : Math.round(fraction * 100)}
       // 85% of the panel's 9px caption, on a fixed footprint.
-      style={{ margin: "2px 0 6px", fontSize: 7.65, letterSpacing: ".06em", color: "var(--text-dim)", lineHeight: "11px" }}
+      style={{ margin: "2px 0 6px", fontSize, letterSpacing: ".06em", color: "var(--text-dim)", lineHeight: `${line}px` }}
     >
-      <div data-testid="depth-progress-line" style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 3, height: 11, whiteSpace: "nowrap" }}>
+      <div data-testid={`${testid}-line`} style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 3, height: line, whiteSpace: "nowrap" }}>
         <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{left.toUpperCase()}</span>
-        <span className="tnum" data-testid="depth-progress-eta" style={{ flex: "none" }}>
+        <span className="tnum" data-testid={`${testid}-eta`} style={{ flex: "none" }}>
           {right.toUpperCase()}
         </span>
       </div>
       <div style={{ position: "relative", height: 3, background: "var(--line-4)", borderRadius: 2, overflow: "hidden" }}>
         {p && fraction === null && (
           <div
-            data-testid="depth-progress-sweep"
+            data-testid={`${testid}-sweep`}
             style={{
               position: "absolute",
               top: 0,
@@ -337,11 +417,67 @@ export function DepthProgressBar() {
         )}
         {p && fraction !== null && (
           <div
-            data-testid="depth-progress-fill"
+            data-testid={`${testid}-fill`}
             style={{ height: "100%", width: `${fraction * 100}%`, background: "var(--accent)", borderRadius: 2 }}
           />
         )}
       </div>
+    </div>
+  );
+}
+
+/** The depth read's progress wherever the owner is: a card above the
+ * status bar, the inline bar's twin at a readable size, shown once a
+ * read has run past DEPTH_SHEET_DELAY_MS and gone when it lands. It does
+ * not block: editing carries on underneath, and nothing can stop a read
+ * once the desktop has it, so there is no Cancel. A failed read leaves
+ * the card up with the error until it is dismissed. While the Depth Map
+ * section's own bar is on screen the card stands down. */
+export function DepthProgressSheet() {
+  const p = React.useSyncExternalStore(subscribeDepthProgress, depthProgressNow, depthProgressNow);
+  const failed = React.useSyncExternalStore(subscribeDepthProgress, depthFailureNow, depthFailureNow);
+  const inline = React.useSyncExternalStore(subscribeDepthProgress, depthInlineShown, depthInlineShown);
+  const [due, setDue] = useState(false);
+  useEffect(() => {
+    setDue(false);
+    if (!p) return;
+    const t = window.setTimeout(() => setDue(true), Math.max(0, DEPTH_SHEET_DELAY_MS - (Date.now() - p.startedAt)));
+    return () => window.clearTimeout(t);
+  }, [p]);
+  if (inline > 0) return null;
+  const card: React.CSSProperties = {
+    position: "fixed",
+    left: "50%",
+    bottom: 76,
+    transform: "translateX(-50%)",
+    zIndex: 40,
+    width: 420,
+    maxWidth: "calc(100vw - 32px)",
+    boxSizing: "border-box",
+    background: "var(--bg-panel)",
+    border: "1px solid var(--line-4)",
+    padding: "12px 16px 8px",
+    color: "var(--text-body)",
+  };
+  if (failed) {
+    return (
+      <div data-testid="depth-sheet" data-state="failed" role="alert" style={card} onMouseDown={(e) => e.stopPropagation()}>
+        <div style={{ fontSize: 13, letterSpacing: ".08em", marginBottom: 4 }}>DEPTH MAP FAILED</div>
+        <div data-testid="depth-sheet-error" style={{ fontSize: 12, color: "var(--text-faint)", overflowWrap: "anywhere" }}>
+          {failed}
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", margin: "8px 0 4px" }}>
+          <button className="chip" data-testid="depth-sheet-dismiss" onClick={dismissDepthFailure}>
+            DISMISS
+          </button>
+        </div>
+      </div>
+    );
+  }
+  if (!p || !due) return null;
+  return (
+    <div data-testid="depth-sheet" data-state="busy" role="status" style={card} onMouseDown={(e) => e.stopPropagation()}>
+      <DepthProgressBar testid="depth-sheet-progress" inline={false} fontSize={11} />
     </div>
   );
 }

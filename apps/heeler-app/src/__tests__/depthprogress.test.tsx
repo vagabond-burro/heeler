@@ -3,21 +3,24 @@
 // fills over what the last reads at this working size took, this
 // session; the first read at a size runs as a sweep with no estimate.
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import type { DepthMapAnswer } from "../bridge";
 import { reduce, type Command, type State } from "../state";
 import {
+  DEPTH_SHEET_DELAY_MS,
   DepthProgressBar,
   DepthRunner,
   depthEstimate,
+  depthFailureNow,
   depthProgressNow,
   recordDepthTiming,
   resetDepthTimings,
 } from "../ui/depthtool";
 
 const pending: (() => void)[] = [];
+const rejects: ((err: unknown) => void)[] = [];
 // What the desktop's answer says the wait bought: a model run, a
 // refine-only filter pass, or an instant cache confirm.
 let answer: DepthMapAnswer = { version: "feedfacefeedface", work: "model" };
@@ -25,7 +28,13 @@ vi.mock("../bridge", async (importOriginal) => {
   const real = await importOriginal<typeof import("../bridge")>();
   return {
     ...real,
-    depthMap: vi.fn(() => new Promise<DepthMapAnswer>((resolve) => pending.push(() => resolve(answer)))),
+    depthMap: vi.fn(
+      () =>
+        new Promise<DepthMapAnswer>((resolve, reject) => {
+          pending.push(() => resolve(answer));
+          rejects.push(reject);
+        }),
+    ),
     smartModelDownload: vi.fn(async () => {}),
     smartModelStatus: vi.fn(async () => null),
   };
@@ -36,6 +45,7 @@ const wanting = () => run(initialState(), { type: "set_param", id: "fog", param:
 
 beforeEach(() => {
   pending.length = 0;
+  rejects.length = 0;
   answer = { version: "feedfacefeedface", work: "model" };
   resetDepthTimings();
   vi.clearAllMocks();
@@ -148,5 +158,62 @@ describe("the Depth Map's progress bar", () => {
     pending[0]();
     await waitFor(() => expect(depthEstimate("518")).not.toBeNull());
     expect(depthEstimate("1036")).toBeNull();
+  });
+});
+
+// A read is mostly started from outside the Depth Map section (a Fog
+// dial, the View eye, Set focus), where the inline bar is not on
+// screen: the floating sheet carries the same progress there.
+describe("the depth read's floating sheet", () => {
+  const pause = (ms: number) => act(() => new Promise((r) => setTimeout(r, ms)));
+
+  it("appears once a read outlasts the delay, and goes when it lands", async () => {
+    render(<DepthRunner state={wanting()} dispatch={() => {}} />);
+    await waitFor(() => expect(pending.length).toBe(1));
+    expect(screen.queryByTestId("depth-sheet")).toBeNull();
+    await waitFor(() => expect(screen.getByTestId("depth-sheet").getAttribute("data-state")).toBe("busy"), {
+      timeout: DEPTH_SHEET_DELAY_MS * 4,
+    });
+    expect(screen.getByTestId("depth-sheet-progress-eta").textContent).toBe("FIRST READ AT THIS SIZE");
+    // It never stands in for the inline bar's own ids.
+    expect(screen.queryByTestId("depth-progress")).toBeNull();
+    pending[0]();
+    await waitFor(() => expect(screen.queryByTestId("depth-sheet")).toBeNull());
+  });
+
+  it("does not flash for a read that lands inside the delay", async () => {
+    answer = { version: "feedfacefeedface", work: "cached" };
+    render(<DepthRunner state={wanting()} dispatch={() => {}} />);
+    await waitFor(() => expect(pending.length).toBe(1));
+    pending[0]();
+    await waitFor(() => expect(depthProgressNow()).toBeNull());
+    await pause(DEPTH_SHEET_DELAY_MS + 100);
+    expect(screen.queryByTestId("depth-sheet")).toBeNull();
+  });
+
+  it("stands down while the Depth Map section's own bar is on screen", async () => {
+    render(
+      <>
+        <DepthRunner state={wanting()} dispatch={() => {}} />
+        <DepthProgressBar />
+      </>,
+    );
+    await waitFor(() => expect(pending.length).toBe(1));
+    await pause(DEPTH_SHEET_DELAY_MS + 100);
+    expect(screen.getByTestId("depth-progress").getAttribute("data-state")).toBe("busy");
+    expect(screen.queryByTestId("depth-sheet")).toBeNull();
+    pending[0]();
+    await waitFor(() => expect(depthProgressNow()).toBeNull());
+  });
+
+  it("shows a failed read's error until it is dismissed", async () => {
+    render(<DepthRunner state={wanting()} dispatch={() => {}} />);
+    await waitFor(() => expect(rejects.length).toBe(1));
+    rejects[0]("the photograph could not be read");
+    await waitFor(() => expect(screen.getByTestId("depth-sheet").getAttribute("data-state")).toBe("failed"));
+    expect(screen.getByTestId("depth-sheet-error").textContent).toMatch(/could not be read/);
+    fireEvent.click(screen.getByTestId("depth-sheet-dismiss"));
+    expect(screen.queryByTestId("depth-sheet")).toBeNull();
+    expect(depthFailureNow()).toBeNull();
   });
 });
