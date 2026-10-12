@@ -1422,6 +1422,9 @@ function NodeEditorImpl({
   const [pickedWire, setPickedWire] = useState<Wire | null>(null);
   const wireCleanup = useRef<(() => void) | null>(null);
   useEffect(() => () => wireCleanup.current?.(), []);
+  // A node drag's window listeners, released when the editor goes too.
+  const nodeDragCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => nodeDragCleanup.current?.(), []);
 
   /** A wire is tentative until release. Escape, a lost touch, or
    * leaving the window cancels it without changing the graph. */
@@ -1821,7 +1824,14 @@ function NodeEditorImpl({
         setDropWire(hit);
       }
     };
-    const key = (ev: KeyboardEvent) => aim(commandHeld(ev));
+    const key = (ev: KeyboardEvent) => {
+      if (ev.type === "keydown" && ev.key === "Escape") {
+        ev.preventDefault();
+        cancel();
+        return;
+      }
+      aim(commandHeld(ev));
+    };
     const move = (ev: MouseEvent) => {
       // The editor may unmount mid-drag (mode switch); go inert.
       if (!surface.current) return;
@@ -1841,11 +1851,31 @@ function NodeEditorImpl({
       at = { x, y };
       aim(commandHeld(ev));
     };
-    const up = (ev: MouseEvent) => {
+    const release = () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
       window.removeEventListener("keydown", key);
       window.removeEventListener("keyup", key);
+      window.removeEventListener("blur", cancel);
+      if (nodeDragCleanup.current === abandon) nodeDragCleanup.current = null;
+    };
+    // The editor unmounting mid-drag: the listeners go and the gesture
+    // ends, so nothing waiting for the hand to finish waits forever.
+    const abandon = () => {
+      release();
+      dispatch({ type: "end_gesture" });
+    };
+    // Escape, or the window losing focus mid-drag, puts the cards back
+    // where they were picked up and changes no wire, as a wire drag does.
+    function cancel() {
+      release();
+      if (group) dispatch({ type: "move_nodes", moves: starts });
+      else dispatch({ type: "move_node", id: n.id, x: starts[0].x, y: starts[0].y });
+      dispatch({ type: "end_gesture" });
+      setDropWire(null);
+    }
+    const up = (ev: MouseEvent) => {
+      release();
       dispatch({ type: "end_gesture" });
       // The key as the hand lets go is what counts for a wired node.
       if (target && wired && !commandHeld(ev)) target = null;
@@ -1862,10 +1892,13 @@ function NodeEditorImpl({
       }
       setDropWire(null);
     };
+    nodeDragCleanup.current?.();
+    nodeDragCleanup.current = abandon;
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
     window.addEventListener("keydown", key);
     window.addEventListener("keyup", key);
+    window.addEventListener("blur", cancel);
   };
 
   const onMove = (e: React.MouseEvent) => {

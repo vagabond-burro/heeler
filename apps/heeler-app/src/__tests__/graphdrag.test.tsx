@@ -4,7 +4,7 @@
 // small distance then it a hard stop. Same when I tried dragging the
 // image source left." And: "If I marquee select a bunch of nodes I
 // can't drag as a group. Only the node I drag on moves."
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { NEUTRAL_NODES, NEUTRAL_WIRES, initialState } from "../data";
@@ -502,4 +502,65 @@ describe("dragging a node over an image pipe", () => {
     fireEvent.mouseUp(window);
     expect(spliced(box.s)).toBe(true);
   });
+});
+
+// The 2026.5.2 review: a node drag's window listeners outlived an
+// unmounted editor, and Escape or a lost window did nothing.
+describe("ending a node drag any way it can end", () => {
+  afterEach(() => {
+    setMacForTests(null);
+    vi.restoreAllMocks();
+  });
+
+  it("the editor going away mid-drag removes every listener the drag added", () => {
+    const add = vi.spyOn(window, "addEventListener");
+    const remove = vi.spyOn(window, "removeEventListener");
+    const sent: Command[] = [];
+    const view = render(<NodeEditor state={fresh()} dispatch={(c: Command) => sent.push(c)} />);
+    const first = fresh().nodes.find((n) => n.id !== "src" && n.id !== "output")!;
+    fireEvent.mouseDown(screen.getByTestId(`node-${first.id}`), { clientX: first.x + 8, clientY: first.y + 8 });
+    expect(sent.some((c) => c.type === "begin_gesture")).toBe(true);
+    const added = add.mock.calls.filter(([k]) => ["mousemove", "mouseup", "keydown", "keyup", "blur"].includes(k as string));
+    expect(added.length).toBeGreaterThanOrEqual(5);
+    view.unmount();
+    for (const [k, h] of added) {
+      expect(remove.mock.calls.some(([a, b]) => a === k && b === h), `${String(k)} left on the window`).toBe(true);
+    }
+    // And the gesture it began is ended.
+    expect(sent[sent.length - 1]).toEqual({ type: "end_gesture" });
+  });
+
+  const Y = 900;
+  const scene = (): State => {
+    let s = fresh();
+    for (const [id, x, y] of [["p", 100, Y], ["q", 700, Y], ["m", 100, Y + 400]] as const) {
+      s = run(s, { type: "add_node", node: makeNode(specFor("heeler.exposure")!, id, x, y) });
+    }
+    return run(s, { type: "connect", wire: { from: "p", to: "q", toPort: "in", kind: "image" } });
+  };
+  const carry = (s: State) => {
+    const m = s.nodes.find((k) => k.id === "m")!;
+    fireEvent.mouseDown(screen.getByTestId("node-m"), { clientX: m.x + 8, clientY: m.y + 8 });
+    fireEvent.mouseMove(window, { clientX: (100 + NODE_W + 700) / 2 - NODE_W / 2 + 8, clientY: Y + 8 });
+  };
+
+  for (const [how, end] of [
+    ["Escape", () => fireEvent.keyDown(window, { key: "Escape" })],
+    ["the window losing focus", () => fireEvent.blur(window)],
+  ] as const) {
+    it(`${how} puts the card back where it was picked up and rewires nothing`, () => {
+      const box = harness(scene());
+      const at = { ...box.s.nodes.find((k) => k.id === "m")! };
+      carry(box.s);
+      // An unwired card over the pipe is lit, and would splice on a drop.
+      expect(screen.queryByTestId("wire-drop-target")).not.toBeNull();
+      end();
+      expect(screen.queryByTestId("wire-drop-target")).toBeNull();
+      fireEvent.mouseUp(window);
+      const m = box.s.nodes.find((k) => k.id === "m")!;
+      expect({ x: m.x, y: m.y }).toEqual({ x: at.x, y: at.y });
+      expect(box.s.wires.some((w) => w.from === "p" && w.to === "q")).toBe(true);
+      expect(box.s.wires.some((w) => w.from === "m" || w.to === "m")).toBe(false);
+    });
+  }
 });
