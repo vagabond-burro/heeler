@@ -5257,6 +5257,10 @@ mod tests {
                     set_num(&mut node, "amount", 100.0);
                     set_text(&mut node, "filter", "r72");
                     set_text(&mut node, "film", "rolleiir");
+                    // The node's own materials, not the defaults: the
+                    // spectral prior falls back to the defaults by itself,
+                    // so only a moved slider tells the two fallbacks apart.
+                    set_num(&mut node, "ir_foliage", 0.0);
                     vec![("in".to_string(), image(&[leaf, blue, red]))]
                 }
                 ("heeler.black_white", "depth_curve") => {

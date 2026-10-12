@@ -72,6 +72,20 @@ describe("stored curves, as the engine reads them", () => {
     expect(new Set(cases.map((c) => c.param))).toEqual(new Set(["points", "hue_curve", "ir_curve", "depth_curve"]));
   });
 
+  // The cases compare against the param absent, so a fallback wrong in
+  // the same way everywhere would pass them: what each control shows
+  // with nothing stored is pinned here.
+  it("with nothing stored, each control shows its own fallback", () => {
+    expect(shown("hue_curve", null).split(" ")).toHaveLength(bwDefaultPoints().length);
+    const depth = shown("depth_curve", null)
+      .split(" ")
+      .map((p) => p.split(",").map(Number));
+    expect(depth).toHaveLength(2);
+    expect(depth[1][1]).toBeLessThan(depth[0][1]); // the diagonal rises: far reads higher on the plot
+    expect(shown("ir_curve", null)).toBe("");
+    expect(shown("ir_curve", "[{\"x\":0,\"y\":0},{\"x\":359,\"y\":0}]")).toBe("0.45");
+  });
+
   for (const c of cases) {
     it(`${c.node} ${c.param} = ${JSON.stringify(c.stored)} ${c.stands ? "stands" : "falls back"}`, () => {
       const absent = shown(c.param, null);
