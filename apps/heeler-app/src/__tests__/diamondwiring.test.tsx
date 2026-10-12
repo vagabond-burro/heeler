@@ -31,8 +31,12 @@ import { NODE_CATALOG, makeNode, specFor } from "../nodes";
 import { BUILTIN_RECIPES } from "../noderecipes";
 import { Inspector, NodeEditor, drawnSeats, pipeFits, portCenter, sourceSeat, type InSeat } from "../ui/graph";
 import { choose, menuRows, menuValue } from "./menuhelp";
+import { setMacForTests } from "../platform";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  setMacForTests(null);
+});
 
 /** The editor over a live reducer, with the state readable from outside. */
 function harness(start: State) {
@@ -308,10 +312,13 @@ describe("moving a node onto another pipe keeps its side inputs", () => {
     const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     const grip = { x: disp.x + 10, y: disp.y + 10 };
     const to = { x: mid.x - NODE_W / 2 + 10, y: mid.y - 35 + 10 };
+    // The node is wired, so the move splices only with Command held at
+    // the drop (2026-10-12: a plain drag of a connected node just moves it).
+    setMacForTests(true);
     fireEvent.mouseDown(screen.getByTestId("node-disp"), { clientX: grip.x, clientY: grip.y, button: 0, buttons: 1 });
-    fireEvent.mouseMove(window, { clientX: to.x, clientY: to.y, buttons: 1 });
+    fireEvent.mouseMove(window, { clientX: to.x, clientY: to.y, buttons: 1, metaKey: true });
     const before = box.s.undoStack.length;
-    fireEvent.mouseUp(window, { clientX: to.x, clientY: to.y });
+    fireEvent.mouseUp(window, { clientX: to.x, clientY: to.y, metaKey: true });
     const w = box.s.wires;
     expect(w).toContainEqual({ from: "src", to: "disp", toPort: "in", kind: "image" });
     expect(w).toContainEqual(expect.objectContaining({ from: "disp", to: "stdcolor", toPort: "in", kind: "image" }));
@@ -443,12 +450,12 @@ describe("in the app", () => {
     const view = () => door().state().graphView;
     const client = (p: { x: number; y: number }) => ({ x: p.x * view().zoom + view().x, y: p.y * view().zoom + view().y });
     const node = (id: string) => door().state().nodes.find((n) => n.id === id)!;
-    const drag = (testId: string, from: { x: number; y: number }, to: { x: number; y: number }) => {
+    const drag = (testId: string, from: { x: number; y: number }, to: { x: number; y: number }, metaKey = false) => {
       const a = client(from);
       const b = client(to);
       fireEvent.mouseDown(screen.getByTestId(testId), { clientX: a.x, clientY: a.y, button: 0, buttons: 1 });
-      fireEvent.mouseMove(window, { clientX: b.x, clientY: b.y, buttons: 1 });
-      fireEvent.mouseUp(window, { clientX: b.x, clientY: b.y });
+      fireEvent.mouseMove(window, { clientX: b.x, clientY: b.y, buttons: 1, metaKey });
+      fireEvent.mouseUp(window, { clientX: b.x, clientY: b.y, metaKey });
     };
     // The test as given: X and Y wired from Math.out.
     drag("mask-port-m1", portCenter(node("m1"), "maskOut"), portCenter(node("disp"), "mask"));
@@ -460,7 +467,9 @@ describe("in the app", () => {
     const b = portCenter(node(feed.to), feed.toPort);
     const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     const d = node("disp");
-    drag("node-disp", { x: d.x + 10, y: d.y + 10 }, { x: mid.x - NODE_W / 2 + 10, y: mid.y - 35 + 10 });
+    // Wired by now, so Command held at the drop (2026-10-12).
+    setMacForTests(true);
+    drag("node-disp", { x: d.x + 10, y: d.y + 10 }, { x: mid.x - NODE_W / 2 + 10, y: mid.y - 35 + 10 }, true);
     const after = door().state().wires;
     expect(after).toContainEqual(expect.objectContaining({ from: "src", to: "disp", toPort: "in" }));
     expect(after).toContainEqual(expect.objectContaining({ from: "disp", to: feed.to, toPort: feed.toPort }));

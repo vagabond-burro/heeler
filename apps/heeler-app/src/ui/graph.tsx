@@ -2,7 +2,7 @@ import { isLayerAdj, layerAdjOfNode } from "../layerids";
 import { FxSettings } from "./artlayers";
 import { FinishAdjustmentControls } from "./finishadjustments";
 import { isPrimaryPress } from "./pointerguard";
-import { modLabel } from "../platform";
+import { commandHeld, modLabel } from "../platform";
 import { SharpeningRecipeControl } from "./simple";
 import { SmartMaskFace, smartCardNote, useSmartModels } from "./smartnode";
 import { PROFILE_CHOICES, SOURCE_MENU_ROWS, SourceMenuRow } from "./sourcemenus";
@@ -1804,7 +1804,24 @@ function NodeEditorImpl({
     // splices into that (26.3). "If a node has Alpha in and out
     // and is dragged over a Alpha connection it should be able to connect."
     const fieldable = !group && !!fieldSpliceSeats(n);
+    // A node already wired is most often being moved out of the way, so
+    // passing it over a pipe must not rewire it: it splices only with the
+    // command key held at the drop, and the pipe lights only while the
+    // key is down. A node with no wires splices on a plain drop, as ever
+    // (2026-10-12: dragging a connected node "breaks the current connected
+    // and makes a new connection").
+    const wired = state.wires.some((w) => w.from === n.id || w.to === n.id);
     let target: Wire | null = null;
+    let at: { x: number; y: number } | null = null;
+    const aim = (armed: boolean) => {
+      if (!(insertable || fieldable) || extracting || !at) return;
+      const hit = armed || !wired ? wireNear(n.id, at.x + NODE_W / 2, at.y + 35, fieldable) : null;
+      if (hit !== target) {
+        target = hit;
+        setDropWire(hit);
+      }
+    };
+    const key = (ev: KeyboardEvent) => aim(commandHeld(ev));
     const move = (ev: MouseEvent) => {
       // The editor may unmount mid-drag (mode switch); go inert.
       if (!surface.current) return;
@@ -1821,18 +1838,17 @@ function NodeEditorImpl({
       } else {
         dispatch({ type: "move_node", id: n.id, x, y });
       }
-      if ((insertable || fieldable) && !extracting) {
-        const hit = wireNear(n.id, x + NODE_W / 2, y + 35, fieldable);
-        if (hit !== target) {
-          target = hit;
-          setDropWire(hit);
-        }
-      }
+      at = { x, y };
+      aim(commandHeld(ev));
     };
-    const up = () => {
+    const up = (ev: MouseEvent) => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
+      window.removeEventListener("keydown", key);
+      window.removeEventListener("keyup", key);
       dispatch({ type: "end_gesture" });
+      // The key as the hand lets go is what counts for a wired node.
+      if (target && wired && !commandHeld(ev)) target = null;
       if (target) {
         dispatch({
           type: "splice_node_into_wire",
@@ -1848,6 +1864,8 @@ function NodeEditorImpl({
     };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
+    window.addEventListener("keydown", key);
+    window.addEventListener("keyup", key);
   };
 
   const onMove = (e: React.MouseEvent) => {

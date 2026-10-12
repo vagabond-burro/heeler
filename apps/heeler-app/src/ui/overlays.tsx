@@ -14,7 +14,7 @@ import { lineColorCss } from "../gridwarp";
 import { lineColorOver, lineEdgeOver, patchAverage, resolveLineColor, useAutoLineColor } from "./linecolor";
 import { quadCenter } from "../state";
 import { quadFolds, reshapeByHandle, scaleByHandle, snapMove, type Guides, type Handle, type Reshape } from "../imagelayers";
-import { isMac, modLabel } from "../platform";
+import { commandHeld, modLabel } from "../platform";
 import { useDragFollow } from "./dragfollow";
 
 /** The fields of a mouse event a drag reads, from the element or the
@@ -2493,12 +2493,6 @@ export interface LiveQuad {
  * Warp, or Command (Ctrl) on a corner here. */
 export type TransformDrag = "scale" | "skew" | "perspective";
 
-/** The platform's command modifier on a pointer event: Command on a
- * Mac, Ctrl elsewhere (a Mac's Control-click is the secondary click,
- * so it cannot be the key there). */
-export function commandHeld(e: { metaKey: boolean; ctrlKey: boolean }): boolean {
-  return isMac() ? e.metaKey : e.ctrlKey;
-}
 
 /** What a corner or edge drag does with the keys held, the way the layer
  * editors read them (2026-09-30: "support modifier keys on the transform

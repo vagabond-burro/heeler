@@ -18,6 +18,13 @@ export function isMac(): boolean {
   return detectedMac;
 }
 
+/** The platform's command modifier on a pointer or key event: Command
+ * on a Mac, Ctrl elsewhere (a Mac's Control-click is the secondary
+ * click, so it cannot be the key there). */
+export function commandHeld(e: { metaKey: boolean; ctrlKey: boolean }): boolean {
+  return isMac() ? e.metaKey : e.ctrlKey;
+}
+
 /** The platform read once: the OS does not change under a running
  * window, and the navigator getters are not free. Every hint and menu
  * label asks, the whole panel re-renders on each step of a slider

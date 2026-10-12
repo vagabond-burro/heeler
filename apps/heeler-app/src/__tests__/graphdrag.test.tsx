@@ -4,14 +4,15 @@
 // small distance then it a hard stop. Same when I tried dragging the
 // image source left." And: "If I marquee select a bunch of nodes I
 // can't drag as a group. Only the node I drag on moves."
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { NEUTRAL_NODES, NEUTRAL_WIRES, initialState } from "../data";
 import { reduce, migrateNodes, NODE_H, NODE_W, type Command, type State } from "../state";
 import { makeNode, portHint, specFor } from "../nodes";
 import { serializeGraph } from "../bridge";
 import { NodeEditor, inputY } from "../ui/graph";
+import { setMacForTests } from "../platform";
 
 function run(s: State, ...cmds: Command[]): State {
   return cmds.reduce(reduce, s);
@@ -408,5 +409,97 @@ describe("dropping a field node onto a pipe", () => {
     expect(box.s.wires.filter((w) => w.from === "rangemask" || w.to === "rangemask")).toEqual([
       { from: "src", to: "rangemask", toPort: "in", kind: "image" },
     ]);
+  });
+});
+
+// (2026-10-12): "when a node is already connected and you drag it over a
+// connector it breaks the current connected and makes a new connection.
+// this can cause issues for a user who just wants to move a node out of
+// the way." A wired node splices only with the command key held at the
+// drop; a node with no wires still splices on a plain drop.
+describe("dragging a node over an image pipe", () => {
+  afterEach(() => setMacForTests(null));
+  const Y = 900;
+  /** A pipe p -> q across the canvas, and the card m beside a card k. */
+  const scene = (wireM: boolean): State => {
+    let s = fresh();
+    for (const [id, x, y] of [["p", 100, Y], ["q", 700, Y], ["m", 100, Y + 400], ["k", 700, Y + 400]] as const) {
+      s = run(s, { type: "add_node", node: makeNode(specFor("heeler.exposure")!, id, x, y) });
+    }
+    s = run(s, { type: "connect", wire: { from: "p", to: "q", toPort: "in", kind: "image" } });
+    if (wireM) s = run(s, { type: "connect", wire: { from: "m", to: "k", toPort: "in", kind: "image" } });
+    return s;
+  };
+  /** Picks m up and carries its drop probe (center, y + 35) onto the p -> q pipe. */
+  const carryOverPipe = (s: State, keys: { metaKey?: boolean; ctrlKey?: boolean } = {}) => {
+    const m = s.nodes.find((k) => k.id === "m")!;
+    fireEvent.mouseDown(screen.getByTestId("node-m"), { clientX: m.x + 8, clientY: m.y + 8 });
+    const gx = (100 + NODE_W + 700) / 2;
+    fireEvent.mouseMove(window, { clientX: gx - NODE_W / 2 + 8, clientY: Y + 8, ...keys });
+  };
+  const pipeKept = (s: State) => s.wires.some((w) => w.from === "p" && w.to === "q" && w.toPort === "in");
+  const spliced = (s: State) =>
+    s.wires.some((w) => w.from === "p" && w.to === "m") && s.wires.some((w) => w.from === "m" && w.to === "q");
+
+  it("a wired node dropped on it just moves: its wires and the pipe are untouched, and the pipe never lights", () => {
+    setMacForTests(true);
+    const box = harness(scene(true));
+    carryOverPipe(box.s);
+    expect(screen.queryByTestId("wire-drop-target")).toBeNull();
+    fireEvent.mouseUp(window);
+    expect(pipeKept(box.s)).toBe(true);
+    expect(box.s.wires.filter((w) => w.from === "m" || w.to === "m")).toEqual([
+      { from: "m", to: "k", toPort: "in", kind: "image" },
+    ]);
+  });
+
+  it("a wired node splices with Command held at the drop on a Mac, the pipe lit while it is down", () => {
+    setMacForTests(true);
+    const box = harness(scene(true));
+    carryOverPipe(box.s, { metaKey: true });
+    expect(screen.queryByTestId("wire-drop-target")).not.toBeNull();
+    fireEvent.mouseUp(window, { metaKey: true });
+    expect(spliced(box.s)).toBe(true);
+    expect(pipeKept(box.s)).toBe(false);
+    // Its old place healed around it.
+    expect(box.s.wires.some((w) => w.from === "m" && w.to === "k")).toBe(false);
+  });
+
+  it("with Ctrl elsewhere; Ctrl on a Mac is not the key", () => {
+    setMacForTests(false);
+    let box = harness(scene(true));
+    carryOverPipe(box.s, { ctrlKey: true });
+    fireEvent.mouseUp(window, { ctrlKey: true });
+    expect(spliced(box.s)).toBe(true);
+    cleanup();
+    setMacForTests(true);
+    box = harness(scene(true));
+    carryOverPipe(box.s, { ctrlKey: true });
+    fireEvent.mouseUp(window, { ctrlKey: true });
+    expect(pipeKept(box.s)).toBe(true);
+  });
+
+  it("the key pressed or let go mid-drag lights or darkens the pipe without a move, and the key at the drop decides", () => {
+    setMacForTests(true);
+    const box = harness(scene(true));
+    carryOverPipe(box.s);
+    expect(screen.queryByTestId("wire-drop-target")).toBeNull();
+    fireEvent.keyDown(window, { key: "Meta", metaKey: true });
+    expect(screen.queryByTestId("wire-drop-target")).not.toBeNull();
+    fireEvent.keyUp(window, { key: "Meta", metaKey: false });
+    expect(screen.queryByTestId("wire-drop-target")).toBeNull();
+    // Lit, then let go of the key before the button: no splice.
+    fireEvent.keyDown(window, { key: "Meta", metaKey: true });
+    fireEvent.mouseUp(window, { metaKey: false });
+    expect(pipeKept(box.s)).toBe(true);
+  });
+
+  it("a node with no wires still splices on a plain drop", () => {
+    setMacForTests(true);
+    const box = harness(scene(false));
+    carryOverPipe(box.s);
+    expect(screen.queryByTestId("wire-drop-target")).not.toBeNull();
+    fireEvent.mouseUp(window);
+    expect(spliced(box.s)).toBe(true);
   });
 });
