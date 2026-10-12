@@ -1913,12 +1913,16 @@ pub(crate) fn parse_eq_points(json: &str) -> Vec<EqPoint> {
     pts
 }
 
-fn eq_points(node: &Node) -> Vec<EqPoint> {
+/// The stored curve, or None when there is none: the param absent or
+/// "" (its spec default). Present means authoritative even when it parses
+/// to nothing, since the Empty layout writes "[]"; eqcurve.ts
+/// storedEqPoints draws the same line.
+fn eq_points(node: &Node) -> Option<Vec<EqPoint>> {
     node.params
         .get("points")
         .and_then(|v| v.as_str())
+        .filter(|s| !s.trim().is_empty())
         .map(parse_eq_points)
-        .unwrap_or_default()
 }
 
 /// The parametric curve's interpolation face (the editors' 3-button
@@ -2159,14 +2163,20 @@ fn tone_eq(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError
         "ev_m4", "ev_m3", "ev_m2", "ev_m1", "ev_0", "ev_p1", "ev_p2", "ev_p3", "ev_p4",
     ];
     // The widget writes `points`; graphs from before it carry only the
-    // nine zone sliders, which are the same curve with fixed x.
-    let mut pts = eq_points(node);
-    if pts.is_empty() {
-        for (i, name) in ZONES.iter().enumerate() {
-            let y = p(&node.params, name, 0.0).clamp(-2.0, 2.0);
-            pts.push(EqPoint { x: i as f32 - 4.0, y, l: None, r: None });
-        }
-    }
+    // nine zone sliders, which are the same curve with fixed x. An empty
+    // list ("[]", the Empty layout) is a flat curve, not a fallback.
+    let mut pts = eq_points(node).unwrap_or_else(|| {
+        ZONES
+            .iter()
+            .enumerate()
+            .map(|(i, name)| EqPoint {
+                x: i as f32 - 4.0,
+                y: p(&node.params, name, 0.0).clamp(-2.0, 2.0),
+                l: None,
+                r: None,
+            })
+            .collect()
+    });
     for pt in &mut pts {
         pt.y = pt.y.clamp(-2.0, 2.0);
     }
@@ -5193,6 +5203,27 @@ mod tests {
             "shift did not slide the window: gain {}",
             lifted / 0.72
         );
+    }
+
+    #[test]
+    fn an_empty_eq_curve_is_flat_and_the_zones_are_only_the_absent_fallback() {
+        // A pre-widget graph: a zone slider lifted, no points. Then the
+        // Empty layout writes "[]", which must render as the flat line the
+        // widget draws, not fall back to the zone that is still set.
+        let mut img = ImageBuf::new(8, 8);
+        for px in img.data.chunks_mut(4) {
+            px.copy_from_slice(&[0.18, 0.18, 0.18, 1.0]);
+        }
+        let mut node = test_util::make_node("heeler.tone_eq");
+        test_util::set_num(&mut node, "ev_0", 1.0);
+        let legacy = test_util::run_on(&node, img.clone()).unwrap();
+        assert!(legacy.as_image().unwrap().pixel(4, 4)[0] > 0.18 * 1.5, "absent points: zones apply");
+        test_util::set_text(&mut node, "points", "");
+        let blank = test_util::run_on(&node, img.clone()).unwrap();
+        assert!(blank.as_image().unwrap().pixel(4, 4)[0] > 0.18 * 1.5, "\"\" is the default, i.e. absent");
+        test_util::set_text(&mut node, "points", "[]");
+        let empty = test_util::run_on(&node, img.clone()).unwrap();
+        assert_eq!(empty.as_image().unwrap().data, img.data, "\"[]\" must be identity");
     }
 
     #[test]

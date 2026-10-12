@@ -2268,7 +2268,8 @@ impl Registry {
                 num("smoothing", 50.0, 0.0, 100.0),
                 // The parametric face (the owner's EQ redesign): free points with
                 // optional tangents, as JSON. When present it replaces the nine fixed
-                // zones above, which remain the no-points fallback so old graphs render
+                // zones above, even as "[]" (the Empty layout, a flat curve); the zones
+                // remain the fallback only when it is absent or "", so old graphs render
                 // unchanged.
                 text("points", ""),
                 // Slides the photo's tones through the curve's window.

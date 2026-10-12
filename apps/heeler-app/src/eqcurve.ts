@@ -233,12 +233,13 @@ export function legacyZonePoints(params: Record<string, number>): EqPoint[] {
 
 /** A node's EQ curve as its widget shows it: the stored `points` when
  * present, authoritative even when it parses to nothing (the Empty
- * layout writes "[]"); else the nine legacy zone sliders of a graph
+ * layout writes "[]"; "" is the spec default and counts as absent, as
+ * the engine's eq_points has it); else the nine legacy zone sliders of a graph
  * saved before the widget; else the starting layout, every three stops.
  * The widget and Tone Equalizer's on-image picker read it alike, so a pick
  * edits the curve the picture is drawn from. */
 export function storedEqPoints(node: { params: Record<string, number>; textParams?: Record<string, string> }): EqPoint[] {
-  if (node.textParams?.points !== undefined) return parseEqPoints(node.textParams.points);
+  if (node.textParams?.points?.trim()) return parseEqPoints(node.textParams.points);
   const legacy = legacyZonePoints(node.params);
   if (legacy.length) return legacy;
   return EQ_PRESETS.find((p) => p.id === "coarse")!.points.map((p) => ({ ...p }));

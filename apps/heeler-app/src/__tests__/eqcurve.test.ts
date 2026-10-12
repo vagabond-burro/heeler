@@ -20,6 +20,7 @@ import {
   serializeRecolorSurfaces,
   serializeRecolorCurves,
   legacyZonePoints,
+  storedEqPoints,
   parseEqPoints,
   serializeEqPoints,
   type EqPoint,
@@ -77,6 +78,15 @@ describe("the EQ curve", () => {
     expect(evalEq(legacy, 4)).toBeCloseTo(0, 6);
     // All zeroes means "no legacy edit": nothing to convert.
     expect(legacyZonePoints({})).toEqual([]);
+  });
+
+  it("an empty stored curve is flat; only an absent or blank one falls back to the zones", () => {
+    // The engine's eq_points draws the same line: the Empty
+    // layout's "[]" must not resurrect a pre-widget graph's zone sliders.
+    const params = { ev_0: 1 };
+    expect(storedEqPoints({ params })).toHaveLength(9);
+    expect(storedEqPoints({ params, textParams: { points: "" } })).toHaveLength(9);
+    expect(storedEqPoints({ params, textParams: { points: "[]" } })).toEqual([]);
   });
 
   it("the periodic axis reaches across the seam, matching the engine", () => {
