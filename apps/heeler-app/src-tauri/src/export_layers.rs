@@ -66,7 +66,7 @@ pub(crate) fn render_export_layers(
 /// The same, for an export to `dest`: what its container cannot hold
 /// is named in the log and never rendered. A JPEG of a photograph with
 /// layers enabled rendered every one of them, and the alpha, only for
-/// finish_export to drop them (vagabond-burro/heeler#14).
+/// finish_export to drop them.
 pub(crate) fn render_export_layers_for(
     ui: &UiGraph,
     source: Arc<ImageBuf>,
@@ -794,7 +794,7 @@ pub(crate) mod tests {
 
     /// What the destination's container cannot hold is never rendered:
     /// a JPEG of a photograph with layers and a wired alpha rendered them
-    /// all only for finish_export to drop them (vagabond-burro/heeler#14).
+    /// all only for finish_export to drop them.
     /// Under a one-byte budget any render is refused, so an export that
     /// renders nothing is the only one that succeeds there.
     #[test]
