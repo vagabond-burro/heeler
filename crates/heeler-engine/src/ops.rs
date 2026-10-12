@@ -5283,7 +5283,10 @@ mod tests {
         };
         assert!(!cases.cases.is_empty());
         for c in &cases.cases {
-            let (node, inputs) = scene(&c.node, &c.param);
+            let (mut node, inputs) = scene(&c.node, &c.param);
+            // make_node fills every param from the spec, the curves as "",
+            // so the param is taken out for absent to mean absent.
+            node.params.remove(&c.param);
             let absent = render(&node, &inputs);
             let mut with = node.clone();
             if let Some(stored) = &c.stored {
