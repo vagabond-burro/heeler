@@ -14,6 +14,8 @@ import {
   DepthRunner,
   depthEstimate,
   depthFailureNow,
+  depthInlineShown,
+  dismissDepthFailure,
   depthProgressNow,
   recordDepthTiming,
   resetDepthTimings,
@@ -215,5 +217,74 @@ describe("the depth read's floating sheet", () => {
     fireEvent.click(screen.getByTestId("depth-sheet-dismiss"));
     expect(screen.queryByTestId("depth-sheet")).toBeNull();
     expect(depthFailureNow()).toBeNull();
+  });
+});
+
+// The 2026.5.2 review's findings on the card.
+describe("the depth card, after the release review", () => {
+  const pause = (ms: number) => act(() => new Promise((r) => setTimeout(r, ms)));
+  it("a late observer callback after a bar unmounts neither counts it nor counts it twice", () => {
+    let cb: IntersectionObserverCallback = () => {};
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(f: IntersectionObserverCallback) {
+          cb = f;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    try {
+      const before = depthInlineShown();
+      // Unmounted unseen, then a queued "visible" arrives.
+      let view = render(<DepthProgressBar />);
+      view.unmount();
+      act(() => cb([{ isIntersecting: true }] as IntersectionObserverEntry[], {} as IntersectionObserver));
+      expect(depthInlineShown()).toBe(before);
+      // Unmounted while seen, then a queued "hidden" arrives.
+      view = render(<DepthProgressBar />);
+      act(() => cb([{ isIntersecting: true }] as IntersectionObserverEntry[], {} as IntersectionObserver));
+      expect(depthInlineShown()).toBe(before + 1);
+      view.unmount();
+      act(() => cb([{ isIntersecting: false }] as IntersectionObserverEntry[], {} as IntersectionObserver));
+      expect(depthInlineShown()).toBe(before);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("a failure shows beside the Depth Map section's own bar too", async () => {
+    render(
+      <>
+        <DepthRunner state={wanting()} dispatch={() => {}} />
+        <DepthProgressBar />
+      </>,
+    );
+    await waitFor(() => expect(rejects.length).toBe(1));
+    rejects[0]("depth failed");
+    await waitFor(() => expect(screen.getByTestId("depth-sheet-error").textContent).toMatch(/depth failed/));
+    act(() => dismissDepthFailure());
+  });
+
+  it("a failure read for one photograph never shows over the next", async () => {
+    const s = wanting();
+    const view = render(<DepthRunner state={s} dispatch={() => {}} />);
+    await waitFor(() => expect(rejects.length).toBe(1));
+    view.rerender(<DepthRunner state={{ ...initialState(), activeImage: "another-photo" }} dispatch={() => {}} />);
+    rejects[0]("old-photo failed");
+    await pause(50);
+    expect(screen.queryByTestId("depth-sheet-error")).toBeNull();
+    expect(depthFailureNow()).toBeNull();
+  });
+
+  it("an error shown for a photograph goes when another opens", async () => {
+    const s = wanting();
+    const view = render(<DepthRunner state={s} dispatch={() => {}} />);
+    await waitFor(() => expect(rejects.length).toBe(1));
+    rejects[0]("this photo failed");
+    await waitFor(() => expect(screen.getByTestId("depth-sheet-error")).toBeTruthy());
+    view.rerender(<DepthRunner state={{ ...initialState(), activeImage: "another-photo" }} dispatch={() => {}} />);
+    await waitFor(() => expect(screen.queryByTestId("depth-sheet-error")).toBeNull());
   });
 });

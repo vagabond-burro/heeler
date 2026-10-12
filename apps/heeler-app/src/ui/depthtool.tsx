@@ -64,18 +64,21 @@ export function depthProgressNow(): DepthProgress | null {
 // error when a read fails, and stands down while an inline bar is
 // visible so the two never show at once.
 
-let failure: string | null = null;
+/** The last read's error and the photograph it was read for: an error
+ * belongs to its photograph, and is never shown over another one. */
+let failure: { image: string | null; message: string } | null = null;
 let inlineShown = 0;
 
-function publishFailure(next: string | null) {
+function publishFailure(next: { image: string | null; message: string } | null) {
   if (failure === next) return;
   failure = next;
   progressSubs.forEach((f) => f());
 }
 
-/** The last read's error, until it is dismissed or the next read starts. */
+/** The last read's error, until it is dismissed, the next read starts,
+ * or the photograph it was read for is no longer the one open. */
 export function depthFailureNow(): string | null {
-  return failure;
+  return failure?.message ?? null;
 }
 
 export function dismissDepthFailure(): void {
@@ -235,10 +238,18 @@ export function DepthRunner({ state, dispatch }: { state: State; dispatch: D }) 
       live = false;
     };
   }, [needModel, downloading]);
+  // The photograph open now, for a read that answers after a switch.
+  const openImage = useRef(state.activeImage);
+  openImage.current = state.activeImage;
+  // An error read for another photograph stands down when this one opens.
+  useEffect(() => {
+    if (failure && failure.image !== state.activeImage) publishFailure(null);
+  }, [state.activeImage]);
   useEffect(() => {
     if (!wanted || busy || needModel || state.gesture !== null) return;
     if (done.current[mark]) return;
     setBusy(true);
+    const image = state.activeImage;
     const label = fromFile
       ? recipe === "raw"
         ? "Reading the depth pass from the file"
@@ -273,7 +284,9 @@ export function DepthRunner({ state, dispatch }: { state: State; dispatch: D }) 
           setNeedModel(true);
         } else {
           done.current[mark] = true; // no retry loop on a broken photo
-          publishFailure(String(err));
+          // Shown only while its photograph is still the one open; the
+          // log keeps it either way.
+          if (openImage.current === image) publishFailure({ image, message: String(err) });
           reportToolError("Depth", err);
         }
       })
@@ -342,8 +355,13 @@ export function DepthProgressBar({
       shiftInline(1);
       return () => shiftInline(-1);
     }
+    // Disconnecting does not drop entries already queued, so a callback
+    // can still arrive after cleanup: it is ignored, and the bar's count
+    // is released exactly once.
     let seen = false;
+    let live = true;
     const io = new IntersectionObserver((entries) => {
+      if (!live) return;
       const now = entries.some((e) => e.isIntersecting);
       if (now !== seen) {
         seen = now;
@@ -352,8 +370,10 @@ export function DepthProgressBar({
     });
     io.observe(el);
     return () => {
+      live = false;
       io.disconnect();
       if (seen) shiftInline(-1);
+      seen = false;
     };
   }, [inline]);
   const [now, setNow] = useState(Date.now());
@@ -431,8 +451,9 @@ export function DepthProgressBar({
  * read has run past DEPTH_SHEET_DELAY_MS and gone when it lands. It does
  * not block: editing carries on underneath, and nothing can stop a read
  * once the desktop has it, so there is no Cancel. A failed read leaves
- * the card up with the error until it is dismissed. While the Depth Map
- * section's own bar is on screen the card stands down. */
+ * the card up with the error until it is dismissed, also beside the
+ * Depth Map section's own bar, which has no place for it; the progress
+ * stands down while that bar is on screen. */
 export function DepthProgressSheet() {
   const p = React.useSyncExternalStore(subscribeDepthProgress, depthProgressNow, depthProgressNow);
   const failed = React.useSyncExternalStore(subscribeDepthProgress, depthFailureNow, depthFailureNow);
@@ -444,7 +465,6 @@ export function DepthProgressSheet() {
     const t = window.setTimeout(() => setDue(true), Math.max(0, DEPTH_SHEET_DELAY_MS - (Date.now() - p.startedAt)));
     return () => window.clearTimeout(t);
   }, [p]);
-  if (inline > 0) return null;
   const card: React.CSSProperties = {
     position: "fixed",
     left: "50%",
@@ -459,6 +479,8 @@ export function DepthProgressSheet() {
     padding: "12px 16px 8px",
     color: "var(--text-body)",
   };
+  // A failure shows even beside the Depth Map section's own bar, which
+  // has no place for it; only the progress stands down there.
   if (failed) {
     return (
       <div data-testid="depth-sheet" data-state="failed" role="alert" style={card} onMouseDown={(e) => e.stopPropagation()}>
@@ -474,7 +496,7 @@ export function DepthProgressSheet() {
       </div>
     );
   }
-  if (!p || !due) return null;
+  if (inline > 0 || !p || !due) return null;
   return (
     <div data-testid="depth-sheet" data-state="busy" role="status" style={card} onMouseDown={(e) => e.stopPropagation()}>
       <DepthProgressBar testid="depth-sheet-progress" inline={false} fontSize={11} />
