@@ -47,6 +47,16 @@ from upstream, because the obligation is met identically either way. It
 is two megabytes, which is a rounding error against being asked to prove
 a negative later.
 
+Our copy does differ now. `third_party/LibRaw-<version>/HEELER-CHANGES.md`
+lists Heeler's changes (the first fixes X-Trans half-size develops,
+vagabond-burro/heeler#12), each one is marked with a `Heeler:` comment in
+the source, and the licence-page test holds `open-source.md` to pointing
+at that list. Any change to the tree means a new archive: run the script
+and publish its output, alongside the archives already published, before
+a binary built from the changed tree ships. When LibRaw is upgraded,
+carry each change forward or drop it if upstream has fixed the same
+thing, and update the list either way.
+
 It is also reproducible. Fixed mtimes, ownership and ordering, and a
 gzip header with no timestamp, so the same tree gives the same bytes and
 the same checksum on any machine. A checksum that moves for no reason is
