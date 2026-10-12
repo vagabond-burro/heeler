@@ -38,8 +38,19 @@ here that is a decision rather than a command.
 python3 scripts/libraw_source.py
 ```
 
-Writes `dist/libraw-<version>-as-shipped-in-heeler.tar.gz` and a
-`.sha256` beside it. Publish both.
+Writes `dist/libraw-<version>-as-shipped-in-heeler-<id>.tar.gz` and a
+`.sha256` beside it. Publish both, and name the archive and its SHA-256 in
+`docs/user-guide/legal/open-source.md`; a release script test fails until
+the page names the archive the current tree builds.
+
+`<id>` is the first twelve hex digits of the SHA-256 of the uncompressed
+tar, so the same tree always gets the same name and a changed tree can
+never overwrite an archive already published. The name has to come from
+the content, not the release: gzip writes the file's name into its
+header, so the name is part of the bytes the checksum covers. The first
+archive (the unmodified 0.22.2, for Heeler 2026.5.1 and earlier)
+predates this and stays published as
+`libraw-0.22.2-as-shipped-in-heeler.tar.gz`.
 
 The archive is the whole vendored tree, not a patch set. That is
 deliberate: it means nobody has to establish whether our copy differs

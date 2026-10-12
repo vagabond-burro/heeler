@@ -45,6 +45,21 @@ def vendored_version() -> str:
     return m.group(1)
 
 
+def archive_name(version: str, body: bytes) -> str:
+    """The archive's name, from what is in it.
+
+    Every changed tree is a new archive, published BESIDE the ones before
+    it, since binaries built from those are still out there. So the name
+    carries the first twelve hex digits of the SHA-256 of the
+    uncompressed tar: the same tree is always the same name, and a changed
+    one can never overwrite an archive already published. (The first
+    archive, the unmodified 0.22.2 shipped with Heeler 2026.5.1 and
+    earlier, predates this and is published as
+    libraw-0.22.2-as-shipped-in-heeler.tar.gz.)
+    """
+    return f"libraw-{version}-as-shipped-in-heeler-{hashlib.sha256(body).hexdigest()[:12]}.tar.gz"
+
+
 def build(out_dir: Path) -> tuple[Path, str]:
     version = vendored_version()
     tree = ROOT / "third_party" / f"LibRaw-{version}"
@@ -57,7 +72,6 @@ def build(out_dir: Path) -> tuple[Path, str]:
         sys.exit(f"{tree} has no LICENSE.CDDL")
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    archive = out_dir / f"libraw-{version}-as-shipped-in-heeler.tar.gz"
 
     files = sorted(p for p in tree.rglob("*") if p.is_file())
     raw = io.BytesIO()
@@ -74,10 +88,12 @@ def build(out_dir: Path) -> tuple[Path, str]:
             with path.open("rb") as fh:
                 tar.addfile(info, fh)
 
-    # gzip with no name or timestamp in the header, same reason.
+    # gzip with no timestamp in the header, same reason. The header does
+    # carry the file's own name, so the name has to be settled first.
     import gzip
 
     body = raw.getvalue()
+    archive = out_dir / archive_name(version, body)
     with archive.open("wb") as fh:
         with gzip.GzipFile(fileobj=fh, mode="wb", mtime=0) as gz:
             gz.write(body)

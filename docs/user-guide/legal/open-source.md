@@ -26,8 +26,11 @@ That archive is the tree this build was made from, not a pointer at
 whatever upstream happens to be today. It is the upstream 0.22.2 release
 with one fix by Heeler, to how a half-size preview of a Fujifilm X-Trans
 file fills in color. `HEELER-CHANGES.md` in the archive lists it, and
-the changed code is marked with a `Heeler:` comment. Its SHA-256 is published beside
-it so you can check the two match.
+the changed code is marked with a `Heeler:` comment. The archive for this
+build is `libraw-0.22.2-as-shipped-in-heeler-7a5366211de5.tar.gz`, SHA-256
+`19e96684c4f6d70da1c2a85364c0b5097594c2db86a5e065da9dcf95f355032a`, published
+beside it so you can check the two match. Archives for other Heeler builds
+stay on the same page.
 
 The full license text is in this app, on the [CDDL 1.0](cddl.md) page
 beside this one, and it ships with the source as `LICENSE.CDDL` in the

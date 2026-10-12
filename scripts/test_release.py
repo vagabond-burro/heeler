@@ -22,6 +22,7 @@ from unittest.mock import patch
 import release
 import dist
 import heeler_build
+import libraw_source
 
 WHATS_NEW = """# What's new
 
@@ -149,6 +150,26 @@ class Notes(unittest.TestCase):
 
     def test_numbered_notes_and_windows_line_endings(self):
         self.assertEqual(release.bullets("1. One\r\n2) Two\r\n\r\n- Three\r\n"), ["One", "Two", "Three"])
+
+
+class LibrawSource(unittest.TestCase):
+    """The published LibRaw source: CDDL-1.0 asks that the source of the
+    tree a binary is built from be available to whoever has the binary, so
+    the license page has to name the archive this tree builds."""
+
+    def test_the_license_page_names_the_archive_this_tree_builds(self):
+        with tempfile.TemporaryDirectory() as d:
+            archive, digest = libraw_source.build(Path(d))
+        page = (libraw_source.ROOT / "docs" / "user-guide" / "legal" / "open-source.md").read_text(encoding="utf-8")
+        words = " ".join(page.split())
+        self.assertIn(archive.name, words, "the license page does not name the archive this tree builds; publish it and name it")
+        self.assertIn(digest, words, "the license page does not give this archive's SHA-256")
+
+    def test_a_changed_tree_never_takes_a_published_name(self):
+        same = libraw_source.archive_name("0.22.2", b"tree")
+        self.assertEqual(same, libraw_source.archive_name("0.22.2", b"tree"))
+        self.assertNotEqual(same, libraw_source.archive_name("0.22.2", b"tree, changed"))
+        self.assertNotEqual(same, "libraw-0.22.2-as-shipped-in-heeler.tar.gz")
 
 
 class Body(unittest.TestCase):
