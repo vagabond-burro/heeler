@@ -96,13 +96,34 @@ fn render_export_layers_holding(
         .iter()
         .filter(|n| n.node_type == "heeler.export_layer" && n.enabled)
         .collect();
+    // What the container cannot hold is named, not rendered, and named
+    // as the render would have named it: only a layer it would have
+    // written (a mask source that exists, a tap with a wire in), under
+    // the deduplicated name, the collisions said first, then the alpha,
+    // then the layers, which is the order the render and finish_export
+    // logged them in. The graph is built for this; nothing is rendered.
+    // One difference stays: a Develop layer's mask the render would have
+    // found empty (applied_mask_weight) is named here.
+    let mut not_held: Vec<String> = Vec::new();
+    if !holds.layers && !layer_nodes.is_empty() {
+        let g = build_graph(ui, &Registry::builtin())?;
+        for n in layer_nodes.drain(..) {
+            let source = n.params.get("source").and_then(|v| v.as_str()).unwrap_or("");
+            let written = match source.strip_prefix("finishmask:").or_else(|| source.strip_prefix("layermask:")) {
+                Some(id) => g.node(id).is_some(),
+                None => g.incoming(&n.id, "mask").or_else(|| g.incoming(&n.id, "image")).is_some(),
+            };
+            if written {
+                let name = unique_name(|taken| not_held.iter().any(|m| m == taken), &export_layer_name(n), &mut log);
+                not_held.push(name);
+            }
+        }
+    }
     if alpha_wired && !holds.alpha {
         log("warn", ALPHA_NOT_HELD);
     }
-    if !holds.layers {
-        for n in layer_nodes.drain(..) {
-            log("warn", &layer_not_held(&export_layer_name(n)));
-        }
+    for name in &not_held {
+        log("warn", &layer_not_held(name));
     }
     let alpha_wired = alpha_wired && holds.alpha;
     if !alpha_wired && layer_nodes.is_empty() {
@@ -348,9 +369,15 @@ fn export_layer_name(n: &UiNode) -> String {
 /// Two layers of one name collide in every container, so the second
 /// earns a suffix and the log says it happened.
 fn unique_layer_name(layers: &[ExportLayer], named: &str, log: &mut impl FnMut(&str, &str)) -> String {
+    unique_name(|taken| layers.iter().any(|c| c.name == taken), named, log)
+}
+
+/// The name a layer writes under when `taken` says its own is in use:
+/// the next free numbered one, said in the log.
+fn unique_name(taken: impl Fn(&str) -> bool, named: &str, log: &mut impl FnMut(&str, &str)) -> String {
     let mut name = named.to_string();
     let mut suffix = 2;
-    while layers.iter().any(|c| c.name == name) {
+    while taken(&name) {
         log("warn", &format!("two Export Layer nodes named '{named}'; the second writes as '{named}-{suffix}'"));
         name = format!("{named}-{suffix}");
         suffix += 1;
@@ -851,6 +878,61 @@ pub(crate) mod tests {
             render_export_layers_for(&ui, export_layer_source(), &smart, Path::new("photo.tiff"), "tiff", |_, _| {}).unwrap();
         assert!(alpha.is_some());
         assert_eq!(layers.len(), 4);
+    }
+
+    /// A JPEG export says exactly what it said when it rendered the
+    /// layers first: no warning for a layer the render would have
+    /// skipped (an unwired tap), the deduplicated names with their
+    /// collision warnings, in the same order (the 2026.5.2 review).
+    #[test]
+    fn a_jpeg_export_logs_what_the_every_layer_render_logged() {
+        let mut ui = export_layer_graph();
+        ui.nodes.push(UiNode {
+            id: "unused".into(),
+            node_type: "heeler.export_layer".into(),
+            enabled: true,
+            params: [("name".to_string(), serde_json::json!("Unused"))].into_iter().collect(),
+        });
+        ui.nodes.push(UiNode {
+            id: "chm3".into(),
+            node_type: "heeler.export_layer".into(),
+            enabled: true,
+            params: [("name".to_string(), serde_json::json!("sky"))].into_iter().collect(),
+        });
+        ui.connections.push(UiConnection { from: ("lm".into(), "out".into()), to: ("chm3".into(), "mask".into()) });
+        let smart = depth_plant();
+        let dir = tempfile::tempdir().unwrap();
+        let export = |every_layer: bool, name: &str| {
+            let dest = dir.path().join(name);
+            let mut log: Vec<String> = Vec::new();
+            let (alpha, layers) = if every_layer {
+                render_export_layers(&ui, export_layer_source(), &smart, |l, m| log.push(format!("{l}: {m}"))).unwrap()
+            } else {
+                render_export_layers_for(&ui, export_layer_source(), &smart, &dest, "jpeg", |l, m| log.push(format!("{l}: {m}"))).unwrap()
+            };
+            finish_export(
+                crate::ExportInput { graph: &ui, source_path: None, source: export_layer_source(), smart: &smart, keywords: &[], alpha, layers },
+                &dest,
+                crate::ExportOptions {
+                    format: "jpeg",
+                    quality: 90,
+                    max_edge: None,
+                    keep_metadata: true,
+                    matte: false,
+                    scale_percent: None,
+                    allow_overwrite: false,
+                    dpi: heeler_io::DEFAULT_DPI,
+                },
+                |l, m| log.push(format!("{l}: {m}")),
+            )
+            .unwrap();
+            log
+        };
+        let before = export(true, "before.jpg");
+        let now = export(false, "now.jpg");
+        assert_eq!(now, before);
+        assert!(!now.iter().any(|m| m.contains("'Unused'")), "{now:?}");
+        assert!(now.iter().any(|m| m.contains("'sky-2'")), "{now:?}");
     }
 
     /// The whole JPEG export, end to end: the file is written, and each
