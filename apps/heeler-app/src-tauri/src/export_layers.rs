@@ -30,6 +30,8 @@ pub(crate) struct ContainerHolds {
 }
 
 impl ContainerHolds {
+    /// Every container at once: what the tests' every-layer render asks.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) const ALL: ContainerHolds = ContainerHolds { alpha: true, layers: true };
 
     pub(crate) fn of(ext: &str) -> ContainerHolds {
@@ -53,7 +55,9 @@ pub(crate) fn layer_not_held(name: &str) -> String {
 /// node, rendered through ONE executor and the beauty's own sources, so
 /// a mask feeding both a layer and the beauty's alpha computes once
 /// (26.3 Phase 8). Nothing wired, nothing rendered: the guard runs
-/// before the graph is even built.
+/// before the graph is even built. The exports ask for their container's
+/// (render_export_layers_for); the tests render every layer through this.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn render_export_layers(
     ui: &UiGraph,
     source: Arc<ImageBuf>,
