@@ -5205,6 +5205,92 @@ mod tests {
         );
     }
 
+    /// When a stored curve stands and when its node falls back, from the
+    /// cases the app's controls are held to as well
+    /// (tests/stored_curves.json). A case that falls back renders exactly
+    /// as the param absent; one that stands renders otherwise.
+    #[test]
+    fn stored_curves_stand_as_the_shared_cases_say() {
+        #[derive(serde::Deserialize)]
+        struct Case {
+            node: String,
+            param: String,
+            stored: Option<String>,
+            stands: bool,
+        }
+        #[derive(serde::Deserialize)]
+        struct Cases {
+            cases: Vec<Case>,
+        }
+        let cases: Cases = serde_json::from_str(include_str!("../tests/stored_curves.json")).unwrap();
+        // Each param's scene: a node its fallback does something on, and
+        // the inputs that make the curve matter.
+        let scene = |node_type: &str, param: &str| -> (Node, Vec<(String, Value)>) {
+            let mut node = make_node(node_type);
+            let image = |px: &[[f32; 4]]| {
+                let mut img = ImageBuf::new(px.len(), 1);
+                for (x, c) in px.iter().enumerate() {
+                    img.set_pixel(x, 0, *c);
+                }
+                Value::Image(Arc::new(img))
+            };
+            let blue = [0.20, 0.35, 0.80, 1.0];
+            let red = [0.80, 0.20, 0.15, 1.0];
+            let leaf = [0.12, 0.32, 0.06, 1.0];
+            let inputs = match (node_type, param) {
+                ("heeler.tone_eq", "points") => {
+                    set_num(&mut node, "ev_0", 1.0);
+                    vec![("in".to_string(), image(&[[0.18, 0.18, 0.18, 1.0]; 4]))]
+                }
+                ("heeler.black_white", "hue_curve") => {
+                    set_num(&mut node, "amount", 100.0);
+                    vec![("in".to_string(), image(&[blue, red, leaf]))]
+                }
+                ("heeler.black_white", "ir_curve") => {
+                    set_num(&mut node, "amount", 100.0);
+                    set_text(&mut node, "filter", "r72");
+                    set_text(&mut node, "film", "rolleiir");
+                    vec![("in".to_string(), image(&[leaf, blue, red]))]
+                }
+                ("heeler.black_white", "depth_curve") => {
+                    set_num(&mut node, "amount", 100.0);
+                    set_text(&mut node, "far_filter", "w25");
+                    vec![
+                        ("in".to_string(), image(&[blue, blue, blue])),
+                        (
+                            "raster".to_string(),
+                            image(&[[0.0, 0.0, 0.0, 1.0], [0.3, 0.3, 0.3, 1.0], [0.6, 0.6, 0.6, 1.0]]),
+                        ),
+                    ]
+                }
+                other => panic!("no scene for {other:?}"),
+            };
+            (node, inputs)
+        };
+        let render = |node: &Node, inputs: &[(String, Value)]| -> Vec<f32> {
+            execute(node, inputs).unwrap().as_image().unwrap().data.clone()
+        };
+        assert!(!cases.cases.is_empty());
+        for c in &cases.cases {
+            let (node, inputs) = scene(&c.node, &c.param);
+            let absent = render(&node, &inputs);
+            let mut with = node.clone();
+            if let Some(stored) = &c.stored {
+                set_text(&mut with, &c.param, stored);
+            }
+            let got = render(&with, &inputs);
+            assert_eq!(
+                got != absent,
+                c.stands,
+                "{} {} = {:?}: stands should be {}",
+                c.node,
+                c.param,
+                c.stored,
+                c.stands
+            );
+        }
+    }
+
     #[test]
     fn an_empty_eq_curve_is_flat_and_the_zones_are_only_the_absent_fallback() {
         // A pre-widget graph: a zone slider lifted, no points. Then the

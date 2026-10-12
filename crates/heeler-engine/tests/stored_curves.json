@@ -1,0 +1,36 @@
+{
+  "about": "When a curve stored in a text param stands, and when its node falls back to what it does without one, held for both sides: the engine's renders (ops.rs, stored_curves_stand_as_the_shared_cases_say) and the app's controls (storedcurves.test.tsx). stored null is the param absent. stands false means the node renders, and its control draws, exactly as with the param absent; stands true means the stored curve is used, even when it parses to nothing. Each param's fallback is its own (Tone Equalizer: the nine zone sliders; Black & White: the hue curve off, the infrared materials, the diagonal depth crossing); the rule for when it applies is what these pin. The one and two cases are chosen to differ from that fallback.",
+  "cases": [
+    { "node": "heeler.tone_eq", "param": "points", "stored": null, "stands": false },
+    { "node": "heeler.tone_eq", "param": "points", "stored": "", "stands": false },
+    { "node": "heeler.tone_eq", "param": "points", "stored": "  ", "stands": false },
+    { "node": "heeler.tone_eq", "param": "points", "stored": "[]", "stands": true },
+    { "node": "heeler.tone_eq", "param": "points", "stored": "not json", "stands": true },
+    { "node": "heeler.tone_eq", "param": "points", "stored": "[{\"x\":0,\"y\":-1}]", "stands": true },
+    { "node": "heeler.tone_eq", "param": "points", "stored": "[{\"x\":-4,\"y\":0.5},{\"x\":4,\"y\":0.5}]", "stands": true },
+
+    { "node": "heeler.black_white", "param": "hue_curve", "stored": null, "stands": false },
+    { "node": "heeler.black_white", "param": "hue_curve", "stored": "", "stands": false },
+    { "node": "heeler.black_white", "param": "hue_curve", "stored": "  ", "stands": false },
+    { "node": "heeler.black_white", "param": "hue_curve", "stored": "[]", "stands": false },
+    { "node": "heeler.black_white", "param": "hue_curve", "stored": "not json", "stands": false },
+    { "node": "heeler.black_white", "param": "hue_curve", "stored": "[{\"x\":200,\"y\":1}]", "stands": false },
+    { "node": "heeler.black_white", "param": "hue_curve", "stored": "[{\"x\":100,\"y\":1},{\"x\":300,\"y\":1}]", "stands": true },
+
+    { "node": "heeler.black_white", "param": "ir_curve", "stored": null, "stands": false },
+    { "node": "heeler.black_white", "param": "ir_curve", "stored": "", "stands": false },
+    { "node": "heeler.black_white", "param": "ir_curve", "stored": "  ", "stands": false },
+    { "node": "heeler.black_white", "param": "ir_curve", "stored": "[]", "stands": false },
+    { "node": "heeler.black_white", "param": "ir_curve", "stored": "not json", "stands": false },
+    { "node": "heeler.black_white", "param": "ir_curve", "stored": "[{\"x\":90,\"y\":1}]", "stands": false },
+    { "node": "heeler.black_white", "param": "ir_curve", "stored": "[{\"x\":0,\"y\":0},{\"x\":359,\"y\":0}]", "stands": true },
+
+    { "node": "heeler.black_white", "param": "depth_curve", "stored": null, "stands": false },
+    { "node": "heeler.black_white", "param": "depth_curve", "stored": "", "stands": false },
+    { "node": "heeler.black_white", "param": "depth_curve", "stored": "  ", "stands": false },
+    { "node": "heeler.black_white", "param": "depth_curve", "stored": "[]", "stands": false },
+    { "node": "heeler.black_white", "param": "depth_curve", "stored": "not json", "stands": false },
+    { "node": "heeler.black_white", "param": "depth_curve", "stored": "[{\"x\":50,\"y\":100}]", "stands": false },
+    { "node": "heeler.black_white", "param": "depth_curve", "stored": "[{\"x\":0,\"y\":100},{\"x\":100,\"y\":100}]", "stands": true }
+  ]
+}
