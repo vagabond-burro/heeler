@@ -68,9 +68,13 @@ a binary built from the changed tree ships. When LibRaw is upgraded,
 carry each change forward or drop it if upstream has fixed the same
 thing, and update the list either way.
 
-It is also reproducible. Fixed mtimes, ownership and ordering, and a
-gzip header with no timestamp, so the same tree gives the same bytes and
-the same checksum on any machine. A checksum that moves for no reason is
+It is also reproducible. The files are read from git at HEAD, not from
+the disk, in POSIX path order, with fixed mtimes and ownership and a gzip
+header with no timestamp, so the same committed tree gives the same bytes
+and the same checksum on any machine. (Read from the disk, a Windows
+checkout sorted the paths without regard to case and built an archive
+under a name nobody had published.) An uncommitted change to the tree
+stops the build. A checksum that moves for no reason is
 one nobody checks.
 
 ## How long it has to stay up

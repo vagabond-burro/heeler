@@ -165,6 +165,24 @@ class LibrawSource(unittest.TestCase):
         self.assertIn(archive.name, words, "the license page does not name the archive this tree builds; publish it and name it")
         self.assertIn(digest, words, "the license page does not give this archive's SHA-256")
 
+    def test_the_archive_is_read_from_git_in_one_order_on_every_platform(self):
+        # Windows sorts paths without regard to case and may check files
+        # out with other line endings; both changed the archive's bytes
+        # and so its name. It is read from the committed blobs and
+        # ordered as POSIX paths, which no platform rewrites.
+        tree = libraw_source.ROOT / "third_party" / f"LibRaw-{libraw_source.vendored_version()}"
+        files = libraw_source.committed_files(tree)
+        names = [n for n, _ in files]
+        self.assertIn(f"LibRaw-{libraw_source.vendored_version()}/LICENSE.CDDL", names)
+        self.assertTrue(all("\\" not in n for n in names), "archive names use forward slashes")
+        from pathlib import PurePosixPath
+        self.assertEqual(names, [str(p) for p in sorted(PurePosixPath(n) for n in names)])
+        # Not the order a case-insensitive sort gives: this tree is one
+        # where the two differ, which is how the Windows build went wrong.
+        self.assertNotEqual(names, sorted(names, key=str.lower))
+        with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+            self.assertEqual(libraw_source.build(Path(a))[1], libraw_source.build(Path(b))[1])
+
     def test_a_changed_tree_never_takes_a_published_name(self):
         same = libraw_source.archive_name("0.22.2", b"tree")
         self.assertEqual(same, libraw_source.archive_name("0.22.2", b"tree"))

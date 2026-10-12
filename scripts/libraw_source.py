@@ -24,9 +24,10 @@ from __future__ import annotations
 import hashlib
 import io
 import re
+import subprocess
 import sys
 import tarfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD_RS = ROOT / "crates" / "heeler-raw" / "build.rs"
@@ -43,6 +44,47 @@ def vendored_version() -> str:
     if not m:
         sys.exit(f"cannot read LIBRAW_VERSION from {BUILD_RS}")
     return m.group(1)
+
+
+def committed_files(tree: Path) -> list[tuple[str, bytes]]:
+    """The tree as git holds it at HEAD: (name inside the archive, bytes).
+
+    Read from git, not from the disk, so every machine builds the same
+    archive. A checkout can differ from what is committed (line endings
+    a platform rewrote, a stray file), and Windows sorts paths without
+    regard to case, which reorders the tar and so changes its checksum
+    and its name; on Windows the archive came out under a name nobody had
+    published. The order is the POSIX path order the first archives were
+    built in, so those keep their exact bytes. An uncommitted change to
+    the tree stops the build: the source published is the source
+    committed.
+    """
+    rel = tree.relative_to(ROOT).as_posix()
+
+    def git(*args: str, data: bytes | None = None) -> bytes:
+        return subprocess.run(["git", "-C", str(ROOT), *args], input=data, capture_output=True, check=True).stdout
+
+    if git("status", "--porcelain", "--", rel).strip():
+        sys.exit(f"{rel} has uncommitted changes; commit them before building the archive")
+    entries = []
+    for line in git("ls-tree", "-r", "-z", "HEAD", "--", rel).split(b"\0"):
+        if not line:
+            continue
+        meta, path = line.split(b"\t", 1)
+        _mode, kind, sha = meta.split()
+        if kind != b"blob":
+            continue
+        entries.append((PurePosixPath(path.decode()), sha.decode()))
+    entries.sort()
+    # One git process for every blob: header line, the bytes, a newline.
+    out = git("cat-file", "--batch", data="".join(f"{sha}\n" for _, sha in entries).encode())
+    files, at = [], 0
+    for path, sha in entries:
+        end = out.index(b"\n", at)
+        size = int(out[at:end].split()[2])
+        files.append((str(path.relative_to(PurePosixPath(rel).parent)), out[end + 1 : end + 1 + size]))
+        at = end + 1 + size + 1
+    return files
 
 
 def archive_name(version: str, body: bytes) -> str:
@@ -73,11 +115,12 @@ def build(out_dir: Path) -> tuple[Path, str]:
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    files = sorted(p for p in tree.rglob("*") if p.is_file())
+    files = committed_files(tree)
     raw = io.BytesIO()
     with tarfile.open(fileobj=raw, mode="w", format=tarfile.USTAR_FORMAT) as tar:
-        for path in files:
-            info = tar.gettarinfo(str(path), arcname=str(path.relative_to(tree.parent)))
+        for name, data in files:
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
             # Everything about the entry that is not its content is
             # pinned, or the archive carries this machine's clock and
             # user id into a file people are meant to verify.
@@ -85,8 +128,7 @@ def build(out_dir: Path) -> tuple[Path, str]:
             info.uid = info.gid = 0
             info.uname = info.gname = ""
             info.mode = 0o644
-            with path.open("rb") as fh:
-                tar.addfile(info, fh)
+            tar.addfile(info, io.BytesIO(data))
 
     # gzip with no timestamp in the header, same reason. The header does
     # carry the file's own name, so the name has to be settled first.
