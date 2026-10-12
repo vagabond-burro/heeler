@@ -9,6 +9,7 @@
 ### Fixes
 
 - **Fujifilm X-Trans previews match the export.** On some X-Trans files, mostly X-Trans II bodies such as the X100S and X70 with a dark top-left corner, the Fit preview was greener than the 1:1 view and the export, so white balance set at Fit came out magenta. The half-size develop the preview uses now fills in color on the right pixels; every other file previews exactly as before.
+- **Faster JPEG exports of photographs with export layers.** A photograph with **Export as layer** turned on in some sections, or an alpha wired to the Output node, rendered every layer and the alpha on every export, even to JPEG, which holds neither, and then left them out. Exports now render only what the file can hold: layers for TIFF and EXR, the alpha for PNG, TIFF and EXR. The export log still names each layer it leaves out.
 - **Moving a connected node no longer rewires it.** Dragging a node that is already connected across a wire in the Graph spliced it into that wire on release, pulling it out of its chain. It now just moves; hold `Cmd` (`Ctrl` on Windows) as you drop to splice it. A node with no connections still splices on a plain drop. [Canvas](user-guide/graph/canvas.md).
 - **The Tone Equalizer's Empty layout is empty.** On a photograph edited before the curve existed, choosing **Empty** flattened the curve but the picture kept the old zone adjustment. The picture now follows the curve. [Tone Equalizer](user-guide/adjustments/tone-equalizer.md).
 

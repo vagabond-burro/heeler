@@ -19,6 +19,36 @@ pub(crate) struct ExportLayer {
     pub finish: Option<FinishMeta>,
 }
 
+/// What the file a destination names can carry beside its picture: by
+/// its container, which the extension picks (the format only says float
+/// or 16-bit). finish_export drops what the container cannot hold, and
+/// render_export_layers_for never renders it, so the two read one rule.
+#[derive(Clone, Copy)]
+pub(crate) struct ContainerHolds {
+    pub alpha: bool,
+    pub layers: bool,
+}
+
+impl ContainerHolds {
+    pub(crate) const ALL: ContainerHolds = ContainerHolds { alpha: true, layers: true };
+
+    pub(crate) fn of(ext: &str) -> ContainerHolds {
+        ContainerHolds {
+            alpha: matches!(ext, "png" | "tif" | "tiff" | "exr"),
+            layers: matches!(ext, "tif" | "tiff" | "exr"),
+        }
+    }
+}
+
+/// The warning for a wired alpha the container cannot hold.
+pub(crate) const ALPHA_NOT_HELD: &str =
+    "the Output node's alpha port is wired, but this format carries no alpha; exported opaque (alpha needs PNG, TIFF or EXR)";
+
+/// The warning for a layer the container cannot hold.
+pub(crate) fn layer_not_held(name: &str) -> String {
+    format!("layer '{name}' needs TIFF or EXR; not written")
+}
+
 /// The Output node's wired alpha port and every enabled Export Layer
 /// node, rendered through ONE executor and the beauty's own sources, so
 /// a mask feeding both a layer and the beauty's alpha computes once
@@ -28,15 +58,49 @@ pub(crate) fn render_export_layers(
     ui: &UiGraph,
     source: Arc<ImageBuf>,
     extra: &HashMap<String, SourceImage>,
+    log: impl FnMut(&str, &str),
+) -> Result<(Option<Value>, Vec<ExportLayer>), String> {
+    render_export_layers_holding(ui, source, extra, ContainerHolds::ALL, log)
+}
+
+/// The same, for an export to `dest`: what its container cannot hold
+/// is named in the log and never rendered. A JPEG of a photograph with
+/// layers enabled rendered every one of them, and the alpha, only for
+/// finish_export to drop them (vagabond-burro/heeler#14).
+pub(crate) fn render_export_layers_for(
+    ui: &UiGraph,
+    source: Arc<ImageBuf>,
+    extra: &HashMap<String, SourceImage>,
+    dest: &Path,
+    format: &str,
+    log: impl FnMut(&str, &str),
+) -> Result<(Option<Value>, Vec<ExportLayer>), String> {
+    render_export_layers_holding(ui, source, extra, ContainerHolds::of(&export_container(dest, format)), log)
+}
+
+fn render_export_layers_holding(
+    ui: &UiGraph,
+    source: Arc<ImageBuf>,
+    extra: &HashMap<String, SourceImage>,
+    holds: ContainerHolds,
     mut log: impl FnMut(&str, &str),
 ) -> Result<(Option<Value>, Vec<ExportLayer>), String> {
     let output = ui.nodes.iter().find(|n| n.node_type == "heeler.output");
     let alpha_wired = output.is_some_and(|o| ui.connections.iter().any(|c| c.to.0 == o.id && c.to.1 == "alpha"));
-    let layer_nodes: Vec<&UiNode> = ui
+    let mut layer_nodes: Vec<&UiNode> = ui
         .nodes
         .iter()
         .filter(|n| n.node_type == "heeler.export_layer" && n.enabled)
         .collect();
+    if alpha_wired && !holds.alpha {
+        log("warn", ALPHA_NOT_HELD);
+    }
+    if !holds.layers {
+        for n in layer_nodes.drain(..) {
+            log("warn", &layer_not_held(&export_layer_name(n)));
+        }
+    }
+    let alpha_wired = alpha_wired && holds.alpha;
     if !alpha_wired && layer_nodes.is_empty() {
         return Ok((None, Vec::new()));
     }
@@ -50,7 +114,7 @@ pub(crate) fn render_export_layers(
     let (g, sources, _terminal) = export_render_setup(ui, source, extra)?;
     let mut exec = Executor::new();
 
-    let alpha = match output {
+    let alpha = match output.filter(|_| alpha_wired) {
         Some(o) => match g.incoming(&o.id, "alpha") {
             Some(conn) => Some(exec.render_connection(&g, conn, &sources).map_err(|e| e.to_string())?),
             None => None,
@@ -726,6 +790,97 @@ pub(crate) mod tests {
         close(planes[9][1], 1.0, "grade.A of the green pixel");
         // Depth stays f32, so it is the planted plane bit for bit.
         assert_eq!(planes[10], vec![0.25, 0.75], "depth.Z is the planted plane");
+    }
+
+    /// What the destination's container cannot hold is never rendered:
+    /// a JPEG of a photograph with layers and a wired alpha rendered them
+    /// all only for finish_export to drop them (vagabond-burro/heeler#14).
+    /// Under a one-byte budget any render is refused, so an export that
+    /// renders nothing is the only one that succeeds there.
+    #[test]
+    fn a_container_that_cannot_hold_them_renders_no_layers_and_no_alpha() {
+        let ui = export_layer_graph();
+        let smart = depth_plant();
+        // Made outside the budget: a picture is itself an allocation it counts.
+        let photo = export_layer_source();
+        let run = |dest: &str, format: &str| {
+            let mut log: Vec<String> = Vec::new();
+            let got = memory::with_budget(1, || {
+                render_export_layers_for(&ui, photo.clone(), &smart, Path::new(dest), format, |level, msg| {
+                    log.push(format!("{level}: {msg}"))
+                })
+            });
+            (got, log)
+        };
+        let layer_warnings = ["sky", "subject", "grade", "farness"].map(|n| format!("warn: {}", layer_not_held(n)));
+
+        // JPEG: neither is rendered, and the log names all five as before.
+        let (got, log) = run("photo.jpg", "jpeg");
+        let (alpha, layers) = got.expect("nothing rendered, nothing refused");
+        assert!(alpha.is_none() && layers.is_empty());
+        assert!(log.contains(&format!("warn: {ALPHA_NOT_HELD}")), "{log:?}");
+        for w in &layer_warnings {
+            assert!(log.contains(w), "{w} missing from {log:?}");
+        }
+        // The extension decides, not the format: a "tiff" named .jpg is a JPEG.
+        assert!(run("photo.jpg", "tiff").0.is_ok());
+        // PNG, TIFF and EXR hold the alpha, so it renders (and is refused
+        // here); with no extension the format's own, png16 being .png.
+        for (dest, format) in [("photo.png", "png"), ("photo", "png16"), ("photo.tif", "jpeg"), ("photo.exr", "exr")] {
+            let err = run(dest, format).0.err().unwrap_or_else(|| panic!("{dest} as {format} rendered nothing"));
+            assert!(memory::is_refusal(&err), "{err}");
+        }
+
+        // With room to render: PNG gets the alpha and none of the layers,
+        // and says nothing of an alpha it carries; TIFF gets both.
+        let mut log: Vec<String> = Vec::new();
+        let (alpha, layers) =
+            render_export_layers_for(&ui, export_layer_source(), &smart, Path::new("photo.png"), "png", |l, m| log.push(format!("{l}: {m}")))
+                .unwrap();
+        assert!(alpha.is_some(), "PNG carries the wired alpha");
+        assert!(layers.is_empty());
+        assert!(!log.iter().any(|m| m.contains("carries no alpha")), "{log:?}");
+        for w in &layer_warnings {
+            assert!(log.contains(w), "{w} missing from {log:?}");
+        }
+        let (alpha, layers) =
+            render_export_layers_for(&ui, export_layer_source(), &smart, Path::new("photo.tiff"), "tiff", |_, _| {}).unwrap();
+        assert!(alpha.is_some());
+        assert_eq!(layers.len(), 4);
+    }
+
+    /// The whole JPEG export, end to end: the file is written, and each
+    /// layer and the alpha are named as not written once, not twice.
+    #[test]
+    fn a_jpeg_export_with_layers_names_each_dropped_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("photo.jpg");
+        let ui = export_layer_graph();
+        let smart = depth_plant();
+        let mut log: Vec<String> = Vec::new();
+        let (alpha, layers) =
+            render_export_layers_for(&ui, export_layer_source(), &smart, &dest, "jpeg", |l, m| log.push(format!("{l}: {m}"))).unwrap();
+        let written = finish_export(
+            crate::ExportInput { graph: &ui, source_path: None, source: export_layer_source(), smart: &smart, keywords: &[], alpha, layers },
+            &dest,
+            crate::ExportOptions {
+                format: "jpeg",
+                quality: 90,
+                max_edge: None,
+                keep_metadata: true,
+                matte: false,
+                scale_percent: None,
+                allow_overwrite: false,
+                dpi: heeler_io::DEFAULT_DPI,
+            },
+            |l, m| log.push(format!("{l}: {m}")),
+        )
+        .unwrap();
+        assert!(std::fs::read(&written).unwrap().starts_with(&[0xFF, 0xD8]));
+        assert_eq!(log.iter().filter(|m| m.contains("carries no alpha")).count(), 1, "{log:?}");
+        for n in ["sky", "subject", "grade", "farness"] {
+            assert_eq!(log.iter().filter(|m| **m == format!("warn: {}", layer_not_held(n))).count(), 1, "{n}: {log:?}");
+        }
     }
 
     /// Two Export Layer nodes named the same collide in every container:

@@ -39,7 +39,11 @@ pub use stack_render::{StackManifest, read_stack, write_stack, MemberDecode, Sta
 use stack_render::{stack_member_full, stack_member_preview, render_stack_at};
 #[allow(unused_imports)]
 use stack_render::{exif_exposure, relative_exposures};
-use export_layers::{render_export_layers, write_exr, write_tiff_siblings};
+use export_layers::{render_export_layers_for, write_exr, write_tiff_siblings, ContainerHolds};
+// The every-layer render, which the exports no longer call (they ask for
+// their container's with render_export_layers_for); the tests still do.
+#[allow(unused_imports)]
+use export_layers::render_export_layers;
 // Only the tests, which build layers by hand, name the type here. Not
 // a cfg(test) line: the source scans stop at the first one.
 #[allow(unused_imports)]
@@ -11210,7 +11214,7 @@ async fn export_image(
         // export_to keyed it on the destination's extension, and a name
         // typed into the dialog got bytes that disagreed with its own
         // extension).
-        let (alpha, layers) = render_export_layers(&graph, source.clone(), &smart, |level, msg| {
+        let (alpha, layers) = render_export_layers_for(&graph, source.clone(), &smart, &dest, &format, |level, msg| {
             emit_log(&app, level, format!("{image_id}: {msg}"));
         })?;
         finish_export(
@@ -16941,7 +16945,7 @@ async fn export_to(
         } else {
             Vec::new()
         };
-        let (alpha, layers) = render_export_layers(&graph, source.clone(), &smart, |level, msg| {
+        let (alpha, layers) = render_export_layers_for(&graph, source.clone(), &smart, Path::new(&dest), &format, |level, msg| {
             emit_log(&app, level, format!("{image_id}: {msg}"));
         })?;
         mark("export layers");
@@ -16999,6 +17003,18 @@ async fn export_to(
 /// png16 export came out as a JPEG. It mirrors FORMAT_EXT in
 /// export.ts, which builds every batch destination, so a name the
 /// panel produces and a name the dialog suggests are the same name.
+/// The container an export to `dest` is written in: the destination's
+/// extension where it carries one, since the bytes must match the name
+/// every other program reads the file by; else the format's, through the
+/// table the save dialog seeds its name from (`format` is not itself an
+/// extension: "png16" is .png).
+pub(crate) fn export_container(dest: &Path, format: &str) -> String {
+    dest.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_else(|| extension_for(format).to_string())
+}
+
 fn extension_for(format: &str) -> &'static str {
     match format {
         // png16 shares .png with png; finish_export breaks the tie on
@@ -17098,25 +17114,18 @@ fn finish_export_admitted(
     // not itself an extension. It used to fall through raw, and
     // "png16" matches no arm below, so a 16-bit PNG asked for by a
     // name with no extension was written as a JPEG.
-    let ext = dest
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_ascii_lowercase())
-        .unwrap_or_else(|| extension_for(format).to_string());
+    let ext = export_container(dest, format);
     // Whether the file written can hold an alpha: by its container, which
     // the extension picks, as the layers go. Asked by the format, a
     // "jpeg" export named .tif wrote a TIFF without its alpha and said
     // the format carried none (the 26.5.1 review).
-    let holds_alpha = matches!(ext.as_str(), "png" | "tif" | "tiff" | "exr");
+    let holds_alpha = ContainerHolds::of(&ext).alpha;
     let alpha_wired = alpha.is_some();
     if let Some(a) = &alpha {
         if holds_alpha {
             apply_alpha(&mut image, a);
         } else {
-            log(
-                "warn",
-                "the Output node's alpha port is wired, but this format carries no alpha; exported opaque (alpha needs PNG, TIFF or EXR)",
-            );
+            log("warn", export_layers::ALPHA_NOT_HELD);
         }
     }
     // Background removal: the graph's Smart mask becomes the alpha
@@ -17176,7 +17185,7 @@ fn finish_export_admitted(
     // under .png names and warned of nothing.
     if !layers.is_empty() && !matches!(ext.as_str(), "tif" | "tiff") {
         for ch in &layers {
-            log("warn", &format!("layer '{}' needs TIFF or EXR; not written", ch.name));
+            log("warn", &export_layers::layer_not_held(&ch.name));
         }
     }
     let mut bytes = match ext.as_str() {
