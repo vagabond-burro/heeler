@@ -15,7 +15,7 @@ import { chooseWith } from "./menuhelp";
 import { bwDefaultPoints, separatePoints } from "../blackwhite";
 import * as bridge from "../bridge";
 import { initialState } from "../data";
-import { parseEqPoints, storedEqPoints } from "../eqcurve";
+import { parseEqPoints, storedCurve, storedEqPoints } from "../eqcurve";
 import type { NodeCard } from "../state";
 import { BwControls } from "../ui/bwcontrols";
 
@@ -85,6 +85,19 @@ describe("stored curves, as the engine reads them", () => {
     expect(depth[1][1]).toBeLessThan(depth[0][1]); // the diagonal rises: far reads higher on the plot
     expect(shown("ir_curve", null)).toBe("");
     expect(shown("ir_curve", "[{\"x\":0,\"y\":0},{\"x\":359,\"y\":0}]")).toBe("0.45");
+  });
+
+  // A reader that kept only x and y would lose a user's curve shape and
+  // no case above would notice (the 2026.5.2 review).
+  it("a stored curve keeps its handles, in every param and through storedEqPoints", () => {
+    const text = '[{"x":0,"y":0,"r":[20,2]},{"x":359,"y":1,"l":[-30,-1]}]';
+    for (const param of ["points", "hue_curve", "ir_curve", "depth_curve"] as const) {
+      const pts = storedCurve({ [param]: text }, param)!;
+      expect(pts[0].r, param).toEqual([20, 2]);
+      expect(pts[1].l, param).toEqual([-30, -1]);
+    }
+    const shown = storedEqPoints({ params: { ev_0: 1 }, textParams: { points: text } });
+    expect(shown[0].r).toEqual([20, 2]);
   });
 
   it("the infrared editor draws a stored curve, not the materials", async () => {

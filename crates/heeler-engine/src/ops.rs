@@ -5305,6 +5305,40 @@ mod tests {
         }
     }
 
+    /// A stored curve keeps its manual handles through every reader, and
+    /// they reach the render: a reader that kept only x and y would lose
+    /// a user's curve shape and no case above would notice (the 2026.5.2
+    /// review).
+    #[test]
+    fn a_stored_curve_keeps_its_handles() {
+        let handled = r#"[{"x":0,"y":0,"r":[20,2]},{"x":359,"y":1,"l":[-30,-1]}]"#;
+        for (node_type, curve) in [
+            ("heeler.tone_eq", &TONE_EQ_POINTS),
+            ("heeler.black_white", &BW_HUE_CURVE),
+            ("heeler.black_white", &BW_IR_CURVE),
+            ("heeler.black_white", &BW_DEPTH_CURVE),
+        ] {
+            let mut node = make_node(node_type);
+            set_text(&mut node, curve.param, handled);
+            let pts = curve.read(&node).unwrap();
+            assert_eq!(pts[0].r, Some([20.0, 2.0]), "{} lost a right handle", curve.param);
+            assert_eq!(pts[1].l, Some([-30.0, -1.0]), "{} lost a left handle", curve.param);
+        }
+        // Rendered: the same points with and without a handle differ.
+        let mut img = ImageBuf::new(4, 1);
+        for (x, v) in [0.02f32, 0.05, 0.18, 0.5].into_iter().enumerate() {
+            img.set_pixel(x, 0, [v, v, v, 1.0]);
+        }
+        let render = |pts: &str| {
+            let mut node = make_node("heeler.tone_eq");
+            set_text(&mut node, "points", pts);
+            run_on(&node, img.clone()).unwrap().as_image().unwrap().data.clone()
+        };
+        let plain = render(r#"[{"x":-4,"y":0},{"x":0,"y":1},{"x":4,"y":0}]"#);
+        let tangent = render(r#"[{"x":-4,"y":0,"r":[1,2]},{"x":0,"y":1},{"x":4,"y":0}]"#);
+        assert_ne!(plain, tangent, "a handle changed nothing in the render");
+    }
+
     #[test]
     fn an_empty_eq_curve_is_flat_and_the_zones_are_only_the_absent_fallback() {
         // A pre-widget graph: a zone slider lifted, no points. Then the
