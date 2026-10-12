@@ -50,7 +50,7 @@ a negative later.
 Our copy does differ now. `third_party/LibRaw-<version>/HEELER-CHANGES.md`
 lists Heeler's changes (the first fixes X-Trans half-size develops,
 vagabond-burro/heeler#12), each one is marked with a `Heeler:` comment in
-the source, and the licence-page test holds `open-source.md` to pointing
+the source, and the license-page test holds `open-source.md` to pointing
 at that list. Any change to the tree means a new archive: run the script
 and publish its output, alongside the archives already published, before
 a binary built from the changed tree ships. When LibRaw is upgraded,
