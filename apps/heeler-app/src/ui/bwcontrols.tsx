@@ -15,7 +15,7 @@
  * it (a bare inspector) the curve and the menus still edit the node. */
 
 import { bwDefaultPoints } from "../blackwhite";
-import { parseEqPoints, recolorLayouts, serializeEqPoints } from "../eqcurve";
+import { recolorLayouts, serializeEqPoints, storedCurve } from "../eqcurve";
 import { IR_DEFAULTS, IR_MATERIALS, filmStock, irPriorPoints } from "../film";
 import { isInfrared, wrattenFilter } from "../filters";
 import { useState } from "react";
@@ -56,17 +56,15 @@ export function BwControls({
   // on it), so the fold's test reads the same key for both.
   const infrared = isInfrared(bw.textParams?.filter, filmKey) || isInfrared(bw.textParams?.far_filter, filmKey);
   const [irCurveOpen, setIrCurveOpen] = useState(false);
-  const irStored = parseEqPoints(bw.textParams?.ir_curve);
-  const irDrawn = irStored.length >= 2;
-  const stored = parseEqPoints(bw.textParams?.hue_curve);
-  const pts = stored.length >= 2 ? stored : bwDefaultPoints();
+  const irStored = storedCurve(bw.textParams, "ir_curve");
+  const irDrawn = irStored !== null;
+  const pts = storedCurve(bw.textParams, "hue_curve") ?? bwDefaultPoints();
   const inputThumb = useHueSourceThumb(state, bw.id);
   const fallback = state?.images.find((i) => i.id === state.activeImage)?.src;
   const curveOn = (bw.params.hue_curve_on ?? 1) !== 0;
   const farKey = bw.textParams?.far_filter ?? "";
   const farOn = wrattenFilter(farKey) !== null && farKey !== (bw.textParams?.filter ?? "");
-  const depthStored = parseEqPoints(bw.textParams?.depth_curve);
-  const depthPts = depthStored.length >= 2 ? depthStored : [{ x: 0, y: 0 }, { x: 100, y: 100 }];
+  const depthPts = storedCurve(bw.textParams, "depth_curve") ?? [{ x: 0, y: 0 }, { x: 100, y: 100 }];
   const total = Math.round((bw.params.red ?? 30) + (bw.params.green ?? 59) + (bw.params.blue ?? 11));
   const off = Math.abs(total - 100) > 2;
   return (
@@ -342,7 +340,7 @@ drawn curve: the curve outranks the four stops, not the floor.*/}
                 histChannel="hue"
                 axisBackground="hue"
                 spectrumBars
-                points={irDrawn ? irStored : irPriorPoints(bw.params)}
+                points={irStored ?? irPriorPoints(bw.params)}
                 interpParam="ir_interp"
                 onPoints={(next) => dispatch({ type: "set_text_param", id: bw.id, param: "ir_curve", value: serializeEqPoints(next) })}
                 presets={recolorLayouts("hue")}

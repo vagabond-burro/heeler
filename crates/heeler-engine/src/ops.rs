@@ -1913,16 +1913,40 @@ pub(crate) fn parse_eq_points(json: &str) -> Vec<EqPoint> {
     pts
 }
 
-/// The stored curve, or None when there is none: the param absent or
-/// "" (its spec default). Present means authoritative even when it parses
-/// to nothing, since the Empty layout writes "[]"; eqcurve.ts
-/// storedEqPoints draws the same line.
-fn eq_points(node: &Node) -> Option<Vec<EqPoint>> {
-    node.params
-        .get("points")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.trim().is_empty())
-        .map(parse_eq_points)
+/// When a curve stored in a text param stands; otherwise its node does
+/// what it does without one. The app's STORED_CURVES in eqcurve.ts says
+/// the same per param, and tests/stored_curves.json holds the two sides
+/// to one set of cases (they once disagreed on the Empty layout's "[]").
+#[derive(Clone, Copy)]
+pub(crate) enum CurveStands {
+    /// Any value but an absent or blank one ("" is the spec default),
+    /// even one that parses to nothing: the Tone Equalizer's Empty layout
+    /// writes "[]", a flat curve.
+    UnlessBlank,
+    /// Two points or more.
+    FromTwoPoints,
+}
+
+/// One curve stored as a point list in a text param.
+pub(crate) struct StoredCurve {
+    pub(crate) param: &'static str,
+    pub(crate) stands: CurveStands,
+}
+
+pub(crate) const TONE_EQ_POINTS: StoredCurve = StoredCurve { param: "points", stands: CurveStands::UnlessBlank };
+pub(crate) const BW_HUE_CURVE: StoredCurve = StoredCurve { param: "hue_curve", stands: CurveStands::FromTwoPoints };
+pub(crate) const BW_IR_CURVE: StoredCurve = StoredCurve { param: "ir_curve", stands: CurveStands::FromTwoPoints };
+pub(crate) const BW_DEPTH_CURVE: StoredCurve = StoredCurve { param: "depth_curve", stands: CurveStands::FromTwoPoints };
+
+impl StoredCurve {
+    /// The node's stored curve, or None when the node falls back.
+    pub(crate) fn read(&self, node: &Node) -> Option<Vec<EqPoint>> {
+        let text = node.params.get(self.param).and_then(|v| v.as_str()).unwrap_or("");
+        match self.stands {
+            CurveStands::UnlessBlank => (!text.trim().is_empty()).then(|| parse_eq_points(text)),
+            CurveStands::FromTwoPoints => Some(parse_eq_points(text)).filter(|pts| pts.len() >= 2),
+        }
+    }
 }
 
 /// The parametric curve's interpolation face (the editors' 3-button
@@ -2165,7 +2189,7 @@ fn tone_eq(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError
     // The widget writes `points`; graphs from before it carry only the
     // nine zone sliders, which are the same curve with fixed x. An empty
     // list ("[]", the Empty layout) is a flat curve, not a fallback.
-    let mut pts = eq_points(node).unwrap_or_else(|| {
+    let mut pts = TONE_EQ_POINTS.read(node).unwrap_or_else(|| {
         ZONES
             .iter()
             .enumerate()
@@ -2272,27 +2296,16 @@ fn black_white(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineE
     if amount == 0.0 {
         return Ok(Value::Image(src.clone()));
     }
-    let curve = node
-        .params
-        .get("hue_curve")
-        .and_then(|v| v.as_str())
-        .map(parse_eq_points)
-        .unwrap_or_default();
+    let curve = BW_HUE_CURVE.read(node).unwrap_or_default();
     let curve_active =
-        curve.len() >= 2 && curve.iter().any(|pt| pt.y != 0.0) && p_bool(&node.params, "hue_curve_on", true);
+        curve.iter().any(|pt| pt.y != 0.0) && p_bool(&node.params, "hue_curve_on", true);
     // Filter and film: a Wratten filter or a film's spectral sensitivity
     // named on the node makes the gray a spectral integral in place of the
     // mixer; the hue curve and Amount ride on top as they do over the
     // mixer. The infrared prior (phase 4b): the curve when the user has
     // drawn one, else the four materials, else the default.
     let prior = {
-        let curve = node
-            .params
-            .get("ir_curve")
-            .and_then(|v| v.as_str())
-            .map(parse_eq_points)
-            .unwrap_or_default();
-        if curve.len() >= 2 {
+        if let Some(curve) = BW_IR_CURVE.read(node) {
             crate::spectral::IrPrior::from_points(curve)
         } else {
             let d = crate::spectral::IrMaterials::DEFAULT;
@@ -2326,15 +2339,9 @@ fn black_white(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineE
     let graded = far.is_some() && plane.is_some();
     let far_infrared = far.as_ref().map(|c| c.infrared_share() > 1e-4).unwrap_or(false);
     let depth_curve = {
-        let mut pts = node
-            .params
-            .get("depth_curve")
-            .and_then(|v| v.as_str())
-            .map(parse_eq_points)
-            .unwrap_or_default();
-        if pts.len() < 2 {
-            pts = parse_eq_points(r#"[{"x":0,"y":0},{"x":100,"y":100}]"#);
-        }
+        let mut pts = BW_DEPTH_CURVE
+            .read(node)
+            .unwrap_or_else(|| parse_eq_points(r#"[{"x":0,"y":0},{"x":100,"y":100}]"#));
         apply_eq_interp(&mut pts, &interp_or(node, "depth_interp"));
         pts
     };

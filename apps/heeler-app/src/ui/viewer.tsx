@@ -29,7 +29,7 @@ import { bandAfterPick, colorSetOf, oklabHueChroma } from "../colorsets";
 import { ZONE_NAMES, bwDefaultPoints, bwGateOf, separatePoints, zoneCentre, placementWord } from "../blackwhite";
 import { developmentDial } from "../film";
 import { consolePickOutcome, linearToSrgb255, parseConsoleBands, serializeConsoleBands } from "../consolebands";
-import { EQ_PICK_GRAB, TONE_EQ_DOMAIN, TONE_EQ_Y, storedEqPoints, RECOLOR_AXIS, RECOLOR_CELLS, RECOLOR_OUT, defaultEqInterp, evalEqInterp, evalEqPeriodic, evalEqPeriodicInterp, parseRecolorCurves, recolorDefaultPoints, serializeRecolorCurves, matchPoints, parseEqPoints, serializeEqPoints } from "../eqcurve";
+import { EQ_PICK_GRAB, TONE_EQ_DOMAIN, TONE_EQ_Y, storedCurve, storedEqPoints, RECOLOR_AXIS, RECOLOR_CELLS, RECOLOR_OUT, defaultEqInterp, evalEqInterp, evalEqPeriodic, evalEqPeriodicInterp, parseRecolorCurves, recolorDefaultPoints, serializeRecolorCurves, matchPoints, serializeEqPoints } from "../eqcurve";
 import { PICK_CURSOR, dropperCursor } from "./cursors";
 import { pickedCurvePoint } from "./editors";
 import { BrushOverlay, CropOverlay, IDENTITY_VIEW, LinearOverlay, RadialOverlay, StraightenOverlay, TransformOverlay, norm, type LiveQuad } from "./overlays";
@@ -2866,8 +2866,7 @@ second lands or Escape drops it.*/}
                       }
                       hue = held;
                     }
-                    const stored = parseEqPoints(live.textParams?.hue_curve);
-                    let pts = (stored.length >= 2 ? stored : bwDefaultPoints()).map((p) => ({ ...p }));
+                    let pts = (storedCurve(live.textParams, "hue_curve") ?? bwDefaultPoints()).map((p) => ({ ...p }));
                     // A new point at the hue, on the curve where it
                     // stands; only a click on a point already there takes
                     // it (EQ_PICK_GRAB), as Recolor's rows do.
@@ -3057,7 +3056,7 @@ until the second lands or Escape drops it.*/}
                     ]);
                     if (!session.stillMine() || !sample || sample.r === undefined || output?.luma_linear === undefined) return;
                     const live = session.state().nodes.find((n) => n.id === bw.id) ?? bw;
-                    const pts = parseEqPoints(live.textParams?.hue_curve);
+                    const pts = storedCurve(live.textParams, "hue_curve") ?? bwDefaultPoints();
                     const { hue, chroma, lightness } = oklabHueChroma(sample.r, sample.g!, sample.b!);
                     const gray = output.luma_linear;
                     const color = { hue, chroma, lightness, gray, x: nx, y: ny };
@@ -3070,7 +3069,7 @@ until the second lands or Escape drops it.*/}
                       return;
                     }
                     if (firstOutput?.luma_linear === undefined) return;
-                    const next = separatePoints({ ...armed.source, gray: firstOutput.luma_linear }, color, pts.length >= 2 ? pts : bwDefaultPoints(), 0.5, live.curveInterp);
+                    const next = separatePoints({ ...armed.source, gray: firstOutput.luma_linear }, color, pts, 0.5, live.curveInterp);
                     if (next === "neutral") {
                       logMsg("warn", "Separate: that color is neutral, and a neutral has no hue to key on. Pick a colored spot.");
                       return;

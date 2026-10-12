@@ -231,15 +231,37 @@ export function legacyZonePoints(params: Record<string, number>): EqPoint[] {
   return pts.some((p) => p.y !== 0) ? pts : [];
 }
 
+/** When a curve stored in a text param stands; otherwise its control
+ * shows what the node does without one. The engine's StoredCurve
+ * constants (ops.rs) say the same per param, and
+ * crates/heeler-engine/tests/stored_curves.json holds the two sides to
+ * one set of cases (they once disagreed on the Empty layout's "[]").
+ * "unless-blank": any value but an absent or blank one ("" is the spec
+ * default), even one that parses to nothing, since the Tone Equalizer's
+ * Empty layout writes "[]". "from-two-points": two points or more. */
+export const STORED_CURVES = {
+  points: "unless-blank",
+  hue_curve: "from-two-points",
+  ir_curve: "from-two-points",
+  depth_curve: "from-two-points",
+} as const;
+
+/** The curve stored in `param`, or null when the node falls back. */
+export function storedCurve(textParams: Record<string, string> | undefined, param: keyof typeof STORED_CURVES): EqPoint[] | null {
+  const text = textParams?.[param] ?? "";
+  if (STORED_CURVES[param] === "unless-blank") return text.trim() ? parseEqPoints(text) : null;
+  const pts = parseEqPoints(text);
+  return pts.length >= 2 ? pts : null;
+}
+
 /** A node's EQ curve as its widget shows it: the stored `points` when
- * present, authoritative even when it parses to nothing (the Empty
- * layout writes "[]"; "" is the spec default and counts as absent, as
- * the engine's eq_points has it); else the nine legacy zone sliders of a graph
+ * they stand (storedCurve); else the nine legacy zone sliders of a graph
  * saved before the widget; else the starting layout, every three stops.
  * The widget and Tone Equalizer's on-image picker read it alike, so a pick
  * edits the curve the picture is drawn from. */
 export function storedEqPoints(node: { params: Record<string, number>; textParams?: Record<string, string> }): EqPoint[] {
-  if (node.textParams?.points?.trim()) return parseEqPoints(node.textParams.points);
+  const stored = storedCurve(node.textParams, "points");
+  if (stored) return stored;
   const legacy = legacyZonePoints(node.params);
   if (legacy.length) return legacy;
   return EQ_PRESETS.find((p) => p.id === "coarse")!.points.map((p) => ({ ...p }));
