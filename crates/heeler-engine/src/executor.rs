@@ -115,6 +115,26 @@ fn planted_id(node: &Node) -> &str {
     node.params.get(PLANTED_AS).and_then(|v| v.as_str()).unwrap_or(&node.id)
 }
 
+/// The slot a node's planted output is kept under in the sources map:
+/// `{id}@{port}`, as Depth Map's plane at `@depth`, a File node's mask at
+/// `@mask` and Depth Lighting's normals at `@normal`.
+fn slot(node_id: &str, port: &str) -> String {
+    format!("{node_id}@{port}")
+}
+
+/// Hashes a planted slot into a key: its full id, whether a raster is
+/// there, then its version. A version alone cannot tell two slots apart,
+/// nor a raster planted at version 0 from none. Every slot a key reads
+/// goes through here, so the next one cannot leave a part out. The
+/// planted source, for what else a caller hashes from it.
+fn hash_slot<'s>(hasher: &mut Hasher, sources: &'s HashMap<String, SourceImage>, slot: &str) -> Option<&'s SourceImage> {
+    let planted = sources.get(slot);
+    hasher.write(slot.as_bytes());
+    hasher.write(&[planted.is_some() as u8]);
+    hasher.write_u64(planted.map(|s| s.version).unwrap_or(0));
+    planted
+}
+
 /// Nodes whose output is a registered picture rather than a function of
 /// their inputs: the photograph itself, and any file read in beside it.
 fn is_source(ty: &str) -> bool {
@@ -136,7 +156,7 @@ fn normal_slot(ty: &str) -> bool {
 /// channel at `@mask` (Phase 6). Nothing planted is an empty mask, the
 /// passthrough rule every field reader follows.
 fn planted_port_value(node_id: &str, port: &str, sources: &HashMap<String, SourceImage>) -> Value {
-    let Some(src) = sources.get(&format!("{node_id}@{port}")) else {
+    let Some(src) = sources.get(&slot(node_id, port)) else {
         return Value::Mask(Arc::new(crate::buffers::MaskBuf::new(0, 0)));
     };
     let img = &src.image;
@@ -373,7 +393,7 @@ impl Executor {
                             // pass-through outputs are the exception:
                             // they carry the node's own render.
                             let d = if c.from.1 != "out" && !passthrough_port(self.graph, &c.from.0, &c.from.1) {
-                                match self.sources.get(&format!("{}@{}", c.from.0, c.from.1)) {
+                                match self.sources.get(&slot(&c.from.0, &c.from.1)) {
                                     // The planted plane is read into a new mask.
                                     Some(src) => {
                                         self.held = memory::sum([self.held, memory::bytes(src.image.width, src.image.height, 1, 4)?])?;
@@ -522,22 +542,11 @@ impl Executor {
             // These nodes' rasters ride the sources map too, but
             // OPTIONALLY: no raster is a valid state (empty mask, a
             // passthrough, or a selection's classical geometry), so
-            // absence is hashed rather than erroring the render. Every
-            // planted slot hashes its full id, whether a raster is there,
-            // then its version: a version alone cannot tell two slots
-            // apart, nor a raster at version 0 from none.
-            let planted = planted_id(node);
-            hasher.write(planted.as_bytes());
-            let raster = sources.get(planted);
-            hasher.write(&[raster.is_some() as u8]);
-            hasher.write_u64(raster.map(|s| s.version).unwrap_or(0));
+            // absence is hashed rather than erroring the render.
+            hash_slot(&mut hasher, sources, planted_id(node));
         }
         if normal_slot(&node.node_type) {
-            let slot = format!("{node_id}@normal");
-            hasher.write(slot.as_bytes());
-            let normals = sources.get(&slot);
-            hasher.write(&[normals.is_some() as u8]);
-            hasher.write_u64(normals.map(|s| s.version).unwrap_or(0));
+            hash_slot(&mut hasher, sources, &slot(node_id, "normal"));
         }
 
         for port in &node.inputs {
@@ -552,11 +561,7 @@ impl Executor {
                         // re-plants when the recipe moves, so the
                         // version covers the params too.
                         hasher.write(b"@planted-port");
-                        let slot = format!("{}@{}", conn.from.0, conn.from.1);
-                        hasher.write(slot.as_bytes());
-                        let planted = sources.get(&slot);
-                        hasher.write(&[planted.is_some() as u8]);
-                        hasher.write_u64(planted.map(|s| s.version).unwrap_or(0));
+                        let planted = hash_slot(&mut hasher, sources, &slot(&conn.from.0, &conn.from.1));
                         // The measured mark changes what the consumer
                         // draws, so it is part of the key too: the
                         // desktop can learn a plane's origin after
@@ -643,7 +648,7 @@ impl Executor {
                     // outputs are the exception.
                     let (value, _) = if conn.from.1 != "out" && !passthrough_port(graph, &conn.from.0, &conn.from.1) {
                         if port.name == "depth" && conn.from.1 == "depth" {
-                            depth_measured = sources.get(&format!("{}@depth", conn.from.0)).is_some_and(|s| s.measured);
+                            depth_measured = sources.get(&slot(&conn.from.0, &conn.from.1)).is_some_and(|s| s.measured);
                         }
                         (planted_port_value(&conn.from.0, &conn.from.1, sources), 0)
                     } else {
@@ -692,7 +697,7 @@ impl Executor {
                 }
             }
             if normal_slot(&node.node_type) {
-                if let Some(src) = sources.get(&format!("{node_id}@normal")) {
+                if let Some(src) = sources.get(&slot(node_id, "normal")) {
                     inputs.push(("normal".to_string(), Value::Image(src.image.clone())));
                 }
             }
