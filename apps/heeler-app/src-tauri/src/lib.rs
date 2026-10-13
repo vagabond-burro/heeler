@@ -7852,7 +7852,7 @@ fn full_short_of(app: &tauri::AppHandle, image_id: &str, opts: heeler_io::RawSou
         return Some(short);
     }
     let path = with_session(app, |s| Ok(s.paths.get(image_id).cloned())).ok().flatten()?;
-    let (w, h) = std::fs::read(&path).ok().and_then(|b| heeler_io::source_dimensions(&b))?;
+    let (w, h) = std::fs::read(&path).ok().and_then(|b| heeler_io::picture_dimensions(&path, &b))?;
     let _ = with_open_catalog(app, |catalog| {
         let _ = catalog.set_dimensions(image_id, w, h);
         Ok(())
@@ -7862,6 +7862,16 @@ fn full_short_of(app: &tauri::AppHandle, image_id: &str, opts: heeler_io::RawSou
 
 /// The short side the catalog knows for `image_id`: the decode's under
 /// `source_key` first, the header's otherwise.
+/// Whether the size the catalog recorded from a file's header was a
+/// thumbnail's rather than the photograph's: under half the decoded
+/// short side. Before 2026.5.3 the header probe read the first IFD,
+/// which for a DNG, a NEF and many other RAWs is the thumbnail, and
+/// meta_of keeps what it recorded; a full decode puts it right. A
+/// header a few pixels off the decode (margins) is left as it is.
+fn header_was_a_thumbnail(recorded: Option<(u32, u32)>, decoded: (u32, u32)) -> bool {
+    recorded.is_some_and(|(w, h)| w.min(h).saturating_mul(2) < decoded.0.min(decoded.1))
+}
+
 fn recorded_short(c: &Catalog, image_id: &str, source_key: &str) -> Option<f32> {
     if let Ok(Some((w, h))) = c.decoded_dimensions(image_id, source_key) {
         return Some(w.min(h) as f32);
@@ -9575,7 +9585,11 @@ fn full_source(
             // header may not: the pixel scale reads it from now on.
             let source_key = managed_source_key(app, image_id, opts);
             let _ = with_open_catalog(app, |c| {
-                let _ = c.set_decoded_dimensions(image_id, &source_key, image.width as u32, image.height as u32);
+                let (w, h) = (image.width as u32, image.height as u32);
+                let _ = c.set_decoded_dimensions(image_id, &source_key, w, h);
+                if header_was_a_thumbnail(c.image(image_id).ok().and_then(|r| r.width.zip(r.height)), (w, h)) {
+                    let _ = c.set_dimensions(image_id, w, h);
+                }
                 Ok(())
             });
             image
@@ -18939,7 +18953,7 @@ fn meta_of(
     // scale and snapping when the first sharp slice reports the frame.
     let (width, height) = match (record.width, record.height) {
         (Some(w), Some(h)) => (Some(w), Some(h)),
-        _ => match std::fs::read(path).ok().and_then(|b| heeler_io::source_dimensions(&b)) {
+        _ => match std::fs::read(path).ok().and_then(|b| heeler_io::picture_dimensions(path, &b)) {
             Some((w, h)) => {
                 let _ = with_open_catalog(app, |catalog| {
                     let _ = catalog.set_dimensions(image_id, w, h);

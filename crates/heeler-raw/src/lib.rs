@@ -71,6 +71,9 @@ extern "C" {
     fn libraw_init(flags: c_uint) -> *mut c_void;
     fn libraw_close(d: *mut c_void);
     fn libraw_open_buffer(d: *mut c_void, buf: *const c_void, size: usize) -> c_int;
+    fn libraw_adjust_sizes_info_only(d: *mut c_void) -> c_int;
+    fn libraw_get_iwidth(d: *mut c_void) -> c_int;
+    fn libraw_get_iheight(d: *mut c_void) -> c_int;
     fn libraw_unpack(d: *mut c_void) -> c_int;
     fn libraw_dcraw_process(d: *mut c_void) -> c_int;
     fn libraw_dcraw_make_mem_image(d: *mut c_void, errc: *mut c_int) -> *mut ProcessedImage;
@@ -192,6 +195,26 @@ pub fn dimensions(bytes: &[u8]) -> Result<(usize, usize), RawError> {
     let handle = Handle(p);
     check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
     Ok(unsafe { (heeler_raw_width(handle.0) as usize, heeler_raw_height(handle.0) as usize) })
+}
+
+/// The size of the picture a develop of this file hands back, upright,
+/// from its header alone. `dimensions` is the sensor's whole readout,
+/// masked margins included, which admission wants; this is what the
+/// photograph is: LibRaw's own output-size rule (adjust_sizes_info_only)
+/// trims the margins, unrotates a 45 degree Fujifilm SuperCCD, stretches
+/// non-square pixels and turns the frame on its side when the camera was.
+pub fn picture_dimensions(bytes: &[u8]) -> Result<(usize, usize), RawError> {
+    if let Some(dims) = gpr::dimensions(bytes) {
+        return Ok(dims);
+    }
+    let p = unsafe { libraw_init(0) };
+    if p.is_null() { return Err(RawError::Init); }
+    let handle = Handle(p);
+    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    check(unsafe { libraw_adjust_sizes_info_only(handle.0) })?;
+    let (w, h) = unsafe { (libraw_get_iwidth(handle.0) as usize, libraw_get_iheight(handle.0) as usize) };
+    if w == 0 || h == 0 { return Err(RawError::Unexpected); }
+    Ok((w, h))
 }
 
 pub fn decode_sensor_with(bytes: &[u8], opts: DevelopOpts) -> Result<SensorImage, RawError> {

@@ -221,14 +221,35 @@ pub(crate) fn get<'e>(entries: &'e [(u16, Entry)], tag: u16) -> Option<&'e Entry
 
 // ------------------------------------------------------------ detection
 
-/// Whether this is a DNG whose main image is JPEG XL, which is the class
-/// LibRaw declines. Cheap enough to call before attempting a decode.
 /// The largest frame any IFD of a TIFF-family file declares: the first
 /// IFD, its SubIFDs and theirs, whichever has the most pixels. A DNG
 /// keeps its photograph in a SubIFD and a thumbnail in the first IFD,
 /// so the first IFD's size, which is what EXIF and the image crate
 /// report, is the thumbnail's; this is the size of the picture itself.
 pub fn largest_frame(bytes: &[u8]) -> Option<(u32, u32)> {
+    largest_frame_where(bytes, |_| true)
+}
+
+/// The size of a TIFF-family file's picture when its first IFD says it
+/// is not the picture: NewSubfileType bit 0 marks a reduced copy, and
+/// a DNG, NEF and most TIFF-based RAWs keep a thumbnail there with the
+/// photograph in a SubIFD. The picture is then the largest frame marked
+/// full-resolution (NewSubfileType 0); previews, masks and the
+/// enhanced or semantic planes of a newer DNG all carry other values.
+/// None when the first IFD is the picture or the file is not a TIFF.
+pub(crate) fn main_frame(bytes: &[u8]) -> Option<(u32, u32)> {
+    let t = Tiff::new(bytes)?;
+    let (entries, _) = t.read_ifd(t.u32_at(4)? as usize)?;
+    let subfile = get(&entries, TAG_NEW_SUBFILE_TYPE).and_then(|e| t.number(e, 0)).unwrap_or(0.0);
+    if subfile as u32 & 1 == 0 {
+        return None;
+    }
+    largest_frame_where(bytes, |subfile| subfile == 0.0)
+}
+
+/// The largest frame among the IFDs whose NewSubfileType `keep` accepts
+/// (absent reads as 0, the full-resolution picture).
+fn largest_frame_where(bytes: &[u8], keep: impl Fn(f64) -> bool) -> Option<(u32, u32)> {
     let t = Tiff::new(bytes)?;
     let ifd0 = t.u32_at(4)? as usize;
     let mut queue = vec![(ifd0, 0u8)];
@@ -241,7 +262,8 @@ pub fn largest_frame(bytes: &[u8]) -> Option<(u32, u32)> {
         let Some((entries, subs)) = t.read_ifd(at) else { continue };
         let w = get(&entries, TAG_IMAGE_WIDTH).and_then(|e| t.number(e, 0)).unwrap_or(0.0);
         let h = get(&entries, TAG_IMAGE_LENGTH).and_then(|e| t.number(e, 0)).unwrap_or(0.0);
-        if w >= 1.0 && h >= 1.0 && w < 1e6 && h < 1e6 {
+        let subfile = get(&entries, TAG_NEW_SUBFILE_TYPE).and_then(|e| t.number(e, 0)).unwrap_or(0.0);
+        if keep(subfile) && w >= 1.0 && h >= 1.0 && w < 1e6 && h < 1e6 {
             let area = (w * h) as u64;
             if best.as_ref().is_none_or(|(a, _)| area > *a) {
                 best = Some((area, (w as u32, h as u32)));
@@ -254,6 +276,8 @@ pub fn largest_frame(bytes: &[u8]) -> Option<(u32, u32)> {
     best.map(|(_, dims)| dims)
 }
 
+/// Whether this is a DNG whose main image is JPEG XL, which is the class
+/// LibRaw declines. Cheap enough to call before attempting a decode.
 pub fn is_jxl_dng(bytes: &[u8]) -> bool {
     let Some(t) = Tiff::new(bytes) else {
         return false;

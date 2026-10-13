@@ -60,3 +60,15 @@ fn the_jaguar_reads_4016_after_one_full_decode() {
     let preview = ImageBuf::new(1365, 2048);
     assert!((px_scale_for(&preview, recorded_short(&c, "img_jaguar", &key)) - 1365.0 / 4016.0).abs() < 1e-6);
 }
+
+/// A catalog that recorded a RAW's thumbnail as its size (the header
+/// probe before 2026.5.3) is put right by the first full decode; a
+/// header a margin off the decode, like the jaguar's, stays.
+#[test]
+fn a_thumbnail_sized_header_gives_way_to_the_decode() {
+    assert!(header_was_a_thumbnail(Some((160, 120)), (3872, 2592)), "a NEF's first IFD");
+    assert!(header_was_a_thumbnail(Some((120, 160)), (3872, 2592)), "on its side");
+    assert!(!header_was_a_thumbnail(Some((6000, 4000)), (6016, 4016)), "margins");
+    assert!(!header_was_a_thumbnail(Some((3872, 2592)), (3872, 2592)));
+    assert!(!header_was_a_thumbnail(None, (3872, 2592)), "nothing recorded");
+}

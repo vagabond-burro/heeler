@@ -1414,10 +1414,10 @@ pub fn source_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
         return exr_passes::dimensions(bytes);
     }
     let exif = exif::read_exif(bytes);
-    let dims = ImageReader::new(Cursor::new(bytes))
-        .with_guessed_format()
-        .ok()
-        .and_then(|r| r.into_dimensions().ok())
+    // A first IFD marked as a reduced copy is a thumbnail (DNG, NEF and
+    // most TIFF-based RAWs), which is all the image crate and EXIF see.
+    let dims = dng_jxl::main_frame(bytes)
+        .or_else(|| ImageReader::new(Cursor::new(bytes)).with_guessed_format().ok().and_then(|r| r.into_dimensions().ok()))
         .or(match (exif.width, exif.height) {
             (Some(w), Some(h)) => Some((w, h)),
             _ => None,
@@ -1432,6 +1432,25 @@ pub fn source_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
             ((256..30_000).contains(&w) && (256..30_000).contains(&h)).then_some((w, h))
         })?;
     Some(if matches!(exif.orientation, Some(5..=8)) { (dims.1, dims.0) } else { dims })
+}
+
+/// The photograph's size for a file on disk, upright, from its header:
+/// a RAW the loader develops through LibRaw answers with LibRaw's own
+/// output size (margins trimmed, a SuperCCD unrotated, non-square
+/// pixels stretched), which is what the decode hands back; anything
+/// else answers as source_dimensions does. The catalog records this
+/// before the first full decode, and the viewer and the pixel scale
+/// read it until then.
+pub fn picture_dimensions(path: &Path, bytes: &[u8]) -> Option<(u32, u32)> {
+    #[cfg(feature = "libraw")]
+    if is_raw_extension(path) {
+        if let Ok((w, h)) = heeler_raw::picture_dimensions(bytes) {
+            return Some((w as u32, h as u32));
+        }
+    }
+    #[cfg(not(feature = "libraw"))]
+    let _ = path;
+    source_dimensions(bytes)
 }
 
 #[cfg(all(test, feature = "libraw"))]
@@ -1886,6 +1905,8 @@ mod tests {
     fn a_dng_whose_main_image_cannot_be_read_is_refused_not_shown_as_its_thumbnail() {
         let bytes = thumbnail_first_dng((4000, 3000));
         assert_eq!(largest_frame(&bytes), Some((4000, 3000)), "the SubIFD's size, not the first IFD's");
+        // The header probe the catalog records reads it the same way.
+        assert_eq!(source_dimensions(&bytes), Some((4000, 3000)));
         let thumb = decode_bytes(&bytes).expect("the image crate reads the first IFD");
         assert_eq!((thumb.width, thumb.height), (160, 120));
         assert_eq!(reduced_copy_of(&thumb, &bytes), Some((4000, 3000)));
