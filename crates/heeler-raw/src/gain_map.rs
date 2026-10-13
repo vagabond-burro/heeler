@@ -16,6 +16,13 @@
 //! position as a fraction of the image's height and width, less the
 //! map's origin, over its spacing, is its place in the grid, clamped to
 //! the grid's edges and read bilinearly.
+//!
+//! OpcodeList3 is applied after demosaic, to the camera's own colors
+//! (stage 3), and drones and iPhones put their lens shading there: a
+//! GainMap with a gain per color, or FixVignetteRadial (opcode 3), a
+//! polynomial in the distance from the optical center. apply_rgb applies
+//! both to LibRaw's demosaiced image before its color conversion, where
+//! the white balance is already in: a gain per channel commutes with it.
 
 /// One GainMap opcode's parameters and gains, as the DNG specification
 /// lays them out (all big-endian).
@@ -41,28 +48,68 @@ pub(crate) struct GainMap {
 }
 
 const GAIN_MAP: u32 = 9;
+const FIX_VIGNETTE_RADIAL: u32 = 3;
 
-/// The GainMaps in an opcode list. A list that ends early or declares
-/// more than it holds yields the maps read before the fault, and a map
-/// whose sizes do not add up is skipped: a damaged list costs its
-/// shading correction, never the photograph.
-pub(crate) fn parse_list(bytes: &[u8]) -> Vec<GainMap> {
+/// FixVignetteRadial: gain 1 + k0 r^2 + k1 r^4 + k2 r^6 + k3 r^8 + k4 r^10
+/// on every plane, where r is a pixel's distance from the optical
+/// center (cx, cy, fractions of the image's width and height) over the
+/// distance from that center to the farthest corner.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Vignette {
+    k: [f64; 5],
+    cx: f64,
+    cy: f64,
+}
+
+/// An opcode applied after demosaic.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Stage3 {
+    Gain(GainMap),
+    Vignette(Vignette),
+}
+
+/// Every opcode in a list, as (id, parameters). A list that ends early or
+/// declares more than it holds yields the opcodes read before the fault:
+/// a damaged list costs its corrections, never the photograph.
+fn opcodes(bytes: &[u8]) -> Vec<(u32, &[u8])> {
     let u32_at = |at: usize| bytes.get(at..at + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]));
-    let mut maps = Vec::new();
-    let Some(count) = u32_at(0) else { return maps };
+    let mut out = Vec::new();
+    let Some(count) = u32_at(0) else { return out };
     let mut at = 4usize;
     for _ in 0..count {
         let (Some(id), Some(len)) = (u32_at(at), u32_at(at + 12)) else { break };
         let start = at + 16;
         let Some(params) = start.checked_add(len as usize).and_then(|end| bytes.get(start..end)) else { break };
-        if id == GAIN_MAP {
-            if let Some(map) = parse_gain_map(params) {
-                maps.push(map);
-            }
-        }
+        out.push((id, params));
         at = start + len as usize;
     }
-    maps
+    out
+}
+
+/// The GainMaps in an opcode list; a map whose sizes do not add up is
+/// skipped.
+pub(crate) fn parse_list(bytes: &[u8]) -> Vec<GainMap> {
+    opcodes(bytes).into_iter().filter(|(id, _)| *id == GAIN_MAP).filter_map(|(_, p)| parse_gain_map(p)).collect()
+}
+
+/// The GainMaps and FixVignetteRadials in an opcode list, in its order.
+pub(crate) fn parse_list3(bytes: &[u8]) -> Vec<Stage3> {
+    opcodes(bytes)
+        .into_iter()
+        .filter_map(|(id, p)| match id {
+            GAIN_MAP => parse_gain_map(p).map(Stage3::Gain),
+            FIX_VIGNETTE_RADIAL => parse_vignette(p).map(Stage3::Vignette),
+            _ => None,
+        })
+        .collect()
+}
+
+fn parse_vignette(p: &[u8]) -> Option<Vignette> {
+    if p.len() != 56 {
+        return None;
+    }
+    let f: Vec<f64> = p.chunks_exact(8).map(|b| f64::from_be_bytes(b.try_into().unwrap())).collect();
+    f.iter().all(|v| v.is_finite()).then(|| Vignette { k: [f[0], f[1], f[2], f[3], f[4]], cx: f[5], cy: f[6] })
 }
 
 fn parse_gain_map(p: &[u8]) -> Option<GainMap> {
@@ -110,7 +157,7 @@ impl GainMap {
     }
 
     /// The gain at (row, col) of an image `height` by `width`, for the
-    /// map's plane `map_plane`: what apply_cfa computes inline.
+    /// map's plane `map_plane`: what apply_cfa and apply_rgb compute inline.
     #[cfg(test)]
     fn gain(&self, row: u32, col: u32, height: u32, width: u32, map_plane: u32) -> f32 {
         let (r0, fr) = Self::locate(row as f64 / height.max(1) as f64, self.origin_v, self.spacing_v, self.points_v);
@@ -170,6 +217,110 @@ pub(crate) fn apply_cfa(maps: &[GainMap], img: &mut Cfa, black: impl Fn(u32, u32
                 if let Some(v) = img.data.get_mut(line + col as usize) {
                     let b = black(row, col) as f32;
                     *v = (b + (*v as f32 - b) * g).round().clamp(0.0, 65535.0) as u16;
+                }
+            }
+        }
+        applied += 1;
+    }
+    applied
+}
+
+/// A demosaiced image: `stride` samples a pixel, the first `planes` of
+/// them the camera's colors.
+pub(crate) struct Rgb<'a> {
+    pub data: &'a mut [u16],
+    pub stride: usize,
+    pub planes: usize,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl Vignette {
+    /// The gain at (row, col): what apply_rgb computes inline.
+    #[cfg(test)]
+    fn gain(&self, row: u32, col: u32, height: u32, width: u32) -> f64 {
+        let (cx, cy) = (self.cx * width as f64, self.cy * height as f64);
+        let far = [(0.0, 0.0), (width as f64, 0.0), (0.0, height as f64), (width as f64, height as f64)]
+            .iter()
+            .map(|(x, y)| (x - cx).powi(2) + (y - cy).powi(2))
+            .fold(0.0, f64::max);
+        if far <= 0.0 {
+            return 1.0;
+        }
+        let r2 = ((col as f64 - cx).powi(2) + (row as f64 - cy).powi(2)) / far;
+        let [k0, k1, k2, k3, k4] = self.k;
+        1.0 + r2 * (k0 + r2 * (k1 + r2 * (k2 + r2 * (k3 + r2 * k4))))
+    }
+}
+
+/// Applies OpcodeList3's GainMaps and FixVignetteRadials, in order, to a
+/// demosaiced image whose black is already taken off: each sample is
+/// scaled by its gain, rounded and kept within 16 bits. A GainMap reaches
+/// the planes it names (its map plane per image plane, the last one for
+/// any beyond) and the pixels its area and pitch name; a vignette reaches
+/// every pixel and plane. Returns how many opcodes were applied.
+pub(crate) fn apply_rgb(ops: &[Stage3], img: &mut Rgb) -> usize {
+    let scale = |v: &mut u16, g: f64| *v = (*v as f64 * g).round().clamp(0.0, 65535.0) as u16;
+    let (w, h) = (img.width as usize, img.height as usize);
+    let mut applied = 0;
+    for op in ops {
+        match op {
+            Stage3::Gain(map) => {
+                let first = map.plane as usize;
+                let last = (first + map.planes as usize).min(img.planes).min(img.stride);
+                if first >= last {
+                    continue;
+                }
+                let mp = map.map_planes as usize;
+                let at = |r: usize, c: usize, p: usize| map.gains[(r * map.points_h as usize + c) * mp + p.min(mp - 1)] as f64;
+                let (last_v, last_h) = (map.points_v as usize - 1, map.points_h as usize - 1);
+                // Grid positions worked out once a column and once a row.
+                let cols: Vec<(usize, usize, f64)> = (map.left..map.right.min(img.width))
+                    .step_by(map.col_pitch as usize)
+                    .map(|col| {
+                        let (c0, fc) = GainMap::locate(col as f64 / w.max(1) as f64, map.origin_h, map.spacing_h, map.points_h);
+                        (col as usize, c0, fc)
+                    })
+                    .collect();
+                for row in (map.top..map.bottom.min(img.height)).step_by(map.row_pitch as usize) {
+                    let (r0, fr) = GainMap::locate(row as f64 / h.max(1) as f64, map.origin_v, map.spacing_v, map.points_v);
+                    let r1 = (r0 + 1).min(last_v);
+                    for &(col, c0, fc) in &cols {
+                        let c1 = (c0 + 1).min(last_h);
+                        let base = (row as usize * w + col) * img.stride;
+                        for plane in first..last {
+                            let p = plane - first;
+                            let g = (at(r0, c0, p) * (1.0 - fc) + at(r0, c1, p) * fc) * (1.0 - fr) + (at(r1, c0, p) * (1.0 - fc) + at(r1, c1, p) * fc) * fr;
+                            if let Some(v) = img.data.get_mut(base + plane) {
+                                scale(v, g);
+                            }
+                        }
+                    }
+                }
+            }
+            Stage3::Vignette(v) => {
+                let (cx, cy) = (v.cx * w as f64, v.cy * h as f64);
+                let far = [(0.0, 0.0), (w as f64, 0.0), (0.0, h as f64), (w as f64, h as f64)]
+                    .iter()
+                    .map(|(x, y)| (x - cx).powi(2) + (y - cy).powi(2))
+                    .fold(0.0, f64::max);
+                if far <= 0.0 {
+                    continue;
+                }
+                let dx2: Vec<f64> = (0..w).map(|col| (col as f64 - cx).powi(2) / far).collect();
+                let planes = img.planes.min(img.stride);
+                let [k0, k1, k2, k3, k4] = v.k;
+                let len = img.data.len();
+                for row in 0..h {
+                    let dy2 = (row as f64 - cy).powi(2) / far;
+                    let line = &mut img.data[(row * w * img.stride).min(len)..((row + 1) * w * img.stride).min(len)];
+                    for (px, dx) in line.chunks_exact_mut(img.stride).zip(&dx2) {
+                        let r2 = dx + dy2;
+                        let g = 1.0 + r2 * (k0 + r2 * (k1 + r2 * (k2 + r2 * (k3 + r2 * k4))));
+                        for s in &mut px[..planes] {
+                            scale(s, g);
+                        }
+                    }
                 }
             }
         }
@@ -290,5 +441,70 @@ mod tests {
         let maps = parse_list(&list(&[op]));
         assert_eq!(apply_cfa(&maps, &mut Cfa { data: &mut data, pitch: 2, top: 0, left: 0, height: 2, width: 2 }, |_, _| 0), 0);
         assert_eq!(data, vec![100; 4]);
+    }
+
+    fn vignette_opcode(k: [f64; 5], cx: f64, cy: f64) -> Vec<u8> {
+        let mut p = Vec::new();
+        for v in [k[0], k[1], k[2], k[3], k[4], cx, cy] {
+            p.extend_from_slice(&v.to_be_bytes());
+        }
+        let mut op = Vec::new();
+        for v in [FIX_VIGNETTE_RADIAL, 0x0103_0000, 0, p.len() as u32] {
+            op.extend_from_slice(&v.to_be_bytes());
+        }
+        op.extend_from_slice(&p);
+        op
+    }
+
+    #[test]
+    fn list3_reads_gain_maps_and_vignettes_in_order() {
+        let ops = parse_list3(&list(&[
+            vignette_opcode([1.0, 0.0, 0.0, 0.0, 0.0], 0.5, 0.5),
+            gain_map_opcode([0, 0, 4, 4], [1, 1], [1, 1], &[2.0]),
+        ]));
+        assert!(matches!(ops.as_slice(), [Stage3::Vignette(_), Stage3::Gain(_)]), "{ops:?}");
+        // A vignette of the wrong length is skipped, the rest kept.
+        let mut short = vignette_opcode([1.0; 5], 0.5, 0.5);
+        short.truncate(short.len() - 8);
+        short[12..16].copy_from_slice(&48u32.to_be_bytes());
+        assert_eq!(parse_list3(&list(&[short, gain_map_opcode([0, 0, 4, 4], [1, 1], [1, 1], &[2.0])])).len(), 1);
+    }
+
+    #[test]
+    fn the_vignette_is_one_at_the_center_and_its_full_sum_at_the_farthest_corner() {
+        let Stage3::Vignette(v) = &parse_list3(&list(&[vignette_opcode([0.5, 0.25, 0.0, 0.0, 0.125], 0.5, 0.5)]))[0] else { panic!() };
+        assert!((v.gain(50, 100, 100, 200) - 1.0).abs() < 1e-12);
+        assert!((v.gain(0, 0, 100, 200) - 1.875).abs() < 1e-12, "{}", v.gain(0, 0, 100, 200));
+        // Off center, the farthest corner is the one away from it.
+        let Stage3::Vignette(off) = &parse_list3(&list(&[vignette_opcode([1.0, 0.0, 0.0, 0.0, 0.0], 0.25, 0.5)]))[0] else { panic!() };
+        assert!((off.gain(0, 200, 100, 200) - 2.0).abs() < 1e-12);
+        assert!(off.gain(0, 0, 100, 200) < 2.0);
+    }
+
+    #[test]
+    fn apply_rgb_scales_the_planes_a_gain_map_names_and_every_plane_for_a_vignette() {
+        // 3 by 2 pixels, four samples each, every sample 1000.
+        let mut data = vec![1000u16; 3 * 2 * 4];
+        let mut red = gain_map_opcode([0, 0, 2, 3], [1, 1], [1, 1], &[1.5]);
+        red[16 + 20..16 + 24].copy_from_slice(&1u32.to_be_bytes()); // planes: 1, plane 0
+        let ops = parse_list3(&list(&[red]));
+        let mut img = Rgb { data: &mut data, stride: 4, planes: 3, width: 3, height: 2 };
+        assert_eq!(apply_rgb(&ops, &mut img), 1);
+        for px in data.chunks_exact(4) {
+            assert_eq!(px, &[1500, 1000, 1000, 1000]);
+        }
+        // A vignette with the center at a corner pixel: that pixel keeps its
+        // value; every color plane moves, the fourth sample does not.
+        let mut data = vec![1000u16; 3 * 2 * 4];
+        let ops = parse_list3(&list(&[vignette_opcode([1.0, 0.0, 0.0, 0.0, 0.0], 0.0, 0.0)]));
+        apply_rgb(&ops, &mut Rgb { data: &mut data, stride: 4, planes: 3, width: 3, height: 2 });
+        assert_eq!(&data[..4], &[1000, 1000, 1000, 1000]);
+        let last = &data[data.len() - 4..];
+        assert!(last[0] > 1000 && last[0] == last[1] && last[1] == last[2] && last[3] == 1000, "{last:?}");
+        // Clipped at 16 bits.
+        let mut data = vec![60000u16; 4];
+        let ops = parse_list3(&list(&[gain_map_opcode([0, 0, 1, 1], [1, 1], [1, 1], &[2.0])]));
+        apply_rgb(&ops, &mut Rgb { data: &mut data, stride: 4, planes: 3, width: 1, height: 1 });
+        assert_eq!(data, vec![65535, 60000, 60000, 60000]);
     }
 }

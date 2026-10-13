@@ -38,6 +38,11 @@ fn opcode_list(ops: &[Vec<u8>]) -> Vec<u8> {
 /// An uncompressed 16-bit RGGB DNG, little endian, with `opcodes` as
 /// its OpcodeList2 when given.
 fn cfa_dng(opcodes: Option<Vec<u8>>) -> Vec<u8> {
+    cfa_dng_with(opcodes, None)
+}
+
+/// The same, with OpcodeList2 and OpcodeList3 (applied after demosaic).
+fn cfa_dng_with(opcodes: Option<Vec<u8>>, list3: Option<Vec<u8>>) -> Vec<u8> {
     let pixels: Vec<u8> = (0..W * H).flat_map(|_| 1064u16.to_le_bytes()).collect();
     // (tag, type, count, out-of-line bytes or inline value)
     enum V {
@@ -74,6 +79,9 @@ fn cfa_dng(opcodes: Option<Vec<u8>>) -> Vec<u8> {
     ];
     if let Some(list) = opcodes {
         entries.push((51009, 7, list.len() as u32, V::Data(list)));
+    }
+    if let Some(list) = list3 {
+        entries.push((51022, 7, list.len() as u32, V::Data(list)));
     }
     entries.sort_by_key(|e| e.0);
     let ifd_len = 2 + entries.len() * 12 + 4;
@@ -167,4 +175,48 @@ fn a_file_without_gain_maps_develops_as_before() {
         other.extend_from_slice(&v.to_be_bytes());
     }
     assert_eq!(means(&cfa_dng(None)), means(&cfa_dng(Some(opcode_list(&[other])))));
+}
+
+/// A GainMap opcode with one gain, on the planes `plane` to
+/// `plane + planes - 1` of a demosaiced image.
+fn gain_map_on(plane: u32, planes: u32, gain: f32) -> Vec<u8> {
+    let mut op = gain_map([0, 0, H, W], [1, 1], gain);
+    op[16 + 16..16 + 20].copy_from_slice(&plane.to_be_bytes());
+    op[16 + 20..16 + 24].copy_from_slice(&planes.to_be_bytes());
+    op
+}
+
+/// FixVignetteRadial: gain 1 + k0 r^2 from the center (0.5, 0.5).
+fn vignette(k0: f64) -> Vec<u8> {
+    let mut p = Vec::new();
+    for v in [k0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5] {
+        p.extend_from_slice(&v.to_be_bytes());
+    }
+    let mut op = Vec::new();
+    for v in [3u32, 0x0103_0000, 0, p.len() as u32] {
+        op.extend_from_slice(&v.to_be_bytes());
+    }
+    op.extend_from_slice(&p);
+    op
+}
+
+#[test]
+fn an_opcode_list3_gain_map_reaches_the_color_it_names_after_demosaic() {
+    let plain = means(&cfa_dng(None));
+    let red = means(&cfa_dng_with(None, Some(opcode_list(&[gain_map_on(0, 1, 2.0)]))));
+    let ratio = [red[0] / plain[0], red[1] / plain[1], red[2] / plain[2]];
+    assert!((ratio[0] - 2.0).abs() < 0.01, "red {ratio:?}");
+    assert!((ratio[1] - 1.0).abs() < 0.01 && (ratio[2] - 1.0).abs() < 0.01, "green and blue {ratio:?}");
+}
+
+#[test]
+fn a_radial_vignette_lifts_the_corners_and_leaves_the_center() {
+    let plain = heeler_raw::decode_sensor(&cfa_dng(None)).unwrap();
+    let lifted = heeler_raw::decode_sensor(&cfa_dng_with(None, Some(opcode_list(&[vignette(1.0)])))).unwrap();
+    let at = |img: &heeler_raw::SensorImage, x: usize, y: usize| img.rgb[(y * img.width + x) * 3 + 1] as f64;
+    let (cx, cy) = (W as usize / 2, H as usize / 2);
+    assert!((at(&lifted, cx, cy) / at(&plain, cx, cy) - 1.0).abs() < 0.01, "the center stays");
+    // r at (2, 2) is nearly 1: the gain there is nearly 2.
+    let corner = at(&lifted, 2, 2) / at(&plain, 2, 2);
+    assert!(corner > 1.8 && corner < 2.0, "the corner rises by the polynomial: {corner}");
 }

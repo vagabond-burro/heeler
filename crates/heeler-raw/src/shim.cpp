@@ -10,6 +10,23 @@
 
 #include "libraw/libraw.h"
 
+// LibRaw keeps its processing-step callbacks protected and offers no C
+// setter. A pointer to the member taken through a derived class reaches
+// them without changing the vendored tree.
+namespace {
+struct CallbackAccess : LibRaw {
+    static libraw_callbacks_t &of(LibRaw *raw) { return raw->*(&CallbackAccess::callbacks); }
+};
+
+// The stage 3 pass the Rust side hands over: one function for every
+// handle, set before the first develop that wants it.
+void (*heeler_stage3_fn)(libraw_data_t *) = nullptr;
+
+void heeler_pre_rgb(void *ctx) {
+    if (ctx && heeler_stage3_fn) heeler_stage3_fn(&static_cast<LibRaw *>(ctx)->imgdata);
+}
+} // namespace
+
 extern "C" {
 
 unsigned heeler_raw_width(libraw_data_t *d) { return d ? d->sizes.raw_width : 0; }
@@ -118,6 +135,25 @@ unsigned heeler_left_margin(libraw_data_t *d) { return d ? d->sizes.left_margin 
 unsigned heeler_active_width(libraw_data_t *d) { return d ? d->sizes.width : 0; }
 unsigned heeler_active_height(libraw_data_t *d) { return d ? d->sizes.height : 0; }
 unsigned heeler_filters(libraw_data_t *d) { return d ? d->idata.filters : 0; }
+
+// OpcodeList3 runs after demosaic (src/gain_map.rs apply_rgb): `stage3`
+// is called with the handle between LibRaw's demosaic and its color
+// conversion, when image holds the camera's colors, black subtracted
+// and white balanced, iwidth by iheight, four samples a pixel.
+void heeler_use_stage3_opcodes(libraw_data_t *d, void (*stage3)(libraw_data_t *)) {
+    if (!d || !d->parent_class) return;
+    heeler_stage3_fn = stage3;
+    CallbackAccess::of(static_cast<LibRaw *>(d->parent_class)).pre_converttorgb_cb = heeler_pre_rgb;
+}
+const unsigned char *heeler_opcode_list3(libraw_data_t *d, size_t *len) {
+    if (!d || !d->color.dng_levels.rawopcodes[2].data) { if (len) *len = 0; return nullptr; }
+    *len = d->color.dng_levels.rawopcodes[2].len;
+    return (const unsigned char *)d->color.dng_levels.rawopcodes[2].data;
+}
+unsigned short *heeler_rgb_image(libraw_data_t *d) { return d && d->image ? &d->image[0][0] : nullptr; }
+unsigned heeler_iwidth(libraw_data_t *d) { return d ? d->sizes.iwidth : 0; }
+unsigned heeler_iheight(libraw_data_t *d) { return d ? d->sizes.iheight : 0; }
+int heeler_colors(libraw_data_t *d) { return d ? d->idata.colors : 0; }
 
 // The black level LibRaw will subtract at (row, col) of the active
 // area, as copy_bayer will: the common level, the per-color level of

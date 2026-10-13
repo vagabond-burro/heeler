@@ -107,6 +107,12 @@ extern "C" {
     fn heeler_filters(d: *mut c_void) -> c_uint;
     fn heeler_black_at(d: *mut c_void, row: c_uint, col: c_uint) -> c_uint;
     fn heeler_black_period(d: *mut c_void, rows: *mut c_uint, cols: *mut c_uint);
+    fn heeler_use_stage3_opcodes(d: *mut c_void, stage3: unsafe extern "C" fn(*mut c_void));
+    fn heeler_opcode_list3(d: *mut c_void, len: *mut usize) -> *const u8;
+    fn heeler_rgb_image(d: *mut c_void) -> *mut u16;
+    fn heeler_iwidth(d: *mut c_void) -> c_uint;
+    fn heeler_iheight(d: *mut c_void) -> c_uint;
+    fn heeler_colors(d: *mut c_void) -> c_int;
     fn heeler_set_xtrans_threads(n: c_int);
 }
 
@@ -271,6 +277,37 @@ unsafe fn apply_dng_gain_maps(d: *mut c_void) -> usize {
     gain_map::apply_cfa(&maps, &mut img, |r, c| black[((r % pr) * pc + c % pc) as usize])
 }
 
+/// Applies a DNG's OpcodeList3 (GainMap and FixVignetteRadial, the lens
+/// shading drones and iPhones write there) to LibRaw's demosaiced image,
+/// called by LibRaw itself between demosaic and color conversion
+/// (heeler_use_stage3_opcodes). Never unwinds into C++.
+///
+/// # Safety
+/// `d` is the handle LibRaw passes, mid-process.
+unsafe extern "C" fn apply_stage3_opcodes(d: *mut c_void) {
+    let _ = std::panic::catch_unwind(|| unsafe {
+        let mut len = 0usize;
+        let list = heeler_opcode_list3(d, &mut len);
+        let image = heeler_rgb_image(d);
+        if list.is_null() || len == 0 || image.is_null() {
+            return;
+        }
+        let ops = gain_map::parse_list3(std::slice::from_raw_parts(list, len));
+        if ops.is_empty() {
+            return;
+        }
+        let (width, height) = (heeler_iwidth(d), heeler_iheight(d));
+        let mut img = gain_map::Rgb {
+            data: std::slice::from_raw_parts_mut(image, width as usize * height as usize * 4),
+            stride: 4,
+            planes: heeler_colors(d).clamp(1, 4) as usize,
+            width,
+            height,
+        };
+        gain_map::apply_rgb(&ops, &mut img);
+    });
+}
+
 pub fn decode_sensor_with(bytes: &[u8], opts: DevelopOpts) -> Result<SensorImage, RawError> {
     // A GoPro GPR's VC-5 tile is decoded here; LibRaw sees a plain DNG.
     let converted = gpr::as_dng(bytes)?;
@@ -313,6 +350,7 @@ pub fn decode_sensor_with(bytes: &[u8], opts: DevelopOpts) -> Result<SensorImage
     let _job = heeler_engine::memory::Job::admit(needed, "RAW decode and demosaic")?;
     check(unsafe { libraw_unpack(handle.0) })?;
     unsafe { apply_dng_gain_maps(handle.0) };
+    unsafe { heeler_use_stage3_opcodes(handle.0, apply_stage3_opcodes) };
     check(unsafe { libraw_dcraw_process(handle.0) })?;
     let headroom = if opts.highlight >= 2 { unsafe { heeler_wb_headroom(handle.0) } } else { 1.0 };
 
