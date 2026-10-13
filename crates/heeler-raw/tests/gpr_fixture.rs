@@ -32,6 +32,9 @@ fn a_real_gpr_develops_to_a_picture_at_full_and_half_size() {
     let (f, h) = (means(&full.rgb), means(&half.rgb));
     // What this tile decodes to today. A misread tile is a flat field or
     // noise, far from these; the half tier averages the same samples.
+    // Since 2026.5.3 the file's GainMap opcodes (lens shading: 1.0 at
+    // the center, 1.68 in the corners) are applied, which lifted every
+    // channel about 9% (from 0.2298, 0.1600, 0.0978).
     for (got, want) in [(f, FULL_MEANS), (h, FULL_MEANS)] {
         for c in 0..3 {
             assert!((got[c] - want[c]).abs() < 0.004, "{got:?} against {want:?}");
@@ -42,7 +45,7 @@ fn a_real_gpr_develops_to_a_picture_at_full_and_half_size() {
     assert!(step < 0.03, "step {step}");
 }
 
-const FULL_MEANS: [f64; 3] = [0.2298, 0.1600, 0.0978];
+const FULL_MEANS: [f64; 3] = [0.2507, 0.1744, 0.1056];
 
 #[test]
 fn a_gpr_cut_short_says_so_rather_than_developing_garbage() {

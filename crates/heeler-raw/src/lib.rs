@@ -35,6 +35,7 @@ pub const JPEG_LINKED: bool = matches!(env!("HEELER_RAW_JPEG").as_bytes(), b"1")
 /// what `examples/dngprobe.rs` prints them next to.
 pub const ZLIB_LINKED: bool = matches!(env!("HEELER_RAW_ZLIB").as_bytes(), b"1");
 
+mod gain_map;
 mod gpr;
 pub use gpr::is_gpr;
 
@@ -96,6 +97,16 @@ extern "C" {
     fn heeler_silence_data_errors(d: *mut c_void);
     fn heeler_is_sensor_data(d: *mut c_void) -> c_int;
     fn heeler_xtrans_extra(d: *mut c_void) -> usize;
+    fn heeler_opcode_list2(d: *mut c_void, len: *mut usize) -> *const u8;
+    fn heeler_cfa_image(d: *mut c_void) -> *mut u16;
+    fn heeler_raw_pitch(d: *mut c_void) -> c_uint;
+    fn heeler_top_margin(d: *mut c_void) -> c_uint;
+    fn heeler_left_margin(d: *mut c_void) -> c_uint;
+    fn heeler_active_width(d: *mut c_void) -> c_uint;
+    fn heeler_active_height(d: *mut c_void) -> c_uint;
+    fn heeler_filters(d: *mut c_void) -> c_uint;
+    fn heeler_black_at(d: *mut c_void, row: c_uint, col: c_uint) -> c_uint;
+    fn heeler_black_period(d: *mut c_void, rows: *mut c_uint, cols: *mut c_uint);
     fn heeler_set_xtrans_threads(n: c_int);
 }
 
@@ -226,6 +237,40 @@ pub fn picture_dimensions(bytes: &[u8]) -> Result<(usize, usize), RawError> {
     Ok((w, h))
 }
 
+/// Applies a DNG's GainMap opcodes (OpcodeList2) to the unpacked sensor
+/// data, which LibRaw itself does not (src/gain_map.rs). Bayer CFA images
+/// only: a linear DNG's maps, and the lists applied after demosaic
+/// (OpcodeList3), are not read. Returns how many maps were applied.
+///
+/// # Safety
+/// `d` is an open LibRaw handle after unpack and before processing.
+unsafe fn apply_dng_gain_maps(d: *mut c_void) -> usize {
+    let mut len = 0usize;
+    let list = heeler_opcode_list2(d, &mut len);
+    let raw = heeler_cfa_image(d);
+    if list.is_null() || len == 0 || raw.is_null() || heeler_filters(d) <= 1000 {
+        return 0;
+    }
+    let maps = gain_map::parse_list(std::slice::from_raw_parts(list, len));
+    if maps.is_empty() {
+        return 0;
+    }
+    let pitch = heeler_raw_pitch(d) as usize / 2;
+    let rows = heeler_raw_height(d) as usize;
+    let (mut pr, mut pc) = (1, 1);
+    heeler_black_period(d, &mut pr, &mut pc);
+    let black: Vec<u32> = (0..pr).flat_map(|r| (0..pc).map(move |c| (r, c))).map(|(r, c)| heeler_black_at(d, r, c)).collect();
+    let mut img = gain_map::Cfa {
+        data: std::slice::from_raw_parts_mut(raw, rows * pitch),
+        pitch,
+        top: heeler_top_margin(d) as usize,
+        left: heeler_left_margin(d) as usize,
+        height: heeler_active_height(d),
+        width: heeler_active_width(d),
+    };
+    gain_map::apply_cfa(&maps, &mut img, |r, c| black[((r % pr) * pc + c % pc) as usize])
+}
+
 pub fn decode_sensor_with(bytes: &[u8], opts: DevelopOpts) -> Result<SensorImage, RawError> {
     // A GoPro GPR's VC-5 tile is decoded here; LibRaw sees a plain DNG.
     let converted = gpr::as_dng(bytes)?;
@@ -267,6 +312,7 @@ pub fn decode_sensor_with(bytes: &[u8], opts: DevelopOpts) -> Result<SensorImage
     let needed = heeler_engine::memory::sum([heeler_engine::memory::bytes(width, height, 1, if opts.half_size { 24 } else { 48 })?, bytes.len(), unsafe { heeler_xtrans_extra(handle.0) }])?;
     let _job = heeler_engine::memory::Job::admit(needed, "RAW decode and demosaic")?;
     check(unsafe { libraw_unpack(handle.0) })?;
+    unsafe { apply_dng_gain_maps(handle.0) };
     check(unsafe { libraw_dcraw_process(handle.0) })?;
     let headroom = if opts.highlight >= 2 { unsafe { heeler_wb_headroom(handle.0) } } else { 1.0 };
 

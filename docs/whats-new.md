@@ -1,5 +1,11 @@
 # What's new
 
+## 2026.5.3
+
+### Fixes
+
+- **Phone and GoPro raw files have even corners.** Many phones (Google Pixel, ASUS and other Android phones) and every GoPro write a lens shading map into their raw files, which the reader is meant to apply: it brightens the corners the lens leaves dark, and evens out any color shift there. Heeler now applies it, so these photographs develop with even light across the frame instead of dark, sometimes tinted, corners; on a Pixel 3a the corners come out nearly three times brighter. A photograph you already edited keeps its edits, but its corners change. A Vignette added to make up for the dark corners may no longer be needed. [Library](user-guide/library.md).
+
 ## 2026.5.2
 
 ### New

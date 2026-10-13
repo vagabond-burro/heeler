@@ -102,4 +102,48 @@ void heeler_silence_data_errors(libraw_data_t *d) {
     libraw_set_dataerror_handler(d, heeler_null_data_cb, nullptr);
 }
 
+// What a DNG's GainMap opcodes need (src/gain_map.rs), read after
+// unpack and before processing: the OpcodeList2 bytes LibRaw kept for
+// the main image, the single-plane sensor buffer with its pitch, and
+// where the stage 2 image (the active area) sits in it.
+const unsigned char *heeler_opcode_list2(libraw_data_t *d, size_t *len) {
+    if (!d || !d->color.dng_levels.rawopcodes[1].data) { if (len) *len = 0; return nullptr; }
+    *len = d->color.dng_levels.rawopcodes[1].len;
+    return (const unsigned char *)d->color.dng_levels.rawopcodes[1].data;
+}
+unsigned short *heeler_cfa_image(libraw_data_t *d) { return d ? d->rawdata.raw_image : nullptr; }
+unsigned heeler_raw_pitch(libraw_data_t *d) { return d ? d->sizes.raw_pitch : 0; }
+unsigned heeler_top_margin(libraw_data_t *d) { return d ? d->sizes.top_margin : 0; }
+unsigned heeler_left_margin(libraw_data_t *d) { return d ? d->sizes.left_margin : 0; }
+unsigned heeler_active_width(libraw_data_t *d) { return d ? d->sizes.width : 0; }
+unsigned heeler_active_height(libraw_data_t *d) { return d ? d->sizes.height : 0; }
+unsigned heeler_filters(libraw_data_t *d) { return d ? d->idata.filters : 0; }
+
+// The black level LibRaw will subtract at (row, col) of the active
+// area, as copy_bayer will: the common level, the per-color level of
+// the CFA site, and the repeating BlackLevel pattern. adjust_bl moves
+// amounts between these three before subtracting, but not their sum.
+// Bayer layouts only (filters > 1000); the pattern repeats every
+// heeler_black_period rows and columns.
+unsigned heeler_black_at(libraw_data_t *d, unsigned row, unsigned col) {
+    if (!d) return 0;
+    const libraw_colordata_t &c = d->color;
+    unsigned filters = d->idata.filters;
+    unsigned site = (filters >> ((((row << 1) & 14) | (col & 1)) << 1)) & 3;
+    unsigned black = c.black + c.cblack[site];
+    if (c.cblack[4] && c.cblack[5] && 6 + c.cblack[4] * c.cblack[5] <= LIBRAW_CBLACK_SIZE)
+        black += c.cblack[6 + (row % c.cblack[4]) * c.cblack[5] + col % c.cblack[5]];
+    return black;
+}
+void heeler_black_period(libraw_data_t *d, unsigned *rows, unsigned *cols) {
+    unsigned r = 1, k = 1;
+    if (d && d->color.cblack[4] && d->color.cblack[5]) { r = d->color.cblack[4]; k = d->color.cblack[5]; }
+    // The CFA site repeats every 8 rows and 2 columns in a Bayer
+    // filters word; the pattern every r by k.
+    unsigned a = 8, b = 2;
+    while (a % r) a += 8;
+    while (b % k) b += 2;
+    *rows = a; *cols = b;
+}
+
 } // extern "C"
