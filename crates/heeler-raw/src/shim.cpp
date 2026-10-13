@@ -33,6 +33,18 @@ int heeler_is_sensor_data(libraw_data_t *d) {
     return d->idata.filters != 0 || d->idata.colors == 1;
 }
 
+// What a full-size X-Trans develop holds beyond the usual workspace:
+// the finished-pixel buffer the patched xtrans_interpolate keeps
+// (src/demosaic/xtrans_demosaic.cpp, three shorts a pixel) and one
+// tile buffer per worker. Read after open, before processing.
+int heeler_xtrans_threads();
+size_t heeler_xtrans_extra(libraw_data_t *d) {
+    if (!d || d->idata.filters != 9 || d->params.half_size) return 0;
+    size_t pixels = size_t(d->sizes.width) * d->sizes.height;
+    size_t tile = size_t(LIBRAW_AHD_TILE) * LIBRAW_AHD_TILE * 94;
+    return pixels * 6 + size_t(heeler_xtrans_threads()) * tile;
+}
+
 
 void heeler_set_half_size(libraw_data_t *d, int value) {
     if (d) d->params.half_size = value;

@@ -16,7 +16,26 @@
 
  */
 
+// Heeler: the standard headers come before LibRaw's, whose macros
+// (image, width, S, ...) would otherwise reach into them.
+#include <atomic>
+#include <thread>
+#include <vector>
 #include "../../internal/dcraw_defs.h"
+
+// Heeler: how many workers share the tile bands of one X-Trans
+// develop when LibRaw is built without OpenMP. 0 means the default,
+// the machine's cores up to four; 1 runs them one after another.
+static std::atomic<int> heeler_xtrans_threads_wanted(0);
+extern "C" void heeler_set_xtrans_threads(int n) { heeler_xtrans_threads_wanted = n < 0 ? 0 : n; }
+extern "C" int heeler_xtrans_threads()
+{
+  int n = heeler_xtrans_threads_wanted;
+  if (n > 0)
+    return n;
+  unsigned cores = std::thread::hardware_concurrency();
+  return cores == 0 ? 1 : cores > 4 ? 4 : int(cores);
+}
 
 #define fcol(row, col) xtrans[(row + 6) % 6][(col + 6) % 6]
 /*
@@ -165,25 +184,36 @@ void LibRaw::xtrans_interpolate(int passes)
 		  }
 	  }
 
+  // Heeler: the tiles overlap by 16 pixels, and upstream each one
+  // wrote its finished pixels back into image, where the next tile's
+  // margin read them as if they were still the sensor's: the green
+  // bounds (image[][1] and [3]) and the copy the tile starts from. So
+  // the result depended on the order the tiles ran in, and with OpenMP
+  // on, on which thread got there first. The finished pixels now go to
+  // a separate buffer that is copied back once every tile is done, so
+  // every tile reads only the unmodified input, the bands are
+  // independent, and they run on several threads without OpenMP too.
+  // Pixels within 8 of a tile's top or left edge differ from upstream's
+  // by what they used to read from the tile before.
+  const int band_step = LIBRAW_AHD_TILE - 16;
+  const int bands = height - 19 > 3 ? (height - 19 - 3 + band_step - 1) / band_step : 0;
 #if defined(LIBRAW_USE_OPENMP)
   int buffer_count = omp_get_max_threads();
 #else
-  int buffer_count = 1;
+  int buffer_count = MAX(1, MIN(heeler_xtrans_threads(), bands));
 #endif
 
   size_t buffer_size = LIBRAW_AHD_TILE * LIBRAW_AHD_TILE * (ndir * 11 + 6);
+  const size_t npix = size_t(width) * height;
+  ushort(*finished)[3] = (ushort(*)[3])malloc(npix * sizeof *finished);
+  if (!finished)
+    throw LIBRAW_EXCEPTION_ALLOC;
+  for (size_t i = 0; i < npix; i++)
+    memcpy(finished[i], image[i], sizeof *finished);
   char** buffers = malloc_omp_buffers(buffer_count, buffer_size);
 
-#if defined(LIBRAW_USE_OPENMP)
-# pragma omp parallel for schedule(dynamic) default(none) firstprivate(buffers, allhex, passes, sgrow, sgcol, ndir) shared(dir) 
-#endif
-    for (int top = 3; top < height - 19; top += LIBRAW_AHD_TILE - 16)
+  auto band = [&](int top, char* buffer)
     {
-#if defined(LIBRAW_USE_OPENMP)
-        char* buffer = buffers[omp_get_thread_num()];
-#else
-        char* buffer = buffers[0];
-#endif
 
         ushort(*rgb)[LIBRAW_AHD_TILE][LIBRAW_AHD_TILE][3], (*rix)[3];
         short(*lab)[LIBRAW_AHD_TILE][3], (*lix)[3];
@@ -420,16 +450,37 @@ void LibRaw::xtrans_interpolate(int passes)
                             FORC3 avg[c] += rgb[dd][row][col][c];
                             avg[3]++;
                         }
-                    FORC3 image[(row + top) * width + col + left][c] = avg[c] / avg[3];
+                    FORC3 finished[(row + top) * width + col + left][c] = avg[c] / avg[3];
                 }
         }
-    }
-  
-#ifdef LIBRAW_USE_OPENMP
-#pragma omp barrier
+    };
+
+#if defined(LIBRAW_USE_OPENMP)
+#pragma omp parallel for schedule(dynamic)
+  for (int b = 0; b < bands; b++)
+    band(3 + b * band_step, buffers[omp_get_thread_num()]);
+#else
+  std::atomic<int> next_band(0);
+  auto work = [&](char* buffer) {
+    for (int b; (b = next_band++) < bands;)
+      band(3 + b * band_step, buffer);
+  };
+  std::vector<std::thread> pool;
+  for (int w = 1; w < buffer_count; w++)
+  {
+    // A thread the system will not start leaves its share to the rest.
+    try { pool.emplace_back(work, buffers[w]); }
+    catch (...) { break; }
+  }
+  work(buffers[0]);
+  for (size_t w = 0; w < pool.size(); w++)
+    pool[w].join();
 #endif
 
     free_omp_buffers(buffers, buffer_count);
+    for (size_t i = 0; i < npix; i++)
+      memcpy(image[i], finished[i], sizeof *finished);
+    free(finished);
 
     border_interpolate(8);
 }

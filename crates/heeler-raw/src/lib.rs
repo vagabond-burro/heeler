@@ -95,6 +95,8 @@ extern "C" {
     fn heeler_set_user_qual(d: *mut c_void, value: c_int);
     fn heeler_silence_data_errors(d: *mut c_void);
     fn heeler_is_sensor_data(d: *mut c_void) -> c_int;
+    fn heeler_xtrans_extra(d: *mut c_void) -> usize;
+    fn heeler_set_xtrans_threads(n: c_int);
 }
 
 /// Develop knobs the UI exposes on the source node.
@@ -197,6 +199,13 @@ pub fn dimensions(bytes: &[u8]) -> Result<(usize, usize), RawError> {
     Ok(unsafe { (heeler_raw_width(handle.0) as usize, heeler_raw_height(handle.0) as usize) })
 }
 
+/// How many threads share one full-size X-Trans develop's tile bands:
+/// 0 for the default (the machine's cores, up to four), 1 for one after
+/// another. Process-wide; the output is the same either way.
+pub fn set_xtrans_threads(n: usize) {
+    unsafe { heeler_set_xtrans_threads(n.min(c_int::MAX as usize) as c_int) }
+}
+
 /// The size of the picture a develop of this file hands back, upright,
 /// from its header alone. `dimensions` is the sensor's whole readout,
 /// masked margins included, which admission wants; this is what the
@@ -253,7 +262,9 @@ pub fn decode_sensor_with(bytes: &[u8], opts: DevelopOpts) -> Result<SensorImage
     let sensor_data = unsafe { heeler_is_sensor_data(handle.0) } != 0;
     // Sensor, demosaic workspace, native processed RGB, Rust RGB and RGBA.
     // The sensor workspace remains full size even for a half-size develop.
-    let needed = heeler_engine::memory::sum([heeler_engine::memory::bytes(width, height, 1, if opts.half_size { 24 } else { 48 })?, bytes.len()])?;
+    // A full X-Trans develop also keeps its finished pixels apart and a
+    // tile buffer per worker (the patched xtrans_interpolate).
+    let needed = heeler_engine::memory::sum([heeler_engine::memory::bytes(width, height, 1, if opts.half_size { 24 } else { 48 })?, bytes.len(), unsafe { heeler_xtrans_extra(handle.0) }])?;
     let _job = heeler_engine::memory::Job::admit(needed, "RAW decode and demosaic")?;
     check(unsafe { libraw_unpack(handle.0) })?;
     check(unsafe { libraw_dcraw_process(handle.0) })?;
