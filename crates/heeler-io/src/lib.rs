@@ -1221,17 +1221,24 @@ fn encode_capacity(buf: &ImageBuf, bytes_per_pixel: usize) -> Result<Vec<u8>, Io
 }
 
 fn to_srgb_u8(buf: &ImageBuf, include_alpha: bool) -> Result<Vec<u8>, IoError> {
+    use rayon::prelude::*;
     let channels = if include_alpha { 4 } else { 3 };
     let mut out = encode_capacity(buf, channels)?;
-    for px in 0..buf.width * buf.height {
-        let i = px * 4;
-        for c in 0..3 {
-            out.push(srgb_u8(buf.data[i + c]));
-        }
-        if include_alpha {
-            out.push((buf.data[i + 3].clamp(0.0, 1.0) * 255.0 + 0.5) as u8);
-        }
+    let count = memory::bytes(buf.width, buf.height, 1, channels)?;
+    out.resize(count, 0);
+    if count == 0 {
+        return Ok(out);
     }
+    out.par_chunks_mut(buf.width * channels).zip(buf.data.par_chunks(buf.width * 4)).for_each(|(row, src)| {
+        for (px, s) in row.chunks_exact_mut(channels).zip(src.chunks_exact(4)) {
+            for c in 0..3 {
+                px[c] = srgb_u8(s[c]);
+            }
+            if include_alpha {
+                px[3] = (s[3].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+            }
+        }
+    });
     Ok(out)
 }
 
@@ -2154,6 +2161,29 @@ mod tests {
         assert_eq!(&out[3..6], &[0, 0, 0]);
         // NaN lands somewhere in range rather than tearing the encode.
         assert!(out.len() == 9);
+    }
+
+    /// The conversion runs a row per task; every sample must still land
+    /// where the one-pixel-at-a-time loop put it, with and without alpha,
+    /// at a width no thread count divides, and at one pixel and none.
+    #[test]
+    fn row_parallel_conversion_matches_the_pixel_order() {
+        for (w, h) in [(37usize, 23usize), (1, 1), (0, 0), (5, 0)] {
+            let mut img = ImageBuf::new(w, h);
+            for (i, v) in img.data.iter_mut().enumerate() {
+                *v = ((i * 7919) % 1201) as f32 / 1000.0 - 0.1;
+            }
+            for alpha in [false, true] {
+                let mut expected = Vec::new();
+                for px in img.data.chunks_exact(4) {
+                    expected.extend(px[..3].iter().map(|v| srgb_u8(*v)));
+                    if alpha {
+                        expected.push((px[3].clamp(0.0, 1.0) * 255.0 + 0.5) as u8);
+                    }
+                }
+                assert_eq!(to_srgb_u8(&img, alpha).unwrap(), expected, "{w}x{h}, alpha {alpha}");
+            }
+        }
     }
 
     /// WP35's documented CMM failure mode: sRGB-class curves breaking
