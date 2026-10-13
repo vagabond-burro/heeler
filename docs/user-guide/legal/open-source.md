@@ -24,11 +24,13 @@ compiles is published at:
 
 That archive is the tree this build was made from, not a pointer at
 whatever upstream happens to be today. It is the upstream 0.22.2 release
-with one fix by Heeler, to how a half-size preview of a Fujifilm X-Trans
-file fills in color. `HEELER-CHANGES.md` in the archive lists it, and
-the changed code is marked with a `Heeler:` comment. The archive for this
-build is `libraw-0.22.2-as-shipped-in-heeler-7a5366211de5.tar.gz`, SHA-256
-`19e96684c4f6d70da1c2a85364c0b5097594c2db86a5e065da9dcf95f355032a`, published
+with two fixes by Heeler, both for Fujifilm X-Trans files: how a
+half-size preview fills in color, and the full-size demosaic, which now
+gives the same picture however its work is split between threads.
+`HEELER-CHANGES.md` in the archive lists them, and the changed code is
+marked with a `Heeler:` comment. The archive for this build is
+`libraw-0.22.2-as-shipped-in-heeler-07e9c6682eb6.tar.gz`, SHA-256
+`bae596a7cbe016e8976220e37e139b20c672153759c7d4326ee1a03d4f290253`, published
 beside it so you can check the two match. Archives for other Heeler builds
 stay on the same page.
 
