@@ -16,6 +16,52 @@ Your presets work the same way but can be created and removed. The two glyphs be
 
 Presets replace the whole look. To keep a group of nodes you drop into a graph beside what is there, save it as a node recipe instead: recipes are files too, in a `recipes` folder beside `presets`, with the same Import, Export and `.trash`. See [Node recipes](graph/recipes.md#recipe-files).
 
+## Preset files
+
+A preset is a text file you can read and edit, written in YAML, the same format as [node recipe files](graph/recipes.md#recipe-files). Your presets live in a `presets` folder in Heeler's app data, one file per preset, with each category a folder: `presets/Travel/Warm Afternoon.heelerpreset`. **Export** writes the same kind of file wherever you choose, and **Import** adds one to the **Imported** category.
+
+A small preset looks like this:
+
+```yaml
+# Heeler preset: a look, saved from the Presets tab. Edit it in any text
+# editor; Heeler reads it again when you apply it. The user guide
+# explains the fields: Presets > Preset files.
+schema: 1
+name: Warm Afternoon
+nodes:
+  - id: src
+    type: heeler.image_source
+    enabled: true
+    params: {}
+  - id: exposure
+    type: heeler.exposure
+    enabled: true
+    params:
+      contrast: 55
+  - id: output
+    type: heeler.output
+    enabled: true
+    params: {}
+wires:
+  - from: src
+    to: exposure
+    kind: image
+    toPort: in
+  - from: exposure
+    to: output
+    kind: image
+    toPort: in
+```
+
+- `schema` is the preset format's version. A preset from a newer Heeler than yours is refused with a message, not half read.
+- `name` is the name the Presets tab shows.
+- `nodes` are the look's nodes: each one's `id`, its `type`, whether it is `enabled`, and its settings under `params` (numbers) and `textParams` (curves and other text).
+- `wires` connect them: `from` one node's id `to` another's.
+
+You can change a value in any text editor, and Heeler reads the file again when you apply the preset. If a file cannot be read, the error names the line that is wrong. Heeler does not keep your comments when it writes the file itself (Save look over an existing name, for example).
+
+Presets saved by Heeler before 2026.5.3 are JSON files with the same extension. They still import and apply exactly as before, and Heeler writes them as YAML the next time it saves or exports them.
+
 ## What a look includes
 
 A look is intended to transfer development decisions: exposure, color, curves, detail, and other Develop-chain operations. It does not capture the photograph's crop, its develop layers or their masks, the document selection, removals, or the Finish layer stack. This makes a look reusable across differently composed photographs.

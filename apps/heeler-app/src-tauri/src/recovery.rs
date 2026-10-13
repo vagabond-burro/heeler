@@ -446,6 +446,18 @@ fn required_rasters(v: &serde_json::Value, out: &mut BTreeSet<u64>) -> Result<()
     }
     Ok(())
 }
+/// A saved edit's document: a graph is JSON; a preset is YAML since
+/// 2026.5.3 and JSON before. None for a file that is neither.
+fn edits_value(path: &str, bytes: &[u8]) -> Option<serde_json::Value> {
+    serde_json::from_slice(bytes).ok().or_else(|| {
+        is_preset(path).then(|| std::str::from_utf8(bytes).ok().and_then(|t| crate::parse_preset_text(t).ok())).flatten()
+    })
+}
+
+fn is_preset(path: &str) -> bool {
+    path.ends_with(".heelerpreset")
+}
+
 fn raster_references(root: &Path, files: &[Entry]) -> Result<BTreeSet<u64>, String> {
     rasters_named_by(
         root,
@@ -459,7 +471,7 @@ fn rasters_named_by<'a>(root: &Path, paths: impl IntoIterator<Item = &'a str>) -
     let mut out = BTreeSet::new();
     for path in paths {
         let bytes = fs::read(safe_path(root, path)?).map_err(|e| e.to_string())?;
-        if let Ok(v) = serde_json::from_slice(&bytes) {
+        if let Some(v) = edits_value(path, &bytes) {
             required_rasters(&v, &mut out).map_err(|e| format!("{path}: {e}"))?;
         }
     }
@@ -561,10 +573,15 @@ fn inventory(
             // Recovery companions are retained byte for byte but are not current takes.
             let current_graph = file.path.starts_with("graphs/") && file.path.ends_with(".json");
             let preset = file.path.starts_with("presets/")
-                && file.path.ends_with(".heelerpreset")
+                && is_preset(&file.path)
                 && !file.path.contains("/.trash/");
             let raw = fs::read(safe_path(root, &file.path)?).map_err(|e| e.to_string())?;
-            match serde_json::from_slice::<serde_json::Value>(&raw) {
+            // A preset is YAML since 2026.5.3, JSON before.
+            let parsed = match serde_json::from_slice::<serde_json::Value>(&raw) {
+                Err(_) if preset => std::str::from_utf8(&raw).map_err(|e| e.to_string()).and_then(crate::parse_preset_text),
+                other => other.map_err(|e| e.to_string()),
+            };
+            match parsed {
                 Ok(v) => {
                     graph_refs(&v, &file.path, &ids, &moved, &mut refs);
                     if current_graph && v.get("heelerReset").and_then(|v| v.as_bool()) != Some(true)
@@ -1133,10 +1150,13 @@ pub fn restore(root: &Path, dest: &Path) -> Result<Report, String> {
         for file in m.files.iter().filter(|f| f.path.starts_with("graphs/") || f.path.starts_with("presets/")) {
             let path = dest.join(&file.path);
             let raw = fs::read(&path).map_err(|e| named(&path, e))?;
-            if let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&raw) {
+            let json = serde_json::from_slice::<serde_json::Value>(&raw).ok();
+            let yaml = json.is_none();
+            if let Some(mut value) = json.or_else(|| edits_value(&file.path, &raw)) {
                 if remap_layer_copies(&mut value, &paths) {
-                    fs::write(&path, serde_json::to_vec(&value).map_err(|e| named(&path, e))?)
-                        .map_err(|e| named(&path, e))?;
+                    // A preset goes back in the format it came in.
+                    let bytes = if yaml { crate::preset_yaml(&value).into_bytes() } else { serde_json::to_vec(&value).map_err(|e| named(&path, e))? };
+                    fs::write(&path, bytes).map_err(|e| named(&path, e))?;
                 }
             }
         }
@@ -1624,7 +1644,9 @@ mod tests {
         g["versions"][1]["group"] = json!({"nodes":[{"type":"heeler.file", "textParams":{"path":copy.path}}]});
         fs::write(&graph_path, serde_json::to_vec(&g).unwrap()).unwrap();
         let preset_path = "presets/Personal/Copy.heelerpreset";
-        fs::write(f.data.join(preset_path), serde_json::to_vec(&json!({"nodes":[node],"wires":[]})).unwrap()).unwrap();
+        // A preset is YAML since 2026.5.3: the restore rewrites its paths
+        // and writes it back as YAML.
+        fs::write(f.data.join(preset_path), crate::preset_yaml(&json!({"nodes":[node],"wires":[]}))).unwrap();
         f.catalog.add_image("kept", Path::new(&copy.path), None).unwrap();
         assert!(make(&f).complete);
         fs::rename(&vision, f.temp.path().join("old-vision-offline")).unwrap();
@@ -1646,7 +1668,9 @@ mod tests {
         assert_eq!(fs::read(a).unwrap(), bytes);
         let decoded = heeler_io::decode_any(Path::new(a)).unwrap();
         assert_eq!((decoded.width, decoded.height), (6, 4));
-        let preset: serde_json::Value = serde_json::from_slice(&fs::read(dest.join(preset_path)).unwrap()).unwrap();
+        let preset_text = fs::read_to_string(dest.join(preset_path)).unwrap();
+        assert!(preset_text.starts_with("# Heeler preset"), "{preset_text}");
+        let preset = crate::parse_preset_text(&preset_text).unwrap();
         assert_eq!(preset["nodes"][0]["params"]["path"].as_str(), Some(a));
         let (_, rows) = Catalog::recovery_inventory(&dest.join("catalog.sqlite")).unwrap();
         assert!(rows.iter().any(|(id, path, _)| id == "kept" && path == a));

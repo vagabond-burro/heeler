@@ -123,11 +123,31 @@ enum Frame {
     Map(usize, Vec<(String, usize, Node)>, Option<(String, usize)>, std::collections::HashSet<String>),
 }
 
-/// The text as a tree, every node with its line. Refuses what a recipe
-/// never needs and what would make reading it unsafe or ambiguous.
+/// What kind of file a YAML text is read as, for its limits and for
+/// the words its errors use: recipes here, presets in lib.rs.
+pub struct Limits {
+    /// "recipe", "preset": the file's name in an error.
+    pub what: &'static str,
+    pub max_bytes: usize,
+    /// The longest single value. A preset keeps curves as text.
+    pub max_text: usize,
+}
+
+const RECIPE: Limits = Limits { what: "recipe", max_bytes: MAX_BYTES, max_text: MAX_TEXT };
+
+/// The text as a recipe's tree, every node with its line.
 fn tree(text: &str) -> Result<Node, RecipeError> {
-    if text.len() > MAX_BYTES {
-        return err(0, format!("the file is {} KB; a recipe file may be at most {} KB", text.len() / 1024, MAX_BYTES / 1024));
+    tree_with(text, &RECIPE)
+}
+
+/// The text as a tree, every node with its line. Refuses what these
+/// files never need and what would make reading one unsafe or
+/// ambiguous: a second document, anchors, aliases, tags, a duplicate
+/// key, too deep a nesting, too long a value.
+fn tree_with(text: &str, limits: &Limits) -> Result<Node, RecipeError> {
+    let what = limits.what;
+    if text.len() > limits.max_bytes {
+        return err(0, format!("the file is {} KB; a {what} file may be at most {} KB", text.len() / 1024, limits.max_bytes / 1024));
     }
     let mut parser = Parser::new_from_str(text);
     let mut stack: Vec<Frame> = Vec::new();
@@ -142,20 +162,20 @@ fn tree(text: &str) -> Result<Node, RecipeError> {
             Event::DocumentStart(_) => {
                 documents += 1;
                 if documents > 1 {
-                    return err(line, "a recipe file holds one recipe; this is a second document (a line of three dashes starts one)");
+                    return err(line, format!("a {what} file holds one {what}; this is a second document (a line of three dashes starts one)"));
                 }
                 continue;
             }
-            Event::Alias(_) => return err(line, "aliases (*name) are not allowed in a recipe file; write the value out"),
+            Event::Alias(_) => return err(line, format!("aliases (*name) are not allowed in a {what} file; write the value out")),
             Event::Scalar(text, style, anchor, tag) => {
                 if anchor != 0 {
-                    return err(line, "anchors (&name) are not allowed in a recipe file");
+                    return err(line, format!("anchors (&name) are not allowed in a {what} file"));
                 }
                 if tag.is_some() {
-                    return err(line, "tags (!name) are not allowed in a recipe file");
+                    return err(line, format!("tags (!name) are not allowed in a {what} file"));
                 }
-                if text.len() > MAX_TEXT {
-                    return err(line, format!("this value is longer than {MAX_TEXT} characters"));
+                if text.len() > limits.max_text {
+                    return err(line, format!("this value is longer than {} characters", limits.max_text));
                 }
                 let v = if style == ScalarStyle::Plain {
                     match Scalar::parse_from_cow(Cow::Borrowed(text.as_ref())) {
@@ -172,18 +192,18 @@ fn tree(text: &str) -> Result<Node, RecipeError> {
             }
             Event::SequenceStart(anchor, tag) | Event::MappingStart(anchor, tag) if anchor != 0 || tag.is_some() => {
                 let _ = tag;
-                return err(line, "anchors (&name) and tags (!name) are not allowed in a recipe file");
+                return err(line, format!("anchors (&name) and tags (!name) are not allowed in a {what} file"));
             }
             Event::SequenceStart(..) => {
                 if stack.len() >= MAX_DEPTH {
-                    return err(line, "the file nests deeper than a recipe ever does");
+                    return err(line, format!("the file nests deeper than a {what} ever does"));
                 }
                 stack.push(Frame::Seq(line, Vec::new()));
                 continue;
             }
             Event::MappingStart(..) => {
                 if stack.len() >= MAX_DEPTH {
-                    return err(line, "the file nests deeper than a recipe ever does");
+                    return err(line, format!("the file nests deeper than a {what} ever does"));
                 }
                 stack.push(Frame::Map(line, Vec::new(), None, std::collections::HashSet::new()));
                 continue;
@@ -201,7 +221,7 @@ fn tree(text: &str) -> Result<Node, RecipeError> {
         match stack.last_mut() {
             None => {
                 if root.is_some() {
-                    return err(line, "a recipe file holds one recipe");
+                    return err(line, format!("a {what} file holds one {what}"));
                 }
                 root = Some(value);
             }
@@ -628,6 +648,81 @@ pub fn parse_recipe(text: &str) -> Result<Parsed, RecipeError> {
     Ok(Parsed { doc: Value::Object(doc), lines: r.lines })
 }
 
+// --- Any document ------------------------------------------------------
+
+/// A YAML file as plain JSON, under `limits`: the shape a JSON file of
+/// the same document would have. A whole number reads as an integer,
+/// so a field JSON wrote as 1 reads back as 1, not 1.0; a number must
+/// be finite.
+pub fn parse_yaml_value(text: &str, limits: &Limits) -> Result<Value, RecipeError> {
+    fn value(n: &Node) -> Result<Value, RecipeError> {
+        Ok(match &n.v {
+            Val::Null => Value::Null,
+            Val::Bool(b) => json!(b),
+            Val::Num(x) if x.is_finite() && *x == x.trunc() && x.abs() < 9.007_199_254_740_992e15 => json!(*x as i64),
+            Val::Num(x) if x.is_finite() => json!(x),
+            Val::Num(_) => return err(n.line, "numbers must be finite, not infinity or NaN"),
+            Val::Str(s) => json!(s),
+            Val::Seq(xs) => Value::Array(xs.iter().map(value).collect::<Result<_, _>>()?),
+            Val::Map(items) => Value::Object(items.iter().map(|(k, _, v)| Ok((k.clone(), value(v)?))).collect::<Result<_, RecipeError>>()?),
+        })
+    }
+    value(&tree_with(text, limits)?)
+}
+
+/// A JSON document as YAML a person can read and edit: `header` (comment
+/// lines) first, then block style, a map's keys in `order` and the rest
+/// alphabetically, short lists and empty structures in flow style.
+/// parse_yaml_value reads it back as the same document.
+pub fn write_yaml_value(header: &str, v: &Value, order: &[&str]) -> String {
+    fn scalar_like(v: &Value) -> bool {
+        match v {
+            Value::Array(xs) => xs.iter().all(|x| !x.is_array() && !x.is_object()) && xs.len() <= 16,
+            Value::Object(m) => m.is_empty(),
+            _ => true,
+        }
+    }
+    fn keys<'a>(m: &'a serde_json::Map<String, Value>, order: &[&str]) -> Vec<&'a String> {
+        let mut ks: Vec<&String> = m.keys().collect();
+        ks.sort_by_key(|k| (order.iter().position(|o| o == k).unwrap_or(usize::MAX), k.as_str()));
+        ks
+    }
+    fn block(o: &mut String, v: &Value, indent: usize, order: &[&str]) {
+        let pad = " ".repeat(indent);
+        match v {
+            Value::Object(m) => {
+                for k in keys(m, order) {
+                    let x = &m[k];
+                    let key = yaml_str(k, false);
+                    if scalar_like(x) {
+                        o.push_str(&format!("{pad}{key}: {}\n", flow(x)));
+                    } else {
+                        o.push_str(&format!("{pad}{key}:\n"));
+                        block(o, x, indent + 2, order);
+                    }
+                }
+            }
+            Value::Array(xs) => {
+                for x in xs {
+                    if scalar_like(x) {
+                        o.push_str(&format!("{pad}- {}\n", flow(x)));
+                    } else {
+                        // The item's first line takes the dash in place
+                        // of its indent; the rest line up under it.
+                        let mut item = String::new();
+                        block(&mut item, x, indent + 2, order);
+                        o.push_str(&format!("{pad}- {}", &item[indent + 2..]));
+                    }
+                }
+            }
+            _ => o.push_str(&format!("{pad}{}\n", flow(v))),
+        }
+    }
+    let mut o = String::from(header);
+    block(&mut o, v, 0, order);
+    o
+}
+
 // --- Writing ------------------------------------------------------------
 
 /// A number as YAML and people write it: 8, 0.05, -3.5.
@@ -805,7 +900,7 @@ fn inside(base: &Path, path: &str) -> Result<PathBuf, String> {
 }
 
 /// Durable text replacement: a temporary neighbor, synced, renamed over.
-fn write_text(path: &Path, text: &str) -> Result<(), String> {
+pub(crate) fn write_text(path: &Path, text: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }

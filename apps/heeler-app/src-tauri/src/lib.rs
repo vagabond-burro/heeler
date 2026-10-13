@@ -6492,15 +6492,51 @@ const PRESET_SCHEMA_RS: u64 = 1;
 const PRESET_EXT: &str = "heelerpreset";
 const BUILTIN_PRESETS_JSON: &str = include_str!("../presets/builtin.json");
 
+/// Preset files are YAML, written the way recipe files are (2026.5.3:
+/// "it puts it inline with the node recipe format"), so a person can
+/// read and edit one. A preset file written before then is JSON, and
+/// still reads: a file whose first character is `{` is read as JSON.
+/// Presets keep curves as text, so a value may run longer than a
+/// recipe's.
+const PRESET_YAML: recipe_files::Limits = recipe_files::Limits { what: "preset", max_bytes: 4 << 20, max_text: 1 << 20 };
+
+/// What every written preset file starts with.
+const PRESET_HEADER: &str = "\
+# Heeler preset: a look, saved from the Presets tab. Edit it in any text
+# editor; Heeler reads it again when you apply it. The user guide
+# explains the fields: Presets > Preset files.
+";
+
+/// The order a preset's fields are written in: what it is, then each
+/// node's identity before its settings. The rest follow alphabetically.
+const PRESET_ORDER: &[&str] = &["schema", "id", "name", "type", "cat", "enabled", "x", "y", "nodes", "wires", "from", "to"];
+
+/// A preset file's text as its document: YAML, or JSON for a file
+/// written before presets were YAML.
+fn parse_preset_text(raw: &str) -> Result<serde_json::Value, String> {
+    if raw.trim_start().starts_with('{') {
+        serde_json::from_str(raw).map_err(|e| format!("not a preset file: {e}"))
+    } else {
+        recipe_files::parse_yaml_value(raw, &PRESET_YAML).map_err(|e| format!("not a preset file: {e}"))
+    }
+}
+
+/// A vetted preset as the YAML file it is saved, imported and exported as.
+fn preset_yaml(v: &serde_json::Value) -> String {
+    recipe_files::write_yaml_value(PRESET_HEADER, v, PRESET_ORDER)
+}
+
 fn presets_base(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path().app_data_dir().map(|d| d.join("presets")).map_err(|e| e.to_string())
 }
 
-/// Parse, schema-check, and node-type-check one preset's JSON.
-/// Returns the (possibly migrated) JSON string.
+/// Parse, schema-check, and node-type-check one preset, YAML or JSON.
+/// Returns its name and the (possibly migrated) document.
 fn vet_preset(raw: &str) -> Result<(String, serde_json::Value), String> {
-    let mut v: serde_json::Value =
-        serde_json::from_str(raw).map_err(|e| format!("not a preset file: {e}"))?;
+    let mut v = parse_preset_text(raw)?;
+    if !v.is_object() {
+        return Err("not a preset file: no nodes".into());
+    }
     let schema = v.get("schema").and_then(|s| s.as_u64()).unwrap_or(0);
     if schema > PRESET_SCHEMA_RS {
         return Err("made by a newer Heeler: update the app to use this preset".into());
@@ -6974,8 +7010,7 @@ fn save_preset_file(
     }
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join(format!("{}.{PRESET_EXT}", safe_file_name(name)));
-    heeler_project::atomic::write_json(&path, serde_json::to_string_pretty(&vetted).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
+    recipe_files::write_text(&path, &preset_yaml(&vetted))?;
     Ok(path.to_string_lossy().to_string())
 }
 
@@ -7053,9 +7088,9 @@ fn import_preset_files(base: &Path, files: &[PathBuf]) -> PresetImportReport {
                     dest = dir.join(format!("{} {k}.{PRESET_EXT}", safe_file_name(&name)));
                     k += 1;
                 }
-                match heeler_project::atomic::write_json(&dest, serde_json::to_string_pretty(&vetted).unwrap_or_default()) {
+                match recipe_files::write_text(&dest, &preset_yaml(&vetted)) {
                     Ok(()) => report.imported.push(name),
-                    Err(e) => report.failed.push((shown, e.to_string())),
+                    Err(e) => report.failed.push((shown, e)),
                 }
             }
             Err(e) => report.failed.push((shown, e)),
@@ -7091,41 +7126,23 @@ async fn preset_import(app: tauri::AppHandle) -> Result<PresetImportReport, Stri
     Ok(report)
 }
 
-/// The export half, dialog-free: a straight copy of the preset's file
-/// (or a write of a built-in's JSON) to the chosen destination. The
-/// library is read, never written.
+/// The export half, dialog-free: the preset, vetted, written as YAML to
+/// the chosen destination, whether the library holds it as YAML, as
+/// JSON from before 2026.5.3, or built in. The library is read, never
+/// written.
 fn export_preset_to(
     base: &Path,
     builtin: bool,
     path: &str,
     dest: &Path,
 ) -> Result<(), String> {
-    let raw = if builtin {
-        let builtins: Vec<serde_json::Value> =
-            serde_json::from_str(BUILTIN_PRESETS_JSON).map_err(|e| e.to_string())?;
-        let i: usize = path.parse().map_err(|_| "bad builtin index".to_string())?;
-        serde_json::to_string_pretty(
-            builtins.get(i).and_then(|b| b.get("preset")).ok_or("no such preset")?,
-        )
-        .map_err(|e| e.to_string())?
-    } else {
-        // Same library-containment rule as preset_read/preset_trash.
-        let p = contained_in(base, path)?;
-        std::fs::read_to_string(&p).map_err(|e| e.to_string())?
-    };
-    // The dialog's pick always has a parent that exists; the function
-    // does not lean on that.
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    // The bare durable write, not the snapshotting one: this is the
-    // user's own folder, and a .good sibling beside their exported
-    // preset would be litter they never asked for.
-    heeler_project::atomic::write_with(dest, raw.as_bytes(), |f, b| {
-        std::io::Write::write_all(f, b)?;
-        f.sync_all()
-    })
-    .map_err(|e| e.to_string())
+    // read_preset_file vets it, and keeps library reads inside the
+    // library (the containment rule preset_read and preset_trash share).
+    let (_, vetted) = vet_preset(&read_preset_file(base, builtin, path)?)?;
+    // A plain durable write: this is the user's own folder, and a .good
+    // sibling beside their exported preset would be litter they never
+    // asked for.
+    recipe_files::write_text(dest, &preset_yaml(&vetted))
 }
 
 /// The export door: a save dialog, then the write above.
@@ -30822,7 +30839,7 @@ mod tests {
         // The export re-imports to an equal preset.
         let report = import_preset_files(&base, std::slice::from_ref(&dest));
         assert_eq!(report.imported, vec!["Mine".to_string()]);
-        // A built-in exports its vetted JSON and re-imports too.
+        // A built-in exports as a vetted YAML file and re-imports too.
         let bdest = root.path().join("out/builtin.heelerpreset");
         export_preset_to(&base, true, "0", &bdest).unwrap();
         let report = import_preset_files(&base, std::slice::from_ref(&bdest));
@@ -30832,6 +30849,132 @@ mod tests {
         // A bad built-in index and an escaped path are errors.
         assert!(export_preset_to(&base, true, "9999", &dest).is_err());
         assert!(export_preset_to(&base, false, "../outside", &dest).is_err());
+    }
+
+    /// Two documents are the same preset when they match field for
+    /// field, numbers by value: JSON's 10.0 is written as YAML's 10.
+    fn same_preset(a: &serde_json::Value, b: &serde_json::Value) -> bool {
+        use serde_json::Value::*;
+        match (a, b) {
+            (Number(x), Number(y)) => x.as_f64() == y.as_f64(),
+            (Array(x), Array(y)) => x.len() == y.len() && x.iter().zip(y).all(|(x, y)| same_preset(x, y)),
+            (Object(x), Object(y)) => x.len() == y.len() && x.iter().all(|(k, v)| y.get(k).is_some_and(|w| same_preset(v, w))),
+            _ => a == b,
+        }
+    }
+
+    /// Every built-in preset written as YAML reads back as itself, so a
+    /// preset exported from one Heeler imports into another unchanged.
+    #[test]
+    fn every_builtin_preset_writes_as_yaml_and_reads_back_the_same() {
+        let builtins: Vec<serde_json::Value> = serde_json::from_str(BUILTIN_PRESETS_JSON).unwrap();
+        assert!(!builtins.is_empty());
+        for b in &builtins {
+            let (name, vetted) = vet_preset(&b["preset"].to_string()).unwrap();
+            let yaml = preset_yaml(&vetted);
+            assert!(yaml.starts_with("# Heeler preset"), "{name}");
+            assert!(!yaml.contains('{') || yaml.contains("{}"), "{name}: block style, not JSON in disguise");
+            let (back_name, back) = vet_preset(&yaml).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(back_name, name);
+            assert!(same_preset(&back, &vetted), "{name} changed in the round trip");
+            // The schema reads back as the integer the vetting compares.
+            assert_eq!(back["schema"].as_u64(), Some(PRESET_SCHEMA_RS));
+        }
+    }
+
+    /// Saving, importing and exporting all write YAML; a JSON preset from
+    /// before 2026.5.3 still imports, still reads, and is stored as YAML.
+    #[test]
+    fn presets_are_written_as_yaml_and_old_json_presets_still_read() {
+        let root = tempfile::tempdir().unwrap();
+        let base = root.path().join("presets");
+        let (_, expected) = vet_preset(&preset_json("Mine")).unwrap();
+        let saved = save_preset_file(&base, "Trips", "Mine", &preset_json("Mine")).unwrap();
+        let text = std::fs::read_to_string(&saved).unwrap();
+        assert!(text.starts_with("# Heeler preset") && text.contains("\nname: Mine\n"), "{text}");
+        let read: serde_json::Value = serde_json::from_str(&read_preset_file(&base, false, &saved).unwrap()).unwrap();
+        assert!(same_preset(&read, &expected));
+
+        // A legacy JSON file in the library reads as it always did.
+        let legacy = base.join("Trips/Old.heelerpreset");
+        std::fs::write(&legacy, preset_json("Old")).unwrap();
+        let read: serde_json::Value = serde_json::from_str(&read_preset_file(&base, false, &legacy.to_string_lossy()).unwrap()).unwrap();
+        assert_eq!(read["name"], "Old");
+        // Exporting it writes YAML; the library file is left as it was.
+        let dest = root.path().join("out/old.heelerpreset");
+        export_preset_to(&base, false, &legacy.to_string_lossy(), &dest).unwrap();
+        assert!(std::fs::read_to_string(&dest).unwrap().starts_with("# Heeler preset"));
+        assert_eq!(std::fs::read_to_string(&legacy).unwrap(), preset_json("Old"));
+
+        // A legacy JSON file imports and lands as YAML, the same preset.
+        let incoming = root.path().join("shared.heelerpreset");
+        std::fs::write(&incoming, preset_json("Shared")).unwrap();
+        assert_eq!(import_preset_files(&base, std::slice::from_ref(&incoming)).imported, vec!["Shared".to_string()]);
+        let landed = std::fs::read_to_string(base.join("Imported/Shared.heelerpreset")).unwrap();
+        assert!(landed.starts_with("# Heeler preset"), "{landed}");
+        let (_, json) = vet_preset(&preset_json("Shared")).unwrap();
+        let (_, yaml) = vet_preset(&landed).unwrap();
+        assert!(same_preset(&json, &yaml));
+
+        // A built-in exports as YAML.
+        let bdest = root.path().join("out/builtin.heelerpreset");
+        export_preset_to(&base, true, "0", &bdest).unwrap();
+        assert!(std::fs::read_to_string(&bdest).unwrap().starts_with("# Heeler preset"));
+    }
+
+    /// Text a YAML reader could take for something else (a number, true,
+    /// nothing, a list, a comment, a field) comes back as the same text,
+    /// and so do long curves, line breaks and other alphabets.
+    #[test]
+    fn text_that_looks_like_something_else_survives_a_preset_round_trip() {
+        let curve = format!("[{}]", (0..2000).map(|i| format!("{{\"x\":{i},\"y\":0.5}}")).collect::<Vec<_>>().join(","));
+        let texts = ["0", "1.5", "-2", "true", "False", "null", "~", "y", "no", "on", "- x", "a: b", "# c", "x #y", "", " lead", "trail ", "quote\"s", "line\nbreak", "{\"x\":1}", "[1, 2]", "café ☀", "*alias", "&anchor", "!tag", "%", "@", "`"];
+        let mut v: serde_json::Value = serde_json::from_str(&preset_json("Texts")).unwrap();
+        let mut params = serde_json::Map::new();
+        for (i, t) in texts.iter().enumerate() {
+            params.insert(format!("t{i}"), serde_json::json!(t));
+        }
+        params.insert("curve".into(), serde_json::json!(curve));
+        v["nodes"][1]["textParams"] = serde_json::Value::Object(params);
+        v["nodes"][1]["params"] = serde_json::json!({ "a": 0.1, "b": -3.25, "c": 1e-7, "d": 123456789, "e": 2.5e20 });
+        let (_, vetted) = vet_preset(&v.to_string()).unwrap();
+        let (_, back) = vet_preset(&preset_yaml(&vetted)).unwrap();
+        assert!(same_preset(&back, &vetted), "{}", preset_yaml(&vetted));
+    }
+
+    /// A YAML preset that cannot be read is refused with the line that
+    /// is wrong, as a recipe is; a broken JSON one is refused as before.
+    #[test]
+    fn a_malformed_preset_is_refused_with_its_line() {
+        let dup = "schema: 1\nname: A\nname: B\nnodes: []\n";
+        let e = vet_preset(dup).unwrap_err();
+        assert!(e.contains("line 3") && e.contains("appears twice"), "{e}");
+        let indent = "schema: 1\nname: A\nnodes:\n  - id: src\n   type: heeler.output\n";
+        assert!(vet_preset(indent).unwrap_err().contains("line"));
+        let alias = "schema: 1\nname: &n A\nother: *n\n";
+        assert!(vet_preset(alias).unwrap_err().contains("preset file"));
+        let two = "schema: 1\n---\nschema: 1\n";
+        assert!(vet_preset(two).unwrap_err().contains("a preset file holds one preset"));
+        assert!(vet_preset("{ not json").unwrap_err().starts_with("not a preset file"));
+        assert!(vet_preset("- just\n- a list\n").is_err());
+    }
+
+    /// A raster a YAML preset points at is kept by the Storage clear, as
+    /// a JSON one's always was: the clear reads presets in either format.
+    #[test]
+    fn clearing_keeps_a_raster_a_yaml_preset_points_at() {
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("data");
+        let base = temp.path().join("vision");
+        std::fs::create_dir_all(data.join("presets")).unwrap();
+        std::fs::create_dir_all(smart_raster_dir(&base)).unwrap();
+        let preset = serde_json::json!({"nodes":[{"type":"heeler.selection_mask","textParams":{"matte_id":"baked:fed"}}]});
+        std::fs::write(data.join("presets/look.heelerpreset"), preset_yaml(&preset)).unwrap();
+        std::fs::write(smart_raster_path(&base, 0xfed), b"preset base").unwrap();
+        std::fs::write(smart_raster_path(&base, 99), b"depth cache").unwrap();
+        assert_eq!(clear_smart_rasters_keeping(&data, &base).unwrap(), 1);
+        assert_eq!(std::fs::read(retained_raster_path(&base, 0xfed)).unwrap(), b"preset base");
+        assert!(!smart_raster_path(&base, 99).exists());
     }
 
     /// A four-control custom chart as the editor writes one: a gray, the
