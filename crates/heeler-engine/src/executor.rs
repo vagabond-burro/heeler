@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use heeler_graph::hash::Hasher;
-use heeler_graph::{Connection, Graph, Node, PortKind};
+use heeler_graph::{Connection, Graph, Node, ParamValue, PortKind};
 
 use crate::buffers::{ImageBuf, Value};
 use crate::ops;
@@ -431,6 +431,15 @@ impl Executor {
         let node = graph
             .node(node_id)
             .ok_or_else(|| EngineError::NodeNotFound(node_id.to_string()))?;
+        // A non-finite number serializes as null below. A render keys
+        // every node before it runs one, so refusing here refuses both.
+        if let Some((param, _)) = node.params.iter().find(|(_, v)| matches!(v, ParamValue::Number(n) if !n.is_finite())) {
+            return Err(EngineError::InvalidParam {
+                node: node_id.to_string(),
+                param: param.clone(),
+                message: "must be a finite number".into(),
+            });
+        }
 
         let mut hasher = Hasher::new();
         hasher.write(node.node_type.as_bytes());
@@ -1810,6 +1819,22 @@ mod tests {
         assert!(exec.cache.contains_key(&1));
         assert!(exec.cache.contains_key(&4));
         assert_eq!(exec.cache.len(), exec.cache_used.len());
+    }
+
+    /// A NaN or infinite number serializes as null in the canonical
+    /// params, so it would share a key with other params that serialize
+    /// that way, and then reach the op's arithmetic. JSON cannot carry
+    /// one; the Rust and Python APIs and params the desktop computes can.
+    #[test]
+    fn nonfinite_params_are_refused_before_keying_or_rendering() {
+        let mut rig = Rig::new();
+        rig.source("src", gray(0.3)).node("heeler.exposure", "e").wire("src", "out", "e", "in");
+        for v in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            rig.graph.set_param("e", "exposure", ParamValue::Number(v)).unwrap();
+            let refused = |r: Result<(), EngineError>| matches!(r, Err(EngineError::InvalidParam { ref param, .. }) if param == "exposure");
+            assert!(refused(Executor::key_of(&rig.graph, "e", &rig.sources).map(|_| ())), "{v}: keyed");
+            assert!(refused(Executor::new().render(&rig.graph, "e", &rig.sources).map(|_| ())), "{v}: rendered");
+        }
     }
 
     #[test]
