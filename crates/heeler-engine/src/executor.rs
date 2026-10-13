@@ -459,14 +459,22 @@ impl Executor {
             // These nodes' rasters ride the sources map too, but
             // OPTIONALLY: no raster is a valid state (empty mask, a
             // passthrough, or a selection's classical geometry), so
-            // absence hashes as zero rather than erroring the render.
+            // absence is hashed rather than erroring the render. Every
+            // planted slot hashes its full id, whether a raster is there,
+            // then its version: a version alone cannot tell two slots
+            // apart, nor a raster at version 0 from none.
             let planted = planted_id(node);
             hasher.write(planted.as_bytes());
-            hasher.write_u64(sources.get(planted).map(|s| s.version).unwrap_or(0));
+            let raster = sources.get(planted);
+            hasher.write(&[raster.is_some() as u8]);
+            hasher.write_u64(raster.map(|s| s.version).unwrap_or(0));
         }
         if normal_slot(&node.node_type) {
-            hasher.write(b"@normal");
-            hasher.write_u64(sources.get(&format!("{node_id}@normal")).map(|s| s.version).unwrap_or(0));
+            let slot = format!("{node_id}@normal");
+            hasher.write(slot.as_bytes());
+            let normals = sources.get(&slot);
+            hasher.write(&[normals.is_some() as u8]);
+            hasher.write_u64(normals.map(|s| s.version).unwrap_or(0));
         }
 
         for port in &node.inputs {
@@ -481,8 +489,10 @@ impl Executor {
                         // re-plants when the recipe moves, so the
                         // version covers the params too.
                         hasher.write(b"@planted-port");
-                        hasher.write(conn.from.1.as_bytes());
-                        let planted = sources.get(&format!("{}@{}", conn.from.0, conn.from.1));
+                        let slot = format!("{}@{}", conn.from.0, conn.from.1);
+                        hasher.write(slot.as_bytes());
+                        let planted = sources.get(&slot);
+                        hasher.write(&[planted.is_some() as u8]);
                         hasher.write_u64(planted.map(|s| s.version).unwrap_or(0));
                         // The measured mark changes what the consumer
                         // draws, so it is part of the key too: the
@@ -2035,6 +2045,69 @@ mod tests {
             let spec = registry.get(ty).unwrap();
             assert!(spec.params.iter().all(|p| p.name != "depth_measured"), "{ty} declares depth_measured");
         }
+    }
+
+    fn plant(rig: &mut Rig, slot: &str, v: f32, version: u64) {
+        rig.sources.insert(slot.into(), SourceImage { image: Arc::new(ImageBuf::filled(8, 8, [v, v, v, 1.0])), version, measured: false });
+    }
+
+    /// A version tells two plantings of one slot apart, not two slots:
+    /// rewiring a consumer from one Depth Map's plane to another's,
+    /// both planted at version 7, must change what it draws.
+    #[test]
+    fn rewiring_between_equal_version_planted_ports_changes_the_key() {
+        let mut rig = Rig::new();
+        rig.node("heeler.depth_map", "a").node("heeler.depth_map", "b").node("heeler.invert_mask", "inv").wire("a", "depth", "inv", "mask");
+        plant(&mut rig, "a@depth", 0.25, 7);
+        plant(&mut rig, "b@depth", 0.75, 7);
+        let mut exec = Executor::new();
+        assert!(rig.render(&mut exec, "inv").as_mask().unwrap().data.iter().all(|v| (*v - 0.75).abs() < EPS));
+        rig.graph.disconnect("inv", "mask").unwrap();
+        rig.wire("b", "depth", "inv", "mask");
+        assert!(rig.render(&mut exec, "inv").as_mask().unwrap().data.iter().all(|v| (*v - 0.25).abs() < EPS));
+    }
+
+    /// No raster and a raster planted at version 0 are different
+    /// states, on a planted port and on a raster-fed node alike.
+    #[test]
+    fn planting_at_version_zero_where_nothing_was_changes_the_key() {
+        let mut rig = Rig::new();
+        rig.node("heeler.depth_map", "dm").node("heeler.invert_mask", "inv").wire("dm", "depth", "inv", "mask");
+        let mut exec = Executor::new();
+        assert!(rig.render(&mut exec, "inv").as_mask().unwrap().data.is_empty());
+        plant(&mut rig, "dm@depth", 0.25, 0);
+        assert!(rig.render(&mut exec, "inv").as_mask().unwrap().data.iter().all(|v| (*v - 0.75).abs() < EPS));
+
+        let mut rig = Rig::new();
+        rig.source("src", ImageBuf::filled(8, 8, [0.3, 0.3, 0.3, 1.0])).node("heeler.smart_mask", "sm").wire("src", "out", "sm", "in");
+        let mut exec = Executor::new();
+        let before = rig.render(&mut exec, "sm").as_mask().unwrap().data.clone();
+        plant(&mut rig, "sm", 0.9, 0);
+        let after = rig.render(&mut exec, "sm").as_mask().unwrap().data.clone();
+        assert_ne!(before, after, "the planted raster reached the mask");
+        assert_eq!(after, rig.render(&mut Executor::new(), "sm").as_mask().unwrap().data.clone());
+    }
+
+    /// Two Depth Lighting nodes with the same settings and inputs but
+    /// different normals, planted at one version, must not share a
+    /// cached result.
+    #[test]
+    fn equal_version_normal_slots_are_keyed_apart() {
+        let mut rig = Rig::new();
+        rig.source("src", ImageBuf::filled(8, 8, [0.5, 0.5, 0.5, 1.0])).node("heeler.depth_map", "dm");
+        for id in ["a", "b"] {
+            rig.node("heeler.key_light", id).wire("src", "out", id, "in").wire("dm", "depth", id, "depth")
+                .set(id, "strength", 100.0).set(id, "ambient", 0.0).set(id, "azimuth", 0.0).set(id, "elevation", 45.0);
+        }
+        plant(&mut rig, "dm@depth", 0.5, 7);
+        rig.sources.insert("a@normal".into(), SourceImage { image: Arc::new(ImageBuf::filled(8, 8, [0.5, 1.0, 1.0, 1.0])), version: 7, measured: false });
+        rig.sources.insert("b@normal".into(), SourceImage { image: Arc::new(ImageBuf::filled(8, 8, [0.5, 0.0, 0.0, 1.0])), version: 7, measured: false });
+        let mut exec = Executor::new();
+        let a = rig.render(&mut exec, "a").as_image().unwrap().data.clone();
+        let b = rig.render(&mut exec, "b").as_image().unwrap().data.clone();
+        let fresh = rig.render(&mut Executor::new(), "b").as_image().unwrap().data.clone();
+        assert_ne!(a, fresh, "the two normals light differently");
+        assert_eq!(b, fresh);
     }
 
     /// Showing the depth map is a view, and a view cannot change what is
