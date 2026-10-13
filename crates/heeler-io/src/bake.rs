@@ -225,18 +225,29 @@ fn wants_alpha(buf: &ImageBuf) -> bool {
 /// The display-referred pixel loop both 16-bit TIFFs share: sRGB-encoded
 /// color, and when any alpha is below 1 a fourth sample, left LINEAR
 /// (alpha is coverage, not color; the transfer curve is for light).
+/// A row per task: the arithmetic per sample is the same as one pixel
+/// at a time, so the bytes are too.
 fn srgb16_pixels(buf: &ImageBuf, alpha: bool) -> Result<Vec<u8>, IoError> {
-    let mut pixels = crate::encode_capacity(buf, if alpha { 8 } else { 6 })?;
-    for i in 0..buf.width * buf.height {
-        for c in 0..3 {
-            let v = linear_to_srgb(buf.data[i * 4 + c].clamp(0.0, 1.0));
-            pixels.extend_from_slice(&((v * 65535.0).round() as u16).to_le_bytes());
-        }
-        if alpha {
-            let a = buf.data[i * 4 + 3].clamp(0.0, 1.0);
-            pixels.extend_from_slice(&((a * 65535.0).round() as u16).to_le_bytes());
-        }
+    use rayon::prelude::*;
+    let stride = if alpha { 8 } else { 6 };
+    let mut pixels = crate::encode_capacity(buf, stride)?;
+    let count = heeler_engine::memory::bytes(buf.width, buf.height, 1, stride)?;
+    pixels.resize(count, 0);
+    if count == 0 {
+        return Ok(pixels);
     }
+    pixels.par_chunks_mut(buf.width * stride).zip(buf.data.par_chunks(buf.width * 4)).for_each(|(row, src)| {
+        for (px, s) in row.chunks_exact_mut(stride).zip(src.chunks_exact(4)) {
+            for c in 0..3 {
+                let v = linear_to_srgb(s[c].clamp(0.0, 1.0));
+                px[c * 2..c * 2 + 2].copy_from_slice(&((v * 65535.0).round() as u16).to_le_bytes());
+            }
+            if alpha {
+                let a = s[3].clamp(0.0, 1.0);
+                px[6..8].copy_from_slice(&((a * 65535.0).round() as u16).to_le_bytes());
+            }
+        }
+    });
     Ok(pixels)
 }
 
@@ -859,6 +870,32 @@ pub(crate) fn encode_cfa_dng(mosaic: &[u16], width: usize, height: usize) -> Vec
 mod tests {
     use super::*;
     use crate::decode_bytes;
+
+    /// Rows run as separate tasks; every sample must land where the
+    /// one-pixel-at-a-time loop put it, with and without alpha, at a
+    /// width no thread count divides, and at one pixel and none.
+    #[test]
+    fn row_parallel_srgb16_matches_the_pixel_order() {
+        for (w, h) in [(37usize, 23usize), (1, 1), (0, 0), (5, 0)] {
+            let mut img = ImageBuf::new(w, h);
+            for (i, v) in img.data.iter_mut().enumerate() {
+                *v = ((i * 7919) % 1201) as f32 / 1000.0 - 0.1;
+            }
+            for alpha in [false, true] {
+                let mut expected = Vec::new();
+                for px in img.data.chunks_exact(4) {
+                    for c in 0..3 {
+                        let v = linear_to_srgb(px[c].clamp(0.0, 1.0));
+                        expected.extend_from_slice(&((v * 65535.0).round() as u16).to_le_bytes());
+                    }
+                    if alpha {
+                        expected.extend_from_slice(&((px[3].clamp(0.0, 1.0) * 65535.0).round() as u16).to_le_bytes());
+                    }
+                }
+                assert_eq!(srgb16_pixels(&img, alpha).unwrap(), expected, "{w}x{h}, alpha {alpha}");
+            }
+        }
+    }
 
     fn ramp(w: usize, h: usize, peak: f32) -> ImageBuf {
         let mut buf = ImageBuf::new(w, h);
