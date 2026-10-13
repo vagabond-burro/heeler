@@ -879,7 +879,7 @@ export function portHint(node: { name: string; type: string; id?: string }, seat
     const tip = `${node.name}.frame`;
     return {
       tip,
-      hint: `${tip} · The photograph the Finish layer masks read, after the crop, the lens correction and the warps: takes rgb, wired by Finish itself. Each mask inside the group reads it from here.`,
+      hint: `${tip} · The photograph the Finish layer masks read, after the lens correction, the crop and the warps: takes rgb, wired by Finish itself. Each mask inside the group reads it from here.`,
     };
   }
   const tip = `${node.name}.${portName(node.type, seat)}`;

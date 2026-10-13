@@ -648,16 +648,19 @@ export const SAMPLE_NODES: NodeCard[] = [
 export const SAMPLE_WIRES: Wire[] = [
   { from: "src", to: "merge", toPort: "in", kind: "image" },
   { from: "portra", to: "merge", toPort: "in2", kind: "group" },
-  // Geometry after the merge so both branches crop together.
-  { from: "merge", to: "crop", toPort: "in", kind: "image" },
-  // The lens correction warps the frame, so it goes before anything that
+  // The lens correction first of the geometry: it describes the lens, so
+  // it belongs to the whole frame the camera recorded, upright as the
+  // file says, before a crop, a straighten, a turn or a flip moves the
+  // lens's center. And before anything that
   // reads neighboring pixels: sharpening a warped frame is right,
   // warping a sharpened one is not.
-  { from: "crop", to: "lens", toPort: "in", kind: "image" },
+  { from: "merge", to: "lens", toPort: "in", kind: "image" },
+  // Then the crop, after the merge so both branches crop together.
+  { from: "lens", to: "crop", toPort: "in", kind: "image" },
   // The Depth Map's fixed seat (26.3 Phase 10): after geometry, before
   // anything tonal. The picture passes through untouched; the plane
   // leaves by the depth port.
-  { from: "lens", to: "depthmap", toPort: "in", kind: "image" },
+  { from: "crop", to: "depthmap", toPort: "in", kind: "image" },
   // The Color Checker's seat (26.3 Phase 11): after the depth map,
   // before Color, so it corrects the camera before anything creative
   // and a calibration never rekeys the depth plane.

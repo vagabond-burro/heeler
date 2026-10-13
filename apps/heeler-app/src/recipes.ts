@@ -627,8 +627,10 @@ export const CHAIN_ORDER = [
   // picture this node sees, so nothing upstream can drift it.
   "modeldenoise",
   "merge",
-  "crop",
+  // The lens correction ahead of the crop: it describes the lens, so it
+  // reads the whole frame the camera recorded.
   "lens",
+  "crop",
   "gridwarp",
   "shapewarp",
   // The Depth Map's one fixed seat (26.3 Phase 10): after geometry,

@@ -18,7 +18,7 @@ The profile line in this section names the profile Heeler found for this photogr
 - **From the lens database.** Otherwise Heeler looks the lens up in its profile database, and **Apply** writes the distortion, fringe and vignetting the database has for it at the shot's focal length.
 - **Your own preset.** A lens preset you saved replaces either of these, since it is the whole lens state.
 
-Correct distortion before final crop because straightening edges can expose empty corners. Inspect high-contrast edges near the frame at 100% while adjusting fringe.
+The lens correction runs ahead of Crop & Rotate, on the whole frame the camera recorded, so cropping, straightening, rotating or flipping the photograph never moves it off the lens. Straightening edges can expose empty corners, which the crop then takes out. Inspect high-contrast edges near the frame at 100% while adjusting fringe.
 
 The controls here undo what the glass did. For a falloff you want, use [Vignette](vignette.md), and correct first: working the other way makes this correction fight a look you chose.
 

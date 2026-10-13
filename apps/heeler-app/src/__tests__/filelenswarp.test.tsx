@@ -1,7 +1,7 @@
-// The lens correction a DNG carries for itself (WarpRectilinear,
-// vagabond-burro/heeler#26): read by the desktop, shown in the Lens
-// section as the profile, on by default for a photograph opened with no
-// saved edits, and taken by a pick exactly where the engine takes it.
+// The lens correction a DNG carries for itself (WarpRectilinear): read
+// by the desktop, shown in the Lens section as the profile, on by
+// default for a photograph opened with no saved edits, and taken by a
+// pick exactly where the engine takes it.
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";

@@ -8592,6 +8592,50 @@ function splitDetail(nodes: NodeCard[], wires: Wire[]): { nodes: NodeCard[]; wir
   return { nodes: outNodes, wires: outWires };
 }
 
+/** The lens correction runs ahead of the crop (2026.5.3).
+ * It describes the lens, so it reads the whole frame the camera
+ * recorded; behind Crop & Rotate it was centered on the cropped,
+ * straightened, turned or flipped frame, and a profile's correction
+ * moved off the lens as soon as the photograph was cropped. A graph
+ * saved with the crop feeding the lens is turned round on load: what fed
+ * the crop feeds the lens, the lens feeds the crop, and everything the
+ * lens fed reads the crop. Everything else on either node stays (a mask
+ * on the lens, the crop's other readers), and the masks then read the
+ * frame by the usual rule. Mirrored for saved graphs the desktop renders
+ * itself (lib.rs lens_before_crop). A graph already in order, or without
+ * the pair wired that way, comes back untouched. */
+export function lensBeforeCrop(nodes: NodeCard[], wires: Wire[]): Wire[] {
+  const isImage = (w: Wire) => w.kind !== "mask" && (w.fromPort ?? "out") === "out";
+  const pair = wires.find(
+    (w) =>
+      isImage(w) &&
+      w.toPort === "in" &&
+      nodes.some((n) => n.id === w.from && n.type === "heeler.crop_rotate") &&
+      nodes.some((n) => n.id === w.to && n.type === "heeler.lens_correct"),
+  );
+  if (!pair) return wires;
+  const crop = pair.from;
+  const lens = pair.to;
+  const feed = wires.find((w) => w.to === crop && w.toPort === "in" && w.kind !== "mask");
+  if (!feed) return wires;
+  const out: Wire[] = [];
+  for (const w of wires) {
+    if (w === pair) continue;
+    if (w === feed) {
+      out.push({ ...w, to: lens });
+      continue;
+    }
+    // What the lens fed now reads the crop.
+    if (w.from === lens && isImage(w)) {
+      out.push({ ...w, from: crop, fromPort: undefined });
+      continue;
+    }
+    out.push(w);
+  }
+  out.push({ from: lens, to: crop, toPort: "in", kind: "image" });
+  return out;
+}
+
 /** 26.3 Phase 10.4: old graphs are moved, not left lying. A Depth Map
  * saved before the fixed seat existed (26.2 spliced it after Grain, so
  * it landed behind whatever tonal nodes the graph had) is re-spliced
@@ -8679,7 +8723,7 @@ export function migrateGraph(
   // lib.rs masks_read_the_frame). The first crop's own move never ran
   // for a graph saved before 2026-09-30, and a mask gating nothing (the
   // document selection) had no gate for the desktop to follow either.
-  const seated = reseatDepthMap(blocks.nodes, blocks.wires);
+  const seated = reseatDepthMap(blocks.nodes, lensBeforeCrop(blocks.nodes, blocks.wires));
   return { nodes: blocks.nodes, wires: masksReadTheFrame(blocks.nodes, seated) };
 }
 

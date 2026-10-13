@@ -2455,13 +2455,13 @@ describe("graph state semantics", () => {
       expect(s.nodes.some((n) => n.id === mask.id)).toBe(false);
       expect(art.groupNodes!.some((n) => n.id === mask.id)).toBe(true);
       expect(art.groupWires).toContainEqual({ from: mask.id, to: "art_b2", toPort: "mask", kind: "mask" });
-      // Fed from the whole frame, after this sample's crop and lens
-      // correction, like every develop mask: the size of the layer it
-      // gates, on the frame it edits. The frame arrives on the group's
-      // second input, and the boundary hands it to the mask.
-      expect(s.wires).toContainEqual({ from: "lens", to: ART_ID, toPort: "in2", kind: "image" });
+      // Fed from the whole frame, after this sample's lens correction and
+      // crop, like every develop mask: the size of the layer it gates, on
+      // the frame it edits. The frame arrives on the group's second
+      // input, and the boundary hands it to the mask.
+      expect(s.wires).toContainEqual({ from: "crop", to: ART_ID, toPort: "in2", kind: "image" });
       expect(art.hasIn2).toBe(true);
-      expect(art.groupBoundary).toContainEqual({ from: "lens", to: mask.id, toPort: "in", kind: "image", groupPort: "in2" });
+      expect(art.groupBoundary).toContainEqual({ from: "crop", to: mask.id, toPort: "in", kind: "image", groupPort: "in2" });
       expect(s.wires.some((w) => w.from === mask.id || w.to === mask.id)).toBe(false);
       // A second add on the same layer is refused; the other layer is bare.
       expect(run(s, { type: "art_add_mask", id: "art_b2" })).toBe(s);
@@ -2477,7 +2477,7 @@ describe("graph state semantics", () => {
       expect(g.connections.some((c: any) => c.to[0] === "art_b1" && c.to[1] === "mask")).toBe(false);
       // The frame reaches the mask's input in the flattened graph, from
       // the same node the mask read when it hung outside the group.
-      expect(g.connections.some((c: any) => c.from[0] === "lens" && c.to[0] === mask.id && c.to[1] === "in")).toBe(true);
+      expect(g.connections.some((c: any) => c.from[0] === "crop" && c.to[0] === mask.id && c.to[1] === "in")).toBe(true);
       // Removal takes the node, its wires and the boundary entries, and
       // the group's second input with them.
       s = run(s, { type: "art_remove_mask", id: "art_b2" });
@@ -3396,9 +3396,9 @@ describe("graph state semantics", () => {
     // The Tone EQ sits between Exposure and B&W since M5.5, and a layer
     // splices in FRONT of it: zone exposure should see layered edits.
     expect(s.wires.some((w) => w.from === "layer_1_adj" && w.to === "toneeq")).toBe(true);
-    // Mask reads the post-geometry image (the sample's crop, then its
-    // lens correction) and gates the adjustment.
-    expect(s.wires.some((w) => w.from === "lens" && w.to === "layer_1_mask")).toBe(true);
+    // Mask reads the post-geometry image (the sample's lens correction,
+    // then its crop) and gates the adjustment.
+    expect(s.wires.some((w) => w.from === "crop" && w.to === "layer_1_mask")).toBe(true);
     expect(s.wires.some((w) => w.from === "layer_1_mask" && w.to === "layer_1_adj" && w.toPort === "mask")).toBe(true);
     expect(s.activeLayer).toBe("layer_1_adj");
 

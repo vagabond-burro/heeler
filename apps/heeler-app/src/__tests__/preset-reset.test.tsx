@@ -234,9 +234,10 @@ describe("an apply fully resets the previous look", () => {
     // carries no crop or lens node at all: the crop is the photo's.
     expect(node(s, "crop")!.params.angle).toBe(7);
     expect(node(s, "lens")!.params.distortion).toBe(0.3);
-    // ...and they are WIRED, not floating: the chain runs through them.
-    const feedsLens = s.wires.find((w) => w.to === "lens" && w.kind === "image");
-    expect(feedsLens?.from).toBe("crop");
+    // ...and they are WIRED, not floating: the chain runs through them,
+    // the lens correction ahead of the crop.
+    const feedsCrop = s.wires.find((w) => w.to === "crop" && w.kind === "image");
+    expect(feedsCrop?.from).toBe("lens");
     // The develop layer crossed over whole: adjustment, stroke, bake,
     // and the Split Tone write that lives on the layer.
     expect(node(s, "layer_1_adj")!.params.exposure).toBe(1.2);
@@ -499,6 +500,9 @@ describe("the sample dressing", () => {
     };
     const s = run(base, { type: "apply_preset", preset: dressed as never });
     expect(s.nodes.some((n) => n.id === "portra" || n.id === "merge")).toBe(false);
-    expect(s.wires.find((w) => w.to === "crop" && w.toPort === "in")!.from).toBe("src");
+    // The chain closes from the source: through the lens correction,
+    // which runs ahead of the crop.
+    expect(s.wires.find((w) => w.to === "crop" && w.toPort === "in")!.from).toBe("lens");
+    expect(s.wires.find((w) => w.to === "lens" && w.toPort === "in")!.from).toBe("src");
   });
 });

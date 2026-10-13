@@ -886,16 +886,19 @@ describe("lens correction", () => {
 
   it("sits before anything that reads neighboring pixels", () => {
     // It warps the frame. Sharpening a warped frame is right; warping a
-    // sharpened one smears the sharpening.
+    // sharpened one smears the sharpening. And it comes first of the
+    // geometry, ahead of the crop: it describes the lens, so it reads the
+    // whole frame the camera recorded (2026.5.3).
     const s = initialState();
-    expect(feeds(s, "lens")).toBe("crop");
+    expect(feeds(s, "lens")).toBe("merge");
+    expect(feeds(s, "crop")).toBe("lens");
     // The Depth Map's pass-through holds the fixed seat between the
     // warps and the tonal work (26.3 Phase 10), with the Color Checker
     // between the map and Color (Phase 11): Standard Color's feed is
     // the checker, whose picture is the map's lens-corrected frame.
     expect(feeds(s, "stdcolor")).toBe("colorchecker");
     expect(feeds(s, "colorchecker")).toBe("depthmap");
-    expect(feeds(s, "depthmap")).toBe("lens");
+    expect(feeds(s, "depthmap")).toBe("crop");
     const order = (id: string) => s.nodes.findIndex((n) => n.id === id);
     expect(order("lens")).toBeGreaterThanOrEqual(0);
     expect(order("sharpen")).toBeGreaterThanOrEqual(0);
@@ -1555,7 +1558,8 @@ describe("a reset photograph runs only what it needs", () => {
       expect(ids.has(id), `${id} is not a node`).toBe(true);
     expect(CHAIN_ORDER.indexOf(MODEL_DENOISE_ID)).toBe(CHAIN_ORDER.indexOf("src") + 1);
     expect(CATEGORY_PIECES["Grid Warp"][0].id).toBe("gridwarp");
-    expect(CHAIN_ORDER.indexOf("gridwarp")).toBe(CHAIN_ORDER.indexOf("lens") + 1);
+    expect(CHAIN_ORDER.indexOf("crop")).toBe(CHAIN_ORDER.indexOf("lens") + 1);
+    expect(CHAIN_ORDER.indexOf("gridwarp")).toBe(CHAIN_ORDER.indexOf("crop") + 1);
     expect(CATEGORY_PIECES["Shape Warp"][0].id).toBe("shapewarp");
     expect(CHAIN_ORDER.indexOf("shapewarp")).toBe(CHAIN_ORDER.indexOf("gridwarp") + 1);
   });

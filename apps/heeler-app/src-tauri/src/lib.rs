@@ -2144,7 +2144,7 @@ fn conform_rasters_to_geometry(
                 continue;
             }
             if n.node_type == "heeler.lens_correct" {
-                // The lens correction bends the frame between the crop
+                // The lens correction bends the frame ahead of the crop
                 // and the warps, and a raster made on the photograph
                 // takes its geometry there too: its distortion, never
                 // its shading (lens_geometry_buf).
@@ -2359,7 +2359,7 @@ fn upstream_crops<'a>(graph: &'a UiGraph, node_id: &str) -> Vec<&'a UiNode> {
             // Upstream first: the recursion above returns before the
             // push, so the list applies in chain order. The lens
             // correction is geometry too (2026-09-30): it bends the
-            // frame between the crop and the warps, and a raster left
+            // frame ahead of the crop and the warps, and a raster left
             // unbent sat off the picture it gates by the distortion.
             if is_frame_geometry(&n.node_type)
                 && n.enabled
@@ -7529,12 +7529,42 @@ struct UiGraphWire {
 
 impl From<UiGraphWire> for UiGraph {
     fn from(w: UiGraphWire) -> Self {
-        masks_read_the_frame(legacy_selection_layer_masks(gradient_maps_by_tone(UiGraph {
+        masks_read_the_frame(lens_before_crop(legacy_selection_layer_masks(gradient_maps_by_tone(UiGraph {
             graph_id: w.graph_id,
             nodes: w.nodes,
             connections: w.connections,
-        })))
+        }))))
     }
+}
+
+/// The lens correction ahead of the crop (2026.5.3), for
+/// every graph the desktop reads, saved ones included: the frontend turns
+/// a saved graph round as it loads it (state.ts lensBeforeCrop), and a
+/// batch export, a thumbnail or the media server rendering a graph file
+/// nobody has opened since must render what the app shows. Where the
+/// crop's output feeds the lens's input, what fed the crop feeds the
+/// lens, the lens feeds the crop, and everything the lens fed reads the
+/// crop; anything else on either node stays. A graph already in order
+/// comes back as it was.
+fn lens_before_crop(mut ui: UiGraph) -> UiGraph {
+    let of_type = |id: &str, ty: &str| ui.nodes.iter().any(|n| n.id == id && n.node_type == ty);
+    let Some(pair) = ui.connections.iter().position(|c| {
+        c.from.1 == "out" && c.to.1 == "in" && of_type(&c.from.0, "heeler.crop_rotate") && of_type(&c.to.0, "heeler.lens_correct")
+    }) else {
+        return ui;
+    };
+    let (crop, lens) = (ui.connections[pair].from.0.clone(), ui.connections[pair].to.0.clone());
+    let Some(feed) = ui.connections.iter().position(|c| c.to.0 == crop && c.to.1 == "in") else { return ui };
+    for (i, c) in ui.connections.iter_mut().enumerate() {
+        if i == feed {
+            c.to.0 = lens.clone();
+        } else if i == pair {
+            *c = UiConnection { from: (lens.clone(), "out".into()), to: (crop.clone(), "in".into()) };
+        } else if c.from.0 == lens && c.from.1 == "out" {
+            c.from.0 = crop.clone();
+        }
+    }
+    ui
 }
 
 /// The Depth block's params, which a layer mask of any kind carries
@@ -7678,8 +7708,8 @@ fn gradient_maps_by_tone(mut ui: UiGraph) -> UiGraph {
     ui
 }
 
-/// A mask reads the frame its layer edits: after the crop, the lens
-/// correction and the warps.
+/// A mask reads the frame its layer edits: after the lens correction,
+/// the crop and the warps.
 ///
 /// A mask is measured on the frame it gates, and behind a crop that
 /// frame is the crop's, not the photograph's. A mask wired from the
@@ -7708,8 +7738,10 @@ fn gradient_maps_by_tone(mut ui: UiGraph) -> UiGraph {
 /// A wire into a node's "in" moves when it comes from an image source
 /// or from geometry earlier on the render's chain, and it moves to the
 /// LAST geometry node everything the node's output gates sits behind:
-/// a mask gating a node ahead of the crop still reads the photograph,
-/// one gating the lens correction reads the crop. Masks chained through
+/// a mask gating a node ahead of the geometry still reads the
+/// photograph, and one gating a geometry node reads the frame that node
+/// sees (the lens correction, first of them, sees the photograph).
+/// Masks chained through
 /// mask nodes (Invert Mask) are followed to their gates. A tap with no
 /// frame of its own (an Export Layer reading the mask) does not decide,
 /// and a mask node gating nothing with a frame (the document
@@ -21807,8 +21839,9 @@ mod tests {
 
     /// The host is the LAST geometry op on the chain, found by walking
     /// back from the output through base ports ("in" on the ops, "base"
-    /// on a merge): the lens sits after the crop, so the slice is cut
-    /// after the lens, and a merge downstream does not hide either.
+    /// on a merge): here, built by hand without the reorder a read makes
+    /// (lens_before_crop), the lens sits after the crop, so the slice is
+    /// cut after the lens, and a merge downstream does not hide either.
     #[test]
     fn roi_feed_walks_the_chain_back_to_the_last_geometry_op() {
         let node = |id: &str, ty: &str| UiNode { id: id.into(), node_type: ty.into(), enabled: true, params: HashMap::new() };
@@ -31400,6 +31433,93 @@ mod tests {
     /// A raster takes the lens geometry green takes: the file's own
     /// correction rides through on green's plane alone, the shading and
     /// fringe terms stay behind.
+    fn wired(graph: &UiGraph, to: &str, port: &str) -> Option<String> {
+        graph.connections.iter().find(|c| c.to.0 == to && c.to.1 == port).map(|c| c.from.0.clone())
+    }
+
+    /// A graph saved with the crop feeding the lens is turned round as it
+    /// is read: the lens takes the crop's feed, the crop reads the lens,
+    /// what read the lens reads the crop; a mask on the lens and the
+    /// crop's other readers stay. A graph in order comes back as it was.
+    #[test]
+    fn a_saved_crop_then_lens_is_read_lens_first() {
+        let old: UiGraph = serde_json::from_value(serde_json::json!({
+            "graph_id": "old",
+            "nodes": [
+                { "id": "src", "type": "heeler.image_source", "enabled": true, "params": {} },
+                { "id": "crop", "type": "heeler.crop_rotate", "enabled": true, "params": {} },
+                { "id": "lens", "type": "heeler.lens_correct", "enabled": true, "params": {} },
+                { "id": "late", "type": "heeler.exposure", "enabled": true, "params": {} },
+                { "id": "output", "type": "heeler.output", "enabled": true, "params": {} },
+                { "id": "tap", "type": "heeler.exposure", "enabled": true, "params": {} },
+                { "id": "m", "type": "heeler.brush_mask", "enabled": true, "params": {} }
+            ],
+            "connections": [
+                { "from": ["src", "out"], "to": ["crop", "in"] },
+                { "from": ["crop", "out"], "to": ["lens", "in"] },
+                { "from": ["lens", "out"], "to": ["late", "in"] },
+                { "from": ["late", "out"], "to": ["output", "in"] },
+                { "from": ["crop", "out"], "to": ["tap", "in"] },
+                { "from": ["m", "out"], "to": ["lens", "mask"] }
+            ]
+        }))
+        .unwrap();
+        assert_eq!(wired(&old, "lens", "in").as_deref(), Some("src"));
+        assert_eq!(wired(&old, "crop", "in").as_deref(), Some("lens"));
+        assert_eq!(wired(&old, "late", "in").as_deref(), Some("crop"));
+        assert_eq!(wired(&old, "tap", "in").as_deref(), Some("crop"), "the crop's other reader stays on the crop");
+        assert_eq!(wired(&old, "lens", "mask").as_deref(), Some("m"), "a mask on the lens stays on the lens");
+        assert_eq!(old.connections.len(), 6);
+        // Read again, nothing moves.
+        let again = lens_before_crop(old.clone());
+        let pairs = |g: &UiGraph| g.connections.iter().map(|c| (c.from.clone(), c.to.clone())).collect::<Vec<_>>();
+        assert_eq!(pairs(&again), pairs(&old));
+    }
+
+    /// What the reorder is for: the lens correction reads the whole frame,
+    /// so a cropped photograph shows, inside its crop, exactly the
+    /// correction the uncropped one shows there. With the crop ahead of the
+    /// lens (built here without the reorder) it does not: the correction
+    /// was centered on the crop and scaled to it.
+    #[test]
+    fn a_crop_shows_the_lens_correction_the_whole_frame_has() {
+        let mut src = ImageBuf::new(96, 64);
+        for y in 0..64 {
+            for x in 0..96 {
+                let v = ((x / 6 + y / 6) % 2) as f32 * 0.8 + 0.1;
+                src.set_pixel(x, y, [v, v * 0.9, v * 0.7, 1.0]);
+            }
+        }
+        let src = Arc::new(src);
+        let node = |id: &str, ty: &str, params: serde_json::Value| UiNode {
+            id: id.into(),
+            node_type: ty.into(),
+            enabled: true,
+            params: serde_json::from_value(params).unwrap(),
+        };
+        let wire = |a: &str, b: &str| UiConnection { from: (a.into(), "out".into()), to: (b.into(), "in".into()) };
+        let crop = [0.25f32, 0.0, 0.5, 1.0];
+        let crop_params = serde_json::json!({ "crop_x": crop[0], "crop_y": crop[1], "crop_w": crop[2], "crop_h": crop[3] });
+        let lens_params = serde_json::json!({ "distortion": 60 });
+        let graph = |order: [&str; 2], with_crop: bool| UiGraph {
+            graph_id: "t".into(),
+            nodes: vec![
+                node("src", "heeler.image_source", serde_json::json!({})),
+                node("lens", "heeler.lens_correct", lens_params.clone()),
+                node("crop", "heeler.crop_rotate", if with_crop { crop_params.clone() } else { serde_json::json!({}) }),
+                node("output", "heeler.output", serde_json::json!({})),
+            ],
+            connections: vec![wire("src", order[0]), wire(order[0], order[1]), wire(order[1], "output")],
+        };
+        let whole = render_export(&graph(["lens", "crop"], false), src.clone(), &HashMap::new()).unwrap();
+        let expected = heeler_engine::crop_rotate_buf(&Arc::new(whole), 0.0, 0.0, crop);
+        let lens_first = render_export(&graph(["lens", "crop"], true), src.clone(), &HashMap::new()).unwrap();
+        assert_eq!((lens_first.width, lens_first.height), (expected.width, expected.height));
+        assert_eq!(lens_first.data, expected.data);
+        let crop_first = render_export(&graph(["crop", "lens"], true), src, &HashMap::new()).unwrap();
+        assert_ne!(crop_first.data, expected.data, "behind the crop the correction is centered on the crop");
+    }
+
     #[test]
     fn lens_geometry_carries_the_files_correction_on_greens_plane() {
         let warp = r#"{"cx":0.5,"cy":0.5,"planes":[[1.1,0,0,0,0,0],[1.2,0,0,0,0,0],[1.3,0,0,0,0,0]]}"#;

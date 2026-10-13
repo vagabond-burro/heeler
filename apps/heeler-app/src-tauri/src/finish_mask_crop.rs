@@ -544,8 +544,11 @@ fn a_depth_mask_follows_the_near_subject_through_the_lens_and_the_warps() {
 }
 
 /// The reading rule past the crop: each mask moves on to the last
-/// geometry its gates sit behind, never back, and the picture never
-/// moves (the frontend's masksReadTheFrame test holds the same graph).
+/// geometry its gates sit behind, never back (the frontend's
+/// masksReadTheFrame test holds the same graph). Saved with the crop
+/// feeding the lens, as graphs were before 2026.5.3, it is turned round
+/// as it is read (lens_before_crop), so the lens sees the whole frame and
+/// a mask gating it reads the photograph.
 #[test]
 fn masks_read_the_last_geometry_their_gates_sit_behind() {
     let ui: UiGraph = serde_json::from_value(json!({
@@ -581,11 +584,13 @@ fn masks_read_the_last_geometry_their_gates_sit_behind() {
     }))
     .unwrap();
     let feed = |id: &str| ui.connections.iter().find(|c| c.to.0 == id && c.to.1 == "in").unwrap().from.0.clone();
-    assert_eq!(feed("m_lens"), "crop", "a mask gating the lens reads the frame the lens sees");
+    assert_eq!(feed("lens"), "src", "the lens correction reads the whole frame");
+    assert_eq!(feed("crop"), "lens", "and the crop reads the corrected frame");
+    assert_eq!(feed("gridwarp"), "crop", "and the warps read the crop");
+    assert_eq!(feed("m_lens"), "src", "a mask gating the lens reads the frame the lens sees");
     assert_eq!(feed("m_late"), "gridwarp", "a saved crop reading moves on to the last enabled geometry");
     assert_eq!(feed("m_loose"), "gridwarp", "a mask gating nothing reads the frame the user sees");
     assert_eq!(feed("m_off"), "shapewarp", "a switched-off warp passes the frame through and is left alone");
-    assert_eq!(feed("lens"), "crop", "the picture itself never moves");
 }
 
 /// The warps really move the feature: a mask left on the unwarped frame

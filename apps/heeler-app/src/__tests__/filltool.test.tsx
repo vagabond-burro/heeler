@@ -131,10 +131,11 @@ describe("the Smart mask on Finish layers", () => {
     const art = s.nodes.find((n) => n.id === ART_ID)!;
     const mask = art.groupNodes!.find((n) => n.id === `art_m_${id}`)!;
     expect(mask.type).toBe("heeler.smart_mask");
-    // Read from the frame (the sample's last geometry, its lens
-    // correction), the size of its layer, through the group's boundary.
-    expect(art.groupBoundary!.some((b) => b.from === "lens" && b.to === mask.id && b.groupPort === "in2")).toBe(true);
-    expect(s.wires.some((w) => w.from === "lens" && w.to === ART_ID && w.toPort === "in2")).toBe(true);
+    // Read from the frame (the sample's last geometry, its crop, after
+    // the lens correction), the size of its layer, through the group's
+    // boundary.
+    expect(art.groupBoundary!.some((b) => b.from === "crop" && b.to === mask.id && b.groupPort === "in2")).toBe(true);
+    expect(s.wires.some((w) => w.from === "crop" && w.to === ART_ID && w.toPort === "in2")).toBe(true);
     const { activeSmartMask } = await import("../ui/smarttool");
     expect(activeSmartMask({ ...s, artActive: id })?.id).toBe(mask.id);
   });

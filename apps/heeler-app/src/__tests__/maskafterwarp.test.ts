@@ -102,9 +102,11 @@ describe("masks read the frame after the lens and the warps", () => {
       const masks = s.nodes.filter((n) => n.type.endsWith("_mask"));
       expect(masks.length, name).toBeGreaterThan(0);
       for (const m of masks) expect(feedOf(s, m.id), `${name}: ${m.id}`).toBe("shapewarp");
-      // The picture runs crop, lens, grid, shape.
-      expect(feedOf(s, "lens"), name).toBe("crop");
-      expect(feedOf(s, "gridwarp"), name).toBe("lens");
+      // The picture runs lens, crop, grid, shape: the lens correction
+      // reads the whole frame, ahead of the crop.
+      expect(feedOf(s, "lens"), name).toBe("src");
+      expect(feedOf(s, "crop"), name).toBe("lens");
+      expect(feedOf(s, "gridwarp"), name).toBe("crop");
       expect(feedOf(s, "shapewarp"), name).toBe("gridwarp");
     }
   });
@@ -121,7 +123,9 @@ describe("masks read the frame after the lens and the warps", () => {
   it("each piece of geometry moves the masks on as it arrives, and undo puts them back", () => {
     let s = run(fresh(), { type: "add_layer", maskType: "brush" });
     const mid = s.activeLayer!.replace("_adj", "_mask");
-    const order = ["crop", "lens", "gridwarp", "shapewarp"];
+    // The lens correction arrives ahead of the crop, so its arrival
+    // leaves the masks on the crop, still the last geometry.
+    const order = ["crop", "crop", "gridwarp", "shapewarp"];
     const steps: Command[][] = [
       [{ type: "set_params", id: "crop", values: CROP }],
       [{ type: "set_category", title: "Lens", on: true }],
