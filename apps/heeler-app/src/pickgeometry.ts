@@ -90,12 +90,42 @@ export function sourceMapOf(graph: Graph, size: Pt): (point: Pt) => Pt | null {
   };
 }
 
+/** The file's own lens correction (dng_warp, ops_lens.rs DngWarp) on one
+ * plane: where the light for pixel (x, y) of a w by h frame came from. */
+export function dngWarpSourceOf(text: unknown, width: number, height: number): ((x: number, y: number) => [number, number]) | null {
+  if (typeof text !== "string" || !text.trim()) return null;
+  let warp: { cx: number; cy: number; planes: number[][] };
+  try {
+    warp = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const planes = Array.isArray(warp?.planes) ? warp.planes : [];
+  // Green's plane: the one a raster and a pick take.
+  const k = planes[planes.length > 1 ? 1 : 0];
+  if (!k || k.length !== 6 || ![warp.cx, warp.cy, ...k].every((v) => typeof v === "number" && Number.isFinite(v))) return null;
+  const [kr0, kr1, kr2, kr3, kt0, kt1] = k;
+  const ox = warp.cx * (width - 1), oy = warp.cy * (height - 1);
+  const wl = Math.max(width - 1, 0), hl = Math.max(height - 1, 0);
+  const m = Math.max(...[[0, 0], [wl, 0], [0, hl], [wl, hl]].map(([px, py]) => Math.hypot(px - ox, py - oy)));
+  if (!(m > 0)) return null;
+  return (x, y) => {
+    const dx = (x - ox) / m, dy = (y - oy) / m;
+    const r2 = dx * dx + dy * dy;
+    const f = kr0 + r2 * (kr1 + r2 * (kr2 + r2 * kr3));
+    const sx = f * dx + kt0 * 2 * dx * dy + kt1 * (r2 + 2 * dx * dx);
+    const sy = f * dy + kt1 * 2 * dx * dy + kt0 * (r2 + 2 * dy * dy);
+    return [ox + m * sx, oy + m * sy];
+  };
+}
+
 /** The lens correction's geometry as a map from its output to the point
  * it samples, both in fractions of its frame: the green channel's map
  * in ops_lens.rs lens_correct (the manual distortion, then the profile's
- * model), which is the one a planted raster takes (lib.rs
- * lens_geometry_buf). Null when the node bends nothing. The fringe and
- * vignette terms move no pixel across the frame and are left out. */
+ * model, then the file's own correction), which is the one a planted
+ * raster takes (lib.rs lens_geometry_buf). Null when the node bends
+ * nothing. The fringe and vignette terms move no pixel across the frame
+ * and are left out. */
 export function lensSourceOf(params: Record<string, unknown>, width: number, height: number): ((p: Pt) => Pt) | null {
   const num = (k: string, d: number) => (typeof params[k] === "number" && Number.isFinite(params[k]) ? (params[k] as number) : d);
   const clampTo = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -111,7 +141,8 @@ export function lensSourceOf(params: Record<string, unknown>, width: number, hei
     return null;
   };
   const profiled = factor(0.5) !== null && (Math.abs(a) > 1e-9 || Math.abs(b) > 1e-9 || Math.abs(c) > 1e-9);
-  if (Math.abs(k) <= 1e-9 && !profiled) return null;
+  const warp = dngWarpSourceOf(params.dng_warp, width, height);
+  if (Math.abs(k) <= 1e-9 && !profiled && !warp) return null;
   const cx = (width - 1) / 2, cy = (height - 1) / 2;
   const norm = Math.max(Math.hypot(cx, cy), 1e-6);
   const short = Math.max(Math.min(cx, cy), 1e-6);
@@ -122,11 +153,15 @@ export function lensSourceOf(params: Record<string, unknown>, width: number, hei
     const r = d / norm;
     const sp = profiled ? (factor((d / short) * scale) ?? 1) : 1;
     const s = sp * (1 + k * r * r);
+    let fu = 0.5 + (u - 0.5) * s, fv = 0.5 + (v - 0.5) * s;
+    if (warp) {
+      // In pixels for the file's map (pixel x sits at fraction (x + 0.5) / width).
+      const [wx, wy] = warp(fu * width - 0.5, fv * height - 0.5);
+      fu = (wx + 0.5) / width;
+      fv = (wy + 0.5) / height;
+    }
     // The op clamps its sample to the edge pixels' centers.
-    return [
-      clampTo(0.5 + (u - 0.5) * s, 0.5 / width, 1 - 0.5 / width),
-      clampTo(0.5 + (v - 0.5) * s, 0.5 / height, 1 - 0.5 / height),
-    ];
+    return [clampTo(fu, 0.5 / width, 1 - 0.5 / width), clampTo(fv, 0.5 / height, 1 - 0.5 / height)];
   };
 }
 

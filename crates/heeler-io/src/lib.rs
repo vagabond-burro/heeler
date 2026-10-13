@@ -46,6 +46,7 @@ pub use bake::{
 };
 
 pub mod heic;
+pub mod lens_warp;
 pub mod lensdb;
 pub use heic::{decode_heif, is_heif};
 

@@ -2690,6 +2690,10 @@ impl Registry {
                 // from, so the panel can say so when the photo comes back. The engine
                 // never reads it.
                 text("lens_preset", ""),
+                // The lens correction a DNG carries (WarpRectilinear, OpcodeList3), as the
+                // desktop read it from the file and turned upright: JSON with the optical
+                // center and six coefficients a color plane. Empty: none.
+                text("dng_warp", ""),
             ],
             inputs: vec![image_in(), mask_in()],
             outputs: vec![image_out()],

@@ -3,7 +3,7 @@ import type { State, Command } from "../state";
 import { clampAutosaveDelay, needsMergedDefaults, needsProfileDefaults, needsRenderedBypass } from "../state";
 import { armAutosave, flushAutosave, autosaves, saveBeforeClose } from "../autosave";
 import { nextSaveRevision } from "../saverevision";
-import { clearThumbnail, isTauri, loadGraphResult, loadLastGoodGraph, loadThumbnail, saveGraph, renderThumbnail, type GraphLoadResult } from "../bridge";
+import { clearThumbnail, isTauri, lensProfileFor, loadGraphResult, loadLastGoodGraph, loadThumbnail, saveGraph, renderThumbnail, type GraphLoadResult } from "../bridge";
 import { queueQuadMembers } from "../quadedit";
 import { linkedWith } from "../links";
 import { writeGraphKeepingTakes } from "../copyedits";
@@ -163,6 +163,13 @@ export function GraphPersistence({ state, dispatch }: { state: State; dispatch: 
       if (!g) {
         if (upgrade) dispatch({ type: "apply_merged_defaults" });
         dispatch({ type: "settle_link_edits", id: image });
+        // A file that carries its own lens correction (a phone's, a
+        // drone's DNG) starts with it on, in the Lens section where it
+        // can be seen and switched off. Only here, for a photograph with
+        // no saved edits: one already edited keeps the look it has.
+        void lensProfileFor(image).then((hit) => {
+          if (live && hit?.file_warp) dispatch({ type: "apply_file_lens_warp", imageId: image, warp: hit.file_warp });
+        });
         return;
       }
       dispatch({

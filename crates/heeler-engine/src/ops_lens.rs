@@ -19,6 +19,12 @@
 //! database is CC-BY-SA data read by our own parser; no lensfun code is
 //! linked. The two compose: a profile correction with a manual trim on
 //! top is two radial maps multiplied.
+//!
+//! A third face: the correction a DNG carries for its own lens (a phone's,
+//! a drone's), WarpRectilinear in its OpcodeList3, which the desktop reads
+//! and the panel writes as `dng_warp` (DngWarp below). It sits under the
+//! other two: a pixel's position goes through the manual and profile maps
+//! first, then through the file's.
 
 use std::sync::Arc;
 
@@ -121,6 +127,56 @@ pub fn vignette_gain(amount: f32, midpoint: f32, r: f32) -> f32 {
     1.0 + amount * smooth
 }
 
+/// The DNG WarpRectilinear correction (opcode 1): per color plane, radial
+/// terms kr0..kr3 and tangential terms kt0, kt1, about an optical center
+/// (cx, cy) given as fractions of the frame's width and height, in a frame
+/// normalized so the farthest corner is 1 from the center. It maps each
+/// corrected position to where the lens put that light:
+///
+///   f = kr0 + kr1 r^2 + kr2 r^4 + kr3 r^6
+///   x' = f x + kt0 2xy + kt1 (r^2 + 2x^2)
+///   y' = f y + kt1 2xy + kt0 (r^2 + 2y^2)
+///
+/// which is the direction a resampler wants: no holes. One plane applies
+/// to every channel; three are red, green and blue.
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct DngWarp {
+    pub cx: f64,
+    pub cy: f64,
+    pub planes: Vec<[f64; 6]>,
+}
+
+impl DngWarp {
+    /// The `dng_warp` parameter's text, or None when empty, malformed,
+    /// not finite or without a plane.
+    pub fn parse(text: &str) -> Option<DngWarp> {
+        let w: DngWarp = serde_json::from_str(text.trim()).ok()?;
+        let finite = w.cx.is_finite() && w.cy.is_finite() && w.planes.iter().flatten().all(|v| v.is_finite());
+        (finite && !w.planes.is_empty()).then_some(w)
+    }
+
+    /// Where the light for (x, y) of a `w` by `h` frame came from, for
+    /// channel `c`.
+    pub fn source(&self, x: f32, y: f32, w: usize, h: usize, c: usize) -> (f32, f32) {
+        let (ox, oy) = (self.cx * (w as f64 - 1.0), self.cy * (h as f64 - 1.0));
+        let (wl, hl) = ((w as f64 - 1.0).max(0.0), (h as f64 - 1.0).max(0.0));
+        let m = [(0.0, 0.0), (wl, 0.0), (0.0, hl), (wl, hl)]
+            .iter()
+            .map(|(px, py)| ((px - ox).powi(2) + (py - oy).powi(2)).sqrt())
+            .fold(0.0, f64::max);
+        if m <= 0.0 {
+            return (x, y);
+        }
+        let [kr0, kr1, kr2, kr3, kt0, kt1] = self.planes[c.min(self.planes.len() - 1)];
+        let (dx, dy) = ((x as f64 - ox) / m, (y as f64 - oy) / m);
+        let r2 = dx * dx + dy * dy;
+        let f = kr0 + r2 * (kr1 + r2 * (kr2 + r2 * kr3));
+        let sx = f * dx + kt0 * 2.0 * dx * dy + kt1 * (r2 + 2.0 * dx * dx);
+        let sy = f * dy + kt1 * 2.0 * dx * dy + kt0 * (r2 + 2.0 * dy * dy);
+        ((ox + m * sx) as f32, (oy + m * sy) as f32)
+    }
+}
+
 pub(crate) fn lens_correct(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError> {
     let src = image_input(inputs, "in", &node.id)?;
     // Scaled down hard: the parameter is a friendly -100..100 and the
@@ -169,7 +225,10 @@ pub(crate) fn lens_correct(node: &Node, inputs: &[(String, Value)]) -> Result<Va
     let vk3 = p(&node.params, "vig_k3", 0.0);
     let vig_profiled = vk1.abs() > 1e-9 || vk2.abs() > 1e-9 || vk3.abs() > 1e-9;
 
-    let geometric = k.abs() > 1e-9 || ca_r.abs() > 1e-9 || ca_b.abs() > 1e-9 || profiled || tca_on;
+    // The file's own correction, under everything else.
+    let warp = node.params.get("dng_warp").and_then(|v| v.as_str()).and_then(DngWarp::parse);
+
+    let geometric = k.abs() > 1e-9 || ca_r.abs() > 1e-9 || ca_b.abs() > 1e-9 || profiled || tca_on || warp.is_some();
     if !geometric && vig.abs() < 1e-4 && !vig_profiled {
         return Ok(Value::Image(src.clone()));
     }
@@ -235,7 +294,12 @@ pub(crate) fn lens_correct(node: &Node, inputs: &[(String, Value)]) -> Result<Va
         let profile_channel = [sp * tr, sp, sp * tb];
         for c in 0..3 {
             let s = profile_channel[c] * radial_scale(per_channel[c], r2);
-            o[c] = sample(&src, cx + dx * s, cy + dy * s, c) * gain;
+            let (sx, sy) = (cx + dx * s, cy + dy * s);
+            let (sx, sy) = match &warp {
+                Some(warp) => warp.source(sx, sy, w, h, c),
+                None => (sx, sy),
+            };
+            o[c] = sample(&src, sx, sy, c) * gain;
         }
         o[3] = src.data[px * 4 + 3];
     });
@@ -245,7 +309,7 @@ pub(crate) fn lens_correct(node: &Node, inputs: &[(String, Value)]) -> Result<Va
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ops::test_util::{make_node, run_on, set_num};
+    use crate::ops::test_util::{make_node, run_on, set_num, set_text};
 
     /// A frame with a single bright pixel out towards a corner, which is
     /// the only thing you need to see a geometric correction move.
@@ -505,5 +569,77 @@ mod tests {
         let img = flat(16, 16, 0.7);
         assert!((sample(&img, -50.0, -50.0, 0) - 0.7).abs() < 1e-6);
         assert!((sample(&img, 1000.0, 1000.0, 0) - 0.7).abs() < 1e-6);
+    }
+
+    /// Where the brightest pixel of channel `c` landed.
+    fn brightest(img: &ImageBuf, c: usize) -> (usize, usize) {
+        let mut best = (0, 0, f32::MIN);
+        for y in 0..img.height {
+            for x in 0..img.width {
+                let v = img.data[(y * img.width + x) * 4 + c];
+                if v > best.2 {
+                    best = (x, y, v);
+                }
+            }
+        }
+        (best.0, best.1)
+    }
+
+    fn warp_text(planes: &[[f64; 6]]) -> String {
+        serde_json::to_string(&DngWarp { cx: 0.5, cy: 0.5, planes: planes.to_vec() }).unwrap()
+    }
+
+    #[test]
+    fn an_identity_dng_warp_leaves_the_picture_alone() {
+        let mut node = make_node("heeler.lens_correct");
+        set_text(&mut node, "dng_warp", &warp_text(&[[1.0, 0.0, 0.0, 0.0, 0.0, 0.0]]));
+        let src = dot(41, 31, (30, 8));
+        let out = run_on(&node, src.clone()).unwrap();
+        assert_eq!(out.as_image().unwrap().data, src.data);
+    }
+
+    #[test]
+    fn a_dng_warp_takes_each_pixel_from_where_its_polynomial_says() {
+        // kr0 = 1.25 everywhere: the output at radius r shows the source at
+        // 1.25 r, so a dot out at 1.25 r lands at r, nearer the center.
+        let mut node = make_node("heeler.lens_correct");
+        set_text(&mut node, "dng_warp", &warp_text(&[[1.25, 0.0, 0.0, 0.0, 0.0, 0.0]]));
+        let out = run_on(&node, dot(81, 61, (70, 50))).unwrap();
+        // Center (40, 30); the dot sits 30 right and 20 down of it.
+        assert_eq!(brightest(out.as_image().unwrap(), 1), (64, 46));
+        // The same check through DngWarp::source directly, for the
+        // tangential terms: kt1 alone pushes along x by kt1 (r^2 + 2x^2).
+        let w = DngWarp { cx: 0.5, cy: 0.5, planes: vec![[1.0, 0.0, 0.0, 0.0, 0.0, 0.1]] };
+        let (sx, sy) = w.source(80.0, 30.0, 81, 61, 0);
+        let m = (40.0f64 * 40.0 + 30.0 * 30.0).sqrt();
+        let x = 40.0 / m;
+        assert!((sx as f64 - (40.0 + m * (x + 0.1 * 3.0 * x * x))).abs() < 1e-3, "{sx}");
+        assert!((sy - 30.0).abs() < 1e-3, "{sy}");
+    }
+
+    #[test]
+    fn a_three_plane_dng_warp_moves_each_color_on_its_own() {
+        let mut node = make_node("heeler.lens_correct");
+        set_text(
+            &mut node,
+            "dng_warp",
+            &warp_text(&[[1.25, 0.0, 0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]]),
+        );
+        let out = run_on(&node, dot(81, 61, (70, 50))).unwrap();
+        let img = out.as_image().unwrap();
+        assert_eq!(brightest(img, 0), (64, 46), "red moves");
+        assert_eq!(brightest(img, 1), (70, 50), "green stays");
+        assert_eq!(brightest(img, 2), (70, 50), "blue stays");
+    }
+
+    #[test]
+    fn a_malformed_dng_warp_is_ignored() {
+        for bad in ["", "{", "{\"cx\":0.5,\"cy\":0.5,\"planes\":[]}", "{\"cx\":0.5,\"cy\":0.5,\"planes\":[[1,0,0]]}"] {
+            let mut node = make_node("heeler.lens_correct");
+            set_text(&mut node, "dng_warp", bad);
+            let src = dot(21, 11, (3, 3));
+            assert_eq!(run_on(&node, src.clone()).unwrap().as_image().unwrap().data, src.data, "{bad}");
+        }
+        assert!(DngWarp::parse("{\"cx\":1e999,\"cy\":0.5,\"planes\":[[1,0,0,0,0,0]]}").is_none());
     }
 }

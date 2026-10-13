@@ -120,6 +120,8 @@ import {
 } from "../bridge";
 import {
   captureLensPreset,
+  DNG_WARP,
+  fileWarpValues,
   lensPresetValues,
   parseLensPresets,
   upsertLensPreset,
@@ -3838,9 +3840,17 @@ function LensProfileLine({
   // Same contract as Auto noise: the measurement writes ordinary
   // parameters onto the node, visibly, in one undo step. The graph
   // shows exactly what was applied and the sliders stay free to trim.
-  const hasProfile = !!hit && !!(hit.model || hit.tca || hit.vig);
+  // The file's own correction outranks the database's: it was made for
+  // this camera and lens, and applying both would correct twice.
+  const fileWarp = hit ? hit.file_warp || null : null;
+  const hasProfile = !!hit && !!(fileWarp || hit.model || hit.tca || hit.vig);
   const applyProfile = () => {
     if (!hit || !hasProfile || !lens) return;
+    if (fileWarp) {
+      dispatch({ type: "set_params", id: lens.id, ...fileWarpValues(fileWarp) });
+      logMsg("info", "Lens correction from the file applied");
+      return;
+    }
     // Every profile parameter is written every time, neutral where this
     // lens has no calibration for it: a reapply after switching photos
     // must never leave the previous lens's coefficients behind.
@@ -3865,8 +3875,9 @@ function LensProfileLine({
         vig_k3: k3,
       },
       // A database profile supersedes any user preset that was on the
-      // node, so the provenance marker clears with it.
-      text: { dist_model: hit.model ?? "none", lens_preset: "" },
+      // node, so the provenance marker clears with it, and any file
+      // correction too.
+      text: { dist_model: hit.model ?? "none", lens_preset: "", [DNG_WARP]: "" },
     });
     const parts = [
       hit.model && "distortion",
@@ -3881,14 +3892,14 @@ function LensProfileLine({
   };
   const applied =
     !!lens &&
-    ((lens.textParams?.dist_model ?? "none") !== "none" || lens.params.tca_vr !== undefined);
+    ((lens.textParams?.dist_model ?? "none") !== "none" || lens.params.tca_vr !== undefined || !!lens.textParams?.[DNG_WARP]);
   return (
     <div style={{ display: "flex", alignItems: "baseline", gap: 6, padding: "1px 0 6px" }}>
       <div
         data-testid="lens-profile-line"
         style={{
           fontSize: 10,
-          color: presetName || (hit && hit.matched) ? "var(--text-body)" : "var(--text-ghost)",
+          color: presetName || fileWarp || (hit && hit.matched) ? "var(--text-body)" : "var(--text-ghost)",
           flex: 1,
           minWidth: 0,
           overflow: "hidden",
@@ -3898,6 +3909,8 @@ function LensProfileLine({
         data-hint={
           presetName
             ? `This photo's lens corrections came from your preset "${presetName}"`
+            : fileWarp
+              ? "This photograph's file carries its own lens correction, made for its camera and lens"
             : hit
               ? hit.matched
                 ? hit.calibrated
@@ -3909,6 +3922,8 @@ function LensProfileLine({
       >
         {presetName
           ? `Profile: ${presetName} (preset)`
+          : fileWarp
+            ? "Profile: from the file"
           : hit
             ? hit.matched
               ? `Profile: ${hit.maker} ${hit.name}`
@@ -3920,7 +3935,11 @@ function LensProfileLine({
           className="chip"
           data-testid="lens-profile-apply"
           style={{ fontSize: 9, padding: "1px 8px", flex: "none" }}
-          data-hint="Write this profile's distortion, chromatic aberration and vignetting corrections onto the Lens Correction node"
+          data-hint={
+            fileWarp
+              ? "Write the file's own lens correction onto the Lens Correction node"
+              : "Write this profile's distortion, chromatic aberration and vignetting corrections onto the Lens Correction node"
+          }
           onClick={applyProfile}
         >
           {applied ? "REAPPLY" : "APPLY"}

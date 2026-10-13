@@ -3757,6 +3757,10 @@ export type LensProfileHit = {
   tca: [number, number, number, number, number, number] | null;
   /** Vignetting [k1, k2, k3] at the shot's focal length and aperture. */
   vig: [number, number, number] | null;
+  /** The lens correction the file carries for itself (a DNG's
+   * WarpRectilinear), as the node's dng_warp text. When present it is
+   * the profile, ahead of the database's. */
+  file_warp?: string | null;
 };
 
 export async function lensProfileFor(imageId: string): Promise<LensProfileHit | null> {

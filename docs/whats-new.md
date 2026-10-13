@@ -4,6 +4,7 @@
 
 ### New
 
+- **Phone, drone and camera DNGs straighten their own lenses.** Many phones and drones, and some cameras (Google Pixel, DJI, Leica, GoPro and others), write a correction for their own lens's distortion into the DNG file, and wide lenses there can bow a horizon or leave the frame's corners dark without it. A photograph that carries one now starts with it on the first time you open it, in the Lens section, where the profile line reads **Profile: from the file** and you can switch it off like any other edit. It takes the place of a database profile, so the lens is never corrected twice; photographs you already edited keep their look, and **Apply** puts the file's correction on them. [Lens](user-guide/adjustments/lens.md#profiles).
 - **Presets are files you can read and edit.** Saved and exported presets are now written in YAML, the same format as node recipe files: each node's settings on its own line, in plain words, editable in any text editor, with any mistake reported by its line. Presets saved or shared from earlier versions are JSON and still import and apply as before; Heeler writes them as YAML the next time it saves or exports them. [Presets](user-guide/presets.md#preset-files).
 
 ### Fixes

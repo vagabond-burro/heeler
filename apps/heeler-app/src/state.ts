@@ -7,6 +7,7 @@ import { convertLegacyFit, fitNeedsOrderFix, type FitOrderFields } from "./check
 import { dayInRange } from "./datefilter";
 import { isNameFormat, type NameFormat } from "./consolebands";
 import { logMsg } from "./log";
+import { fileWarpValues } from "./lenspresets";
 import { cornersOf, mapPoint, solveHomography, type Pt } from "./quadmap";
 import { flipQuad, frameAspectFor, reframeQuad } from "./imagelayers";
 import { cropGeomOf, flippedCropParams, sourceSizeFor, frameRemap, mirrorRemap, remapNode, remapNodes, sameCrop, sourceAspectFor, turnedCropParams, turnRemap, type CropGeom, type FrameRemap } from "./framemap";
@@ -4639,6 +4640,11 @@ export type Command =
    * replacing, and already-known ids are left alone*/
   | { type: "append_images"; images: ImageEntry[] }
   | { type: "apply_merged_defaults" }
+  /** A photograph opened without saved edits whose file carries its own
+   * lens correction: build the Lens section with it, once, as one undo
+   * step. Skipped if the photo is no longer the one on screen, or already
+   * has a Lens Correction node (someone got there first). */
+  | { type: "apply_file_lens_warp"; imageId: string; warp: string }
   | { type: "apply_profile_defaults" }
   | { type: "apply_rendered_bypass" }
   /** A Color Checker fit saved before the order fix (2026-09-20) has its
@@ -13865,6 +13871,11 @@ function reduceWithLifted(s: State, cmd: Command, logged: boolean): State {
   // and only the history is joined: the build's entry, the state before
   // either, stands for the pair. A drag that began the build keeps its
   // gesture, so the rest of it coalesces as usual.
+  if (cmd.type === "apply_file_lens_warp") {
+    if (s.activeImage !== cmd.imageId || s.nodes.some((n) => n.type === "heeler.lens_correct")) return s;
+    const { values, text } = fileWarpValues(cmd.warp);
+    return reduceWith(s, { type: "set_category", title: "Lens", on: true, then: { type: "set_params", id: "lens", values, text } }, logged);
+  }
   if ((cmd.type === "set_category" || cmd.type === "set_recipe") && cmd.then) {
     const { then, ...build } = cmd;
     let built = reduceWith(s, build as Command, logged);
@@ -14719,6 +14730,10 @@ function reduceInner(s: State, cmd: Command): State {
         exportQueue: { groups, active: Math.min(Math.max(0, q.active ?? 0), groups.length - 1) },
       };
     }
+    // Handled in reduceWith, where it can build the section and write the
+    // correction as one undo step.
+    case "apply_file_lens_warp":
+      return s;
     case "apply_merged_defaults": {
       const profile = s.nodes.find((n) => n.type === "heeler.tone_profile");
       // Zero and the shipped default both read as "nobody chose this";

@@ -2207,14 +2207,19 @@ fn conform_rasters_to_geometry(
 /// apart by channel.
 const LENS_GEOMETRY_KEYS: [&str; 6] = ["distortion", "dist_model", "dist_a", "dist_b", "dist_c", "dist_scale"];
 
-/// A Lens Correction node with its geometry alone (LENS_GEOMETRY_KEYS).
+/// A Lens Correction node with its geometry alone (LENS_GEOMETRY_KEYS),
+/// and the file's own correction (`dng_warp`) on green's plane alone: a
+/// raster takes the distortion green takes, never a fringe.
 fn lens_geometry_node(n: &UiNode) -> UiNode {
-    UiNode {
-        id: n.id.clone(),
-        node_type: n.node_type.clone(),
-        enabled: true,
-        params: n.params.iter().filter(|(k, _)| LENS_GEOMETRY_KEYS.contains(&k.as_str())).map(|(k, v)| (k.clone(), v.clone())).collect(),
+    let mut params: HashMap<String, serde_json::Value> =
+        n.params.iter().filter(|(k, _)| LENS_GEOMETRY_KEYS.contains(&k.as_str())).map(|(k, v)| (k.clone(), v.clone())).collect();
+    if let Some(mut warp) = n.params.get("dng_warp").and_then(|v| v.as_str()).and_then(heeler_engine::ops_lens::DngWarp::parse) {
+        warp.planes = vec![warp.planes[if warp.planes.len() > 1 { 1 } else { 0 }]];
+        if let Ok(text) = serde_json::to_string(&warp) {
+            params.insert("dng_warp".into(), serde_json::Value::String(text));
+        }
     }
+    UiNode { id: n.id.clone(), node_type: n.node_type.clone(), enabled: true, params }
 }
 
 /// `image` bent by the lens correction's geometry, through the op
@@ -12344,6 +12349,12 @@ pub struct LensProfileOut {
     /// Vignetting [k1, k2, k3] at the shot's focal length AND aperture;
     /// absent when either is unknown or uncalibrated.
     vig: Option<[f32; 3]>,
+    /// The lens correction the file carries for itself (a DNG's
+    /// WarpRectilinear: phones, drones, some cameras), upright, as the
+    /// text the node's `dng_warp` takes. When present it is the profile:
+    /// the panel applies it instead of the database's, and on its own
+    /// for a photograph opened without edits.
+    file_warp: Option<String>,
 }
 
 /// Phase 1 of lens profiles: NAME the database profile this image's
@@ -12368,7 +12379,13 @@ fn lens_profile_for_in(app: &tauri::AppHandle, image_id: &str) -> Result<Option<
         return Ok(None);
     };
     let exif = heeler_io::read_exif(&head);
-    let Some(lens_name) = exif.lens else { return Ok(None) };
+    let file_warp = file_lens_warp(std::path::Path::new(&path));
+    // A phone often names no lens at all; its own correction still stands.
+    let lens_name = match (exif.lens, &file_warp) {
+        (Some(name), _) => name,
+        (None, Some(_)) => String::new(),
+        (None, None) => return Ok(None),
+    };
     let focal = exif
         .focal_length
         .as_ref()
@@ -12392,8 +12409,9 @@ fn lens_profile_for_in(app: &tauri::AppHandle, image_id: &str) -> Result<Option<
         focal,
         tca: None,
         vig: None,
+        file_warp: file_warp.clone(),
     };
-    Ok(Some(match lens_db(app).match_lens(&lens_name) {
+    Ok(Some(match lens_db(app).match_lens(&lens_name).filter(|_| !lens_name.is_empty()) {
         Some(hit) => {
             // The camera's crop factor, from its own testimony: the
             // 35mm-equivalent focal over the real one. When the file
@@ -12424,10 +12442,24 @@ fn lens_profile_for_in(app: &tauri::AppHandle, image_id: &str) -> Result<Option<
                 focal: row.as_ref().map(|r| r.focal).or(focal),
                 tca,
                 vig,
+                file_warp,
             }
         }
         None => none,
     }))
+}
+
+/// The lens correction a DNG or GPR carries for itself, upright, as the
+/// Lens Correction node's `dng_warp` text; None for any other file. The
+/// opcode lists sit beside the raw data, past the head the EXIF read
+/// takes, so the file is read whole.
+fn file_lens_warp(path: &std::path::Path) -> Option<String> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    if ext != "dng" && ext != "gpr" {
+        return None;
+    }
+    let bytes = std::fs::read(path).ok()?;
+    serde_json::to_string(&heeler_io::lens_warp::dng_lens_warp(&bytes)?).ok()
 }
 
 /// The fraction of a buffer's pixels outside the working gamut (any
@@ -31364,6 +31396,32 @@ mod tests {
         }
     }
 
+
+    /// A raster takes the lens geometry green takes: the file's own
+    /// correction rides through on green's plane alone, the shading and
+    /// fringe terms stay behind.
+    #[test]
+    fn lens_geometry_carries_the_files_correction_on_greens_plane() {
+        let warp = r#"{"cx":0.5,"cy":0.5,"planes":[[1.1,0,0,0,0,0],[1.2,0,0,0,0,0],[1.3,0,0,0,0,0]]}"#;
+        let n = UiNode {
+            id: "lens".into(),
+            node_type: "heeler.lens_correct".into(),
+            enabled: true,
+            params: HashMap::from([
+                ("dng_warp".to_string(), serde_json::json!(warp)),
+                ("vig_k1".to_string(), serde_json::json!(0.5)),
+                ("distortion".to_string(), serde_json::json!(3.0)),
+            ]),
+        };
+        let g = lens_geometry_node(&n);
+        let kept = heeler_engine::ops_lens::DngWarp::parse(g.params["dng_warp"].as_str().unwrap()).unwrap();
+        assert_eq!(kept.planes, vec![[1.2, 0.0, 0.0, 0.0, 0.0, 0.0]]);
+        assert_eq!(g.params.get("distortion"), Some(&serde_json::json!(3.0)));
+        assert!(!g.params.contains_key("vig_k1"));
+        // No correction in the file, none on the raster.
+        let plain = UiNode { params: HashMap::new(), ..n };
+        assert!(!lens_geometry_node(&plain).params.contains_key("dng_warp"));
+    }
 
     #[test]
     fn gpu_tail_finds_the_supported_run_and_its_prefix() {

@@ -83,7 +83,24 @@ export function lensPresetValues(preset: LensPreset): {
   }
   // Applying stamps the photo with where these numbers came from.
   text[LENS_PRESET_MARKER] = preset.name;
+  // A preset is the whole lens state: it replaces a correction read from
+  // the file too, or the lens would be corrected twice.
+  text[DNG_WARP] = "";
   return { values, text };
+}
+
+/** The Lens Correction node's text parameter holding the correction the
+ * photograph's own file carries (a DNG's WarpRectilinear), as the desktop
+ * read it. Not part of a preset's capture: it belongs to the file. */
+export const DNG_WARP = "dng_warp";
+
+/** What applying the file's own correction writes: that correction, and
+ * every other profile and manual term neutral, so it stands alone. */
+export function fileWarpValues(warp: string): {
+  values: Record<string, number>;
+  text: Record<string, string>;
+} {
+  return { values: { ...LENS_NEUTRAL }, text: { ...LENS_TEXT_NEUTRAL, [LENS_PRESET_MARKER]: "", [DNG_WARP]: warp } };
 }
 
 /** Parse a stored preset list, tolerating anything: a corrupt blob is
