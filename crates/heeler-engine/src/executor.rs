@@ -82,6 +82,10 @@ pub struct Executor {
     /// Polled before each node is evaluated; true stops the render with
     /// EngineError::Cancelled. None renders to the end.
     stop: Option<Box<dyn Fn() -> bool + Send + Sync>>,
+    /// During a render: how many of each node's consumers in this render
+    /// have yet to take its output. A cached output with consumers still
+    /// to come is not evicted mid-render, or it would be computed twice.
+    pending: HashMap<String, usize>,
 }
 
 /// Resident bytes of one cached value: f32 RGBA for images, one f32
@@ -177,6 +181,31 @@ fn raster_fed(ty: &str) -> bool {
     )
 }
 
+/// How many times each node's output is taken by the nodes a render of
+/// `terminal` reaches: one per wire, a planted port's wires excluded (they
+/// read the planted plane, not the node's render).
+fn consumers(graph: &Graph, terminal: &str) -> HashMap<String, usize> {
+    let mut count: HashMap<String, usize> = HashMap::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut stack = vec![terminal.to_string()];
+    while let Some(id) = stack.pop() {
+        if !seen.insert(id.clone()) {
+            continue;
+        }
+        let Some(node) = graph.node(&id) else { continue };
+        for port in &node.inputs {
+            if let Some(c) = graph.incoming(&id, &port.name) {
+                if c.from.1 != "out" && !passthrough_port(graph, &c.from.0, &c.from.1) {
+                    continue;
+                }
+                *count.entry(c.from.0.clone()).or_insert(0) += 1;
+                stack.push(c.from.0.clone());
+            }
+        }
+    }
+    count
+}
+
 impl Executor {
     pub fn new() -> Self {
         Executor::default()
@@ -269,10 +298,12 @@ impl Executor {
         self.track_cache();
         let needed = self.estimate(graph, node_id, sources)?;
         let _job = crate::memory::Job::admit(needed, "graph render and intermediates")?;
+        self.pending = consumers(graph, node_id);
         let result = crate::memory::catch(|| {
             let mut keys = HashMap::new();
             self.resolve(graph, node_id, sources, &mut keys).map(|(v, _)| v)
         });
+        self.pending.clear();
         self.track_cache();
         result?
     }
@@ -313,6 +344,11 @@ impl Executor {
         struct Walk<'a> {
             exec: &'a Executor, graph: &'a Graph, sources: &'a HashMap<String, SourceImage>,
             shapes: HashMap<String, (usize, usize, usize)>, keys: HashMap<String, u64>, outputs: usize, scratch: usize,
+            // The render's order replayed: bytes the nodes in progress hold
+            // as inputs, the most held at once while a node makes its
+            // output, each newly computed output's bytes (a cache hit or a
+            // source is already resident), and how many wires take each.
+            held: usize, live_peak: usize, fresh: HashMap<String, usize>, wires: HashMap<String, usize>,
         }
         impl Walk<'_> {
             fn visit(&mut self, id: &str) -> Result<(usize, usize, usize), EngineError> {
@@ -326,6 +362,7 @@ impl Executor {
                     (src.image.width, src.image.height, 4)
                 } else {
                     let mut base = None;
+                    let held_before = self.held;
                     for port in &node.inputs {
                         if let Some(c) = self.graph.incoming(id, &port.name) {
                             // A wire off a planted port carries the
@@ -337,11 +374,18 @@ impl Executor {
                             // they carry the node's own render.
                             let d = if c.from.1 != "out" && !passthrough_port(self.graph, &c.from.0, &c.from.1) {
                                 match self.sources.get(&format!("{}@{}", c.from.0, c.from.1)) {
-                                    Some(src) => (src.image.width, src.image.height, 1),
+                                    // The planted plane is read into a new mask.
+                                    Some(src) => {
+                                        self.held = memory::sum([self.held, memory::bytes(src.image.width, src.image.height, 1, 4)?])?;
+                                        (src.image.width, src.image.height, 1)
+                                    }
                                     None => continue,
                                 }
                             } else {
-                                self.visit(&c.from.0)?
+                                let d = self.visit(&c.from.0)?;
+                                *self.wires.entry(c.from.0.clone()).or_insert(0) += 1;
+                                self.held = memory::sum([self.held, self.fresh.get(&c.from.0).copied().unwrap_or(0)])?;
+                                d
                             };
                             if base.is_none() || port.name == "in" || port.name == "base" { base = Some(d); }
                         }
@@ -360,6 +404,12 @@ impl Executor {
                     }
                     let channels = if !node.enabled { incoming_channels }
                         else if node.outputs.iter().any(|p| p.kind == PortKind::Image) { 4 } else { 1 };
+                    // The output is made while the inputs are held; then
+                    // the inputs go and the output is the consumer's to hold.
+                    let made = memory::bytes(w, h, channels, 4)?;
+                    self.live_peak = self.live_peak.max(memory::sum([self.held, made])?);
+                    self.held = held_before;
+                    self.fresh.insert(id.into(), made);
                     if node.enabled {
                         self.outputs = memory::sum([self.outputs, memory::bytes(w, h, channels, 4)?])?;
                         let workspace = match node.node_type.as_str() {
@@ -382,7 +432,10 @@ impl Executor {
                 Ok(dims)
             }
         }
-        let mut walk = Walk { exec: self, graph, sources, shapes: HashMap::new(), keys: HashMap::new(), outputs: 0, scratch: 0 };
+        let mut walk = Walk {
+            exec: self, graph, sources, shapes: HashMap::new(), keys: HashMap::new(), outputs: 0, scratch: 0,
+            held: 0, live_peak: 0, fresh: HashMap::new(), wires: HashMap::new(),
+        };
         let (w, h, _) = walk.visit(terminal)?;
         let budget = memory::budget();
         let mut seen = std::collections::HashSet::new();
@@ -393,12 +446,22 @@ impl Executor {
         for m in self.cache.values().filter_map(|v| v.as_mask()) {
             if seen.insert(Arc::as_ptr(m) as usize) && !budget.mask_is_resident(m) { held.push(m.data.capacity().saturating_mul(4)); }
         }
-        // A render keeps at most what the trim leaves: counting one whole
-        // frame per node of a long chain would refuse a full-size export
-        // the machine has always managed.
+        // What the render's new outputs hold at most. Without a budget the
+        // cache keeps every one of them until the render ends. With one,
+        // evict_within_render holds the cache to the budget as it goes,
+        // over it only by what it may not evict: the output just made, and
+        // outputs another node in this render has yet to take. On top of
+        // the cache, the nodes in progress hold their inputs while making
+        // their outputs, whether or not the cache still has them.
         let outputs = match self.cache_budget {
-            Some(cap) => walk.outputs.min(cap),
             None => walk.outputs,
+            Some(cap) => {
+                let cached: usize = self.cache.values().map(value_bytes).sum();
+                let pinned = memory::sum(walk.fresh.iter().filter(|(id, _)| walk.wires.get(*id).is_some_and(|n| *n > 1)).map(|(_, b)| *b))?;
+                let newest = walk.fresh.values().copied().max().unwrap_or(0);
+                let kept = memory::sum([cap.max(cached) - cached, pinned, newest])?;
+                memory::sum([walk.outputs.min(kept), walk.live_peak])?
+            }
         };
         // The returned clone and format conversion coexist with cached outputs.
         Ok(memory::sum([memory::sum(held)?, outputs, walk.scratch, memory::bytes(w, h, 4, 8)?])?)
@@ -584,7 +647,11 @@ impl Executor {
                         }
                         (planted_port_value(&conn.from.0, &conn.from.1, sources), 0)
                     } else {
-                        self.resolve(graph, &conn.from.0, sources, keys)?
+                        let resolved = self.resolve(graph, &conn.from.0, sources, keys)?;
+                        if let Some(n) = self.pending.get_mut(&conn.from.0) {
+                            *n = n.saturating_sub(1);
+                        }
+                        resolved
                     };
                     inputs.push((port.name.clone(), value));
                 }
@@ -655,7 +722,38 @@ impl Executor {
             .or_insert(0) += 1;
         self.cache.insert(key, value.clone());
         self.touch(key);
+        self.evict_within_render(key, keys);
         Ok((value, key))
+    }
+
+    /// Holds the cache to the byte budget the last trim_bytes set while a
+    /// render runs, not only between frames: every result a render
+    /// computes would otherwise stay cached until it ended, so a long
+    /// chain held one whole frame per node. Evicts least recently used
+    /// first, never the result just made (its consumer takes it next) and
+    /// never one a node later in this render still has to take. Without a
+    /// budget (a one-off executor, the export's) everything stays, as the
+    /// export's layers and alpha reuse the beauty's upstream work.
+    fn evict_within_render(&mut self, keep: u64, keys: &HashMap<String, u64>) {
+        let Some(budget) = self.cache_budget else { return };
+        let mut total: usize = self.cache.values().map(value_bytes).sum();
+        if total <= budget {
+            return;
+        }
+        let pinned: std::collections::HashSet<u64> =
+            self.pending.iter().filter(|(_, n)| **n > 0).filter_map(|(id, _)| keys.get(id).copied()).collect();
+        let mut oldest: Vec<(u64, u64)> =
+            self.cache_used.iter().filter(|(k, _)| **k != keep && !pinned.contains(*k)).map(|(&k, &used)| (k, used)).collect();
+        oldest.sort_unstable_by_key(|&(_, used)| used);
+        for (key, _) in oldest {
+            if total <= budget {
+                break;
+            }
+            if let Some(v) = self.cache.remove(&key) {
+                total = total.saturating_sub(value_bytes(&v));
+                self.cache_used.remove(&key);
+            }
+        }
     }
 
     /// Marks every cached ancestor of a hit as recently used, approximating
@@ -1845,6 +1943,81 @@ mod tests {
             assert!(refused(Executor::key_of(&rig.graph, "e", &rig.sources).map(|_| ())), "{v}: keyed");
             assert!(refused(Executor::new().render(&rig.graph, "e", &rig.sources).map(|_| ())), "{v}: rendered");
         }
+    }
+
+    /// A source and a chain of `n` Exposure nodes, e0 to e{n-1}.
+    fn chain(n: usize, side: usize) -> (Rig, String) {
+        let mut rig = Rig::new();
+        rig.source("src", ImageBuf::filled(side, side, [0.2, 0.3, 0.4, 1.0]));
+        let mut prev = "src".to_string();
+        for i in 0..n {
+            let id = format!("e{i}");
+            rig.node("heeler.exposure", &id).set(&id, "exposure", 0.05).wire(&prev, "out", &id, "in");
+            prev = id;
+        }
+        (rig, prev)
+    }
+
+    /// Under a byte budget a render holds its cache to the budget as it
+    /// goes, not only between frames. Every result used to stay cached
+    /// until the render ended, so 20 nodes held 20 frames (22 MB here)
+    /// under a 10 MB limit; admission counted the budget instead, so it
+    /// let that through. Now the chain needs a few frames at once, is
+    /// admitted, stays within the limit, and runs each node once.
+    #[test]
+    fn a_long_chain_under_a_small_budget_renders_within_it() {
+        crate::memory::with_budget(10 << 20, || {
+            let (rig, last) = chain(20, 256);
+            let mut exec = Executor::new();
+            exec.trim_bytes(1 << 20);
+            let out = exec.render(&rig.graph, &last, &rig.sources).expect("admitted: a few frames at once, not twenty");
+            let snapshot = crate::memory::budget().snapshot();
+            assert!(snapshot.resident + snapshot.reserved <= snapshot.limit, "{snapshot:?}");
+            let cached: usize = exec.cache.values().map(value_bytes).sum();
+            assert!(cached <= (1 << 20) + value_bytes(&out), "the cache holds {cached} bytes after the render");
+            for i in 0..20 {
+                assert_eq!(exec.stats.executions.get(&format!("e{i}")), Some(&1), "e{i}");
+            }
+        });
+    }
+
+    /// A result another node in the same render has yet to take is not
+    /// evicted, however small the budget: the shared node of a diamond
+    /// runs once.
+    #[test]
+    fn an_output_still_to_be_taken_is_not_evicted_mid_render() {
+        let mut rig = Rig::new();
+        rig.source("src", ImageBuf::filled(64, 64, [0.2, 0.3, 0.4, 1.0]));
+        rig.node("heeler.exposure", "shared").set("shared", "exposure", 0.5).wire("src", "out", "shared", "in");
+        rig.node("heeler.exposure", "left").set("left", "exposure", 0.1).wire("shared", "out", "left", "in");
+        rig.node("heeler.exposure", "right").set("right", "exposure", -0.1).wire("shared", "out", "right", "in");
+        rig.node("heeler.merge", "join").wire("left", "out", "join", "base").wire("right", "out", "join", "fg");
+        let mut exec = Executor::new();
+        exec.trim_bytes(1);
+        let small = rig.render(&mut exec, "join");
+        assert_eq!(exec.stats.executions.get("shared"), Some(&1));
+        // And the picture is the one an unbounded render makes.
+        assert_eq!(small.as_image().unwrap().data, rig.render(&mut Executor::new(), "join").as_image().unwrap().data);
+    }
+
+    /// Admission counts what a render holds at most: under a budget, the
+    /// budget and the nodes in progress (a few frames for a chain);
+    /// without one, every output, as before.
+    #[test]
+    fn admission_counts_a_few_frames_under_a_budget_and_every_output_without() {
+        let (rig, last) = chain(20, 256);
+        let frame = 256 * 256 * 16;
+        let mut bounded = Executor::new();
+        bounded.trim_bytes(frame);
+        let under = bounded.estimate(&rig.graph, &last, &rig.sources).unwrap();
+        let unbounded = Executor::new().estimate(&rig.graph, &last, &rig.sources).unwrap();
+        // Both carry the same fixed part: the operator's scratch, the
+        // returned copy, the source. On top of it the unbounded render
+        // keeps all 20 outputs; the bounded one keeps the budget and the
+        // newest output, and holds one node's input and output while it
+        // works: four frames.
+        assert!(unbounded >= 20 * frame, "without a budget every output: {unbounded}");
+        assert_eq!(unbounded - under, 16 * frame, "under {under}, unbounded {unbounded}");
     }
 
     #[test]
