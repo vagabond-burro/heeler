@@ -311,19 +311,54 @@ pub fn write_gallery(dir: &Path, name: &str, items: &[ServeItem]) -> Result<(), 
     Ok(())
 }
 
+/// Writes one answer, always with `Connection: close`, so a browser
+/// never keeps an idle connection to a share.
+///
+/// Stopping a share drops the server and its listener, but tiny_http
+/// keeps serving each connection it already accepted on a thread of its
+/// own, which goes on reading requests into the stopped server's queue
+/// where nothing answers them. A browser holds a used connection open
+/// for minutes and reuses it, and a share restarts on the same port so
+/// its link stays the same, so after a stop and a start the first load
+/// went down an old connection and hung until a refresh opened a new
+/// one. Without an idle connection there is nothing for it to reuse.
+/// The cost is a connection per request, on a local network: the
+/// gallery's manifest poll every 2.5 s and one per photograph.
+///
+/// The answer is written by hand because tiny_http drops a Connection
+/// header from a Response it builds.
+fn send(req: tiny_http::Request, status: u16, headers: &[(&str, &str)], body: &[u8]) {
+    use std::io::Write;
+    let head_only = *req.method() == tiny_http::Method::Head;
+    let reason = tiny_http::StatusCode(status).default_reason_phrase();
+    let mut out = format!("HTTP/1.1 {status} {reason}\r\n");
+    for (field, value) in headers {
+        out.push_str(&format!("{field}: {value}\r\n"));
+    }
+    out.push_str(&format!("Content-Length: {}\r\nConnection: close\r\n\r\n", body.len()));
+    let mut w = req.into_writer();
+    let _ = w.write_all(out.as_bytes());
+    if !head_only {
+        let _ = w.write_all(body);
+    }
+    let _ = w.flush();
+}
+
 fn respond(
     req: tiny_http::Request,
     status: u16,
     content_type: &str,
     body: Vec<u8>,
 ) {
-    let header = tiny_http::Header::from_bytes(&b"Content-Type"[..], content_type.as_bytes())
-        .expect("static header");
-    let _ = req.respond(
-        tiny_http::Response::from_data(body)
-            .with_status_code(status)
-            .with_header(header),
-    );
+    send(req, status, &[("Content-Type", content_type)], &body);
+}
+
+/// Answers whatever is still waiting when a share stops, so a request
+/// that arrived in the last moments gets "stopped" rather than nothing.
+fn drain(server: &tiny_http::Server) {
+    while let Ok(Some(req)) = server.try_recv() {
+        respond(req, 503, "text/plain; charset=utf-8", b"This share has stopped.".to_vec());
+    }
 }
 
 /// Routes one request. Everything unknown is 404 with no detail: a
@@ -347,12 +382,7 @@ fn handle(
     let Some(rest) = url.strip_prefix(&prefix) else {
         if simple {
             let target = format!("{prefix}/");
-            let header =
-                tiny_http::Header::from_bytes(&b"Location"[..], target.as_bytes()).unwrap();
-            let _ = req.respond(
-                tiny_http::Response::from_data(Vec::new()).with_status_code(303).with_header(header),
-            );
-            return;
+            return send(req, 303, &[("Location", &target)], b"");
         }
         return respond(req, 404, "text/plain", b"not found".to_vec());
     };
@@ -504,6 +534,7 @@ pub fn start(
                 Err(_) => break,
             }
         }
+        drain(&server);
     });
     *running().lock().unwrap() = Some(Running { status: status.clone(), stop: stop_flag, shared, dir });
     Ok(status)
@@ -568,6 +599,114 @@ mod tests {
         let (code, _) = get(&format!("{base}/"));
         assert_eq!(code, 303, "the bare address hands the guest to the gallery");
         stop();
+    }
+
+    /// One request on a connection the client means to keep, as a
+    /// browser does: the status and the response's headers.
+    fn keep_alive_get(host: &str, path: &str) -> (u16, String) {
+        use std::io::Write;
+        let mut s = std::net::TcpStream::connect(host).unwrap();
+        s.set_read_timeout(Some(std::time::Duration::from_secs(3))).unwrap();
+        write!(s, "GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: keep-alive\r\n\r\n").unwrap();
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 4096];
+        while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
+            let n = s.read(&mut chunk).expect("an answer");
+            assert!(n > 0, "closed before answering");
+            buf.extend_from_slice(&chunk[..n]);
+        }
+        let text = String::from_utf8_lossy(&buf).to_string();
+        let head = text.split("\r\n\r\n").next().unwrap().to_string();
+        let code = head.split_whitespace().nth(1).unwrap().parse().unwrap();
+        (code, head)
+    }
+
+    /// A stopped and restarted share answers the first load. Every
+    /// answer says Connection: close, so the browser holds no idle
+    /// connection to the stopped server for the restarted one's first
+    /// load to go down and hang on.
+    #[test]
+    fn every_answer_closes_the_connection() {
+        let _one_at_a_time = serial();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("one.webp"), b"fake webp bytes").unwrap();
+        let items = vec![ServeItem { id: "one".into(), name: "One.RW2".into(), v: 0 }];
+        let st = start("Home".into(), items, dir.path().to_path_buf(), "127.0.0.1:0", None, true).unwrap();
+        let port = st.url.split(':').nth(2).unwrap().trim_end_matches('/');
+        let host = format!("127.0.0.1:{port}");
+        let (_, redirect) = keep_alive_get(&host, "/");
+        let into = redirect
+            .lines()
+            .find_map(|l| l.strip_prefix("Location: "))
+            .unwrap()
+            .trim_end_matches('/')
+            .to_string();
+        for (path, code) in [
+            ("/".to_string(), 303),
+            (format!("{into}/"), 200),
+            (format!("{into}/live"), 200),
+            (format!("{into}/view/one"), 200),
+            (format!("{into}/manifest.json"), 200),
+            (format!("{into}/img/one.webp"), 200),
+            (format!("{into}/img/nobody.webp"), 404),
+        ] {
+            let (got, head) = keep_alive_get(&host, &path);
+            assert_eq!(got, code, "{path}");
+            assert!(
+                head.lines().any(|l| l.eq_ignore_ascii_case("Connection: close")),
+                "{path} must close: {head}"
+            );
+        }
+        stop();
+    }
+
+    /// What the tutorial kept doing: stop, start again on the same port,
+    /// load. A client that honors Connection: close, as browsers do,
+    /// opens a fresh connection and the new share answers it.
+    #[test]
+    fn a_restart_on_the_same_port_answers_the_first_load() {
+        let _one_at_a_time = serial();
+        let dir = tempfile::tempdir().unwrap();
+        let items = || vec![ServeItem { id: "one".into(), name: "One.RW2".into(), v: 0 }];
+        let st = start("Home".into(), items(), dir.path().to_path_buf(), "127.0.0.1:0", None, true).unwrap();
+        let port = st.url.split(':').nth(2).unwrap().trim_end_matches('/').to_string();
+        let host = format!("127.0.0.1:{port}");
+        for _ in 0..6 {
+            let (code, head) = keep_alive_get(&host, "/");
+            assert_eq!(code, 303);
+            assert!(head.lines().any(|l| l.eq_ignore_ascii_case("Connection: close")));
+            stop();
+            // The old loop lets go of the port within one receive wait.
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            start("Home".into(), items(), dir.path().to_path_buf(), &host, None, true)
+                .expect("the same port again");
+        }
+        assert_eq!(keep_alive_get(&host, "/").0, 303);
+        stop();
+    }
+
+    /// A request still waiting when a share stops is told so instead of
+    /// being left with no answer.
+    #[test]
+    fn a_request_left_waiting_at_stop_is_answered() {
+        use std::io::Write;
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let host = format!("127.0.0.1:{}", server.server_addr().to_ip().unwrap().port());
+        let mut s = std::net::TcpStream::connect(&host).unwrap();
+        write!(s, "GET / HTTP/1.1\r\nHost: {host}\r\n\r\n").unwrap();
+        // tiny_http reads it into the queue on a thread of its own, so
+        // drain until it is there and answered.
+        s.set_read_timeout(Some(std::time::Duration::from_millis(100))).unwrap();
+        let mut buf = [0u8; 1024];
+        let mut n = 0;
+        let waited = std::time::Instant::now();
+        while n == 0 && waited.elapsed() < std::time::Duration::from_secs(3) {
+            drain(&server);
+            n = s.read(&mut buf).unwrap_or(0);
+        }
+        let text = String::from_utf8_lossy(&buf[..n]);
+        assert!(text.starts_with("HTTP/1.1 503"), "{text}");
+        assert!(text.contains("This share has stopped."), "{text}");
     }
 
     #[test]

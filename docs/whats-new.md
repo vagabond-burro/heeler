@@ -9,6 +9,7 @@
 ### Fixes
 
 - **Undo brings back a deleted collection.** **Edit > Undo** (`Cmd+Z`, `Ctrl+Z` on Windows) right after deleting a collection now brings it back with its name, look and photographs, and opens it again if it was open. Before, Undo took back the last edit on the photograph instead and the collection stayed gone. Undo and Redo go through deleted collections and photo edits in the order you made them. [Library](user-guide/library.md#collections).
+- **A restarted share opens on the first try.** After stopping a shared collection and serving it again, opening its address in a browser that had shown the share before could hang until you refreshed the page. The browser was reusing its connection to the stopped share, which no longer answered. Heeler now closes each connection after answering, so the first load reaches the new share.
 - **A deleted collection leaves the ribbon.** Deleting the collection you had open left its photographs in the ribbon, as if it were still open. The library now goes back to the folder you were in before you opened the collection, or shows an empty ribbon if there was none.
 
 ## 2026.5.3
