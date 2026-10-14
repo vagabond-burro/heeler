@@ -23,7 +23,7 @@
 import { deleteCollection, restoreCollection, type DeletedCollection } from "./bridge";
 import { logMsg } from "./log";
 import type { Command, State } from "./state";
-import { refreshLibrary } from "./ui/chrome";
+import { currentNavigation, navStale, refreshLibrary } from "./ui/chrome";
 import { leaveCollection, openCollection } from "./ui/collectionnav";
 
 type D = (command: Command) => void;
@@ -105,14 +105,17 @@ export function canRedo(s: State): boolean {
 /** Edit > Undo and its key. */
 export function undo(s: State, dispatch: D): void {
   if (busy) return;
-  if (libraryUndoFirst(s)) void exclusive(() => undoLibraryStep(s, dispatch));
+  // The navigation is noted at the keypress: anything after it is newer.
+  const nav = currentNavigation();
+  if (libraryUndoFirst(s)) void exclusive(() => undoLibraryStep(s, dispatch, nav));
   else dispatch({ type: "undo" });
 }
 
 /** Edit > Redo and its key. */
 export function redo(s: State, dispatch: D): void {
   if (busy) return;
-  if (libraryRedoFirst(s)) void exclusive(() => redoLibraryStep(s, dispatch));
+  const nav = currentNavigation();
+  if (libraryRedoFirst(s)) void exclusive(() => redoLibraryStep(s, dispatch, nav));
   else dispatch({ type: "redo" });
 }
 
@@ -145,6 +148,9 @@ export async function deleteCollectionStep(
   dispatch: D,
   a: { id: number; name: string; open: boolean; back: string | null },
 ): Promise<void> {
+  // Noted before any wait: a navigation after this point is newer than
+  // the delete, and the way out must not land on top of it.
+  const nav = currentNavigation();
   return exclusive(async () => {
     let collection: DeletedCollection;
     try {
@@ -155,18 +161,19 @@ export async function deleteCollectionStep(
       return;
     }
     // A new step leaves nothing to redo (library_step_done); what redoing
-    // needed goes in pruneLibrarySteps, against the lists as they are.
+    // needed goes in pruneLibrarySteps, against the lists as they are
+    // then, since `s` is from before this waited its turn.
     const seq = nextSeq++;
     steps.set(seq, { collection, open: a.open, back: a.back });
     marks.set(seq, historyNow(s));
     dispatch({ type: "library_step_done", step: { seq, label: `Delete collection "${collection.name}"` } });
-    if (a.open) await leaveCollection(s, dispatch, a.back);
+    if (a.open && !navStale(nav)) await leaveCollection(s, dispatch, a.back);
     await refreshLibrary(dispatch);
     logMsg("info", `Deleted the collection "${collection.name}". Its photographs are untouched, and Undo brings it back.`);
   });
 }
 
-async function undoLibraryStep(s: State, dispatch: D): Promise<void> {
+async function undoLibraryStep(s: State, dispatch: D, nav: number): Promise<void> {
   const top = s.libraryUndo[s.libraryUndo.length - 1];
   const step = top && steps.get(top.seq);
   if (!top || !step) return;
@@ -187,8 +194,9 @@ async function undoLibraryStep(s: State, dispatch: D): Promise<void> {
   dispatch({ type: "library_step_undone", seq: top.seq });
   await refreshLibrary(dispatch);
   // It was open when it went: open again, where the delete took the
-  // library from.
-  if (step.open) await openCollection(id, step.collection.name, dispatch, s.prefs.thumbnailEdge);
+  // library from, unless the library went somewhere newer while the
+  // restore ran.
+  if (step.open && !navStale(nav)) await openCollection(id, step.collection.name, dispatch, s.prefs.thumbnailEdge);
   logMsg("info", `Brought back the collection "${step.collection.name}".`);
 }
 
@@ -198,7 +206,7 @@ function drop(seq: number, dispatch: D): void {
   dispatch({ type: "library_step_dropped", seq });
 }
 
-async function redoLibraryStep(s: State, dispatch: D): Promise<void> {
+async function redoLibraryStep(s: State, dispatch: D, nav: number): Promise<void> {
   const top = s.libraryRedo[s.libraryRedo.length - 1];
   const step = top && steps.get(top.seq);
   if (!top || !step) return;
@@ -216,7 +224,7 @@ async function redoLibraryStep(s: State, dispatch: D): Promise<void> {
   steps.set(top.seq, { collection, open, back: step.back });
   marks.set(top.seq, historyNow(s));
   dispatch({ type: "library_step_redone", seq: top.seq });
-  if (open) await leaveCollection(s, dispatch, step.back);
+  if (open && !navStale(nav)) await leaveCollection(s, dispatch, step.back);
   await refreshLibrary(dispatch);
   logMsg("info", `Deleted the collection "${collection.name}" again.`);
 }

@@ -8,6 +8,7 @@ import * as bridge from "../bridge";
 import { initialState } from "../data";
 import { canRedo, deleteCollectionStep, pruneLibrarySteps, redo, resetLibraryUndo, retainedLibrarySteps, undo } from "../libraryundo";
 import { reduce, type Command, type State } from "../state";
+import { beginNavigation } from "../ui/chrome";
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -128,6 +129,65 @@ describe("one library action at a time", () => {
     undo(r.s, r.dispatch);
     await settle();
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a newer navigation wins over a library step's way in or out", () => {
+  it("Undo does not reopen the collection over a folder clicked during the restore", async () => {
+    const r = setup();
+    await deleted(r, "Picks", true);
+    const { release } = holdRestore();
+    undo(r.s, r.dispatch);
+    beginNavigation();
+    r.dispatch({ type: "set_library", label: "New folder", path: "/new", collection: null });
+    release();
+    await settle();
+    expect(r.s.libraryLabel).toBe("New folder");
+    expect(r.s.libraryUndo).toEqual([]);
+    expect(r.s.libraryRedo).toHaveLength(1);
+  });
+
+  it("a delete does not leave over a folder clicked while it ran", async () => {
+    const r = setup();
+    const id = await bridge.createCollection("Picks");
+    const original = bridge.deleteCollection;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    vi.spyOn(bridge, "deleteCollection").mockImplementation(async (c) => {
+      await held;
+      return original(c);
+    });
+    const deleting = deleteCollectionStep(r.s, r.dispatch, { id, name: "Picks", open: true, back: null });
+    beginNavigation();
+    r.dispatch({ type: "set_library", label: "New folder", path: "/new", collection: null });
+    release();
+    await deleting;
+    expect(r.s.libraryLabel).toBe("New folder");
+    expect(r.s.libraryUndo).toHaveLength(1);
+  });
+});
+
+describe("Redo's way out", () => {
+  it("does not leave over a folder clicked while the delete ran again", async () => {
+    const r = setup();
+    await deleted(r, "Picks", true);
+    undo(r.s, r.dispatch);
+    await settle();
+    expect(r.s.libraryLabel).toBe("Picks");
+    const original = bridge.deleteCollection;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    vi.spyOn(bridge, "deleteCollection").mockImplementation(async (c) => {
+      await held;
+      return original(c);
+    });
+    redo(r.s, r.dispatch);
+    beginNavigation();
+    r.dispatch({ type: "set_library", label: "New folder", path: "/new", collection: null });
+    release();
+    await settle();
+    expect(r.s.libraryLabel).toBe("New folder");
+    expect(r.s.libraryUndo).toHaveLength(1);
   });
 });
 
