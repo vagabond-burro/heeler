@@ -110,6 +110,21 @@ function forget(seqs: number[]): void {
   }
 }
 
+/** Lets go of what undoing needs for every step no longer in either list:
+ * trimmed off the end of a long history, ended by a new edit, or
+ * dropped with the session on a catalog switch. A deleted collection's
+ * members can run to thousands of ids. The app calls this whenever the
+ * lists change. */
+export function pruneLibrarySteps(s: State): void {
+  const live = new Set([...s.libraryUndo, ...s.libraryRedo].map((x) => x.seq));
+  forget([...steps.keys()].filter((seq) => !live.has(seq)));
+}
+
+/** How many steps' worth of undo data are held, for tests. */
+export function retainedLibrarySteps(): number {
+  return steps.size;
+}
+
 /** Deletes a collection the user has agreed to delete, as one step Undo
  * can take back. */
 export async function deleteCollectionStep(
@@ -127,9 +142,8 @@ export async function deleteCollectionStep(
       await refreshLibrary(dispatch);
       return;
     }
-    // A new step leaves nothing to redo (library_step_done), so what
-    // redoing needed goes with it.
-    forget(s.libraryRedo.map((x) => x.seq));
+    // A new step leaves nothing to redo (library_step_done); what redoing
+    // needed goes in pruneLibrarySteps, against the lists as they are.
     const seq = nextSeq++;
     steps.set(seq, { collection, open: a.open, back: a.back });
     marks.set(seq, historyNow(s));

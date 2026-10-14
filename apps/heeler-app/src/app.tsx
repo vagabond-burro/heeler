@@ -8,6 +8,7 @@ import { describeForAssistant } from "./assistantvision";
 import { photoFactsOf, whereFactsOf } from "./assistantphoto";
 import { useScheduledCatalogBackup } from "./ui/catalogbackup";
 import { catalogSaves } from "./savebarrier";
+import { pruneLibrarySteps } from "./libraryundo";
 import { startTransition, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { SelectDialogs } from "./ui/selectdialogs";
 import { FileLayersDialog } from "./ui/filelayers";
@@ -309,6 +310,12 @@ export function App() {
       state: () => stateRef.current,
     };
   }, [dispatch]);
+  // What undoing a library step needs (a deleted collection's members)
+  // lives beside the state, so it is let go here once the step leaves
+  // both lists: trimmed, ended by a new edit, or dropped with a catalog.
+  useEffect(() => {
+    pruneLibrarySteps(state);
+  }, [state.libraryUndo, state.libraryRedo]); // eslint-disable-line react-hooks/exhaustive-deps
   // The log scrubber learns where home is, so pasted bug reports say
   // a shortened photo path instead of carrying the username.
   useEffect(() => {

@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as bridge from "../bridge";
 import { initialState } from "../data";
-import { canRedo, deleteCollectionStep, redo, resetLibraryUndo, undo } from "../libraryundo";
+import { canRedo, deleteCollectionStep, pruneLibrarySteps, redo, resetLibraryUndo, retainedLibrarySteps, undo } from "../libraryundo";
 import { reduce, type Command, type State } from "../state";
 
 beforeEach(() => {
@@ -84,5 +84,42 @@ describe("a new edit ends library Redo", () => {
     const other = r.s.images.find((i) => i.id !== r.s.activeImage)!.id;
     r.dispatch({ type: "select_image", id: other });
     expect(r.s.libraryRedo).toHaveLength(1);
+  });
+});
+
+describe("a step's undo data is let go with the step", () => {
+  it("when a long history trims it", async () => {
+    const r = setup();
+    for (let i = 0; i < 101; i++) await deleted(r, `C${i}`);
+    expect(r.s.libraryUndo).toHaveLength(100);
+    pruneLibrarySteps(r.s);
+    expect(retainedLibrarySteps()).toBe(100);
+  });
+
+  it("when a catalog switch drops the lists", async () => {
+    const r = setup();
+    await deleted(r);
+    r.dispatch({ type: "begin_session_load" });
+    pruneLibrarySteps(r.s);
+    expect(retainedLibrarySteps()).toBe(0);
+  });
+
+  it("when a new edit ends its Redo, and not before", async () => {
+    const r = setup();
+    await deleted(r);
+    undo(r.s, r.dispatch);
+    await settle();
+    pruneLibrarySteps(r.s);
+    expect(retainedLibrarySteps()).toBe(1);
+    edit(r);
+    pruneLibrarySteps(r.s);
+    expect(retainedLibrarySteps()).toBe(0);
+  });
+
+  it("the app prunes whenever the lists change", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const app = readFileSync(resolve(process.cwd(), "src/app.tsx"), "utf8");
+    expect(app).toMatch(/pruneLibrarySteps\(state\);\s*\}, \[state\.libraryUndo, state\.libraryRedo\]\)/);
   });
 });
