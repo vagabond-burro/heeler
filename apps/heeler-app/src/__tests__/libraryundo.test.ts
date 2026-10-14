@@ -87,6 +87,50 @@ describe("a new edit ends library Redo", () => {
   });
 });
 
+/** restoreCollection held until released. */
+function holdRestore() {
+  const original = bridge.restoreCollection;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const spy = vi.spyOn(bridge, "restoreCollection").mockImplementation(async (d) => {
+    await held;
+    return original(d);
+  });
+  return { spy, release };
+}
+
+describe("one library action at a time", () => {
+  it("a delete during a restore does not let a second Undo start another", async () => {
+    const r = setup();
+    await deleted(r);
+    const { spy, release } = holdRestore();
+    undo(r.s, r.dispatch);
+    const id = await bridge.createCollection("Other");
+    const deleting = deleteCollectionStep(r.s, r.dispatch, { id, name: "Other", open: false, back: null });
+    // Long enough for a delete that does not wait its turn to finish, and
+    // in finishing clear the restore's claim.
+    await settle();
+    undo(r.s, r.dispatch);
+    const calls = spy.mock.calls.length;
+    release();
+    await deleting;
+    await settle();
+    expect(calls).toBe(1);
+    // The delete waited its turn and then happened.
+    expect((await bridge.listCollections()).map((c) => c.name)).toEqual(["Picks"]);
+  });
+
+  it("two fast Undo presses restore once", async () => {
+    const r = setup();
+    await deleted(r);
+    const spy = vi.spyOn(bridge, "restoreCollection");
+    undo(r.s, r.dispatch);
+    undo(r.s, r.dispatch);
+    await settle();
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("a step's undo data is let go with the step", () => {
   it("when a long history trims it", async () => {
     const r = setup();

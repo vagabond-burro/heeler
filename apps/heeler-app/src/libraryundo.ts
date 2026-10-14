@@ -41,9 +41,22 @@ const steps = new Map<number, CollectionDelete>();
  * undone, by the library step's seq. */
 const marks = new Map<number, WeakSet<object>>();
 let nextSeq = 1;
-/** A library step in flight: a second Cmd+Z waits for it rather than
- * restoring the same collection twice. */
-let working = false;
+/** Library actions in flight or waiting their turn. They run one at a
+ * time (exclusive): a delete that arrives during a restore waits for it,
+ * and a Cmd+Z pressed while one is busy is dropped rather than starting
+ * a second restore of the same collection. A count, not a flag, so one
+ * action finishing cannot clear another's claim. */
+let busy = 0;
+let queue: Promise<unknown> = Promise.resolve();
+
+function exclusive<T>(run: () => Promise<T>): Promise<T> {
+  busy++;
+  const turn = queue.then(run, run).finally(() => {
+    busy--;
+  });
+  queue = turn.catch(() => {});
+  return turn;
+}
 
 /** Every step in every photograph's history, now. */
 function historyNow(s: State): WeakSet<object> {
@@ -91,15 +104,15 @@ export function canRedo(s: State): boolean {
 
 /** Edit > Undo and its key. */
 export function undo(s: State, dispatch: D): void {
-  if (working) return;
-  if (libraryUndoFirst(s)) void undoLibraryStep(s, dispatch);
+  if (busy) return;
+  if (libraryUndoFirst(s)) void exclusive(() => undoLibraryStep(s, dispatch));
   else dispatch({ type: "undo" });
 }
 
 /** Edit > Redo and its key. */
 export function redo(s: State, dispatch: D): void {
-  if (working) return;
-  if (libraryRedoFirst(s)) void redoLibraryStep(s, dispatch);
+  if (busy) return;
+  if (libraryRedoFirst(s)) void exclusive(() => redoLibraryStep(s, dispatch));
   else dispatch({ type: "redo" });
 }
 
@@ -132,8 +145,7 @@ export async function deleteCollectionStep(
   dispatch: D,
   a: { id: number; name: string; open: boolean; back: string | null },
 ): Promise<void> {
-  working = true;
-  try {
+  return exclusive(async () => {
     let collection: DeletedCollection;
     try {
       collection = await deleteCollection(a.id);
@@ -151,40 +163,33 @@ export async function deleteCollectionStep(
     if (a.open) await leaveCollection(s, dispatch, a.back);
     await refreshLibrary(dispatch);
     logMsg("info", `Deleted the collection "${collection.name}". Its photographs are untouched, and Undo brings it back.`);
-  } finally {
-    working = false;
-  }
+  });
 }
 
 async function undoLibraryStep(s: State, dispatch: D): Promise<void> {
   const top = s.libraryUndo[s.libraryUndo.length - 1];
   const step = top && steps.get(top.seq);
   if (!top || !step) return;
-  working = true;
+  let id: number;
   try {
-    let id: number;
-    try {
-      id = await restoreCollection(step.collection);
-    } catch (e) {
-      // Most likely a collection made since under the same name. The
-      // step goes: left in place, every Cmd+Z after would fail on it and
-      // never reach the edits beneath.
-      logMsg("error", `Could not bring back the collection "${step.collection.name}": ${String(e)}`);
-      drop(top.seq, dispatch);
-      return;
-    }
-    // Redo deletes what came back, under the id it came back as.
-    step.collection = { ...step.collection, id };
-    marks.set(top.seq, historyNow(s));
-    dispatch({ type: "library_step_undone", seq: top.seq });
-    await refreshLibrary(dispatch);
-    // It was open when it went: open again, where the delete took the
-    // library from.
-    if (step.open) await openCollection(id, step.collection.name, dispatch, s.prefs.thumbnailEdge);
-    logMsg("info", `Brought back the collection "${step.collection.name}".`);
-  } finally {
-    working = false;
+    id = await restoreCollection(step.collection);
+  } catch (e) {
+    // Most likely a collection made since under the same name. The
+    // step goes: left in place, every Cmd+Z after would fail on it and
+    // never reach the edits beneath.
+    logMsg("error", `Could not bring back the collection "${step.collection.name}": ${String(e)}`);
+    drop(top.seq, dispatch);
+    return;
   }
+  // Redo deletes what came back, under the id it came back as.
+  step.collection = { ...step.collection, id };
+  marks.set(top.seq, historyNow(s));
+  dispatch({ type: "library_step_undone", seq: top.seq });
+  await refreshLibrary(dispatch);
+  // It was open when it went: open again, where the delete took the
+  // library from.
+  if (step.open) await openCollection(id, step.collection.name, dispatch, s.prefs.thumbnailEdge);
+  logMsg("info", `Brought back the collection "${step.collection.name}".`);
 }
 
 /** A step that could not be undone or redone leaves both lists. */
@@ -197,28 +202,23 @@ async function redoLibraryStep(s: State, dispatch: D): Promise<void> {
   const top = s.libraryRedo[s.libraryRedo.length - 1];
   const step = top && steps.get(top.seq);
   if (!top || !step) return;
-  working = true;
+  const open = s.activeCollection === step.collection.id;
+  let collection: DeletedCollection;
   try {
-    const open = s.activeCollection === step.collection.id;
-    let collection: DeletedCollection;
-    try {
-      collection = await deleteCollection(step.collection.id);
-    } catch (e) {
-      logMsg("error", `Could not delete the collection "${step.collection.name}" again: ${String(e)}`);
-      drop(top.seq, dispatch);
-      await refreshLibrary(dispatch);
-      return;
-    }
-    // What it is now, renamed or added to since the undo included.
-    steps.set(top.seq, { collection, open, back: step.back });
-    marks.set(top.seq, historyNow(s));
-    dispatch({ type: "library_step_redone", seq: top.seq });
-    if (open) await leaveCollection(s, dispatch, step.back);
+    collection = await deleteCollection(step.collection.id);
+  } catch (e) {
+    logMsg("error", `Could not delete the collection "${step.collection.name}" again: ${String(e)}`);
+    drop(top.seq, dispatch);
     await refreshLibrary(dispatch);
-    logMsg("info", `Deleted the collection "${collection.name}" again.`);
-  } finally {
-    working = false;
+    return;
   }
+  // What it is now, renamed or added to since the undo included.
+  steps.set(top.seq, { collection, open, back: step.back });
+  marks.set(top.seq, historyNow(s));
+  dispatch({ type: "library_step_redone", seq: top.seq });
+  if (open) await leaveCollection(s, dispatch, step.back);
+  await refreshLibrary(dispatch);
+  logMsg("info", `Deleted the collection "${collection.name}" again.`);
 }
 
 /** Test hook: the module's memory emptied between tests. */
@@ -226,5 +226,6 @@ export function resetLibraryUndo(): void {
   steps.clear();
   marks.clear();
   nextSeq = 1;
-  working = false;
+  busy = 0;
+  queue = Promise.resolve();
 }
