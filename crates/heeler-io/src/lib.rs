@@ -38,6 +38,7 @@ pub mod sidecar;
 pub use sidecar::{read_sidecar, write_sidecar, Sidecar, TakeNote};
 
 pub mod bake;
+mod raw_tiff;
 pub use bake::{
     baked_exposure, encode_baked_dng, encode_dng, encode_dng_with_xmp, encode_tiff16, encode_tiff16_export,
     TiffExportOptions, FloatTiffOptions, encode_tiff16_display_untagged, encode_tiff16_grey, encode_tiff16_layer, encode_tiff16_layer_display,
@@ -362,7 +363,7 @@ pub fn probe_memory(path: &Path) -> Result<Option<DecodeEstimate>, IoError> {
                 let _job = Job::admit(memory::bytes(prefix_len, 1, 1, 1)?, "image header bytes")?;
                 let mut prefix = memory::vector(prefix_len, 0u8, "image header bytes")?;
                 file.take(prefix_len as u64).read_exact(&mut prefix)?;
-                estimate_from(&prefix, file_len, is_raw_extension(path), prefix_len < file_len)?
+                estimate_from(&prefix, file_len, is_raw_path(path), prefix_len < file_len)?
             };
             if probed.is_some() || prefix_len >= file_len {
                 return Ok(probed);
@@ -370,7 +371,7 @@ pub fn probe_memory(path: &Path) -> Result<Option<DecodeEstimate>, IoError> {
             // Dimensions parked past the prefix (a TIFF whose directory
             // sits at the file's end) still get the full read from before.
             let bytes = read_image(path)?;
-            estimate_from(&bytes, file_len, is_raw_extension(path), false)
+            estimate_from(&bytes, file_len, is_raw_file(path, &bytes), false)
         })();
         // A member that vanished or will not read is unknown, not an
         // error: stack and panorama discovery list it as missing rather
@@ -413,6 +414,23 @@ const RAW_EXTENSIONS: &[&str] = &[
     // GoPro HERO5 on and Fusion: a DNG with a VC-5 tile (heeler-raw's gpr.rs).
     "gpr",
 ];
+
+/// Whether the loader develops this file through LibRaw: an extension
+/// in RAW_EXTENSIONS, or a .tif that is a camera's raw (src/raw_tiff.rs:
+/// Kodak DCS, Canon EOS-1D and D2000, Phase One backs), whose first
+/// image is only its thumbnail. The answer for a .tif is kept per file.
+pub fn is_raw_path(path: &Path) -> bool {
+    is_raw_extension(path) || (is_tiff_extension(path) && raw_tiff::at(path, None))
+}
+
+/// is_raw_path for a caller already holding the file's bytes.
+pub fn is_raw_file(path: &Path, bytes: &[u8]) -> bool {
+    is_raw_extension(path) || (is_tiff_extension(path) && raw_tiff::at(path, Some(bytes)))
+}
+
+fn is_tiff_extension(path: &Path) -> bool {
+    path.extension().is_some_and(|e| e.eq_ignore_ascii_case("tif") || e.eq_ignore_ascii_case("tiff"))
+}
 
 /// Whether the extension is one LibRaw is asked to develop. Public so the
 /// support-matrix probe (examples/rawmatrix.rs) can report the same
@@ -646,6 +664,7 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
     #[cfg(not(feature = "libraw"))]
     let _ = opts;
     let bytes = read_image(path)?;
+    let raw_file = is_raw_file(path, &bytes);
     // A develop turned away as noise, for the error if nothing else reads
     // the file (rejected_develop).
     #[allow(unused_mut)]
@@ -664,7 +683,7 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
         }
     }
     #[cfg(feature = "rawler")]
-    if is_raw_extension(path) && rawler_selected() {
+    if raw_file && rawler_selected() {
         if let Some(img) = decode_rawler(path, &bytes) {
             if develop_looks_sane(&img) {
                 return Ok(unbake(pixels.of(img, &bytes), &bytes));
@@ -676,11 +695,11 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
     // files can be 256 pixels wide. A failure here is returned rather
     // than swallowed, because at develop and export quality a wrong
     // picture is worse than an honest error.
-    if is_raw_extension(path) && is_jxl_dng(&bytes) {
+    if raw_file && is_jxl_dng(&bytes) {
         return decode_jxl_dng(&bytes).map(|img| pixels.of(img, &bytes));
     }
     #[cfg(feature = "libraw")]
-    if is_raw_extension(path) {
+    if raw_file {
         let dev = heeler_raw::DevelopOpts {
             half_size: false,
             fixed_white: pixels == Pixels::SceneLinear,
@@ -715,12 +734,12 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
         }
     }
     #[cfg(not(feature = "libraw"))]
-    let _ = is_raw_extension(path);
+    let _ = raw_file;
     let out = match decode_bytes(&bytes) {
         // Phone JPEGs store pixels unrotated and describe the device's
         // attitude in EXIF; without this an inverted-landscape iPhone
         // shot developed upside down.
-        Ok(img) => match (is_raw_extension(path), reduced_copy_of(&img, &bytes)) {
+        Ok(img) => match (raw_file, reduced_copy_of(&img, &bytes)) {
             // The image crate reads a TIFF's first IFD, which in a DNG is
             // the thumbnail too. The largest embedded JPEG preview stands
             // in when there is one; otherwise the file is refused in
@@ -746,7 +765,7 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
             _ => Ok(apply_orientation(img, media_orientation(&bytes))),
         },
         Err(original) if memory::is_refusal(&original.to_string()) => Err(original),
-        Err(original) if pixels == Pixels::SceneLinear && is_raw_extension(path) => Err(original),
+        Err(original) if pixels == Pixels::SceneLinear && raw_file => Err(original),
         Err(original) => match extract_raw_preview(&bytes) {
             Some(preview) => {
                 decode_bytes(preview).map(|img| apply_orientation(img, raw_orientation(&bytes)))
@@ -981,7 +1000,7 @@ fn preview_at(path: &Path, opts: RawSourceOpts, edge: usize, pixels: Pixels) -> 
                 // The reduced stand-ins below are the phone's finished
                 // preview, which is no scene-linear frame: a merge that
                 // asked for one is refused rather than handed it.
-                if pixels == Pixels::SceneLinear && (bytes.starts_with(&[255, 216]) || is_raw_extension(path)) {
+                if pixels == Pixels::SceneLinear && (bytes.starts_with(&[255, 216]) || is_raw_file(path, &bytes)) {
                     return Err(e);
                 }
                 // Never the system decoder for an OpenEXR: it reads the
@@ -1013,6 +1032,7 @@ fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, p
     #[cfg(not(feature = "libraw"))]
     let _ = opts;
     let bytes = read_image(path)?;
+    let raw_file = is_raw_file(path, &bytes);
     // A scene-linear render is previewed at the tier's size, reduced
     // while its blocks are read; the full planes belong to export.
     if exr_passes::is_exr(&bytes) {
@@ -1021,7 +1041,7 @@ fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, p
     if heic::is_heif(&bytes) {
         if let Some(image) = heic::decode_heif(&bytes) { return Ok(image); }
     }
-    if is_raw_extension(path) && is_jxl_dng(&bytes) {
+    if raw_file && is_jxl_dng(&bytes) {
         // No half-size shortcut on this path: JPEG XL tiles decode
         // whole. Falling back is allowed here, unlike at develop
         // quality, because a preview's job is to show something.
@@ -1033,7 +1053,7 @@ fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, p
         }
     }
     #[cfg(feature = "libraw")]
-    if is_raw_extension(path) {
+    if raw_file {
         let dev = heeler_raw::DevelopOpts {
             half_size: true,
             fixed_white: pixels == Pixels::SceneLinear,
@@ -1063,7 +1083,7 @@ fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, p
             }
         }
     }
-    if is_raw_extension(path) && pixels == Pixels::AsTheFileRenders {
+    if raw_file && pixels == Pixels::AsTheFileRenders {
         if let Some(preview) = extract_raw_preview(&bytes) {
             if let Ok(img) = decode_bytes(preview) {
                 return Ok(apply_orientation(img, raw_orientation(&bytes)));
@@ -1078,7 +1098,7 @@ fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, p
         }
     }
     decode_bytes(&bytes).and_then(|img| {
-        if pixels == Pixels::SceneLinear && is_raw_extension(path) && reduced_copy_of(&img, &bytes).is_some() {
+        if pixels == Pixels::SceneLinear && raw_file && reduced_copy_of(&img, &bytes).is_some() {
             return Err(IoError::Unsupported("scene-linear stack member needs a sensor develop, not a thumbnail".into()));
         }
         Ok(unbake(apply_orientation(img, media_orientation(&bytes)), &bytes))
@@ -1156,6 +1176,7 @@ pub const THUMBNAIL_EDGE: usize = 1200;
 
 fn decode_thumbnail_inner(path: &Path) -> Result<ImageBuf, IoError> {
     let bytes = read_image(path)?;
+    let raw_file = is_raw_file(path, &bytes);
     // An OpenEXR has no embedded preview and the system decoder reads
     // it wrongly (premultiplied, re-linearized), so its thumbnail is
     // its own beauty, reduced while the blocks are read.
@@ -1165,7 +1186,7 @@ fn decode_thumbnail_inner(path: &Path) -> Result<ImageBuf, IoError> {
     if heic::is_heif(&bytes) {
         if let Some(image) = heic::decode_thumbnail(&bytes, 1200) { return Ok(image); }
     }
-    if is_raw_extension(path) {
+    if raw_file {
         // A GPR has no preview (so no scan for one), and the TIFF reader below cannot read its
         // VC-5 tile: develop it at half size (plenty for a thumbnail), and
         // report a damaged one as itself.
@@ -1176,6 +1197,16 @@ fn decode_thumbnail_inner(path: &Path) -> Result<ImageBuf, IoError> {
                 Err(heeler_raw::RawError::Memory(e)) => Err(e.into()),
                 Err(e) => Err(IoError::Unsupported(e.to_string())),
             };
+        }
+        // A raw saved as a .tif carries only a postage stamp of itself
+        // (156 by 104 on a Kodak DCS 520C): develop it at half size too.
+        #[cfg(feature = "libraw")]
+        if is_tiff_extension(path) {
+            match heeler_raw::decode_sensor_half(&bytes) {
+                Ok(sensor) => return Ok(unbake(as_the_file_renders(sensor_to_imagebuf(sensor), &bytes), &bytes)),
+                Err(heeler_raw::RawError::Memory(e)) => return Err(e.into()),
+                Err(_) => {}
+            }
         }
         if let Some(preview) = extract_raw_preview(&bytes) {
             if let Ok(img) = decode_bytes(preview) {
@@ -1190,7 +1221,7 @@ fn decode_thumbnail_inner(path: &Path) -> Result<ImageBuf, IoError> {
         Ok(img) => Ok(unbake(apply_orientation(img, media_orientation(&bytes)), &bytes)),
         Err(original) => {
             #[cfg(feature = "libraw")]
-            if is_raw_extension(path) {
+            if raw_file {
                 if let Ok(sensor) = heeler_raw::decode_sensor(&bytes) {
                     return Ok(unbake(as_the_file_renders(sensor_to_imagebuf(sensor), &bytes), &bytes));
                 }
@@ -1444,7 +1475,7 @@ pub fn source_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 /// read it until then.
 pub fn picture_dimensions(path: &Path, bytes: &[u8]) -> Option<(u32, u32)> {
     #[cfg(feature = "libraw")]
-    if is_raw_extension(path) {
+    if is_raw_file(path, bytes) {
         if let Ok((w, h)) = heeler_raw::picture_dimensions(bytes) {
             return Some((w as u32, h as u32));
         }

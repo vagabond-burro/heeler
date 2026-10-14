@@ -424,7 +424,7 @@ pub fn convert(
     }
 }
 pub(crate) fn legacy_raw() -> bool {
-    NAME.with(|n| crate::is_raw_extension(Path::new(&*n.borrow())))
+    NAME.with(|n| crate::is_raw_path(Path::new(&*n.borrow())))
 }
 type DiagnosticLogger = Box<dyn Fn(&str) + Send + Sync>;
 static LOGGER: std::sync::OnceLock<DiagnosticLogger> = std::sync::OnceLock::new();
@@ -467,7 +467,7 @@ pub fn identity(profile: Result<Option<&[u8]>, &str>) -> String {
 /// Modification time and length are the identity every other cache in the
 /// app already trusts for a file's content.
 pub fn file_identity(path: &Path) -> String {
-    if crate::is_raw_extension(path) {
+    if crate::is_raw_path(path) {
         // Restoring Heeler DNG exposure on successful RAW decode changes
         // pixels, including old merge members and persisted thumbnails.
         // v4: corrected gain indexing and over-range tone interpolation (26.4.1).

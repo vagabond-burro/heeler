@@ -5521,7 +5521,9 @@ fn file_passes_of(path: &Path) -> Option<FilePasses> {
             layered: false,
         });
     }
-    if ext == "tif" || ext == "tiff" {
+    // A camera raw saved as a .tif has no layers to offer: its other
+    // pages are previews of the one photograph.
+    if (ext == "tif" || ext == "tiff") && !heeler_io::is_raw_path(path) {
         let bytes = std::fs::read(path).ok()?;
         let pages = heeler_io::tiff_pages::pages(&bytes);
         let first = pages.first()?;
@@ -19511,7 +19513,7 @@ fn member_rendered(folder: &Path, member: &str, pano: bool) -> bool {
     if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("exr")) {
         return false;
     }
-    if !heeler_io::is_raw_extension(&path) {
+    if !heeler_io::is_raw_path(&path) {
         return true;
     }
     if !path.extension().is_some_and(|e| e.eq_ignore_ascii_case("dng")) {

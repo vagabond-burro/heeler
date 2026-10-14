@@ -11,7 +11,7 @@
 //! For every file this asks three things the app never says out loud:
 //!
 //! - would the catalog even index it (`SUPPORTED_EXTENSIONS`), and would
-//!   the loader send it to LibRaw (`is_raw_extension`). The two lists
+//!   the loader send it to LibRaw (`is_raw_path`). The two lists
 //!   differ: PEF, SRW, 3FR, IIQ, ERF, NRW, SRF and SR2 develop but are
 //!   never listed, so the report keeps both columns.
 //! - does LibRaw produce a sensor develop, and does that develop pass
@@ -43,7 +43,7 @@ use std::time::Instant;
 use heeler_engine::ImageBuf;
 use heeler_io::{
     decode_any_with, decode_jxl_dng, develop_looks_sane, extract_raw_preview, is_jxl_dng,
-    is_raw_extension, read_exif, RawSourceOpts,
+    is_raw_path, read_exif, RawSourceOpts,
 };
 
 /// One camera sample, answered.
@@ -157,7 +157,7 @@ fn probe(root: &Path, path: &Path, full: bool, app: bool, thumbs: Option<&Path>)
         .map(|e| e.to_ascii_lowercase())
         .unwrap_or_default();
     let in_catalog = heeler_catalog::SUPPORTED_EXTENSIONS.contains(&ext.as_str());
-    let io_raw = is_raw_extension(path);
+    let io_raw = is_raw_path(path);
 
     let bytes = match std::fs::read(path) {
         Ok(b) => b,
