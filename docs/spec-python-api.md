@@ -71,7 +71,7 @@ the owner's list, refined:
 ## Status
 
 Items 1-3 are BUILT: the registry manifest (Rust-side, authoritative,
-with both ranges), the bridge (api.rs: loopback tiny_http, token,
+with both ranges), the bridge (api.rs and api_transport.rs: a loopback HTTP listener of its own, token,
 native ping/registry/render, frontend forwarding through the
 heeler-api event into handleApi and the reducers), and the Python
 client (tools/python/heeler.py, stdlib-only, contract-tested against a

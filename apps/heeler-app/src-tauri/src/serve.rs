@@ -56,6 +56,8 @@ struct Running {
     shared: Arc<Mutex<Shared>>,
     /// where the snapshot lives, so live re-renders know where to land
     dir: PathBuf,
+    /// the listener's thread, joined by a stop
+    listening: Option<std::thread::JoinHandle<()>>,
 }
 
 fn running() -> &'static Mutex<Option<Running>> {
@@ -311,54 +313,78 @@ pub fn write_gallery(dir: &Path, name: &str, items: &[ServeItem]) -> Result<(), 
     Ok(())
 }
 
-/// Writes one answer, always with `Connection: close`, so a browser
-/// never keeps an idle connection to a share.
-///
-/// Stopping a share drops the server and its listener, but tiny_http
-/// keeps serving each connection it already accepted on a thread of its
-/// own, which goes on reading requests into the stopped server's queue
-/// where nothing answers them. A browser holds a used connection open
-/// for minutes and reuses it, and a share restarts on the same port so
-/// its link stays the same, so after a stop and a start the first load
-/// went down an old connection and hung until a refresh opened a new
-/// one. Without an idle connection there is nothing for it to reuse.
-/// The cost is a connection per request, on a local network: the
-/// gallery's manifest poll every 2.5 s and one per photograph.
-///
-/// The answer is written by hand because tiny_http drops a Connection
-/// header from a Response it builds.
-fn send(req: tiny_http::Request, status: u16, headers: &[(&str, &str)], body: &[u8]) {
-    use std::io::Write;
-    let head_only = *req.method() == tiny_http::Method::Head;
-    let reason = tiny_http::StatusCode(status).default_reason_phrase();
-    let mut out = format!("HTTP/1.1 {status} {reason}\r\n");
-    for (field, value) in headers {
+/// One answer to one request, before it is written.
+struct Answer {
+    status: u16,
+    headers: Vec<(&'static str, String)>,
+    body: Vec<u8>,
+}
+
+fn respond(status: u16, content_type: &str, body: Vec<u8>) -> Answer {
+    Answer { status, headers: vec![("Content-Type", content_type.to_string())], body }
+}
+
+fn not_found() -> Answer {
+    respond(404, "text/plain", b"not found".to_vec())
+}
+
+fn reason(status: u16) -> &'static str {
+    match status {
+        200 => "OK",
+        303 => "See Other",
+        400 => "Bad Request",
+        404 => "Not Found",
+        405 => "Method Not Allowed",
+        431 => "Request Header Fields Too Large",
+        503 => "Service Unavailable",
+        _ => "",
+    }
+}
+
+/// A time as HTTP writes it (RFC 9110's IMF-fixdate): "Sun, 06 Nov 1994
+/// 08:49:37 GMT". Worked out by hand, there being no date crate here.
+fn http_date(t: std::time::SystemTime) -> String {
+    let secs = t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let days = (secs / 86_400) as i64;
+    let rem = secs % 86_400;
+    // Days since 1970-01-01 to a civil date (Howard Hinnant's algorithm).
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    const WEEKDAYS: [&str; 7] = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
+    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    format!(
+        "{}, {:02} {} {} {:02}:{:02}:{:02} GMT",
+        WEEKDAYS[days.rem_euclid(7) as usize],
+        day,
+        MONTHS[(month - 1) as usize],
+        year,
+        rem / 3600,
+        rem / 60 % 60,
+        rem % 60
+    )
+}
+
+/// Writes one answer, always with `Connection: close`: a share answers
+/// one request per connection and then closes it.
+fn write_answer(w: &mut impl std::io::Write, answer: &Answer, head_only: bool) -> std::io::Result<()> {
+    let mut out = format!("HTTP/1.1 {} {}\r\n", answer.status, reason(answer.status));
+    out.push_str(&format!("Date: {}\r\n", http_date(std::time::SystemTime::now())));
+    for (field, value) in &answer.headers {
         out.push_str(&format!("{field}: {value}\r\n"));
     }
-    out.push_str(&format!("Content-Length: {}\r\nConnection: close\r\n\r\n", body.len()));
-    let mut w = req.into_writer();
-    let _ = w.write_all(out.as_bytes());
+    out.push_str(&format!("Content-Length: {}\r\nConnection: close\r\n\r\n", answer.body.len()));
+    w.write_all(out.as_bytes())?;
     if !head_only {
-        let _ = w.write_all(body);
+        w.write_all(&answer.body)?;
     }
-    let _ = w.flush();
-}
-
-fn respond(
-    req: tiny_http::Request,
-    status: u16,
-    content_type: &str,
-    body: Vec<u8>,
-) {
-    send(req, status, &[("Content-Type", content_type)], &body);
-}
-
-/// Answers whatever is still waiting when a share stops, so a request
-/// that arrived in the last moments gets "stopped" rather than nothing.
-fn drain(server: &tiny_http::Server) {
-    while let Ok(Some(req)) = server.try_recv() {
-        respond(req, 503, "text/plain; charset=utf-8", b"This share has stopped.".to_vec());
-    }
+    w.flush()
 }
 
 /// Routes one request. Everything unknown is 404 with no detail: a
@@ -369,33 +395,24 @@ fn drain(server: &tiny_http::Server) {
 /// ip:port. "Why can't for simple home use can I just
 /// have the IP and Port?" The token still anchors the internal
 /// routes; it simply stops being something a guest has to know.
-fn handle(
-    req: tiny_http::Request,
-    token: &str,
-    simple: bool,
-    name: &str,
-    dir: &Path,
-    shared: &Mutex<Shared>,
-) {
-    let url = req.url().to_string();
+fn handle(url: &str, token: &str, simple: bool, name: &str, dir: &Path, shared: &Mutex<Shared>) -> Answer {
     let prefix = format!("/t/{token}");
     let Some(rest) = url.strip_prefix(&prefix) else {
         if simple {
-            let target = format!("{prefix}/");
-            return send(req, 303, &[("Location", &target)], b"");
+            return Answer { status: 303, headers: vec![("Location", format!("{prefix}/"))], body: Vec::new() };
         }
-        return respond(req, 404, "text/plain", b"not found".to_vec());
+        return not_found();
     };
     // Live re-fetches carry a cache-busting query; routing ignores it.
     let rest = rest.split('?').next().unwrap_or(rest);
     match rest {
         "" | "/" => {
             let html = gallery_html(name, Some(token));
-            respond(req, 200, "text/html; charset=utf-8", html.into_bytes())
+            respond(200, "text/html; charset=utf-8", html.into_bytes())
         }
         "/live" | "/live/" => {
             let html = live_html(name, token);
-            respond(req, 200, "text/html; charset=utf-8", html.into_bytes())
+            respond(200, "text/html; charset=utf-8", html.into_bytes())
         }
         _ if rest.starts_with("/view/") => {
             let id = urldecode(rest.trim_start_matches("/view/"));
@@ -404,19 +421,19 @@ fn handle(
                 .map(|s| s.items.iter().any(|i| i.id == id))
                 .unwrap_or(false);
             if !known {
-                return respond(req, 404, "text/plain", b"not found".to_vec());
+                return not_found();
             }
             let html = view_html(name, token, &id);
-            respond(req, 200, "text/html; charset=utf-8", html.into_bytes())
+            respond(200, "text/html; charset=utf-8", html.into_bytes())
         }
         "/manifest.json" => {
             let body = match shared.lock() {
                 Ok(s) => {
                     serde_json::json!({ "name": name, "items": s.items, "live": s.live }).to_string()
                 }
-                Err(_) => return respond(req, 404, "text/plain", b"not found".to_vec()),
+                Err(_) => return not_found(),
             };
-            respond(req, 200, "application/json", body.into_bytes())
+            respond(200, "application/json", body.into_bytes())
         }
         _ => {
             // /img/{id}.jpg and /thumb/{id}.jpg serve the same render;
@@ -427,7 +444,7 @@ fn handle(
                 // WebP now; .jpg accepted so an old bookmark still lands.
                 .and_then(|f| f.strip_suffix(".webp").or_else(|| f.strip_suffix(".jpg")));
             let Some(id) = id else {
-                return respond(req, 404, "text/plain", b"not found".to_vec());
+                return not_found();
             };
             let decoded = urldecode(id);
             // Only ids from the snapshot are servable: the id list is
@@ -438,19 +455,19 @@ fn handle(
                 .map(|s| s.items.iter().any(|i| i.id == decoded))
                 .unwrap_or(false);
             if !known {
-                return respond(req, 404, "text/plain", b"not found".to_vec());
+                return not_found();
             }
             let path = dir.join(format!("{}.webp", crate::sanitize_id(&decoded)));
             match std::fs::File::open(&path) {
                 Ok(mut f) => {
                     let mut buf = Vec::new();
                     if f.read_to_end(&mut buf).is_ok() {
-                        respond(req, 200, "image/webp", buf)
+                        respond(200, "image/webp", buf)
                     } else {
-                        respond(req, 404, "text/plain", b"not found".to_vec())
+                        not_found()
                     }
                 }
-                Err(_) => respond(req, 404, "text/plain", b"not found".to_vec()),
+                Err(_) => not_found(),
             }
         }
     }
@@ -498,6 +515,166 @@ pub fn persistent_token(root: &Path) -> String {
     t
 }
 
+/// The longest request head a share reads, request line and headers
+/// together. A browser's GET is a few hundred bytes.
+const MAX_HEAD: usize = 16 * 1024;
+/// Connections served at once. A gallery page loads a few images at a
+/// time; past this a new connection is told to come back.
+const MAX_CONNECTIONS: usize = 64;
+/// How long a connection may take to send its request, and a reader to
+/// take an answer, before it is closed.
+const READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const WRITE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+/// How often the listener looks at the stop flag between connections.
+const ACCEPT_POLL: std::time::Duration = std::time::Duration::from_millis(25);
+
+/// Connection threads still running, across every share: what a stop
+/// must bring back to zero.
+static OPEN_CONNECTIONS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// The connections a share has accepted and not yet finished, kept so a
+/// stop can close every one of them.
+///
+/// This server is the share's own, not a library's. The library it
+/// replaced (tiny_http) kept serving each connection it had accepted on
+/// a thread of its own after its listener closed, with no way to close
+/// them: requests on them went into a queue nothing answered, a browser
+/// reusing one after a restart on the same port hung, and every
+/// restart left a thread behind per connection a client held open.
+/// Owning the sockets is what lets a stop end them.
+#[derive(Default)]
+struct Connections {
+    next: u64,
+    open: std::collections::HashMap<u64, std::net::TcpStream>,
+}
+
+/// What every connection thread of one share reads.
+struct Site {
+    token: String,
+    simple: bool,
+    name: String,
+    dir: PathBuf,
+    shared: Arc<Mutex<Shared>>,
+}
+
+#[derive(Debug, PartialEq)]
+enum HeadError {
+    /// the client went away, timed out, or the socket was closed by a stop
+    Gone,
+    Malformed,
+    TooLarge,
+}
+
+/// Reads one request head and gives back its method and target. The
+/// share serves GET and HEAD with no body, so nothing past the head is
+/// read: the connection is closed after the answer.
+fn read_head(r: &mut impl Read) -> Result<(String, String), HeadError> {
+    let mut head = Vec::new();
+    let mut chunk = [0u8; 2048];
+    let end = loop {
+        if let Some(at) = head.windows(4).position(|w| w == b"\r\n\r\n") {
+            break at;
+        }
+        if head.len() > MAX_HEAD {
+            return Err(HeadError::TooLarge);
+        }
+        match r.read(&mut chunk) {
+            Ok(0) | Err(_) => return Err(HeadError::Gone),
+            Ok(n) => head.extend_from_slice(&chunk[..n]),
+        }
+    };
+    if end > MAX_HEAD {
+        return Err(HeadError::TooLarge);
+    }
+    let text = std::str::from_utf8(&head[..end]).map_err(|_| HeadError::Malformed)?;
+    let line = text.split("\r\n").next().unwrap_or("");
+    let mut parts = line.split(' ');
+    match (parts.next(), parts.next(), parts.next(), parts.next()) {
+        (Some(method), Some(target), Some(version), None)
+            if !method.is_empty() && target.starts_with('/') && version.starts_with("HTTP/1.") =>
+        {
+            Ok((method.to_string(), target.to_string()))
+        }
+        _ => Err(HeadError::Malformed),
+    }
+}
+
+/// Serves one connection: one request, one answer, then closed.
+fn serve_connection(mut stream: std::net::TcpStream, site: &Site) {
+    let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
+    let _ = stream.set_write_timeout(Some(WRITE_TIMEOUT));
+    let (answer, head_only) = match read_head(&mut stream) {
+        Ok((method, target)) if method == "GET" || method == "HEAD" => {
+            (handle(&target, &site.token, site.simple, &site.name, &site.dir, &site.shared), method == "HEAD")
+        }
+        Ok(_) => {
+            let mut a = respond(405, "text/plain", b"method not allowed".to_vec());
+            a.headers.push(("Allow", "GET, HEAD".to_string()));
+            (a, false)
+        }
+        Err(HeadError::TooLarge) => (respond(431, "text/plain", b"request too large".to_vec()), false),
+        Err(HeadError::Malformed) => (respond(400, "text/plain", b"bad request".to_vec()), false),
+        Err(HeadError::Gone) => return,
+    };
+    let _ = write_answer(&mut stream, &answer, head_only);
+    let _ = stream.shutdown(std::net::Shutdown::Both);
+}
+
+/// The listener's loop: accepts until the stop flag is up, registering
+/// each connection before its thread starts, then closes every
+/// connection still open. Nothing is accepted after the loop ends, so
+/// none can slip past the close.
+fn accept_loop(listener: std::net::TcpListener, stop: Arc<AtomicBool>, site: Arc<Site>) {
+    let conns: Arc<Mutex<Connections>> = Arc::default();
+    while !stop.load(Ordering::Relaxed) {
+        let stream = match listener.accept() {
+            Ok((stream, _)) => stream,
+            Err(_) => {
+                std::thread::sleep(ACCEPT_POLL);
+                continue;
+            }
+        };
+        let _ = stream.set_nonblocking(false);
+        let id = {
+            let mut c = conns.lock().unwrap_or_else(|e| e.into_inner());
+            if c.open.len() >= MAX_CONNECTIONS {
+                drop(c);
+                let mut s = stream;
+                let _ = s.set_write_timeout(Some(std::time::Duration::from_secs(1)));
+                let _ = write_answer(&mut s, &respond(503, "text/plain", b"busy, try again".to_vec()), false);
+                let _ = s.shutdown(std::net::Shutdown::Both);
+                continue;
+            }
+            let Ok(kept) = stream.try_clone() else { continue };
+            c.next += 1;
+            let id = c.next;
+            c.open.insert(id, kept);
+            id
+        };
+        OPEN_CONNECTIONS.fetch_add(1, Ordering::SeqCst);
+        let site = site.clone();
+        let conns = conns.clone();
+        std::thread::spawn(move || {
+            serve_connection(stream, &site);
+            conns.lock().unwrap_or_else(|e| e.into_inner()).open.remove(&id);
+            OPEN_CONNECTIONS.fetch_sub(1, Ordering::SeqCst);
+        });
+    }
+    drop(listener);
+    // Close what is still open: a reader waiting on a request returns at
+    // once, a writer fails, and each thread ends.
+    let open: Vec<std::net::TcpStream> = conns
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .open
+        .drain()
+        .map(|(_, s)| s)
+        .collect();
+    for s in open {
+        let _ = s.shutdown(std::net::Shutdown::Both);
+    }
+}
+
 /// Starts serving `dir` as the gallery for `name`. Any previous share
 /// stops first: one view at a time. `token` carries the
 /// persistent one for a stable address; None mints a fresh one.
@@ -511,8 +688,10 @@ pub fn start(
 ) -> Result<ServeStatus, String> {
     stop();
     let token = token.unwrap_or_else(mint_token);
-    let server = tiny_http::Server::http(bind).map_err(|e| e.to_string())?;
-    let port = server.server_addr().to_ip().map(|a| a.port()).unwrap_or(0);
+    let listener = std::net::TcpListener::bind(bind).map_err(|e| e.to_string())?;
+    // Polled, so the loop sees a stop within ACCEPT_POLL.
+    listener.set_nonblocking(true).map_err(|e| e.to_string())?;
+    let port = listener.local_addr().map(|a| a.port()).unwrap_or(0);
     // Simple sharing advertises the bare address; the server redirects
     // into the token routes on arrival.
     let url = if simple {
@@ -523,26 +702,24 @@ pub fn start(
     let status = ServeStatus { name: name.clone(), url, count: items.len() };
     let stop_flag = Arc::new(AtomicBool::new(false));
     let shared = Arc::new(Mutex::new(Shared { items, live: None }));
+    let site = Arc::new(Site { token, simple, name, dir: dir.clone(), shared: shared.clone() });
     let flag = stop_flag.clone();
-    let served = shared.clone();
-    let serve_dir = dir.clone();
-    std::thread::spawn(move || {
-        while !flag.load(Ordering::Relaxed) {
-            match server.recv_timeout(std::time::Duration::from_millis(300)) {
-                Ok(Some(req)) => handle(req, &token, simple, &name, &serve_dir, &served),
-                Ok(None) => {}
-                Err(_) => break,
-            }
-        }
-        drain(&server);
-    });
-    *running().lock().unwrap() = Some(Running { status: status.clone(), stop: stop_flag, shared, dir });
+    let listening = std::thread::spawn(move || accept_loop(listener, flag, site));
+    *running().lock().unwrap() =
+        Some(Running { status: status.clone(), stop: stop_flag, shared, dir, listening: Some(listening) });
     Ok(status)
 }
 
+/// Stops the share: the listener closes and every connection it accepted
+/// is closed, before this returns, so the port is free for the next
+/// share and no request is left waiting.
 pub fn stop() {
-    if let Some(r) = running().lock().unwrap().take() {
+    let taken = running().lock().unwrap().take();
+    if let Some(mut r) = taken {
         r.stop.store(true, Ordering::Relaxed);
+        if let Some(listening) = r.listening.take() {
+            let _ = listening.join();
+        }
     }
 }
 
@@ -685,28 +862,215 @@ mod tests {
         stop();
     }
 
-    /// A request still waiting when a share stops is told so instead of
-    /// being left with no answer.
-    #[test]
-    fn a_request_left_waiting_at_stop_is_answered() {
+    /// A client holding a connection open mid-request, as a slow client
+    /// or a browser's preconnect does: part of a head sent, the rest
+    /// never. Returns once the server has the connection on a thread.
+    fn idle_client(host: &str) -> std::net::TcpStream {
         use std::io::Write;
-        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
-        let host = format!("127.0.0.1:{}", server.server_addr().to_ip().unwrap().port());
-        let mut s = std::net::TcpStream::connect(&host).unwrap();
-        write!(s, "GET / HTTP/1.1\r\nHost: {host}\r\n\r\n").unwrap();
-        // tiny_http reads it into the queue on a thread of its own, so
-        // drain until it is there and answered.
-        s.set_read_timeout(Some(std::time::Duration::from_millis(100))).unwrap();
-        let mut buf = [0u8; 1024];
-        let mut n = 0;
-        let waited = std::time::Instant::now();
-        while n == 0 && waited.elapsed() < std::time::Duration::from_secs(3) {
-            drain(&server);
-            n = s.read(&mut buf).unwrap_or(0);
+        let before = OPEN_CONNECTIONS.load(Ordering::SeqCst);
+        let mut s = std::net::TcpStream::connect(host).unwrap();
+        s.set_read_timeout(Some(std::time::Duration::from_millis(1500))).unwrap();
+        write!(s, "GET / HTTP/1.1\r\nHost: {host}\r\n").unwrap();
+        let since = std::time::Instant::now();
+        while OPEN_CONNECTIONS.load(Ordering::SeqCst) <= before && since.elapsed() < std::time::Duration::from_secs(3) {
+            std::thread::sleep(std::time::Duration::from_millis(5));
         }
-        let text = String::from_utf8_lossy(&buf[..n]);
-        assert!(text.starts_with("HTTP/1.1 503"), "{text}");
-        assert!(text.contains("This share has stopped."), "{text}");
+        s
+    }
+
+    /// Whether the server has closed this connection: a read ends (EOF
+    /// or reset) instead of timing out.
+    fn closed_by_server(s: &mut std::net::TcpStream) -> bool {
+        let mut b = [0u8; 256];
+        loop {
+            match s.read(&mut b) {
+                Ok(0) => return true,
+                Ok(_) => continue,
+                Err(e) => {
+                    return !matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut)
+                }
+            }
+        }
+    }
+
+    fn wait_for_no_connections() -> usize {
+        let since = std::time::Instant::now();
+        while OPEN_CONNECTIONS.load(Ordering::SeqCst) > 0 && since.elapsed() < std::time::Duration::from_secs(3) {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        OPEN_CONNECTIONS.load(Ordering::SeqCst)
+    }
+
+    /// From the independent review: clients holding their connections
+    /// through fifty stops left every socket open and a thread behind for
+    /// each. A stop now closes them all, mid-request too, and their
+    /// threads end.
+    #[test]
+    fn stopping_closes_every_connection_it_accepted() {
+        let _one_at_a_time = serial();
+        let dir = tempfile::tempdir().unwrap();
+        let mut clients = Vec::new();
+        for _ in 0..50 {
+            let st = start("Home".into(), vec![], dir.path().to_path_buf(), "127.0.0.1:0", None, true).unwrap();
+            let host = format!("127.0.0.1:{}", st.url.split(':').nth(2).unwrap().trim_end_matches('/'));
+            clients.push(idle_client(&host));
+            stop();
+        }
+        let still_open = clients.iter_mut().map(closed_by_server).filter(|closed| !closed).count();
+        assert_eq!(still_open, 0, "every connection is closed by the stop");
+        assert_eq!(wait_for_no_connections(), 0, "and every connection thread has ended");
+    }
+
+    /// A request finished on a connection from before a stop is not left
+    /// hanging: the connection is already closed.
+    #[test]
+    fn a_request_after_a_stop_is_refused_not_hung() {
+        use std::io::Write;
+        let _one_at_a_time = serial();
+        let dir = tempfile::tempdir().unwrap();
+        let st = start("Home".into(), vec![], dir.path().to_path_buf(), "127.0.0.1:0", None, true).unwrap();
+        let host = format!("127.0.0.1:{}", st.url.split(':').nth(2).unwrap().trim_end_matches('/'));
+        let mut s = idle_client(&host);
+        stop();
+        let _ = write!(s, "\r\n");
+        // Closed with nothing said: a stopped share answers nobody, and
+        // leaves nobody waiting.
+        let mut got = Vec::new();
+        let ended = loop {
+            let mut b = [0u8; 256];
+            match s.read(&mut b) {
+                Ok(0) => break true,
+                Ok(n) => got.extend_from_slice(&b[..n]),
+                Err(e) => break !matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut),
+            }
+        };
+        assert!(ended, "the late request meets a closed connection");
+        assert!(got.is_empty(), "and no answer: {}", String::from_utf8_lossy(&got));
+    }
+
+    /// One request per connection: a second request pipelined behind the
+    /// first is not answered, since the first answer said close and the
+    /// connection then closes.
+    #[test]
+    fn a_connection_carries_one_request() {
+        use std::io::Write;
+        let _one_at_a_time = serial();
+        let dir = tempfile::tempdir().unwrap();
+        let st = start("Home".into(), vec![], dir.path().to_path_buf(), "127.0.0.1:0", None, true).unwrap();
+        let host = format!("127.0.0.1:{}", st.url.split(':').nth(2).unwrap().trim_end_matches('/'));
+        let mut s = std::net::TcpStream::connect(&host).unwrap();
+        s.set_read_timeout(Some(std::time::Duration::from_secs(3))).unwrap();
+        write!(s, "GET / HTTP/1.1\r\nHost: {host}\r\n\r\nGET / HTTP/1.1\r\nHost: {host}\r\n\r\n").unwrap();
+        let mut all = Vec::new();
+        let _ = s.read_to_end(&mut all);
+        let text = String::from_utf8_lossy(&all);
+        assert_eq!(text.matches("HTTP/1.1 303").count(), 1, "{text}");
+        stop();
+    }
+
+    /// Every answer carries the Date HTTP asks for, Content-Length, and
+    /// Connection: close; HEAD gets the headers and no body.
+    #[test]
+    fn answers_carry_date_and_length_and_head_has_no_body() {
+        use std::io::Write;
+        let _one_at_a_time = serial();
+        let dir = tempfile::tempdir().unwrap();
+        let st = start("Home".into(), vec![], dir.path().to_path_buf(), "127.0.0.1:0", None, false).unwrap();
+        let addr = st.url.strip_prefix("http://").unwrap();
+        let (host, path) = addr.split_once('/').unwrap();
+        let host = format!("127.0.0.1:{}", host.split(':').nth(1).unwrap());
+        for method in ["GET", "HEAD"] {
+            let mut s = std::net::TcpStream::connect(&host).unwrap();
+            s.set_read_timeout(Some(std::time::Duration::from_secs(3))).unwrap();
+            write!(s, "{method} /{path} HTTP/1.1\r\nHost: {host}\r\n\r\n").unwrap();
+            let mut all = Vec::new();
+            s.read_to_end(&mut all).unwrap();
+            let text = String::from_utf8_lossy(&all).to_string();
+            let (head, body) = text.split_once("\r\n\r\n").unwrap();
+            assert!(head.starts_with("HTTP/1.1 200 OK"), "{head}");
+            let date = head.lines().find_map(|l| l.strip_prefix("Date: ")).expect("a Date header");
+            assert!(date.ends_with(" GMT") && date.len() == 29, "{date}");
+            let length: usize = head.lines().find_map(|l| l.strip_prefix("Content-Length: ")).unwrap().parse().unwrap();
+            assert!(head.lines().any(|l| l == "Connection: close"));
+            if method == "GET" {
+                assert_eq!(body.len(), length);
+                assert!(length > 0);
+            } else {
+                assert!(body.is_empty(), "HEAD has no body");
+            }
+        }
+        stop();
+    }
+
+    /// RFC 9110's own example date, and the turn of a leap day.
+    #[test]
+    fn http_dates_are_written_as_http_asks() {
+        let at = |s: u64| std::time::UNIX_EPOCH + std::time::Duration::from_secs(s);
+        assert_eq!(http_date(at(784_111_777)), "Sun, 06 Nov 1994 08:49:37 GMT");
+        assert_eq!(http_date(at(0)), "Thu, 01 Jan 1970 00:00:00 GMT");
+        assert_eq!(http_date(at(951_782_400)), "Tue, 29 Feb 2000 00:00:00 GMT");
+        assert_eq!(http_date(at(1_790_000_000)), "Mon, 21 Sep 2026 14:13:20 GMT");
+    }
+
+    /// What is not a GET or HEAD, a head too large, and a line that is
+    /// not HTTP each get their own answer, and the connection closes.
+    #[test]
+    fn requests_it_does_not_serve_get_an_answer_that_says_so() {
+        use std::io::Write;
+        let _one_at_a_time = serial();
+        let dir = tempfile::tempdir().unwrap();
+        let st = start("Home".into(), vec![], dir.path().to_path_buf(), "127.0.0.1:0", None, true).unwrap();
+        let host = format!("127.0.0.1:{}", st.url.split(':').nth(2).unwrap().trim_end_matches('/'));
+        let ask = |raw: Vec<u8>| -> String {
+            let mut s = std::net::TcpStream::connect(&host).unwrap();
+            s.set_read_timeout(Some(std::time::Duration::from_secs(3))).unwrap();
+            let _ = s.write_all(&raw);
+            let mut all = Vec::new();
+            let _ = s.read_to_end(&mut all);
+            String::from_utf8_lossy(&all).lines().next().unwrap_or("").to_string()
+        };
+        assert_eq!(ask(b"POST / HTTP/1.1\r\nHost: x\r\n\r\n".to_vec()), "HTTP/1.1 405 Method Not Allowed");
+        let mut big = b"GET / HTTP/1.1\r\nX: ".to_vec();
+        big.extend(std::iter::repeat(b'a').take(20_000));
+        big.extend_from_slice(b"\r\n\r\n");
+        assert_eq!(ask(big), "HTTP/1.1 431 Request Header Fields Too Large");
+        assert_eq!(ask(b"hello there\r\n\r\n".to_vec()), "HTTP/1.1 400 Bad Request");
+        stop();
+    }
+
+    /// Past MAX_CONNECTIONS a new connection is told to come back rather
+    /// than given a thread; the stop still closes the ones it kept.
+    #[test]
+    fn connections_past_the_limit_are_told_to_come_back() {
+        let _one_at_a_time = serial();
+        let dir = tempfile::tempdir().unwrap();
+        let st = start("Home".into(), vec![], dir.path().to_path_buf(), "127.0.0.1:0", None, true).unwrap();
+        let host = format!("127.0.0.1:{}", st.url.split(':').nth(2).unwrap().trim_end_matches('/'));
+        // Silent clients: each holds a connection thread waiting on a head.
+        let silent: Vec<std::net::TcpStream> =
+            (0..MAX_CONNECTIONS).map(|_| std::net::TcpStream::connect(&host).unwrap()).collect();
+        let since = std::time::Instant::now();
+        while OPEN_CONNECTIONS.load(Ordering::SeqCst) < MAX_CONNECTIONS && since.elapsed() < std::time::Duration::from_secs(3) {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let mut late = std::net::TcpStream::connect(&host).unwrap();
+        late.set_read_timeout(Some(std::time::Duration::from_secs(3))).unwrap();
+        let mut all = Vec::new();
+        let _ = late.read_to_end(&mut all);
+        assert!(String::from_utf8_lossy(&all).starts_with("HTTP/1.1 503"), "{}", String::from_utf8_lossy(&all));
+        stop();
+        drop(silent);
+        assert_eq!(wait_for_no_connections(), 0);
+    }
+
+    #[test]
+    fn a_request_head_is_read_to_its_end_and_no_further() {
+        let mut r: &[u8] = b"GET /t/x/img/a.webp?v=2 HTTP/1.1\r\nHost: h\r\n\r\nleftover";
+        assert_eq!(read_head(&mut r), Ok(("GET".into(), "/t/x/img/a.webp?v=2".into())));
+        let mut cut: &[u8] = b"GET / HTTP/1.1\r\nHost: h\r\n";
+        assert_eq!(read_head(&mut cut), Err(HeadError::Gone));
+        let mut odd: &[u8] = b"GET http://elsewhere/ HTTP/1.1\r\n\r\n";
+        assert_eq!(read_head(&mut odd), Err(HeadError::Malformed));
     }
 
     #[test]

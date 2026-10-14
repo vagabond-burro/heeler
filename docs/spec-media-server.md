@@ -21,8 +21,14 @@ disturb editing, and nothing served may write back.
   which makes the no-interference guarantee structural rather than
   polite. Refreshing the slice = restarting the share; live views are
   v2's problem.
-- Server: `tiny_http` (small, MIT, no async runtime), one thread,
-  bound to 0.0.0.0 on an OS-assigned port unless configured.
+- Server: the share's own, in `serve.rs` (std networking, no async
+  runtime): a listener thread and a thread per connection, one GET or
+  HEAD per connection, answered with `Connection: close`. Bound to
+  0.0.0.0 on port 4335, or an OS-assigned port when that is taken. A
+  stop closes the listener and every connection it accepted before
+  it returns. It replaced `tiny_http` in 2026.5.4, which kept serving
+  accepted connections after its listener closed, with no way to end
+  them.
 - Every URL carries a random token minted at start:
   - `/t/{token}/` - gallery page (self-contained HTML, no CDN)
   - `/t/{token}/manifest.json` - names, ids, dimensions
@@ -85,7 +91,7 @@ guarantee SURVIVES: the server still holds no catalog and no engine.
   gallery page polls the manifest every couple of seconds and
   re-fetches only images whose version moved (cache-busting query).
   Polling, not push: it works in every browser including the iPad's,
-  survives sleep/wake, and asks nothing exotic of tiny_http.
+  survives sleep/wake, and asks nothing exotic of the server.
 - The APP re-renders an edited image into the snapshot folder once the
   edit settles (debounced past the gesture), atomically, then bumps
   the version. The server never renders; files arrive in its folder.

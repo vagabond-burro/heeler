@@ -18,9 +18,6 @@ tauri-plugin-dialog = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 base64 = "0.22"
-# The served-views feature: one small synchronous HTTP server,
-# MIT/Apache, no async runtime dragged in.
-tiny_http = "0.12"
 heeler-project = { path = "../../../crates/heeler-project" }
 heeler-graph = { path = "../../../crates/heeler-graph" }
 heeler-engine = { path = "../../../crates/heeler-engine" }
@@ -75,6 +72,10 @@ exr = "1.74"
 # Plants a failing trigger in a catalog file, so a test can make a
 # command's second write fail (already linked through heeler-catalog).
 rusqlite = { version = "0.32", features = ["bundled"] }
+# A stand-in local model server for the assistant's tests. The share
+# no longer uses it: it serves its own connections so a stop can close
+# them (serve.rs).
+tiny_http = "0.12"
 
 [lib]
 name = "heeler_desktop_lib"
