@@ -14,7 +14,8 @@ import { initialState } from "../data";
 import { deleteCollectionStep, resetLibraryUndo } from "../libraryundo";
 import type { Command, State } from "../state";
 import { beginNavigation, editCollectionMembership } from "../ui/chrome";
-import { openCollection, reloadCollection } from "../ui/collectionnav";
+import { leaveCollection, openCollection, reloadCollection } from "../ui/collectionnav";
+import { wantThumb } from "../thumbs";
 
 type User = ReturnType<typeof userEvent.setup>;
 
@@ -267,6 +268,52 @@ describe("the commands behind it", () => {
     release();
     await removing;
     expect(sent.some((c) => c.type === "set_library" || c.type === "load_images")).toBe(false);
+  });
+
+  it("each way in and out passes the thumbnail size it was given", async () => {
+    // From the independent review: nothing read the size a collection
+    // listing hands the thumbnail session, so dropping it survived.
+    const id = await createCollection("Picks");
+    await addToCollection(id, "a", "A.dng");
+    const thumbs = vi.spyOn(bridge, "loadThumbnail").mockResolvedValue(null);
+    const asked = async (id: string) => {
+      thumbs.mockClear();
+      wantThumb(id);
+      await Promise.resolve();
+      return thumbs.mock.calls[0]?.[1];
+    };
+    const { state, dispatch } = recorder(id);
+    await openCollection(id, "Picks", dispatch, 1024);
+    expect(await asked("a")).toBe(1024);
+    await reloadCollection(id, "Picks", dispatch, 777);
+    expect(await asked("a")).toBe(777);
+    const sized = { ...state, prefs: { ...state.prefs, thumbnailEdge: 640 } };
+    await leaveCollection(sized, dispatch, null);
+    expect(await asked("b")).toBe(640);
+    await leaveCollection({ ...sized, prefs: { ...sized.prefs, thumbnailEdge: 320 } }, dispatch, "mock://wedding");
+    expect(await asked("mock_1")).toBe(320);
+  });
+
+  it("the way back to a folder has landed when it returns", async () => {
+    // The callers await it before refreshing and logging; one that did
+    // not wait would report the way out done with the folder not shown.
+    const original = bridge.openFolder;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    vi.spyOn(bridge, "openFolder").mockImplementation(async (path) => {
+      await held;
+      return original(path);
+    });
+    const { state, sent, dispatch } = recorder(1);
+    let returned = false;
+    const leaving = leaveCollection(state, dispatch, "mock://wedding").then(() => {
+      returned = true;
+    });
+    for (let i = 0; i < 40; i++) await Promise.resolve();
+    expect(returned).toBe(false);
+    release();
+    await leaving;
+    expect(sent).toContainEqual(expect.objectContaining({ type: "set_library", label: "Wedding", collection: null }));
   });
 
   it("adding does not reload, and nothing reloads with no collection open", async () => {
