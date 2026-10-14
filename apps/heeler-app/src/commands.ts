@@ -15,6 +15,7 @@ import { COMMANDS, type Scope } from "./hotkeys";
 import { SECTIONS } from "./ui/simple";
 import { NAV_START } from "./keynav";
 import { BAKE_DIALOG_BACKUP_LINE, bakeBackupNotice } from "./bakedbackups";
+import { redo, undo } from "./libraryundo";
 
 type D = React.Dispatch<Command>;
 
@@ -234,10 +235,12 @@ export function runCommand(
       return true;
 
     case "edit.undo":
-      dispatch({ type: "undo" });
+      // The library's steps too (libraryundo.ts): a deleted collection
+      // comes back by the same key as an edit.
+      undo(state, dispatch);
       return true;
     case "edit.redo":
-      dispatch({ type: "redo" });
+      redo(state, dispatch);
       return true;
     case "edit.delete":
       if (state.selection.length === 0) return false;

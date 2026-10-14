@@ -44,6 +44,7 @@ import { logMsg } from "../log";
 import { flushRecoverySaves } from "../savebarrier";
 import { watchOp } from "./opprogress";
 import { RIBBON_ICON_CHIP } from "./ribbontable";
+import { deleteCollectionStep } from "../libraryundo";
 
 type D = React.Dispatch<Command>;
 
@@ -159,6 +160,23 @@ export function confirmCopy(confirm: Confirm): {
       danger: true,
     };
   }
+  if (a.kind === "delete_collection") {
+    const stay =
+      a.count === 0
+        ? "It holds no photographs."
+        : a.count === 1
+          ? "The photograph in it stays in the catalog and on disk, with its rating, flag and edits."
+          : `The ${a.count.toLocaleString()} photographs in it stay in the catalog and on disk, with their ratings, flags and edits.`;
+    return {
+      title: "Delete collection",
+      // Says what does NOT go, since "delete" next to a list of
+      // photographs reads as deleting them, and that the list itself
+      // comes back with Undo.
+      body: `"${a.name}" will be deleted. ${stay} Undo brings the collection back.`,
+      ok: "Delete collection",
+      danger: false,
+    };
+  }
   if (a.kind === "recover_hidden") {
     return {
       title: "Recover hidden",
@@ -192,8 +210,14 @@ export function trashFailure(failed: string[]): string {
 }
 
 /** Runs the action the user has now agreed to. */
-async function perform(confirm: Confirm, dispatch: D): Promise<void> {
+async function perform(confirm: Confirm, state: State, dispatch: D): Promise<void> {
   const a = confirm.action;
+  if (a.kind === "delete_collection") {
+    // Refreshes the library itself, and leaves the collection first if
+    // it was the one open.
+    await deleteCollectionStep(state, dispatch, a);
+    return;
+  }
   if (a.kind === "backup_failed") {
     // The way to the fix: the Backup category is one click from the top.
     dispatch({ type: "open_prefs" });
@@ -303,7 +327,7 @@ export function ConfirmDialog({ state, dispatch }: { state: State; dispatch: D }
       dispatch({ type: "set_prefs", prefs: { confirmDeleteTake: false } });
     }
     setBusy(true);
-    void perform(confirm, dispatch).finally(() => {
+    void perform(confirm, state, dispatch).finally(() => {
       setBusy(false);
       dispatch({ type: "close_confirm" });
     });

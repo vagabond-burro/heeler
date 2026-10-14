@@ -121,6 +121,17 @@ pub struct CollectionRecord {
     pub graph_id: Option<String>,
 }
 
+/// What delete_collection removed, enough for restore_collection to put
+/// it back.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeletedCollection {
+    pub id: i64,
+    pub name: String,
+    pub graph_id: Option<String>,
+    /// The member image ids, sorted.
+    pub members: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct FolderSummary {
     pub id: i64,
@@ -2188,21 +2199,88 @@ impl Catalog {
     }
 
     /// Deletes a collection and its memberships. Images stay in the catalog.
-    pub fn delete_collection(&self, id: i64) -> Result<(), CatalogError> {
+    ///
+    /// Hands back what it removed, so Undo can put it back with
+    /// restore_collection.
+    pub fn delete_collection(&self, id: i64) -> Result<DeletedCollection, CatalogError> {
+        use rusqlite::OptionalExtension;
         // Two deletes, one transaction: a crash between them would leave
         // memberships pointing at a collection that no longer exists.
         self.batch(|c| {
+            let row = c
+                .conn
+                .query_row(
+                    "SELECT name, graph_id FROM collections WHERE id = ?1",
+                    params![id],
+                    |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?)),
+                )
+                .optional()?;
+            let Some((name, graph_id)) = row else {
+                return Err(CatalogError::CollectionNotFound(id.to_string()));
+            };
+            let members = {
+                let mut stmt = c.conn.prepare(
+                    "SELECT image_id FROM collection_members WHERE collection_id = ?1 ORDER BY image_id",
+                )?;
+                let rows = stmt.query_map(params![id], |r| r.get::<_, String>(0))?;
+                rows.collect::<Result<Vec<_>, _>>()?
+            };
             c.conn.execute(
                 "DELETE FROM collection_members WHERE collection_id = ?1",
                 params![id],
             )?;
-            let n = c
-                .conn
+            c.conn
                 .execute("DELETE FROM collections WHERE id = ?1", params![id])?;
-            if n == 0 {
-                return Err(CatalogError::CollectionNotFound(id.to_string()));
+            Ok(DeletedCollection { id, name, graph_id, members })
+        })
+    }
+
+    /// Puts a deleted collection back: the same id, name and look, and
+    /// every member still in the catalog. A member flushed since is left
+    /// out rather than refusing the whole restore. A name taken since
+    /// refuses with CollectionExists, the words create gives.
+    /// Returns the id it came back under.
+    pub fn restore_collection(&self, deleted: &DeletedCollection) -> Result<i64, CatalogError> {
+        self.batch(|c| {
+            let taken: bool = c.conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM collections WHERE name = ?1)",
+                params![deleted.name],
+                |r| r.get(0),
+            )?;
+            if taken {
+                return Err(CatalogError::CollectionExists(deleted.name.clone()));
             }
-            Ok(())
+            // The same id when it is free, so the panel's row, an open
+            // share and the session all still name it. SQLite does not
+            // hand a deleted rowid out again unless it was the highest,
+            // and a collection made since may have taken it; then a
+            // fresh one.
+            let id_free: bool = c.conn.query_row(
+                "SELECT NOT EXISTS(SELECT 1 FROM collections WHERE id = ?1)",
+                params![deleted.id],
+                |r| r.get(0),
+            )?;
+            let id = if id_free {
+                c.conn.execute(
+                    "INSERT INTO collections (id, name, graph_id) VALUES (?1, ?2, ?3)",
+                    params![deleted.id, deleted.name, deleted.graph_id],
+                )?;
+                deleted.id
+            } else {
+                c.conn.execute(
+                    "INSERT INTO collections (name, graph_id) VALUES (?1, ?2)",
+                    params![deleted.name, deleted.graph_id],
+                )?;
+                c.conn.last_insert_rowid()
+            };
+            for image in &deleted.members {
+                c.conn.execute(
+                    "INSERT OR IGNORE INTO collection_members (collection_id, image_id)
+                     SELECT ?1, id FROM images WHERE id = ?2",
+                    params![id, image],
+                )?;
+            }
+            Ok(id)
         })
     }
 
@@ -4096,6 +4174,63 @@ mod tests {
         let by_id = |id: i64| list.iter().find(|s| s.id == id).unwrap();
         assert_eq!(by_id(set).image_count, 2);
         assert_eq!(by_id(empty).image_count, 0);
+    }
+
+    /// Undo of a delete: the collection comes
+    /// back under its own id, with its name, look and members.
+    #[test]
+    fn deleted_collection_is_restored_whole() {
+        let c = catalog_with_images();
+        let id = c.create_collection("Picks").unwrap();
+        c.add_to_collection(id, "img_3").unwrap();
+        c.add_to_collection(id, "img_1").unwrap();
+        c.set_collection_graph(id, Some("look-1")).unwrap();
+
+        let gone = c.delete_collection(id).unwrap();
+        assert_eq!(
+            gone,
+            DeletedCollection {
+                id,
+                name: "Picks".into(),
+                graph_id: Some("look-1".into()),
+                members: vec!["img_1".into(), "img_3".into()],
+            }
+        );
+        assert!(c.list_collections().unwrap().is_empty());
+
+        assert_eq!(c.restore_collection(&gone).unwrap(), id);
+        let back = c.list_collections().unwrap();
+        assert_eq!(back, vec![CollectionRecord { id, name: "Picks".into(), graph_id: Some("look-1".into()) }]);
+        assert_eq!(c.collection_summaries().unwrap()[0].image_count, 2);
+        // And it can be deleted again, as Redo does.
+        assert_eq!(c.delete_collection(id).unwrap(), gone);
+    }
+
+    /// What changed since the delete is respected: a member the catalog
+    /// has forgotten stays out, a name taken since refuses in the words
+    /// create uses, and an id taken since gives a fresh one.
+    #[test]
+    fn restoring_a_collection_respects_what_changed_since() {
+        let c = catalog_with_images();
+        let id = c.create_collection("Picks").unwrap();
+        c.add_to_collection(id, "img_1").unwrap();
+        c.add_to_collection(id, "img_2").unwrap();
+        let gone = c.delete_collection(id).unwrap();
+
+        c.set_trashed("img_2", true).unwrap();
+        assert_eq!(c.forget_trashed_images(&["img_2".to_string()]).unwrap(), 1);
+        let other = c.create_collection("Picks").unwrap();
+        assert!(matches!(c.restore_collection(&gone), Err(CatalogError::CollectionExists(n)) if n == "Picks"));
+
+        c.rename_collection(other, "Other").unwrap();
+        let mut moved = gone.clone();
+        moved.id = other;
+        let fresh = c.restore_collection(&moved).unwrap();
+        assert_ne!(fresh, other);
+        let summaries = c.collection_summaries().unwrap();
+        let picks = summaries.iter().find(|s| s.name == "Picks").unwrap();
+        assert_eq!(picks.id, fresh);
+        assert_eq!(picks.image_count, 1, "the forgotten member is left out");
     }
 
     #[test]

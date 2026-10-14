@@ -4190,6 +4190,13 @@ export interface State {
   presetFolds: string[] | null;
   /** the destructive-action confirmation currently on screen */
   confirm: Confirm | null;
+  /** Library steps Undo can take back, oldest first: catalog changes
+   * that are not edits to a photograph, so they live outside the
+   * photograph's own history (libraryundo.ts holds what each one needs
+   * to be undone; this is the order and the words). */
+  libraryUndo: LibraryStep[];
+  /** Library steps undone, which Redo does again. */
+  libraryRedo: LibraryStep[];
   /** The section look previewed on the photograph (src/sectionlooks.ts),
    * or null. A render-only override: the viewer's render requests carry
    * the look while the looks menu points at it (lookPreviewState), while
@@ -4859,6 +4866,10 @@ export type Command =
   | { type: "set_bend_popped_out"; out: boolean }
   | { type: "set_tool_popped_out"; tool: "wheels" | "curves" | "toneeq" | "recolor" | "colorconsole"; out: boolean }
   | { type: "ask_confirm"; action: ConfirmAction }
+  | { type: "library_step_done"; step: LibraryStep }
+  | { type: "library_step_undone"; seq: number }
+  | { type: "library_step_redone"; seq: number }
+  | { type: "library_step_dropped"; seq: number }
   | { type: "advance_confirm" }
   | { type: "close_confirm" }
   | { type: "remove_images"; ids: string[] }
@@ -8938,6 +8949,12 @@ export type ConfirmAction =
   // prompt: history is per-take and switching between them clears it, so
   // there is no undo behind this one.
   | { kind: "delete_take"; takeId: string; name: string }
+  // Deleting a collection takes the list away and leaves every
+  // photograph where it was. One prompt, and Undo puts it back
+  // (libraryundo.ts). `back` is the folder the library returns to when
+  // the collection was the one open, so its photographs do not stay in
+  // the ribbon.
+  | { kind: "delete_collection"; id: number; name: string; count: number; open: boolean; back: string | null }
   // Forget Missing Trashed Photos (2026-10-01: "yes, build the purge"):
   // trashed photographs whose file the user removed from `.trash`
   // outside Heeler leave the catalog. No file is touched. One prompt
@@ -8948,6 +8965,14 @@ export type ConfirmAction =
   // a notice the user has to see, with the native message that says
   // what happened, why, and what to do. OK opens Preferences.
   | { kind: "backup_failed"; message: string };
+
+/** A library change Undo can take back (State.libraryUndo). `seq` names
+ * it to libraryundo.ts, which keeps what undoing it needs; `label` is
+ * what it is called. */
+export interface LibraryStep {
+  seq: number;
+  label: string;
+}
 
 export interface Confirm {
   action: ConfirmAction;
@@ -14497,6 +14522,9 @@ function reduceInner(s: State, cmd: Command): State {
         activeLayer: null,
         undoStack: [],
         redoStack: [],
+        // A library step names rows in the catalog being left.
+        libraryUndo: [],
+        libraryRedo: [],
         // The tree and folder go too, and not only visually: the session
         // saver keys off them, and keeping the old catalog's paths here
         // is how they ended up written into the newly opened catalog.
@@ -19693,6 +19721,37 @@ function reduceInner(s: State, cmd: Command): State {
         return reduce(s, { type: "delete_take", takeId: cmd.action.takeId });
       }
       return { ...s, confirm: { action: cmd.action, step: 1 } };
+    case "library_step_done":
+      // A new library step leaves nothing to redo, as a new edit does.
+      return {
+        ...s,
+        libraryUndo: [...s.libraryUndo, cmd.step].slice(-HISTORY_LIMIT),
+        libraryRedo: [],
+      };
+    case "library_step_undone": {
+      const step = s.libraryUndo.find((x) => x.seq === cmd.seq);
+      if (!step) return s;
+      return {
+        ...s,
+        libraryUndo: s.libraryUndo.filter((x) => x.seq !== cmd.seq),
+        libraryRedo: [...s.libraryRedo, step],
+      };
+    }
+    case "library_step_redone": {
+      const step = s.libraryRedo.find((x) => x.seq === cmd.seq);
+      if (!step) return s;
+      return {
+        ...s,
+        libraryRedo: s.libraryRedo.filter((x) => x.seq !== cmd.seq),
+        libraryUndo: [...s.libraryUndo, step],
+      };
+    }
+    case "library_step_dropped":
+      return {
+        ...s,
+        libraryUndo: s.libraryUndo.filter((x) => x.seq !== cmd.seq),
+        libraryRedo: s.libraryRedo.filter((x) => x.seq !== cmd.seq),
+      };
     case "advance_confirm":
       // Only ever moves forward. Whether this was the last prompt is the
       // caller's question, answered by isFinalPrompt before it dispatches.

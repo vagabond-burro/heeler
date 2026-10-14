@@ -10952,9 +10952,39 @@ async fn rename_collection(app: tauri::AppHandle, collection_id: i64, name: Stri
     catalog_command(app, move |c| c.rename_collection(collection_id, &name).map_err(|e| e.to_string())).await
 }
 
+/// What a deleted collection was, handed to the frontend so Undo can
+/// give it back through restore_collection.
+#[derive(Serialize, Deserialize)]
+pub struct DeletedCollectionPayload {
+    pub id: i64,
+    pub name: String,
+    pub graph_id: Option<String>,
+    pub members: Vec<String>,
+}
+
 #[tauri::command]
-async fn delete_collection(app: tauri::AppHandle, collection_id: i64) -> Result<(), String> {
-    catalog_command(app, move |c| c.delete_collection(collection_id).map_err(|e| e.to_string())).await
+async fn delete_collection(app: tauri::AppHandle, collection_id: i64) -> Result<DeletedCollectionPayload, String> {
+    catalog_command(app, move |c| {
+        let d = c.delete_collection(collection_id).map_err(|e| e.to_string())?;
+        Ok(DeletedCollectionPayload { id: d.id, name: d.name, graph_id: d.graph_id, members: d.members })
+    })
+    .await
+}
+
+/// Undo of delete_collection: the same id when it is free, the name, the
+/// look and every member the catalog still has. Returns the id.
+#[tauri::command]
+async fn restore_collection(app: tauri::AppHandle, collection: DeletedCollectionPayload) -> Result<i64, String> {
+    catalog_command(app, move |c| {
+        let d = heeler_catalog::DeletedCollection {
+            id: collection.id,
+            name: collection.name,
+            graph_id: collection.graph_id,
+            members: collection.members,
+        };
+        c.restore_collection(&d).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -20313,6 +20343,7 @@ pub fn run() {
             create_collection,
             rename_collection,
             delete_collection,
+            restore_collection,
             add_to_collection,
             remove_from_collection,
             load_collection,
@@ -20934,6 +20965,7 @@ mod tests {
             "create_collection",
             "rename_collection",
             "delete_collection",
+            "restore_collection",
             "add_to_collection",
             "remove_from_collection",
             "image_keywords",

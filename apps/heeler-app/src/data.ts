@@ -1038,6 +1038,8 @@ export function initialState(): State {
     docsFile: null,
     catalogsOpen: false,
     confirm: null,
+    libraryUndo: [],
+    libraryRedo: [],
     lookPreview: null,
     bake: null,
     // "JPG, TIFF, DNG (default)".

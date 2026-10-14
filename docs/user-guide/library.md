@@ -32,7 +32,7 @@ Collections are catalog lists. A photograph can belong to multiple collections w
 - Click the new-collection icon (a stack of cards with a plus), type a name, and press Enter to create a collection.
 - Click a collection name to show it; double-click to rename it.
 - Use `+` to add the active photograph or `−` to remove it from the active collection.
-- Use the delete button to remove the collection. Photographs and edits remain in the catalog and on disk.
+- Use the delete button to remove the collection. It asks first. Photographs and edits remain in the catalog and on disk, and **Edit > Undo** brings the collection back with its photographs. Deleting the collection you have open takes the library back to the folder you were in before.
 - A **LOOK** badge indicates that the collection has an associated look.
 
 The **Photo** menu can add or remove the current selection from the open collection and remove it from all collections.

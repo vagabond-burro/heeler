@@ -2380,9 +2380,10 @@ describe("Heeler UI", () => {
     await user.click(screen.getByTestId(`collection-remove-${id}`));
     expect(await screen.findByTestId(`collection-row-${id}`)).toHaveTextContent("0");
 
-    // Delete the collection outright.
+    // Delete the collection outright, once it has asked.
     await user.click(screen.getByTestId(`collection-delete-${id}`));
-    expect(screen.queryByTestId(`collection-row-${id}`)).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("confirm-ok"));
+    await waitFor(() => expect(screen.queryByTestId(`collection-row-${id}`)).not.toBeInTheDocument());
   });
 
   it("the library keeps answering while the collection list is on its way", async () => {
@@ -2426,6 +2427,8 @@ describe("Heeler UI", () => {
     expect(await screen.findByTestId(`collection-row-${id}`)).toHaveTextContent("Final");
     // The mock catalog is module-level; leave it clean for other tests.
     await user.click(screen.getByTestId(`collection-delete-${id}`));
+    await user.click(screen.getByTestId("confirm-ok"));
+    await waitFor(() => expect(screen.queryByTestId(`collection-row-${id}`)).not.toBeInTheDocument());
   });
 
   it("ribbon filter narrows by stars and flags", async () => {

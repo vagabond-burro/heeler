@@ -3343,12 +3343,56 @@ export async function renameCollection(collectionId: number, name: string): Prom
   if (c) c.name = name;
 }
 
-export async function deleteCollection(collectionId: number): Promise<void> {
+/** What a deleted collection was: enough for restoreCollection to give
+ * it back, which is what Undo does (libraryundo.ts). */
+export interface DeletedCollection {
+  id: number;
+  name: string;
+  /** the look's graph id, null when it has none */
+  graphId: string | null;
+  /** member image ids */
+  members: string[];
+  /** The mock bridge's display names for the members; Tauri reads names
+   * from the catalog. */
+  memberNames?: Record<string, string>;
+}
+
+export async function deleteCollection(collectionId: number): Promise<DeletedCollection> {
   if (isTauri()) {
-      return call("delete_collection", { collectionId });
+    const d = await call<{ id: number; name: string; graph_id: string | null; members: string[] }>(
+      "delete_collection", { collectionId });
+    return { id: d.id, name: d.name, graphId: d.graph_id, members: d.members };
   }
+  const c = mockLibrary.collections.find((c) => c.id === collectionId);
+  if (!c) throw new Error(`collection '${collectionId}' not found`);
+  const members = mockLibrary.members.get(collectionId) ?? new Map<string, string>();
   mockLibrary.collections = mockLibrary.collections.filter((c) => c.id !== collectionId);
   mockLibrary.members.delete(collectionId);
+  return {
+    id: c.id,
+    name: c.name,
+    graphId: c.hasLook ? "look" : null,
+    members: [...members.keys()].sort(),
+    memberNames: Object.fromEntries(members),
+  };
+}
+
+/** Puts a deleted collection back: its id when still free, its name,
+ * look and the members the catalog still has. Returns the id it came
+ * back under. Refuses when the name was taken since. */
+export async function restoreCollection(d: DeletedCollection): Promise<number> {
+  if (isTauri()) {
+    return call<number>("restore_collection", {
+      collection: { id: d.id, name: d.name, graph_id: d.graphId, members: d.members },
+    });
+  }
+  if (mockLibrary.collections.some((c) => c.name === d.name)) {
+    throw new Error(`a collection named '${d.name}' already exists`);
+  }
+  const id = mockLibrary.collections.some((c) => c.id === d.id) ? mockLibrary.nextCollectionId++ : d.id;
+  mockLibrary.collections.push({ id, name: d.name, count: 0, hasLook: d.graphId !== null });
+  mockLibrary.members.set(id, new Map(d.members.map((m) => [m, d.memberNames?.[m] ?? m])));
+  return id;
 }
 
 /** `name` rides along for the mock bridge's display; Tauri reads it from

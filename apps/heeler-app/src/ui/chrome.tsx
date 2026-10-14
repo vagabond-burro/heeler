@@ -33,7 +33,7 @@ export { CROP_RATIOS, parseAspect };
 import { PHOTO } from "../data";
 import { LEGAL_MENU_LABEL, OPEN_SOURCE_MENU_PATH } from "../legaldocs";
 import {
-  addToCollection, createCollection, deleteCollection, editedFolders, exportTo, isTauri,
+  addToCollection, createCollection, editedFolders, exportTo, isTauri,
   exportImage, lastSessionFolder, listCollections, listFolders, listSubfolders, loadCollection, loadFolderSession, loadGraph, loadSession, loadThumbnail, openFolder, pickExportFolder, writeGallery,
   STACK_KINDS, createStack, createPano, persistFlag, persistRating, removeFromCollection, renameCollection, revealFolder, saveSession, stackAppend,
   serializeGraph, serializeLoadedGraph, serveCacheDir, serveFileName, serveStart, serveStatus, serveStop,
@@ -95,6 +95,16 @@ export async function refreshLibrary(dispatch: D) {
   dispatch({ type: "set_folders_with_hidden", paths: hidden });
   dispatch({ type: "set_folders_with_trash", paths: trash });
   dispatch({ type: "set_missing_trashed", count: missing?.ids?.length ?? 0, skipped: missing?.skipped ?? 0 });
+}
+
+/** Opens a collection: its photographs in the ribbon, its name on the
+ * library. Takes the navigation token so a folder restore still in
+ * flight cannot land its listing on top of the collection. */
+export async function openCollection(id: number, label: string, dispatch: D, thumbnailEdge = 480): Promise<void> {
+  beginNavigation();
+  const files = await loadCollection(id);
+  loadSessionImages(files, dispatch, thumbnailEdge);
+  dispatch({ type: "set_library", label, collection: id, path: null });
 }
 
 /** Membership errands for the ACTIVE collection, or eviction from all
@@ -408,6 +418,7 @@ import { PanelDivider } from "./divider";
 import { useTopBarFit } from "./layoutroom";
 import { ADJUST_SEAT, CONTENT_ITEMS, IMAGE_ITEMS, IMAGE_SEAT, UTILITY_ITEMS, addContentLayer, adjustmentItems } from "./finishnew";
 import { SuggestField } from "./suggestfield";
+import { canRedo, canUndo, redo, undo } from "../libraryundo";
 export { GroupGlyph };
 
 function Star({ on }: { on: boolean }) {
@@ -1157,18 +1168,18 @@ export function MenuBar({ state, dispatch }: { state: State; dispatch: D }) {
       items: [
         item(
           "Undo",
-          () => dispatch({ type: "undo" }),
+          () => undo(state, dispatch),
           "menu-edit-undo",
-          state.undoStack.length === 0,
+          !canUndo(state),
           "edit.undo",
           "Step back one edit.",
           "Nothing to undo: this photograph is as you found it.",
         ),
         item(
           "Redo",
-          () => dispatch({ type: "redo" }),
+          () => redo(state, dispatch),
           "menu-edit-redo",
-          state.redoStack.length === 0,
+          !canRedo(state),
           "edit.redo",
           "Step forward again through an edit you undid.",
           "Nothing to redo: undo something first.",
@@ -3620,14 +3631,8 @@ function BrowserPanelImpl({ state, dispatch }: { state: State; dispatch: D }) {
     }
   };
 
-  const showCollection = async (id: number, label: string) => {
-    // Takes the navigation token so a folder restore still in flight
-    // cannot land its listing on top of the collection.
-    beginNavigation();
-    const files = await loadCollection(id);
-    loadSessionImages(files, dispatch, state.prefs.thumbnailEdge);
-    dispatch({ type: "set_library", label, collection: id, path: null });
-  };
+  const showCollection = (id: number, label: string) =>
+    openCollection(id, label, dispatch, state.prefs.thumbnailEdge);
 
   return (
     <div className="panel-col ui-zoom" style={{ width: state.panelSizes.library }} data-testid="browser-panel">
@@ -4193,11 +4198,16 @@ wall of bigger glyphs jammed together is not more readable.*/}
                   data-testid={`collection-delete-${c.id}`}
                   aria-label={`Delete collection ${c.name}`}
                   data-hint="Delete this collection (images stay in the catalog)"
-                  onClick={async () => {
-                    await deleteCollection(c.id);
-                    if (active) dispatch({ type: "set_library", label: state.libraryLabel, collection: null });
-                    void refreshLibrary(dispatch);
-                  }}
+                  // Asks first, and the deed is
+                  // the confirmation's (deleteCollectionStep): one step
+                  // Undo takes back, leaving the collection if it was open.
+                  onClick={() => dispatch({
+                    type: "ask_confirm",
+                    action: {
+                      kind: "delete_collection", id: c.id, name: c.name, count: c.count, open: active,
+                      back: active ? (state.activeFolderPath ?? lastFolderRef.current) : null,
+                    },
+                  })}
                 >
                   ✕
                 </button>
