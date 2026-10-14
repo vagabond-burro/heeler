@@ -23,7 +23,8 @@
 import { deleteCollection, restoreCollection, type DeletedCollection } from "./bridge";
 import { logMsg } from "./log";
 import type { Command, State } from "./state";
-import { beginNavigation, loadSessionImages, openCollection, openFolderPlain, refreshLibrary } from "./ui/chrome";
+import { refreshLibrary } from "./ui/chrome";
+import { leaveCollection, openCollection } from "./ui/collectionnav";
 
 type D = (command: Command) => void;
 
@@ -102,20 +103,6 @@ export function redo(s: State, dispatch: D): void {
   else dispatch({ type: "redo" });
 }
 
-/** Out of a collection that is no longer there: back to the folder the
- * library was in before it, the way clicking off the collection goes,
- * or, with no folder to go back to, an empty ribbon. Its photographs
- * must not stay listed as if it were open. */
-async function leaveCollection(s: State, dispatch: D, back: string | null): Promise<void> {
-  if (back) {
-    await openFolderPlain(back, s.folderTree, dispatch, s.prefs.thumbnailEdge);
-    return;
-  }
-  beginNavigation();
-  loadSessionImages([], dispatch, s.prefs.thumbnailEdge);
-  dispatch({ type: "set_library", label: "No folder open", collection: null, path: null });
-}
-
 function forget(seqs: number[]): void {
   for (const seq of seqs) {
     steps.delete(seq);
@@ -147,7 +134,7 @@ export async function deleteCollectionStep(
     steps.set(seq, { collection, open: a.open, back: a.back });
     marks.set(seq, historyNow(s));
     dispatch({ type: "library_step_done", step: { seq, label: `Delete collection "${collection.name}"` } });
-    if (a.open) await leaveCollection(s, dispatch, a.back);
+    if (a.open) await leaveCollection(s, dispatch, a.back, "empty");
     await refreshLibrary(dispatch);
     logMsg("info", `Deleted the collection "${collection.name}". Its photographs are untouched, and Undo brings it back.`);
   } finally {
@@ -212,7 +199,7 @@ async function redoLibraryStep(s: State, dispatch: D): Promise<void> {
     steps.set(top.seq, { collection, open, back: step.back });
     marks.set(top.seq, historyNow(s));
     dispatch({ type: "library_step_redone", seq: top.seq });
-    if (open) await leaveCollection(s, dispatch, step.back);
+    if (open) await leaveCollection(s, dispatch, step.back, "empty");
     await refreshLibrary(dispatch);
     logMsg("info", `Deleted the collection "${collection.name}" again.`);
   } finally {

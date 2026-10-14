@@ -12,7 +12,8 @@ import { addToCollection, createCollection, mockResetCollections } from "../brid
 import { initialState } from "../data";
 import { resetLibraryUndo } from "../libraryundo";
 import type { Command, State } from "../state";
-import { beginNavigation, editCollectionMembership, openCollection } from "../ui/chrome";
+import { beginNavigation, editCollectionMembership } from "../ui/chrome";
+import { openCollection } from "../ui/collectionnav";
 
 type User = ReturnType<typeof userEvent.setup>;
 

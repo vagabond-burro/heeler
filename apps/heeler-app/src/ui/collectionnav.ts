@@ -1,0 +1,66 @@
+// The way into and out of a collection: which photographs the ribbon
+// holds, the label over them and which collection is open.
+//
+// Every path that enters or leaves a collection used to decide that for
+// itself, and one that forgot left a deleted collection's photographs in
+// the ribbon. Each path says here what it is (an open, a reload, a way
+// out) and the rest follows.
+
+import { loadCollection, type FolderImage } from "../bridge";
+import type { Command, State } from "../state";
+import { beginNavigation, loadSessionImages, openFolderPlain } from "./chrome";
+
+type D = (command: Command) => void;
+
+function show(files: FolderImage[], id: number, label: string, dispatch: D, thumbnailEdge: number): void {
+  loadSessionImages(files, dispatch, thumbnailEdge);
+  dispatch({ type: "set_library", label, collection: id, path: null });
+}
+
+/** Opens a collection: its photographs in the ribbon, its name on the
+ * library. Takes the navigation token so a folder restore still in
+ * flight cannot land its listing on top of the collection. */
+export async function openCollection(id: number, label: string, dispatch: D, thumbnailEdge = 480): Promise<void> {
+  beginNavigation();
+  show(await loadCollection(id), id, label, dispatch, thumbnailEdge);
+}
+
+/** Shows the open collection again after its membership changed, so the
+ * ribbon tells the truth instead of showing ghosts. Not a navigation, so
+ * it leaves the token alone: a folder clicked while the change was on
+ * its way is the newer wish and must still land. */
+export async function reloadCollection(id: number, label: string, dispatch: D, thumbnailEdge = 480): Promise<void> {
+  show(await loadCollection(id), id, label, dispatch, thumbnailEdge);
+}
+
+/** The folder a way out of the open collection leads back to: the one
+ * the library was in before it. Opening a collection sets
+ * activeFolderPath to null, so the panel remembers the last folder on
+ * the way past (`remembered`) for when the state no longer knows. */
+export function folderBehind(s: State, remembered: string | null): string | null {
+  return s.activeFolderPath ?? remembered;
+}
+
+/** What a way out leaves when there is no folder to go back to.
+ * "keep": the collection is let go and its photographs and label stay,
+ * since stepping off one changes only the selection. "empty": the
+ * ribbon empties, since the collection is gone and its photographs must
+ * not stay listed as if it were open. */
+export type NoFolder = "keep" | "empty";
+
+/** Out of the open collection: back to `back` (folderBehind) when there
+ * is one, the way clicking off a collection goes, otherwise as `noFolder`
+ * says. */
+export async function leaveCollection(s: State, dispatch: D, back: string | null, noFolder: NoFolder): Promise<void> {
+  if (back) {
+    await openFolderPlain(back, s.folderTree, dispatch, s.prefs.thumbnailEdge);
+    return;
+  }
+  if (noFolder === "keep") {
+    dispatch({ type: "set_library", label: s.libraryLabel, collection: null });
+    return;
+  }
+  beginNavigation();
+  loadSessionImages([], dispatch, s.prefs.thumbnailEdge);
+  dispatch({ type: "set_library", label: "No folder open", collection: null, path: null });
+}

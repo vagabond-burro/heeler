@@ -97,16 +97,6 @@ export async function refreshLibrary(dispatch: D) {
   dispatch({ type: "set_missing_trashed", count: missing?.ids?.length ?? 0, skipped: missing?.skipped ?? 0 });
 }
 
-/** Opens a collection: its photographs in the ribbon, its name on the
- * library. Takes the navigation token so a folder restore still in
- * flight cannot land its listing on top of the collection. */
-export async function openCollection(id: number, label: string, dispatch: D, thumbnailEdge = 480): Promise<void> {
-  beginNavigation();
-  const files = await loadCollection(id);
-  loadSessionImages(files, dispatch, thumbnailEdge);
-  dispatch({ type: "set_library", label, collection: id, path: null });
-}
-
 /** Membership errands for the ACTIVE collection, or eviction from all
  * of them at once, shared by the Photo menu and the thumbnail
  * right-click. "I should be able to add/remove a photo
@@ -126,13 +116,8 @@ export async function editCollectionMembership(
     else if (op === "remove") await removeFromCollection(col!.id, id);
     else for (const c of state.collections) await removeFromCollection(c.id, id);
   }
-  // Viewing a collection that just shrank: reload it, so the ribbon
-  // tells the truth instead of showing ghosts.
-  if (op !== "add" && col) {
-    const files = await loadCollection(col.id);
-    loadSessionImages(files, dispatch, state.prefs.thumbnailEdge);
-    dispatch({ type: "set_library", label: col.name, collection: col.id, path: null });
-  }
+  // Viewing a collection that just shrank: show it again.
+  if (op !== "add" && col) await reloadCollection(col.id, col.name, dispatch, state.prefs.thumbnailEdge);
   void refreshLibrary(dispatch);
   const n = ids.length;
   const what = `${n} photo${n === 1 ? "" : "s"}`;
@@ -419,6 +404,7 @@ import { useTopBarFit } from "./layoutroom";
 import { ADJUST_SEAT, CONTENT_ITEMS, IMAGE_ITEMS, IMAGE_SEAT, UTILITY_ITEMS, addContentLayer, adjustmentItems } from "./finishnew";
 import { SuggestField } from "./suggestfield";
 import { canRedo, canUndo, redo, undo } from "../libraryundo";
+import { folderBehind, leaveCollection, openCollection, reloadCollection } from "./collectionnav";
 export { GroupGlyph };
 
 function Star({ on }: { on: boolean }) {
@@ -3619,16 +3605,7 @@ function BrowserPanelImpl({ state, dispatch }: { state: State; dispatch: D }) {
     // a row, a button or the section head is that thing's business.
     if (e.target !== e.currentTarget) return;
     if (state.activeCollection === null) return;
-    // The folder you were in, remembered on the way past: opening a
-    // collection sets activeFolderPath to null (set_library, path:
-    // null), so by the time anyone wants to step back out, the state
-    // no longer knows where out was.
-    const back = state.activeFolderPath ?? lastFolderRef.current;
-    if (back) {
-      void openFolderPlain(back, state.folderTree, dispatch, state.prefs.thumbnailEdge);
-    } else {
-      dispatch({ type: "set_library", label: state.libraryLabel, collection: null });
-    }
+    void leaveCollection(state, dispatch, folderBehind(state, lastFolderRef.current), "keep");
   };
 
   const showCollection = (id: number, label: string) =>
@@ -4205,7 +4182,7 @@ wall of bigger glyphs jammed together is not more readable.*/}
                     type: "ask_confirm",
                     action: {
                       kind: "delete_collection", id: c.id, name: c.name, count: c.count, open: active,
-                      back: active ? (state.activeFolderPath ?? lastFolderRef.current) : null,
+                      back: active ? folderBehind(state, lastFolderRef.current) : null,
                     },
                   })}
                 >
