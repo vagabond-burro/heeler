@@ -13219,12 +13219,44 @@ async fn folder_subtree_counts(app: tauri::AppHandle, path: String) -> Result<Fo
 /// stays, and browsing to the folder again brings it back.
 #[tauri::command]
 async fn hide_folder(app: tauri::AppHandle, path: String) -> Result<usize, String> {
-    catalog_command(app, move |c| {
-        let n = c.hide_folder(Path::new(&path)).map_err(|e| e.to_string())?;
-        sessions_leave_folder(c, Path::new(&path), false)?;
-        Ok(n)
+    catalog_command(app, move |c| hide_folder_payload(c, Path::new(&path))).await
+}
+
+/// Hides a folder and moves the sessions out of it in one transaction: a
+/// session left naming the hidden folder would open it again (and
+/// unhide it) when the library restores.
+pub fn hide_folder_payload(c: &Catalog, path: &Path) -> Result<usize, String> {
+    c.batch_with(|c| {
+        let n = c.hide_folder(path)?;
+        sessions_leave_folder(c, path, false)?;
+        Ok::<_, SessionLeave>(n)
     })
-    .await
+    .map_err(|e| e.0)
+}
+
+/// Flushes a folder and moves the sessions out of it in one transaction:
+/// a flush whose session update failed would leave the session naming
+/// the folder, and the library's restore would open it again, adding it
+/// back without its records. Returns (folders, photographs) forgotten.
+pub fn flush_folder_payload(c: &Catalog, path: &Path) -> Result<(usize, i64), String> {
+    c.batch_with(|c| {
+        let counts = c.flush_folder(path)?;
+        sessions_leave_folder(c, path, true)?;
+        Ok::<_, SessionLeave>(counts)
+    })
+    .map_err(|e| e.0)
+}
+
+/// Why a flush or hide and its session update failed, as the words the
+/// library shows. A type of its own so the two can share one catalog
+/// transaction (Catalog::batch_with).
+#[derive(Debug)]
+pub struct SessionLeave(pub String);
+
+impl From<heeler_catalog::CatalogError> for SessionLeave {
+    fn from(e: heeler_catalog::CatalogError) -> Self {
+        SessionLeave(e.to_string())
+    }
 }
 
 /// Moves the remembered sessions out of a folder a flush or hide just
@@ -13244,9 +13276,9 @@ async fn hide_folder(app: tauri::AppHandle, path: String) -> Result<usize, Strin
 /// - a flush also forgets the per-root sessions of roots inside the
 ///   folder, whose records are gone. A hidden root keeps its own, so
 ///   opening it again lands where work in it stopped.
-pub fn sessions_leave_folder(c: &Catalog, path: &Path, flushed: bool) -> Result<(), String> {
+pub fn sessions_leave_folder(c: &Catalog, path: &Path, flushed: bool) -> Result<(), SessionLeave> {
     let inside = |p: &str| Path::new(p).starts_with(path);
-    let err = |e: heeler_catalog::CatalogError| e.to_string();
+    let err = SessionLeave::from;
     let root = c.meta("tree_root").map_err(err)?;
     let active = c.meta("active_folder").map_err(err)?;
     match (root, active) {
@@ -13269,7 +13301,7 @@ pub fn sessions_leave_folder(c: &Catalog, path: &Path, flushed: bool) -> Result<
             }
             continue;
         }
-        let Some(session) = folder_session_payload(c, root)? else { continue };
+        let Some(session) = folder_session_payload(c, root).map_err(SessionLeave)? else { continue };
         if inside(&session.active_folder) {
             let json = serde_json::json!({ "active_folder": root, "active_image": "" });
             c.set_meta(&key, &json.to_string()).map_err(err)?;
@@ -13284,8 +13316,7 @@ pub fn sessions_leave_folder(c: &Catalog, path: &Path, flushed: bool) -> Result<
 #[tauri::command]
 async fn flush_folder(app: tauri::AppHandle, path: String) -> Result<FolderSubtreeCounts, String> {
     catalog_command(app, move |c| {
-        let (folders, images) = c.flush_folder(Path::new(&path)).map_err(|e| e.to_string())?;
-        sessions_leave_folder(c, Path::new(&path), true)?;
+        let (folders, images) = flush_folder_payload(c, Path::new(&path))?;
         Ok(FolderSubtreeCounts { folders, images })
     })
     .await
@@ -29887,14 +29918,68 @@ mod tests {
     #[test]
     fn flush_and_hide_move_the_sessions_out() {
         let src = src_all();
-        for (name, flushed) in [("flush_folder", "true"), ("hide_folder", "false")] {
+        for name in ["flush_folder", "hide_folder"] {
             let start = src.find(&format!("async fn {name}(")).unwrap();
             let body = &src[start..src[start..].find("\n}\n").unwrap() + start];
             assert!(
-                body.contains(&format!("sessions_leave_folder(c, Path::new(&path), {flushed})")),
-                "{name} must take the remembered sessions out of the folder"
+                body.contains(&format!("{name}_payload(c, Path::new(&path))")),
+                "{name} must take the remembered sessions out of the folder, in one transaction"
             );
         }
+    }
+
+    /// A catalog file with a folder of two photographs, the session in
+    /// it, and a trigger that makes every session cleanup fail: a delete
+    /// or an update of the meta table aborts.
+    fn catalog_whose_session_cleanup_fails() -> (tempfile::TempDir, Catalog) {
+        let d = tempfile::tempdir().unwrap();
+        let db = d.path().join("catalog.sqlite");
+        let c = Catalog::open(&db).unwrap();
+        let folder = c.add_folder(Path::new("/photos")).unwrap();
+        c.add_image("a", Path::new("/photos/a.dng"), Some(folder)).unwrap();
+        c.add_image("b", Path::new("/photos/b.dng"), Some(folder)).unwrap();
+        c.set_rating("a", 4).unwrap();
+        save_ui_session_payload(&c, "/photos", "/photos", Some("a")).unwrap();
+        let conn = rusqlite::Connection::open(&db).unwrap();
+        conn.execute_batch(
+            "CREATE TRIGGER fail_delete BEFORE DELETE ON meta BEGIN SELECT RAISE(ABORT, 'injected failure'); END;
+             CREATE TRIGGER fail_update BEFORE UPDATE ON meta BEGIN SELECT RAISE(ABORT, 'injected failure'); END;",
+        )
+        .unwrap();
+        (d, c)
+    }
+
+    /// From the independent review: the flush committed on its own, and
+    /// a session update that failed after it left the session naming the
+    /// flushed folder, which the restore then opened again. A failure
+    /// now takes the flush back with it.
+    #[test]
+    fn a_flush_whose_session_update_fails_changes_nothing() {
+        let (_d, c) = catalog_whose_session_cleanup_fails();
+        let err = flush_folder_payload(&c, Path::new("/photos")).unwrap_err();
+        assert!(err.contains("injected failure"), "{err}");
+        assert_eq!(c.folder_summaries().unwrap().len(), 1, "the folder is still there");
+        assert_eq!(c.image("a").unwrap().rating, 4, "and its records");
+        assert_eq!(c.meta("tree_root").unwrap().as_deref(), Some("/photos"));
+    }
+
+    #[test]
+    fn a_hide_whose_session_update_fails_changes_nothing() {
+        let (_d, c) = catalog_whose_session_cleanup_fails();
+        assert!(hide_folder_payload(&c, Path::new("/photos")).is_err());
+        assert_eq!(c.folder_summaries().unwrap().len(), 1, "the folder is still listed");
+    }
+
+    /// And when nothing fails, both commit together.
+    #[test]
+    fn a_flush_and_its_session_update_commit_together() {
+        let d = tempfile::tempdir().unwrap();
+        let c = Catalog::open(&d.path().join("catalog.sqlite")).unwrap();
+        c.add_folder(Path::new("/photos")).unwrap();
+        save_ui_session_payload(&c, "/photos", "/photos", Some("a")).unwrap();
+        assert_eq!(flush_folder_payload(&c, Path::new("/photos")).unwrap(), (1, 0));
+        assert!(c.folder_summaries().unwrap().is_empty());
+        assert!(c.meta("tree_root").unwrap().is_none());
     }
 
     fn global_session(c: &Catalog) -> (Option<String>, Option<String>, Option<String>) {

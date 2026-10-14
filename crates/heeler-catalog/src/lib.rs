@@ -1033,14 +1033,31 @@ impl Catalog {
     /// Runs `f` inside one SQLite transaction. Registering a folder of
     /// images is hundreds of inserts; without this each one pays its own
     /// fsync and a big folder visibly stalls the open.
+    ///
+    /// Inside a transaction already open (a caller's batch), `f` simply
+    /// joins it: the outer one commits or rolls back the whole, so a
+    /// command can put its own writes and a catalog method's in one.
     pub fn batch<T>(
         &self,
         f: impl FnOnce(&Catalog) -> Result<T, CatalogError>,
     ) -> Result<T, CatalogError> {
-        self.conn.execute_batch("BEGIN")?;
+        self.batch_with(f)
+    }
+
+    /// `batch` for a caller whose writes fail with an error of its own,
+    /// such as a desktop command mixing catalog calls with its own
+    /// checks.
+    pub fn batch_with<T, E: From<CatalogError>>(
+        &self,
+        f: impl FnOnce(&Catalog) -> Result<T, E>,
+    ) -> Result<T, E> {
+        if !self.conn.is_autocommit() {
+            return f(self);
+        }
+        self.conn.execute_batch("BEGIN").map_err(CatalogError::from)?;
         match f(self) {
             Ok(v) => {
-                self.conn.execute_batch("COMMIT")?;
+                self.conn.execute_batch("COMMIT").map_err(CatalogError::from)?;
                 Ok(v)
             }
             Err(e) => {
@@ -1158,10 +1175,12 @@ impl Catalog {
     /// it. Returns how many folder rows were flagged.
     pub fn hide_folder(&self, path: &Path) -> Result<usize, CatalogError> {
         let folders = self.folder_subtree(path)?;
-        for (id, _) in &folders {
-            self.conn.execute("UPDATE folders SET hidden = 1 WHERE id = ?1", params![id])?;
-        }
-        Ok(folders.len())
+        self.batch(|c| {
+            for (id, _) in &folders {
+                c.conn.execute("UPDATE folders SET hidden = 1 WHERE id = ?1", params![id])?;
+            }
+            Ok(folders.len())
+        })
     }
 
     /// Forgets `path` and every folder beneath it: the image rows and
@@ -2904,6 +2923,24 @@ mod tests {
         let shallow = discover_files_shallow(dir.path()).unwrap();
         assert_eq!(shallow.len(), 1);
         assert!(shallow[0].ends_with("a.dng"));
+    }
+
+    /// A batch inside a batch joins it: the outer one's failure takes the
+    /// inner one's committed-looking writes back too, so a command can
+    /// make a catalog method's writes and its own one transaction.
+    #[test]
+    fn a_batch_inside_a_batch_joins_it() {
+        let c = Catalog::open_in_memory().unwrap();
+        let err = c.batch(|c| {
+            c.batch(|c| c.add_image("img_1", Path::new("D:/p/a.dng"), None))
+                .expect("the inner batch joins the outer one rather than failing to begin");
+            c.set_rating("ghost", 3)
+        });
+        assert!(err.is_err());
+        assert!(c.list_images(&Filter::default()).unwrap().is_empty(), "the inner write went too");
+        // And a lone batch afterwards still opens and commits its own.
+        c.batch(|c| c.add_image("img_2", Path::new("D:/p/b.dng"), None)).unwrap();
+        assert_eq!(c.list_images(&Filter::default()).unwrap().len(), 1);
     }
 
     #[test]

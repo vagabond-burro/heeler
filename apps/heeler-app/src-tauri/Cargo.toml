@@ -72,6 +72,9 @@ tempfile = "3"
 # Writes the OpenEXR fixtures the file-depth tests read (already linked
 # through heeler-io for the reading).
 exr = "1.74"
+# Plants a failing trigger in a catalog file, so a test can make a
+# command's second write fail (already linked through heeler-catalog).
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 [lib]
 name = "heeler_desktop_lib"
