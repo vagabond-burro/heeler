@@ -134,7 +134,7 @@ export async function deleteCollectionStep(
     steps.set(seq, { collection, open: a.open, back: a.back });
     marks.set(seq, historyNow(s));
     dispatch({ type: "library_step_done", step: { seq, label: `Delete collection "${collection.name}"` } });
-    if (a.open) await leaveCollection(s, dispatch, a.back, "empty");
+    if (a.open) await leaveCollection(s, dispatch, a.back);
     await refreshLibrary(dispatch);
     logMsg("info", `Deleted the collection "${collection.name}". Its photographs are untouched, and Undo brings it back.`);
   } finally {
@@ -199,7 +199,7 @@ async function redoLibraryStep(s: State, dispatch: D): Promise<void> {
     steps.set(top.seq, { collection, open, back: step.back });
     marks.set(top.seq, historyNow(s));
     dispatch({ type: "library_step_redone", seq: top.seq });
-    if (open) await leaveCollection(s, dispatch, step.back, "empty");
+    if (open) await leaveCollection(s, dispatch, step.back);
     await refreshLibrary(dispatch);
     logMsg("info", `Deleted the collection "${collection.name}" again.`);
   } finally {

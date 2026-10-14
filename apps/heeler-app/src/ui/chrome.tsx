@@ -3599,13 +3599,14 @@ function BrowserPanelImpl({ state, dispatch }: { state: State; dispatch: D }) {
   //
   // The way out is the folder you were in, reopened, since a collection
   // replaced its listing on the way in. With no folder open there is
-  // nothing to go back to, so the selection simply clears.
+  // nothing to go back to, so the ribbon empties, as it does when the
+  // open collection is deleted.
   const deselectCollection = (e: React.MouseEvent) => {
     // Only a click that landed on the section itself. A click that hit
     // a row, a button or the section head is that thing's business.
     if (e.target !== e.currentTarget) return;
     if (state.activeCollection === null) return;
-    void leaveCollection(state, dispatch, folderBehind(state, lastFolderRef.current), "keep");
+    void leaveCollection(state, dispatch, folderBehind(state, lastFolderRef.current));
   };
 
   const showCollection = (id: number, label: string) =>

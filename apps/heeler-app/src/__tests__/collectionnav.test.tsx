@@ -71,18 +71,24 @@ describe("stepping off a collection", () => {
     expect(openColor(id)).toBe("var(--text-hi)");
   });
 
-  it("with no folder behind it, lets go of the collection and keeps the ribbon and label", async () => {
+  it("with no folder behind it, empties the ribbon as a delete does", async () => {
+    // Its photographs and name used to stay, with nothing on screen
+    // saying what the ribbon held once the collection was let go.
     const user = userEvent.setup();
     render(<App />);
     const id = await picks(user);
     await user.click(screen.getByTestId(`collection-open-${id}`));
     await waitFor(() => expect(screen.getByTestId("library-label")).toHaveTextContent("Picks"));
+    expect(await screen.findByTestId("thumb-4871")).toBeInTheDocument();
 
     await user.click(screen.getByTestId("collections-section"));
     await waitFor(() => expect(openColor(id)).toBe("var(--text-hi)"));
-    expect(screen.getByTestId("library-label")).toHaveTextContent("Picks");
-    expect(screen.getByTestId("thumb-4871")).toBeInTheDocument();
-    expect(screen.queryByTestId("thumb-4866")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("library-label")).toHaveTextContent("No folder open"));
+    expect(screen.queryByTestId("thumb-4871")).not.toBeInTheDocument();
+    // The collection itself is untouched, and opens again.
+    expect(screen.getByTestId(`collection-row-${id}`)).toHaveTextContent("1");
+    await user.click(screen.getByTestId(`collection-open-${id}`));
+    expect(await screen.findByTestId("thumb-4871")).toBeInTheDocument();
   });
 });
 

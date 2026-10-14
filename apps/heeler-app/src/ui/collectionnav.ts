@@ -41,23 +41,14 @@ export function folderBehind(s: State, remembered: string | null): string | null
   return s.activeFolderPath ?? remembered;
 }
 
-/** What a way out leaves when there is no folder to go back to.
- * "keep": the collection is let go and its photographs and label stay,
- * since stepping off one changes only the selection. "empty": the
- * ribbon empties, since the collection is gone and its photographs must
- * not stay listed as if it were open. */
-export type NoFolder = "keep" | "empty";
-
 /** Out of the open collection: back to `back` (folderBehind) when there
- * is one, the way clicking off a collection goes, otherwise as `noFolder`
- * says. */
-export async function leaveCollection(s: State, dispatch: D, back: string | null, noFolder: NoFolder): Promise<void> {
+ * is one, otherwise to an empty ribbon. The collection's photographs
+ * must not stay listed, under its name, once it is no longer open:
+ * stepping off one with no folder behind it used to leave both, so
+ * nothing on screen said what the ribbon held. */
+export async function leaveCollection(s: State, dispatch: D, back: string | null): Promise<void> {
   if (back) {
     await openFolderPlain(back, s.folderTree, dispatch, s.prefs.thumbnailEdge);
-    return;
-  }
-  if (noFolder === "keep") {
-    dispatch({ type: "set_library", label: s.libraryLabel, collection: null });
     return;
   }
   beginNavigation();
