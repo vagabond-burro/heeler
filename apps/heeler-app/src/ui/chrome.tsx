@@ -235,7 +235,13 @@ let navToken = 0;
 export function beginNavigation(): number {
   return ++navToken;
 }
-const navStale = (token: number) => token !== navToken;
+export const navStale = (token: number) => token !== navToken;
+/** The navigation now under way, without starting one: for a refresh
+ * of what is on screen that must give way to a newer navigation but is
+ * not one itself. */
+export function currentNavigation(): number {
+  return navToken;
+}
 
 /** Expands the tree from `root` down to `folder`, opens it, and puts its
  * images in the ribbon. The tree nodes are dispatched directly rather

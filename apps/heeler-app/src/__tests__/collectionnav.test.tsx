@@ -13,7 +13,7 @@ import { initialState } from "../data";
 import { deleteCollectionStep, resetLibraryUndo } from "../libraryundo";
 import type { Command, State } from "../state";
 import { beginNavigation, editCollectionMembership } from "../ui/chrome";
-import { openCollection } from "../ui/collectionnav";
+import { openCollection, reloadCollection } from "../ui/collectionnav";
 
 type User = ReturnType<typeof userEvent.setup>;
 
@@ -223,6 +223,28 @@ describe("the commands behind it", () => {
     // One for the way out, one for this probe.
     expect(beginNavigation()).toBe(before + 2);
     expect(sent).toContainEqual({ type: "set_library", label: "No folder open", collection: null, path: null });
+  });
+
+  it("an open overtaken by a newer navigation does not land", async () => {
+    // A folder row clicked while the members load is the newer wish,
+    // even when its listing comes back first.
+    const id = await createCollection("Picks");
+    await addToCollection(id, "a", "A.dng");
+    const { sent, dispatch } = recorder(null);
+    const opening = openCollection(id, "Picks", dispatch, 480);
+    beginNavigation();
+    await opening;
+    expect(sent.some((c) => c.type === "set_library" || c.type === "load_images")).toBe(false);
+  });
+
+  it("a reload overtaken by a navigation does not land", async () => {
+    const id = await createCollection("Picks");
+    await addToCollection(id, "a", "A.dng");
+    const { sent, dispatch } = recorder(id);
+    const reloading = reloadCollection(id, "Picks", dispatch, 480);
+    beginNavigation();
+    await reloading;
+    expect(sent.some((c) => c.type === "set_library" || c.type === "load_images")).toBe(false);
   });
 
   it("adding does not reload, and nothing reloads with no collection open", async () => {

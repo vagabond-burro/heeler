@@ -8,7 +8,7 @@
 
 import { loadCollection, type FolderImage } from "../bridge";
 import type { Command, State } from "../state";
-import { beginNavigation, loadSessionImages, openFolderPlain } from "./chrome";
+import { beginNavigation, currentNavigation, loadSessionImages, navStale, openFolderPlain } from "./chrome";
 
 type D = (command: Command) => void;
 
@@ -19,18 +19,26 @@ function show(files: FolderImage[], id: number, label: string, dispatch: D, thum
 
 /** Opens a collection: its photographs in the ribbon, its name on the
  * library. Takes the navigation token so a folder restore still in
- * flight cannot land its listing on top of the collection. */
+ * flight cannot land its listing on top of the collection, and drops its
+ * own listing if a newer navigation came while the members loaded: a
+ * folder clicked meanwhile is the newer wish, whichever answer arrives
+ * first. */
 export async function openCollection(id: number, label: string, dispatch: D, thumbnailEdge = 480): Promise<void> {
-  beginNavigation();
-  show(await loadCollection(id), id, label, dispatch, thumbnailEdge);
+  const nav = beginNavigation();
+  const files = await loadCollection(id);
+  if (navStale(nav)) return;
+  show(files, id, label, dispatch, thumbnailEdge);
 }
 
 /** Shows the open collection again after its membership changed, so the
  * ribbon tells the truth instead of showing ghosts. Not a navigation, so
- * it leaves the token alone: a folder clicked while the change was on
- * its way is the newer wish and must still land. */
+ * it takes no token of its own, but it gives way to one that started
+ * while it loaded: a folder clicked meanwhile must still be what shows. */
 export async function reloadCollection(id: number, label: string, dispatch: D, thumbnailEdge = 480): Promise<void> {
-  show(await loadCollection(id), id, label, dispatch, thumbnailEdge);
+  const nav = currentNavigation();
+  const files = await loadCollection(id);
+  if (navStale(nav)) return;
+  show(files, id, label, dispatch, thumbnailEdge);
 }
 
 /** The folder a way out of the open collection leads back to: the one
