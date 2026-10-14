@@ -13219,7 +13219,63 @@ async fn folder_subtree_counts(app: tauri::AppHandle, path: String) -> Result<Fo
 /// stays, and browsing to the folder again brings it back.
 #[tauri::command]
 async fn hide_folder(app: tauri::AppHandle, path: String) -> Result<usize, String> {
-    catalog_command(app, move |c| c.hide_folder(Path::new(&path)).map_err(|e| e.to_string())).await
+    catalog_command(app, move |c| {
+        let n = c.hide_folder(Path::new(&path)).map_err(|e| e.to_string())?;
+        sessions_leave_folder(c, Path::new(&path), false)?;
+        Ok(n)
+    })
+    .await
+}
+
+/// Moves the remembered sessions out of a folder a flush or hide just
+/// took off the list.
+///
+/// When the folder on screen goes, the library restores the remembered
+/// session so it is not left showing a folder the list no longer has.
+/// That session still named the folder, so the restore opened it again,
+/// and opening a folder adds it back to the catalog (and unhides it):
+/// a flushed folder came straight back, its photographs without their
+/// ratings. So, before the restore reads it:
+/// - a global session whose root is inside the folder is forgotten, and
+///   the restore falls back to the last folder still listed;
+/// - one whose subfolder is inside it goes back to its root;
+/// - a per-root session whose subfolder is inside it goes back to its
+///   root too, or picking that root again would walk back down into it;
+/// - a flush also forgets the per-root sessions of roots inside the
+///   folder, whose records are gone. A hidden root keeps its own, so
+///   opening it again lands where work in it stopped.
+pub fn sessions_leave_folder(c: &Catalog, path: &Path, flushed: bool) -> Result<(), String> {
+    let inside = |p: &str| Path::new(p).starts_with(path);
+    let err = |e: heeler_catalog::CatalogError| e.to_string();
+    let root = c.meta("tree_root").map_err(err)?;
+    let active = c.meta("active_folder").map_err(err)?;
+    match (root, active) {
+        (Some(root), _) if inside(&root) => {
+            for key in ["tree_root", "active_folder", "active_image"] {
+                c.delete_meta(key).map_err(err)?;
+            }
+        }
+        (Some(root), Some(active)) if inside(&active) => {
+            c.set_meta("active_folder", &root).map_err(err)?;
+            c.delete_meta("active_image").map_err(err)?;
+        }
+        _ => {}
+    }
+    for key in c.meta_keys("session:").map_err(err)? {
+        let root = &key["session:".len()..];
+        if inside(root) {
+            if flushed {
+                c.delete_meta(&key).map_err(err)?;
+            }
+            continue;
+        }
+        let Some(session) = folder_session_payload(c, root)? else { continue };
+        if inside(&session.active_folder) {
+            let json = serde_json::json!({ "active_folder": root, "active_image": "" });
+            c.set_meta(&key, &json.to_string()).map_err(err)?;
+        }
+    }
+    Ok(())
 }
 
 /// Forgets a folder and its subfolders: the catalog's records for their
@@ -13229,6 +13285,7 @@ async fn hide_folder(app: tauri::AppHandle, path: String) -> Result<usize, Strin
 async fn flush_folder(app: tauri::AppHandle, path: String) -> Result<FolderSubtreeCounts, String> {
     catalog_command(app, move |c| {
         let (folders, images) = c.flush_folder(Path::new(&path)).map_err(|e| e.to_string())?;
+        sessions_leave_folder(c, Path::new(&path), true)?;
         Ok(FolderSubtreeCounts { folders, images })
     })
     .await
@@ -29823,6 +29880,91 @@ mod tests {
         // A record that does not parse reads as never-worked-in.
         catalog.set_meta("session:F:\\broken", "not json").unwrap();
         assert!(folder_session_payload(&catalog, "F:\\broken").unwrap().is_none());
+    }
+
+    /// Both commands that take a folder off the list move the sessions
+    /// out of it, in the same catalog call as the change itself.
+    #[test]
+    fn flush_and_hide_move_the_sessions_out() {
+        let src = src_all();
+        for (name, flushed) in [("flush_folder", "true"), ("hide_folder", "false")] {
+            let start = src.find(&format!("async fn {name}(")).unwrap();
+            let body = &src[start..src[start..].find("\n}\n").unwrap() + start];
+            assert!(
+                body.contains(&format!("sessions_leave_folder(c, Path::new(&path), {flushed})")),
+                "{name} must take the remembered sessions out of the folder"
+            );
+        }
+    }
+
+    fn global_session(c: &Catalog) -> (Option<String>, Option<String>, Option<String>) {
+        (c.meta("tree_root").unwrap(), c.meta("active_folder").unwrap(), c.meta("active_image").unwrap())
+    }
+
+    /// Flushing the folder on screen restored the session that named it,
+    /// and the restore opened it again, adding it back to the catalog.
+    /// The global session leaves the folder first.
+    #[test]
+    fn a_flush_takes_the_session_out_of_the_folder() {
+        let c = Catalog::open_in_memory().unwrap();
+        save_ui_session_payload(&c, "/Users/Shared/Media", "/Users/Shared/Media/star_sequence", Some("img_4")).unwrap();
+        save_ui_session_payload(&c, "/Photos", "/Photos/2026/june", Some("img_1")).unwrap();
+        save_ui_session_payload(&c, "/Users/Shared/Media", "/Users/Shared/Media/star_sequence", Some("img_4")).unwrap();
+
+        sessions_leave_folder(&c, Path::new("/Users/Shared/Media"), true).unwrap();
+        // The root is gone, so nothing is left to restore: the library
+        // falls back to the last folder still listed.
+        assert_eq!(global_session(&c), (None, None, None));
+        assert!(c.meta("session:/Users/Shared/Media").unwrap().is_none(), "its records are gone");
+        // Another root's place is untouched.
+        let photos = folder_session_payload(&c, "/Photos").unwrap().unwrap();
+        assert_eq!(photos.active_folder, "/Photos/2026/june");
+        assert_eq!(photos.active_image, "img_1");
+    }
+
+    /// Flushing the subfolder you are in keeps the root and goes back up
+    /// to it, rather than walking back down into the flushed subfolder.
+    #[test]
+    fn a_flushed_subfolder_sends_the_session_back_to_its_root() {
+        let c = Catalog::open_in_memory().unwrap();
+        save_ui_session_payload(&c, "/Photos", "/Photos/2026/june", Some("img_1")).unwrap();
+        sessions_leave_folder(&c, Path::new("/Photos/2026"), true).unwrap();
+        assert_eq!(global_session(&c), (Some("/Photos".into()), Some("/Photos".into()), None));
+        let photos = folder_session_payload(&c, "/Photos").unwrap().unwrap();
+        assert_eq!(photos.active_folder, "/Photos");
+        assert_eq!(photos.active_image, "");
+    }
+
+    /// Hiding keeps every record, including a hidden root's own place, so
+    /// opening it again lands where work stopped; but nothing restored
+    /// on its own may open it.
+    #[test]
+    fn a_hide_takes_the_session_out_and_keeps_the_roots_place() {
+        let c = Catalog::open_in_memory().unwrap();
+        save_ui_session_payload(&c, "/Photos", "/Photos/2026/june", Some("img_1")).unwrap();
+        save_ui_session_payload(&c, "/Media", "/Media/stars", Some("img_4")).unwrap();
+        sessions_leave_folder(&c, Path::new("/Media"), false).unwrap();
+        assert_eq!(global_session(&c), (None, None, None));
+        let media = folder_session_payload(&c, "/Media").unwrap().unwrap();
+        assert_eq!(media.active_folder, "/Media/stars");
+
+        save_ui_session_payload(&c, "/Photos", "/Photos/2026/june", Some("img_1")).unwrap();
+        sessions_leave_folder(&c, Path::new("/Photos/2026/june"), false).unwrap();
+        assert_eq!(global_session(&c), (Some("/Photos".into()), Some("/Photos".into()), None));
+    }
+
+    /// A session elsewhere is left alone, and a folder whose name only
+    /// starts the same is not inside: paths compare by component.
+    #[test]
+    fn a_session_outside_the_folder_is_left_alone() {
+        let c = Catalog::open_in_memory().unwrap();
+        save_ui_session_payload(&c, "/Photos", "/Photos/2026-june", Some("img_1")).unwrap();
+        sessions_leave_folder(&c, Path::new("/Photos/2026"), true).unwrap();
+        assert_eq!(
+            global_session(&c),
+            (Some("/Photos".into()), Some("/Photos/2026-june".into()), Some("img_1".into()))
+        );
+        assert_eq!(folder_session_payload(&c, "/Photos").unwrap().unwrap().active_folder, "/Photos/2026-june");
     }
 
     #[test]

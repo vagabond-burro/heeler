@@ -1280,6 +1280,25 @@ impl Catalog {
         Ok(())
     }
 
+    pub fn delete_meta(&self, key: &str) -> Result<(), CatalogError> {
+        self.conn.execute("DELETE FROM meta WHERE key = ?1", params![key])?;
+        Ok(())
+    }
+
+    /// Every meta key that starts with `prefix`, in order.
+    pub fn meta_keys(&self, prefix: &str) -> Result<Vec<String>, CatalogError> {
+        let mut stmt = self.conn.prepare("SELECT key FROM meta ORDER BY key")?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        let mut out = Vec::new();
+        for key in rows {
+            let key = key?;
+            if key.starts_with(prefix) {
+                out.push(key);
+            }
+        }
+        Ok(out)
+    }
+
     pub fn meta(&self, key: &str) -> Result<Option<String>, CatalogError> {
         let result = self.conn.query_row(
             "SELECT value FROM meta WHERE key = ?1",
@@ -4231,6 +4250,20 @@ mod tests {
         let picks = summaries.iter().find(|s| s.name == "Picks").unwrap();
         assert_eq!(picks.id, fresh);
         assert_eq!(picks.image_count, 1, "the forgotten member is left out");
+    }
+
+    #[test]
+    fn meta_keys_list_by_prefix_and_a_key_can_be_deleted() {
+        let c = Catalog::open_in_memory().unwrap();
+        c.set_meta("session:/b", "2").unwrap();
+        c.set_meta("session:/a", "1").unwrap();
+        c.set_meta("tree_root", "/a").unwrap();
+        assert_eq!(c.meta_keys("session:").unwrap(), vec!["session:/a".to_string(), "session:/b".to_string()]);
+        c.delete_meta("session:/a").unwrap();
+        c.delete_meta("never-set").unwrap();
+        assert!(c.meta("session:/a").unwrap().is_none());
+        assert_eq!(c.meta_keys("session:").unwrap(), vec!["session:/b".to_string()]);
+        assert_eq!(c.meta("tree_root").unwrap().as_deref(), Some("/a"));
     }
 
     #[test]
