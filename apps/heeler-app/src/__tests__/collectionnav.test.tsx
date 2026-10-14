@@ -4,10 +4,11 @@
 // off it, deleting it, and Undo and Redo of a delete each decide that,
 // and these pin what each decides today.
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "../app";
+import * as bridge from "../bridge";
 import { addToCollection, createCollection, mockResetCollections } from "../bridge";
 import { initialState } from "../data";
 import { deleteCollectionStep, resetLibraryUndo } from "../libraryundo";
@@ -18,6 +19,7 @@ import { openCollection, reloadCollection } from "../ui/collectionnav";
 type User = ReturnType<typeof userEvent.setup>;
 
 beforeEach(() => {
+  vi.restoreAllMocks();
   mockResetCollections();
   resetLibraryUndo();
 });
@@ -244,6 +246,26 @@ describe("the commands behind it", () => {
     const reloading = reloadCollection(id, "Picks", dispatch, 480);
     beginNavigation();
     await reloading;
+    expect(sent.some((c) => c.type === "set_library" || c.type === "load_images")).toBe(false);
+  });
+
+  it("a removal's reload gives way to a folder clicked while the removal itself ran", async () => {
+    // From the independent review: the reload noted the navigation only
+    // after the removal's own wait, by when the click had moved it.
+    await createCollection("Picks");
+    await addToCollection(1, "a", "A.dng");
+    const original = bridge.removeFromCollection;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    vi.spyOn(bridge, "removeFromCollection").mockImplementation(async (c, i) => {
+      await held;
+      return original(c, i);
+    });
+    const { state, sent, dispatch } = recorder(1);
+    const removing = editCollectionMembership(state, dispatch, ["a"], "remove");
+    beginNavigation();
+    release();
+    await removing;
     expect(sent.some((c) => c.type === "set_library" || c.type === "load_images")).toBe(false);
   });
 

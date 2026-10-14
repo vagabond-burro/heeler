@@ -33,9 +33,19 @@ export async function openCollection(id: number, label: string, dispatch: D, thu
 /** Shows the open collection again after its membership changed, so the
  * ribbon tells the truth instead of showing ghosts. Not a navigation, so
  * it takes no token of its own, but it gives way to one that started
- * while it loaded: a folder clicked meanwhile must still be what shows. */
-export async function reloadCollection(id: number, label: string, dispatch: D, thumbnailEdge = 480): Promise<void> {
-  const nav = currentNavigation();
+ * since `since`: a folder clicked meanwhile must still be what shows.
+ * A caller that waited on something first (the membership change
+ * itself) passes the navigation it noted before that wait; noted only
+ * here, a click during the caller's wait would already count as
+ * current. */
+export async function reloadCollection(
+  id: number,
+  label: string,
+  dispatch: D,
+  thumbnailEdge = 480,
+  since: number = currentNavigation(),
+): Promise<void> {
+  const nav = since;
   const files = await loadCollection(id);
   if (navStale(nav)) return;
   show(files, id, label, dispatch, thumbnailEdge);

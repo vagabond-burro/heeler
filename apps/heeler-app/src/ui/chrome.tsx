@@ -110,6 +110,9 @@ export async function editCollectionMembership(
 ): Promise<void> {
   const col = state.collections.find((c) => c.id === state.activeCollection);
   if (op !== "remove-all" && !col) return;
+  // Noted before the membership writes: a folder clicked while they run
+  // is newer than this errand, and the reload must give way to it.
+  const nav = currentNavigation();
   for (const id of ids) {
     const name = state.images.find((i) => i.id === id)?.name;
     if (op === "add") await addToCollection(col!.id, id, name);
@@ -117,7 +120,7 @@ export async function editCollectionMembership(
     else for (const c of state.collections) await removeFromCollection(c.id, id);
   }
   // Viewing a collection that just shrank: show it again.
-  if (op !== "add" && col) await reloadCollection(col.id, col.name, dispatch, state.prefs.thumbnailEdge);
+  if (op !== "add" && col) await reloadCollection(col.id, col.name, dispatch, state.prefs.thumbnailEdge, nav);
   void refreshLibrary(dispatch);
   const n = ids.length;
   const what = `${n} photo${n === 1 ? "" : "s"}`;
