@@ -13460,7 +13460,21 @@ function syncToolGroups(prev: State, next: State, cmd: Command): State {
 }
 
 export function reduce(s: State, cmd: Command): State {
-  return reduceWith(s, cmd, true);
+  return endLibraryRedo(s, reduceWith(s, cmd, true), cmd);
+}
+
+/** A new edit ends the chance to redo a library step, as it ends the
+ * photograph's own redo: undo a collection delete, change a dial, and
+ * Redo must not delete the collection again. A new edit is a step on
+ * the open photograph's history that was not in it before; Undo, Redo,
+ * a jump through the history, a photo switch and a take switch leave
+ * none. */
+function endLibraryRedo(s: State, next: State, cmd: Command): State {
+  if (next.libraryRedo.length === 0 || cmd.type === "undo" || cmd.type === "redo") return next;
+  if (next.activeImage !== s.activeImage) return next;
+  const top = next.undoStack[next.undoStack.length - 1];
+  if (!top || s.undoStack.includes(top)) return next;
+  return { ...next, libraryRedo: [] };
 }
 
 /** The reducer for a copy that is never dispatched or kept: a guided
