@@ -10,7 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { App } from "../app";
 import { addToCollection, createCollection, mockResetCollections } from "../bridge";
 import { initialState } from "../data";
-import { resetLibraryUndo } from "../libraryundo";
+import { deleteCollectionStep, resetLibraryUndo } from "../libraryundo";
 import type { Command, State } from "../state";
 import { beginNavigation, editCollectionMembership } from "../ui/chrome";
 import { openCollection } from "../ui/collectionnav";
@@ -203,6 +203,20 @@ describe("the commands behind it", () => {
     const load = sent.find((c) => c.type === "load_images");
     expect(load && load.type === "load_images" && load.images).toEqual([]);
     expect(sent).toContainEqual({ type: "set_library", label: "Picks", collection: 1, path: null });
+  });
+
+  it("deleting the open collection with no folder behind it takes the navigation", async () => {
+    // So a folder listing still on its way cannot land over the emptied
+    // ribbon. From the second reader's mutation pass: nothing read the
+    // token on this way out.
+    const id = await createCollection("Picks");
+    await addToCollection(id, "a", "A.dng");
+    const { state, sent, dispatch } = recorder(id);
+    const before = beginNavigation();
+    await deleteCollectionStep(state, dispatch, { id, name: "Picks", open: true, back: null });
+    // One for the way out, one for this probe.
+    expect(beginNavigation()).toBe(before + 2);
+    expect(sent).toContainEqual({ type: "set_library", label: "No folder open", collection: null, path: null });
   });
 
   it("adding does not reload, and nothing reloads with no collection open", async () => {
