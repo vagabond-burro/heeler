@@ -46,6 +46,26 @@ describe("the lens correction ahead of the crop", () => {
     expect(lensBeforeCrop(NODES, noLens)).toBe(noLens);
   });
 
+  it("turns every pair in one read: a crop feeding two lens nodes in a row, and a second crop with its own lens", () => {
+    // lib.rs every_saved_crop_then_lens_pair_is_read_lens_first, the same graph.
+    const nodes = [
+      card("src", "heeler.image_source"),
+      card("crop", "heeler.crop_rotate"),
+      card("lens", "heeler.lens_correct"),
+      card("lens2", "heeler.lens_correct"),
+      card("crop2", "heeler.crop_rotate"),
+      card("lens3", "heeler.lens_correct"),
+      card("output", "heeler.output"),
+    ];
+    const link = (from: string, to: string): Wire => ({ from, to, toPort: "in", kind: "image" });
+    const old = [link("src", "crop"), link("crop", "lens"), link("lens", "lens2"), link("lens2", "crop2"), link("crop2", "lens3"), link("lens3", "output")];
+    const out = lensBeforeCrop(nodes, old);
+    const chain = ["output"];
+    for (let at = feed(out, "output"); at; at = feed(out, at)) chain.unshift(at);
+    expect(chain).toEqual(["src", "lens", "lens2", "lens3", "crop", "crop2", "output"]);
+    expect(out).toHaveLength(old.length);
+  });
+
   it("happens as a saved graph loads", () => {
     const { wires } = migrateGraph(NODES, OLD);
     expect(feed(wires, "lens")).toBe("src");

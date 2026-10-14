@@ -8602,9 +8602,24 @@ function splitDetail(nodes: NodeCard[], wires: Wire[]): { nodes: NodeCard[]; wir
  * lens fed reads the crop. Everything else on either node stays (a mask
  * on the lens, the crop's other readers), and the masks then read the
  * frame by the usual rule. Mirrored for saved graphs the desktop renders
- * itself (lib.rs lens_before_crop). A graph already in order, or without
- * the pair wired that way, comes back untouched. */
+ * itself (lib.rs lens_before_crop). Every such pair is turned, one at a
+ * time (two crops, or a crop feeding two lens nodes, end with every lens
+ * ahead of every crop). A graph already in order, or without the pair
+ * wired that way, comes back untouched. */
 export function lensBeforeCrop(nodes: NodeCard[], wires: Wire[]): Wire[] {
+  // A turn can hand a crop a lens it did not feed before (the lens fed
+  // another lens), so the pairs are found afresh each time; the bound
+  // only guards against a graph wired in a loop.
+  let out = wires;
+  for (let i = 0; i < wires.length; i++) {
+    const next = turnCropLensPair(nodes, out);
+    if (next === out) break;
+    out = next;
+  }
+  return out;
+}
+
+function turnCropLensPair(nodes: NodeCard[], wires: Wire[]): Wire[] {
   const isImage = (w: Wire) => w.kind !== "mask" && (w.fromPort ?? "out") === "out";
   const pair = wires.find(
     (w) =>

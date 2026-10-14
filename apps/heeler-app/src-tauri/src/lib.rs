@@ -7544,24 +7544,31 @@ impl From<UiGraphWire> for UiGraph {
 /// nobody has opened since must render what the app shows. Where the
 /// crop's output feeds the lens's input, what fed the crop feeds the
 /// lens, the lens feeds the crop, and everything the lens fed reads the
-/// crop; anything else on either node stays. A graph already in order
-/// comes back as it was.
+/// crop; anything else on either node stays. Every such pair is turned,
+/// one at a time (two crops, or a crop feeding two lens nodes, end with
+/// every lens ahead of every crop), and a graph already in order comes
+/// back as it was.
 fn lens_before_crop(mut ui: UiGraph) -> UiGraph {
-    let of_type = |id: &str, ty: &str| ui.nodes.iter().any(|n| n.id == id && n.node_type == ty);
-    let Some(pair) = ui.connections.iter().position(|c| {
-        c.from.1 == "out" && c.to.1 == "in" && of_type(&c.from.0, "heeler.crop_rotate") && of_type(&c.to.0, "heeler.lens_correct")
-    }) else {
-        return ui;
-    };
-    let (crop, lens) = (ui.connections[pair].from.0.clone(), ui.connections[pair].to.0.clone());
-    let Some(feed) = ui.connections.iter().position(|c| c.to.0 == crop && c.to.1 == "in") else { return ui };
-    for (i, c) in ui.connections.iter_mut().enumerate() {
-        if i == feed {
-            c.to.0 = lens.clone();
-        } else if i == pair {
-            *c = UiConnection { from: (lens.clone(), "out".into()), to: (crop.clone(), "in".into()) };
-        } else if c.from.0 == lens && c.from.1 == "out" {
-            c.from.0 = crop.clone();
+    // A turn can hand a crop a lens it did not feed before (the lens fed
+    // another lens), so the pairs are found afresh each time; the bound
+    // only guards against a graph wired in a loop.
+    for _ in 0..ui.connections.len() {
+        let of_type = |id: &str, ty: &str| ui.nodes.iter().any(|n| n.id == id && n.node_type == ty);
+        let Some(pair) = ui.connections.iter().position(|c| {
+            c.from.1 == "out" && c.to.1 == "in" && of_type(&c.from.0, "heeler.crop_rotate") && of_type(&c.to.0, "heeler.lens_correct")
+        }) else {
+            break;
+        };
+        let (crop, lens) = (ui.connections[pair].from.0.clone(), ui.connections[pair].to.0.clone());
+        let Some(feed) = ui.connections.iter().position(|c| c.to.0 == crop && c.to.1 == "in") else { break };
+        for (i, c) in ui.connections.iter_mut().enumerate() {
+            if i == feed {
+                c.to.0 = lens.clone();
+            } else if i == pair {
+                *c = UiConnection { from: (lens.clone(), "out".into()), to: (crop.clone(), "in".into()) };
+            } else if c.from.0 == lens && c.from.1 == "out" {
+                c.from.0 = crop.clone();
+            }
         }
     }
     ui
@@ -31474,6 +31481,47 @@ mod tests {
         let again = lens_before_crop(old.clone());
         let pairs = |g: &UiGraph| g.connections.iter().map(|c| (c.from.clone(), c.to.clone())).collect::<Vec<_>>();
         assert_eq!(pairs(&again), pairs(&old));
+    }
+
+    /// Every crop-then-lens pair is turned in one read, not one per open
+    /// and save: a crop feeding two lens nodes in a row, and a second
+    /// crop with a lens of its own. lensbeforecrop.test.ts holds the
+    /// frontend to the same graphs.
+    #[test]
+    fn every_saved_crop_then_lens_pair_is_read_lens_first() {
+        let node = |id: &str, ty: &str| serde_json::json!({ "id": id, "type": ty, "enabled": true, "params": {} });
+        let link = |a: &str, b: &str| serde_json::json!({ "from": [a, "out"], "to": [b, "in"] });
+        let old: UiGraph = serde_json::from_value(serde_json::json!({
+            "graph_id": "old",
+            "nodes": [
+                node("src", "heeler.image_source"),
+                node("crop", "heeler.crop_rotate"),
+                node("lens", "heeler.lens_correct"),
+                node("lens2", "heeler.lens_correct"),
+                node("crop2", "heeler.crop_rotate"),
+                node("lens3", "heeler.lens_correct"),
+                node("output", "heeler.output")
+            ],
+            "connections": [
+                link("src", "crop"),
+                link("crop", "lens"),
+                link("lens", "lens2"),
+                link("lens2", "crop2"),
+                link("crop2", "lens3"),
+                link("lens3", "output")
+            ]
+        }))
+        .unwrap();
+        let ui = lens_before_crop(old);
+        let mut at = "output".to_string();
+        let mut chain = vec![at.clone()];
+        while let Some(from) = wired(&ui, &at, "in") {
+            chain.push(from.clone());
+            at = from;
+        }
+        chain.reverse();
+        assert_eq!(chain, ["src", "lens", "lens2", "lens3", "crop", "crop2", "output"]);
+        assert_eq!(ui.connections.len(), 6);
     }
 
     /// What the reorder is for: the lens correction reads the whole frame,
