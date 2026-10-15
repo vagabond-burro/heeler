@@ -14234,6 +14234,14 @@ pub struct FolderMissing {
     pub missing: Vec<String>,
 }
 
+/// A file name in NFC, for comparing a catalog row's name against a
+/// directory listing: the two can spell the same name in different
+/// Unicode forms (a Mac's disk can hold NFD while a row written on
+/// Windows is NFC), and byte-wise they differ.
+fn nfc(name: &std::ffi::OsStr) -> String {
+    icu_normalizer::ComposingNormalizerBorrowed::new_nfc().normalize(&name.to_string_lossy()).into_owned()
+}
+
 /// The photographs among each folder's records whose file is not there,
 /// one folder listing each rather than a question per photograph, and
 /// none for a folder on a drive that is not plugged in or that is gone
@@ -14248,13 +14256,13 @@ pub fn missing_by_folder(rows: Vec<(String, Vec<(String, String)>)>) -> Vec<Fold
             continue;
         }
         let Ok(entries) = std::fs::read_dir(dir) else { continue };
-        let names: std::collections::HashSet<std::ffi::OsString> = entries.flatten().map(|e| e.file_name()).collect();
+        let names: std::collections::HashSet<String> = entries.flatten().map(|e| nfc(&e.file_name())).collect();
         let missing: Vec<String> = records
             .into_iter()
             .filter(|(_, path)| {
                 let p = Path::new(path);
                 match (p.parent(), p.file_name()) {
-                    (Some(parent), Some(name)) if parent == dir => !names.contains(name),
+                    (Some(parent), Some(name)) if parent == dir => !names.contains(&nfc(name)),
                     _ => !p.exists(),
                 }
             })
@@ -25599,6 +25607,27 @@ mod tests {
             (s(&d.path().join("gone")), vec![("x".to_string(), s(&d.path().join("gone").join("x.png")))]),
         ];
         assert_eq!(missing_by_folder(rows), vec![FolderMissing { path: s(&a), missing: vec!["ag".into()] }]);
+    }
+
+    /// The same name in another Unicode form: a Mac can hold a file in
+    /// NFD while the catalog row was written NFC (or the other way round
+    /// after a rename outside Heeler). Byte-wise the names differ, so a
+    /// byte-wise match called the file missing although it was there;
+    /// Forget stayed safe (it asks the disk again with exists()), but the
+    /// badge and the Folders count lied.
+    #[test]
+    fn a_present_file_in_another_unicode_form_is_not_called_missing() {
+        let d = tempfile::tempdir().unwrap();
+        let on_disk = d.path().join("\u{E9}.png");
+        std::fs::write(&on_disk, b"x").unwrap();
+        let in_the_row = d.path().join("e\u{301}.png");
+        if !in_the_row.exists() {
+            eprintln!("this volume keeps the two forms apart; the test does not apply");
+            return;
+        }
+        let s = |p: &Path| p.to_string_lossy().into_owned();
+        let rows = vec![(s(d.path()), vec![("r".to_string(), s(&in_the_row))])];
+        assert!(missing_by_folder(rows).is_empty(), "present on disk, in the other Unicode form");
     }
 
     #[test]

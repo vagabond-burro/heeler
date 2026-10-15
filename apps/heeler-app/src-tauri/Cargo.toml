@@ -40,6 +40,11 @@ tauri-plugin-window-state = "2.4.1"
 # libusb, which is the dependency the transport decision exists to
 # avoid.
 nusb = "0.2"
+# NFC for matching a catalog row's file name against a directory listing
+# (missing_by_folder): a disk can hold the same name in NFD while the row
+# is NFC, and byte-wise the two differ. Already linked through ureq's
+# idna, so no new crate enters the lockfile; Unicode-3.0 license.
+icu_normalizer = { version = "2", default-features = false, features = ["compiled_data"] }
 # The assistant's requests to a model server (src/assistant.rs). The
 # same crate heeler-vision already fetches models with, so nothing new
 # enters the lockfile.

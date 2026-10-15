@@ -1829,6 +1829,7 @@ dependencies = [
  "heeler-project",
  "heeler-stitch",
  "heeler-vision",
+ "icu_normalizer",
  "if-addrs",
  "nusb",
  "rayon",
