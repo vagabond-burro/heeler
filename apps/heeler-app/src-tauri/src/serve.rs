@@ -524,6 +524,12 @@ const MAX_CONNECTIONS: usize = 64;
 /// How long a connection may take to send its request, and a reader to
 /// take an answer, before it is closed.
 const READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+/// How long one read waits before the connection looks at the stop flag
+/// again. A stop shuts every socket down, but on Windows that does not
+/// wake a read already waiting on it (macOS's does), so a reader waiting
+/// on a client that never finishes its request would otherwise sit out
+/// the whole READ_TIMEOUT after the share stopped.
+const READ_SLICE: std::time::Duration = std::time::Duration::from_millis(100);
 const WRITE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 /// How often the listener looks at the stop flag between connections.
 const ACCEPT_POLL: std::time::Duration = std::time::Duration::from_millis(25);
@@ -550,6 +556,8 @@ struct Connections {
 
 /// What every connection thread of one share reads.
 struct Site {
+    /// the share's stop flag, which a waiting reader checks between reads
+    stop: Arc<AtomicBool>,
     token: String,
     simple: bool,
     name: String,
@@ -568,7 +576,12 @@ enum HeadError {
 /// Reads one request head and gives back its method and target. The
 /// share serves GET and HEAD with no body, so nothing past the head is
 /// read: the connection is closed after the answer.
-fn read_head(r: &mut impl Read) -> Result<(String, String), HeadError> {
+///
+/// A read that times out (each waits READ_SLICE) is not the end: the
+/// reader asks `stopped` and checks READ_TIMEOUT, and reads again. So a
+/// stop ends a waiting reader within a slice on every platform.
+fn read_head(r: &mut impl Read, stopped: impl Fn() -> bool) -> Result<(String, String), HeadError> {
+    let started = std::time::Instant::now();
     let mut head = Vec::new();
     let mut chunk = [0u8; 2048];
     let end = loop {
@@ -579,8 +592,15 @@ fn read_head(r: &mut impl Read) -> Result<(String, String), HeadError> {
             return Err(HeadError::TooLarge);
         }
         match r.read(&mut chunk) {
-            Ok(0) | Err(_) => return Err(HeadError::Gone),
+            Ok(0) => return Err(HeadError::Gone),
             Ok(n) => head.extend_from_slice(&chunk[..n]),
+            Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {
+                if stopped() || started.elapsed() >= READ_TIMEOUT {
+                    return Err(HeadError::Gone);
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(_) => return Err(HeadError::Gone),
         }
     };
     if end > MAX_HEAD {
@@ -601,9 +621,9 @@ fn read_head(r: &mut impl Read) -> Result<(String, String), HeadError> {
 
 /// Serves one connection: one request, one answer, then closed.
 fn serve_connection(mut stream: std::net::TcpStream, site: &Site) {
-    let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
+    let _ = stream.set_read_timeout(Some(READ_SLICE));
     let _ = stream.set_write_timeout(Some(WRITE_TIMEOUT));
-    let (answer, head_only) = match read_head(&mut stream) {
+    let (answer, head_only) = match read_head(&mut stream, || site.stop.load(Ordering::Relaxed)) {
         Ok((method, target)) if method == "GET" || method == "HEAD" => {
             (handle(&target, &site.token, site.simple, &site.name, &site.dir, &site.shared), method == "HEAD")
         }
@@ -702,7 +722,7 @@ pub fn start(
     let status = ServeStatus { name: name.clone(), url, count: items.len() };
     let stop_flag = Arc::new(AtomicBool::new(false));
     let shared = Arc::new(Mutex::new(Shared { items, live: None }));
-    let site = Arc::new(Site { token, simple, name, dir: dir.clone(), shared: shared.clone() });
+    let site = Arc::new(Site { stop: stop_flag.clone(), token, simple, name, dir: dir.clone(), shared: shared.clone() });
     let flag = stop_flag.clone();
     let listening = std::thread::spawn(move || accept_loop(listener, flag, site));
     *running().lock().unwrap() =
@@ -1063,14 +1083,44 @@ mod tests {
         assert_eq!(wait_for_no_connections(), 0);
     }
 
+    /// On Windows a stop's shutdown does not wake a read already waiting,
+    /// so a reader ends on the stop flag alone: here a reader whose reads
+    /// only ever time out, as such a socket's do, stops within a few
+    /// reads of the flag going up rather than at READ_TIMEOUT.
+    #[test]
+    fn a_waiting_reader_ends_on_the_stop_flag_alone() {
+        struct Waiting(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+        impl Read for Waiting {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                std::thread::sleep(std::time::Duration::from_millis(5));
+                Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out"))
+            }
+        }
+        let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let stop = AtomicBool::new(false);
+        let counted = reads.clone();
+        let started = std::time::Instant::now();
+        let got = read_head(&mut Waiting(reads.clone()), || {
+            // The flag goes up on the third look.
+            if counted.load(Ordering::SeqCst) >= 3 {
+                stop.store(true, Ordering::SeqCst);
+            }
+            stop.load(Ordering::SeqCst)
+        });
+        assert_eq!(got, Err(HeadError::Gone));
+        assert_eq!(reads.load(Ordering::SeqCst), 3);
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+    }
+
     #[test]
     fn a_request_head_is_read_to_its_end_and_no_further() {
         let mut r: &[u8] = b"GET /t/x/img/a.webp?v=2 HTTP/1.1\r\nHost: h\r\n\r\nleftover";
-        assert_eq!(read_head(&mut r), Ok(("GET".into(), "/t/x/img/a.webp?v=2".into())));
+        assert_eq!(read_head(&mut r, || false), Ok(("GET".into(), "/t/x/img/a.webp?v=2".into())));
         let mut cut: &[u8] = b"GET / HTTP/1.1\r\nHost: h\r\n";
-        assert_eq!(read_head(&mut cut), Err(HeadError::Gone));
+        assert_eq!(read_head(&mut cut, || false), Err(HeadError::Gone));
         let mut odd: &[u8] = b"GET http://elsewhere/ HTTP/1.1\r\n\r\n";
-        assert_eq!(read_head(&mut odd), Err(HeadError::Malformed));
+        assert_eq!(read_head(&mut odd, || false), Err(HeadError::Malformed));
     }
 
     #[test]
