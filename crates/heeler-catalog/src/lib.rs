@@ -1893,6 +1893,19 @@ impl Catalog {
     /// Points an image at the folder it actually lives in. Rescans call
     /// this because the pre-lazy-scan era registered whole trees under
     /// the root folder, leaving folder_id wrong for anything deeper.
+    /// Moves a photograph's row to `folder_id` only when it is somewhere
+    /// else, and says whether it moved: a folder scan asks this of every
+    /// file, and an unconditional write per file was most of the scan's
+    /// time in the catalog, while the "healed" count it fed counted every
+    /// file rather than the ones healed.
+    pub fn assign_folder_if_elsewhere(&self, id: &str, folder_id: i64) -> Result<bool, CatalogError> {
+        let n = self.conn.execute(
+            "UPDATE images SET folder_id = ?2 WHERE id = ?1 AND folder_id IS NOT ?2",
+            params![id, folder_id],
+        )?;
+        Ok(n > 0)
+    }
+
     pub fn assign_folder(&self, id: &str, folder_id: i64) -> Result<(), CatalogError> {
         let n = self.conn.execute(
             "UPDATE images SET folder_id = ?2 WHERE id = ?1",

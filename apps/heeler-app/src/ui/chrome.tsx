@@ -615,6 +615,16 @@ export function takenNote(taken: number): string {
     : ` ${taken} were left as they were: the files found for them are already in the catalog as other photographs, with their own ratings, flags, keywords or edits.`;
 }
 
+/** What a folder relink says about names it found more than once under
+ * the folder: taking one of them could put the wrong photograph under
+ * the right name, so none is taken. */
+export function ambiguousNote(n: number): string {
+  if (!n) return "";
+  return n === 1
+    ? " 1 was left as it was: more than one file under that folder has its name."
+    : ` ${n} were left as they were: more than one file under that folder has each of their names.`;
+}
+
 /** Finds a moved photograph again, and everything that moved with it.
  *
  * The owner's design for this: relink "re-homes an image to its new
@@ -635,7 +645,7 @@ export async function relinkFrom(state: State, dispatch: D) {
   // not take the library back to the folder from before it.
   let nav = currentNavigation();
   try {
-    let report: { relinked: number; stillMissing: number; taken: number };
+    let report: { relinked: number; stillMissing: number; taken: number; ambiguous?: number };
     let told: string;
     if (missing.length > 1) {
       // A multi-selection relinks at the FOLDER level ("I just
@@ -658,7 +668,7 @@ export async function relinkFrom(state: State, dispatch: D) {
       const left = report.stillMissing
         ? ` ${report.stillMissing} of them ${report.stillMissing === 1 ? "was" : "were"} not under that folder.`
         : "";
-      told = stopped ? `Relinking stopped: ${stopped}` : `Relinked ${report.relinked} of ${missing.length} selected.${left}${takenNote(report.taken)}`;
+      told = stopped ? `Relinking stopped: ${stopped}` : `Relinked ${report.relinked} of ${missing.length} selected.${left}${ambiguousNote(report.ambiguous ?? 0)}${takenNote(report.taken)}`;
     } else {
       const target = await pickRelinkTarget(id);
       if (!target) return;

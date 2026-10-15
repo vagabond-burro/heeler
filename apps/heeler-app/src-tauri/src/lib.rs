@@ -516,8 +516,32 @@ pub fn scan_folder(
     paths: &mut HashMap<String, PathBuf>,
     stats: &mut ScanStats,
 ) -> Result<Vec<SessionImage>, String> {
+    let records = scan_folder_records(folder, catalog, paths, stats)?;
+    Ok(sessions_from_records(&records))
+}
+
+/// The ribbon's rows for catalog records, sorted by file name. Reads
+/// each file (its size and kind, a DNG's headers, a stack's manifest),
+/// so open_folder calls it after the catalog is released rather than
+/// holding the catalog through a folder's worth of disk reads.
+pub fn sessions_from_records(records: &[heeler_catalog::ImageRecord]) -> Vec<SessionImage> {
+    let mut out: Vec<SessionImage> = records.iter().map(record_to_session).collect();
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    out
+}
+
+/// The catalog half of a folder scan: registers the folder's files and
+/// answers its records, present and missing, without reading any file
+/// beyond the folder listing (sessions_from_records does that, after).
+pub fn scan_folder_records(
+    folder: &Path,
+    catalog: &Catalog,
+    paths: &mut HashMap<String, PathBuf>,
+    stats: &mut ScanStats,
+) -> Result<Vec<heeler_catalog::ImageRecord>, String> {
     let files = heeler_catalog::discover_files_shallow(folder).map_err(|e| e.to_string())?;
     stats.discovered = files.len();
+    let discovered: std::collections::HashSet<String> = files.iter().map(|f| f.to_string_lossy().into_owned()).collect();
     let mut out = Vec::new();
     catalog
         .batch(|catalog| {
@@ -618,8 +642,9 @@ pub fn scan_folder(
                     Some(existing) => {
                         // Heal stale ownership: the old recursive scan
                         // registered deep files under the root folder.
-                        catalog.assign_folder(&existing, folder_id)?;
-                        stats.healed += 1;
+                        if catalog.assign_folder_if_elsewhere(&existing, folder_id)? {
+                            stats.healed += 1;
+                        }
                         existing
                     }
                     None => {
@@ -640,9 +665,7 @@ pub fn scan_folder(
                     stats.hidden_skipped += 1;
                     continue;
                 }
-                let record = catalog.image(&id)?;
                 paths.insert(id.clone(), file.clone());
-                out.push(record_to_session(&record));
             }
 
             if flushed.len() != flushed_before {
@@ -666,7 +689,15 @@ pub fn scan_folder(
                 folder_id: Some(folder_id),
                 ..heeler_catalog::Filter::default()
             })?;
-            for record in &known {
+            // One read of the folder's rows answers both halves: the files
+            // just found, and the ones the catalog has here that the disk
+            // does not. Only a row whose file was not in the listing is
+            // looked for on the disk.
+            for record in known {
+                if discovered.contains(&record.path) {
+                    out.push(record);
+                    continue;
+                }
                 let path = PathBuf::from(&record.path);
                 if path.exists() {
                     continue;
@@ -675,12 +706,11 @@ pub fn scan_folder(
                 // lets one relink re-home the rest of the folder.
                 stats.missing += 1;
                 paths.insert(record.id.clone(), path);
-                out.push(record_to_session(record));
+                out.push(record);
             }
             Ok(())
         })
         .map_err(|e| e.to_string())?;
-    out.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(out)
 }
 
@@ -9958,12 +9988,15 @@ async fn open_folder(app: tauri::AppHandle, path: Option<String>) -> Result<Fold
         let ((result, scan), paths) = with_catalog_at(&app, issued, |catalog| {
             Ok(path_delta(|paths| {
                 let mut stats = ScanStats::default();
-                let result = scan_folder(&folder, catalog, paths, &mut stats);
+                let result = scan_folder_records(&folder, catalog, paths, &mut stats);
                 (result, stats)
             }))
         })?;
         merge_session_paths(&app, issued, paths)?;
-        let images = result?;
+        // The files are read with the catalog let go: a big folder's
+        // headers and manifests used to hold every other catalog call
+        // waiting behind the scan.
+        let images = sessions_from_records(&result?);
         debug_log!(
             &app,
             "open folder: {} ({}), {} images, {} subfolders, scanned in {}ms ({} on disk: {} new, {} healed, {} untrashed; {} hidden skipped, {} missing)",
@@ -13517,6 +13550,10 @@ pub struct RelinkReport {
     /// photograph, so this one was left as it was. Counted apart from
     /// still_missing, which used to swallow these without a reason.
     pub taken: usize,
+    /// Several files under the folder have its name, so none was taken.
+    /// Used to be counted as still missing, which camera numbering that
+    /// starts over makes common under a big folder.
+    pub ambiguous: usize,
 }
 
 /// Points photograph `id` at `target`, in folder `folder_id`. Answers
@@ -13632,33 +13669,63 @@ pub fn relink_in(
     Ok(report)
 }
 
-/// Finds exactly one file with this name under the root, walking
-/// subfolders but never hidden ones (`.trash` lives beside the images
-/// and holds files with exactly these names). Zero or several matches
-/// both come back empty: relinking to an ambiguous file is how the
-/// wrong photograph ends up wearing the right name.
-fn find_one_by_name(root: &Path, name: &str) -> Option<PathBuf> {
-    fn walk(dir: &Path, name: &str, hits: &mut Vec<PathBuf>) {
-        let Ok(entries) = std::fs::read_dir(dir) else { return };
-        for entry in entries.flatten() {
-            if hits.len() > 1 {
-                return;
+/// Every file under a folder-level relink's root, by name, walked once.
+///
+/// Never hidden folders (`.trash` lives beside the images and holds
+/// files with exactly these names). Each folder is walked once even when
+/// a link leads back into it, so a link loop cannot hang the relink. The
+/// relink used to walk the whole root again for every missing photograph,
+/// four hundred walks for four hundred photographs, with the catalog held
+/// the whole time; this is built once, before the catalog is asked.
+pub struct NameIndex(HashMap<std::ffi::OsString, Vec<PathBuf>>);
+
+/// What a name finds under the root.
+#[derive(Debug, PartialEq)]
+pub enum NameHit {
+    None,
+    One(PathBuf),
+    /// Several files: relinking to one of them is how the wrong
+    /// photograph ends up wearing the right name, so none is taken.
+    Several,
+}
+
+impl NameIndex {
+    /// None when `should_stop` said to stop part way.
+    pub fn build(root: &Path, should_stop: &dyn Fn() -> bool) -> Option<NameIndex> {
+        let mut found: HashMap<std::ffi::OsString, Vec<PathBuf>> = HashMap::new();
+        let mut seen = std::collections::HashSet::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            if should_stop() {
+                return None;
             }
-            let path = entry.path();
-            let hidden = entry.file_name().to_string_lossy().starts_with('.');
-            if hidden {
+            let key = std::fs::canonicalize(&dir).unwrap_or_else(|_| dir.clone());
+            if !seen.insert(key) {
                 continue;
             }
-            if path.is_dir() {
-                walk(&path, name, hits);
-            } else if entry.file_name().to_string_lossy() == name {
-                hits.push(path);
+            let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+            for entry in entries.flatten() {
+                if entry.file_name().to_string_lossy().starts_with('.') {
+                    continue;
+                }
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else {
+                    found.entry(entry.file_name()).or_default().push(path);
+                }
             }
         }
+        Some(NameIndex(found))
     }
-    let mut hits = Vec::new();
-    walk(root, name, &mut hits);
-    (hits.len() == 1).then(|| hits.remove(0))
+
+    pub fn find(&self, name: &str) -> NameHit {
+        match self.0.get(std::ffi::OsStr::new(name)).map(Vec::as_slice) {
+            None | Some([]) => NameHit::None,
+            Some([one]) => NameHit::One(one.clone()),
+            Some(_) => NameHit::Several,
+        }
+    }
 }
 
 /// Folder-level relink for a multi-selection ("if a bunch
@@ -13692,9 +13759,26 @@ pub fn relink_in_folder_watched(
     if !root.is_dir() {
         return Err(format!("{} is not a folder", root.display()));
     }
+    // The stop is heard between photographs here; relink_folder, which
+    // walks before it takes the catalog, hears it during the walk too.
+    let index = NameIndex::build(root, &|| false).unwrap_or(NameIndex(HashMap::new()));
+    relink_in_folder_indexed(catalog, paths, ids, root, &index, should_stop, progress)
+}
+
+/// relink_in_folder_watched with the root already walked (NameIndex),
+/// so the catalog is held only for the catalog's part.
+pub fn relink_in_folder_indexed(
+    catalog: &Catalog,
+    paths: &mut HashMap<String, PathBuf>,
+    ids: &[String],
+    root: &Path,
+    index: &NameIndex,
+    should_stop: &dyn Fn() -> bool,
+    progress: &mut dyn FnMut(u64, u64),
+) -> Result<RelinkReport, String> {
     let mut report = RelinkReport::default();
     let mut moved = Vec::new();
-    let outcome = relink_each(catalog, ids, root, should_stop, progress, &mut report, &mut moved);
+    let outcome = relink_each(catalog, ids, root, index, should_stop, progress, &mut report, &mut moved);
     // Every catalog row that moved is committed as it goes, so the
     // session's path map has to learn about every one of them however
     // the run ends: whole, stopped, or failed. A run that returned early
@@ -13714,6 +13798,7 @@ fn relink_each(
     catalog: &Catalog,
     ids: &[String],
     root: &Path,
+    index: &NameIndex,
     should_stop: &dyn Fn() -> bool,
     progress: &mut dyn FnMut(u64, u64),
     report: &mut RelinkReport,
@@ -13727,7 +13812,7 @@ fn relink_each(
                 report.relinked
             ));
         }
-        relink_one(catalog, id, root, report, moved)?;
+        relink_one(catalog, id, root, index, report, moved)?;
         progress(checked as u64 + 1, ids.len() as u64);
     }
     Ok(())
@@ -13738,6 +13823,7 @@ fn relink_one(
     catalog: &Catalog,
     id: &str,
     root: &Path,
+    index: &NameIndex,
     report: &mut RelinkReport,
     moved: &mut Vec<(String, PathBuf)>,
 ) -> Result<(), String> {
@@ -13746,9 +13832,16 @@ fn relink_one(
     if Path::new(&rec.path).exists() {
         return Ok(());
     }
-    let Some(found) = find_one_by_name(root, &rec.file_name) else {
-        report.still_missing += 1;
-        return Ok(());
+    let found = match index.find(&rec.file_name) {
+        NameHit::One(found) => found,
+        NameHit::Several => {
+            report.ambiguous += 1;
+            return Ok(());
+        }
+        NameHit::None => {
+            report.still_missing += 1;
+            return Ok(());
+        }
     };
     // Found under the root, so it always has a folder.
     let parent = found.parent().unwrap_or(root);
@@ -13790,8 +13883,17 @@ async fn relink_folder(
         let mut tick = move |checked: u64, total: u64| {
             progress::emit(&emitter, "relink", &reporting, checked, total, format!("Checking files: {checked} of {total}"));
         };
+        if !root.is_dir() {
+            return Err(format!("{} is not a folder", root.display()));
+        }
+        // The walk is the slow part, and it needs no catalog: it is done
+        // first, with the catalog free for everything else meanwhile.
+        progress::emit(&app, "relink", &watched, 0, image_ids.len() as u64, "Looking through the folder".to_string());
+        let Some(index) = NameIndex::build(&root, &stop) else {
+            return Err("canceled before any photograph was checked".into());
+        };
         let (result, paths) = with_catalog_at(&app, issued, |c| {
-            Ok(path_delta(|paths| relink_in_folder_watched(c, paths, &image_ids, &root, &stop, &mut tick)))
+            Ok(path_delta(|paths| relink_in_folder_indexed(c, paths, &image_ids, &root, &index, &stop, &mut tick)))
         })?;
         merge_session_paths(&app, issued, paths)?;
         result
@@ -13821,6 +13923,19 @@ async fn relink_image(
     .map_err(|e| e.to_string())?
 }
 
+/// The rows whose file is not there, leaving out the ones on a drive that
+/// is not plugged in: those are not known to be gone, and listing a whole
+/// unplugged drive as missing invited relinking or forgetting it.
+pub fn missing_rows(rows: &[heeler_catalog::ImageRecord]) -> Vec<&heeler_catalog::ImageRecord> {
+    let mut check = trash::VolumeCheck::default();
+    rows.iter()
+        .filter(|r| {
+            let p = Path::new(&r.path);
+            !p.exists() && check.unmounted(p).is_none()
+        })
+        .collect()
+}
+
 /// Every photograph the catalog knows about whose file is not there.
 ///
 /// The whole library, not one folder: somebody who has moved a drive
@@ -13834,14 +13949,11 @@ async fn missing_images(app: tauri::AppHandle) -> Result<Vec<SessionImage>, Stri
     // catalog's missing files.
     let issued = catalog_generation(&app)?;
     tauri::async_runtime::spawn_blocking(move || -> Result<Vec<SessionImage>, String> {
-        with_catalog_at(&app, issued, |c| {
-            Ok(c.list_images(&heeler_catalog::Filter::default())
-                .map_err(|e| e.to_string())?
-                .iter()
-                .filter(|r| !Path::new(&r.path).exists())
-                .map(record_to_session)
-                .collect())
-        })
+        // The rows under the catalog, the disk after it is let go: every
+        // photograph in the library is asked about, and on a sleeping
+        // share each question can wait on the network.
+        let rows = with_catalog_at(&app, issued, |c| c.list_images(&heeler_catalog::Filter::default()).map_err(|e| e.to_string()))?;
+        Ok(missing_rows(&rows).into_iter().map(record_to_session).collect())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -25032,6 +25144,64 @@ mod tests {
         assert!(c.image("away").is_ok(), "one on an unplugged drive stays");
     }
 
+    /// The folder relink walks its root once, not once per photograph,
+    /// tells a name found twice from one not found, and a folder link
+    /// back into the tree cannot loop it.
+    #[test]
+    fn a_name_index_finds_one_several_or_none_and_survives_a_link_loop() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        std::fs::create_dir_all(root.join("a/b")).unwrap();
+        std::fs::create_dir_all(root.join(".trash")).unwrap();
+        std::fs::write(root.join("a/one.dng"), b"1").unwrap();
+        std::fs::write(root.join("a/two.dng"), b"2").unwrap();
+        std::fs::write(root.join("a/b/two.dng"), b"2").unwrap();
+        std::fs::write(root.join(".trash/three.dng"), b"3").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(root, root.join("a/b/loop")).unwrap();
+        let index = NameIndex::build(root, &|| false).expect("not stopped");
+        assert_eq!(index.find("one.dng"), NameHit::One(root.join("a/one.dng")));
+        assert_eq!(index.find("two.dng"), NameHit::Several);
+        assert_eq!(index.find("three.dng"), NameHit::None, "the trash is not looked in");
+        assert_eq!(index.find("four.dng"), NameHit::None);
+        assert!(NameIndex::build(root, &|| true).is_none(), "a stop is heard");
+    }
+
+    #[test]
+    fn a_folder_relink_counts_a_name_found_twice_apart_from_one_not_found() {
+        let d = tempfile::tempdir().unwrap();
+        let c = Catalog::open(&d.path().join("catalog.sqlite")).unwrap();
+        let gone = d.path().join("old");
+        for (id, name) in [("a", "one.dng"), ("b", "two.dng"), ("c", "three.dng")] {
+            c.add_image(id, &gone.join(name), None).unwrap();
+        }
+        let root = d.path().join("new");
+        std::fs::create_dir_all(root.join("x")).unwrap();
+        std::fs::write(root.join("one.dng"), b"1").unwrap();
+        std::fs::write(root.join("two.dng"), b"2").unwrap();
+        std::fs::write(root.join("x/two.dng"), b"2").unwrap();
+        let mut paths = HashMap::new();
+        let ids: Vec<String> = ["a", "b", "c"].iter().map(|s| s.to_string()).collect();
+        let report = relink_in_folder(&c, &mut paths, &ids, &root).unwrap();
+        assert_eq!(report, RelinkReport { relinked: 1, still_missing: 1, taken: 0, ambiguous: 1 });
+    }
+
+    /// A whole unplugged drive was listed as missing photographs.
+    #[test]
+    fn missing_photographs_leave_out_a_drive_that_is_not_plugged_in() {
+        let d = tempfile::tempdir().unwrap();
+        let c = Catalog::open_in_memory().unwrap();
+        let here = d.path().join("here.png");
+        std::fs::write(&here, b"x").unwrap();
+        c.add_image("here", &here, None).unwrap();
+        c.add_image("gone", &d.path().join("gone.png"), None).unwrap();
+        let away = if cfg!(windows) { PathBuf::from("Q:\\shoot\\away.png") } else { PathBuf::from("/Volumes/heeler-no-such-drive/away.png") };
+        c.add_image("away", &away, None).unwrap();
+        let rows = c.list_images(&heeler_catalog::Filter::default()).unwrap();
+        let ids: Vec<&str> = missing_rows(&rows).into_iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(ids, vec!["gone"]);
+    }
+
     /// A folder relink used to stop at the first photograph it could not
     /// relink, with the earlier ones already moved in the catalog but
     /// never handed to the session, so the viewer decoded their old paths. One that cannot move is counted and
@@ -25056,7 +25226,7 @@ mod tests {
         let mut paths: HashMap<String, PathBuf> = HashMap::new();
         let ids: Vec<String> = ["a", "b", "flushed", "c"].iter().map(|s| s.to_string()).collect();
         let report = relink_in_folder(&c, &mut paths, &ids, &root).expect("the run finishes");
-        assert_eq!(report, RelinkReport { relinked: 2, still_missing: 0, taken: 1 });
+        assert_eq!(report, RelinkReport { relinked: 2, still_missing: 0, taken: 1, ambiguous: 0 });
         assert_eq!(paths.get("a"), Some(&root.join("one.dng")));
         assert_eq!(paths.get("c"), Some(&root.join("three.dng")), "the one after the clash moved, and the session knows");
         assert!(!paths.contains_key("b"));
@@ -25081,7 +25251,7 @@ mod tests {
         c.set_rating("b_new", 2).unwrap();
         let mut paths = HashMap::new();
         let report = relink_in(&c, &mut paths, "a", &to.path().join("a.png")).unwrap();
-        assert_eq!(report, RelinkReport { relinked: 1, still_missing: 1, taken: 1 });
+        assert_eq!(report, RelinkReport { relinked: 1, still_missing: 1, taken: 1, ambiguous: 0 });
     }
 
     /// The owner's ghost: a photograph moved in the file browser, the new
@@ -30417,6 +30587,32 @@ mod tests {
         assert!(catalog.list_trashed(None).unwrap().is_empty());
     }
 
+    /// A rescan heals only rows filed under another folder: it used to
+    /// rewrite every row's folder and count every file as healed, which
+    /// made the debug ledger's number meaningless.
+    #[test]
+    fn a_rescan_heals_only_rows_filed_elsewhere() {
+        let dir = tempfile::tempdir().unwrap();
+        let png = heeler_io::encode_png(&ImageBuf::filled(8, 8, [0.5, 0.5, 0.5, 1.0])).unwrap();
+        for name in ["a.png", "b.png"] {
+            std::fs::write(dir.path().join(name), &png).unwrap();
+        }
+        let catalog = Catalog::open_in_memory().unwrap();
+        let mut paths = HashMap::new();
+        let mut first = ScanStats::default();
+        let ids: Vec<String> = scan_folder(dir.path(), &catalog, &mut paths, &mut first).unwrap().into_iter().map(|i| i.id).collect();
+        assert_eq!((first.added, first.healed), (2, 0));
+        let mut again = ScanStats::default();
+        scan_folder(dir.path(), &catalog, &mut paths, &mut again).unwrap();
+        assert_eq!((again.added, again.healed), (0, 0), "nothing was filed elsewhere");
+        let other = catalog.add_folder(Path::new("/elsewhere")).unwrap();
+        catalog.assign_folder(&ids[0], other).unwrap();
+        let mut healing = ScanStats::default();
+        let listed = scan_folder(dir.path(), &catalog, &mut paths, &mut healing).unwrap();
+        assert_eq!(healing.healed, 1);
+        assert_eq!(listed.len(), 2);
+    }
+
     /// Hiding must survive reopening the folder: the scan walks the disk,
     /// and a hidden photograph's file is right there, so without the
     /// hidden-set check every rescan would put it back in the ribbon.
@@ -31508,7 +31704,8 @@ mod tests {
         let ids = vec![ia.clone(), ib.clone(), ic.clone(), id_.clone()];
         let report = relink_in_folder(&catalog, &mut paths, &ids, to.path()).unwrap();
         assert_eq!(report.relinked, 2, "a and b should be found, root and subfolder");
-        assert_eq!(report.still_missing, 2, "c is gone and d is ambiguous");
+        assert_eq!(report.still_missing, 1, "c is gone");
+        assert_eq!(report.ambiguous, 1, "and d is found twice, counted apart");
         assert_eq!(paths.get(&ia), Some(&to.path().join("a.png")));
         assert_eq!(paths.get(&ib), Some(&sub.join("b.png")));
         assert!(paths.get(&ic).map(|p| !p.starts_with(to.path())).unwrap_or(true));

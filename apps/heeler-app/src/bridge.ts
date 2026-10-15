@@ -5094,6 +5094,8 @@ export interface RelinkReport {
   stillMissing: number;
   /** Found, but the file is already in the catalog as another photograph. */
   taken: number;
+  /** Several files under the folder have its name, so none was taken. */
+  ambiguous?: number;
 }
 
 /** Asks the user where a missing photograph went. */
@@ -5115,11 +5117,11 @@ export async function pickRelinkTarget(imageId: string): Promise<string | null> 
  * among the ids is found by name under the root, subfolders included. */
 export async function relinkFolder(imageIds: string[], root: string): Promise<RelinkReport> {
   if (!isTauri()) return { relinked: imageIds.length, stillMissing: 0, taken: 0 };
-  const r = await call<{ relinked: number; still_missing: number; taken?: number }>("relink_folder", {
+  const r = await call<{ relinked: number; still_missing: number; taken?: number; ambiguous?: number }>("relink_folder", {
     imageIds,
     root,
   });
-  return { relinked: r.relinked, stillMissing: r.still_missing, taken: r.taken ?? 0 };
+  return { relinked: r.relinked, stillMissing: r.still_missing, taken: r.taken ?? 0, ambiguous: r.ambiguous ?? 0 };
 }
 
 /** Asks the user for the folder a moved batch now lives under. */

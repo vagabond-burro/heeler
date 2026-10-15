@@ -15,7 +15,7 @@ import { useState } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { initialState } from "../data";
-import { BrowserPanel, Ribbon, loadSessionImages, takenNote } from "../ui/chrome";
+import { BrowserPanel, Ribbon, ambiguousNote, loadSessionImages, takenNote } from "../ui/chrome";
 import { reduce, trashConfirmAction, type Command, type ImageEntry, type State } from "../state";
 import { mockRemovalCalls, mockResetRemovalCalls, type FolderImage } from "../bridge";
 import { ConfirmDialog, confirmCopy } from "../ui/catalogui";
@@ -251,5 +251,13 @@ describe("a missing photograph leaves the catalog instead of the folder", () => 
       { command: "trash", ids: ["img_here"] },
       { command: "forget_missing", ids: ["img_gone"] },
     ]);
+  });
+});
+
+describe("a folder relink's report of names found more than once", () => {
+  it("says nothing when there are none, and counts them when there are", () => {
+    expect(ambiguousNote(0)).toBe("");
+    expect(ambiguousNote(1)).toBe(" 1 was left as it was: more than one file under that folder has its name.");
+    expect(ambiguousNote(2)).toMatch(/^ 2 were left as they were: more than one file/);
   });
 });
