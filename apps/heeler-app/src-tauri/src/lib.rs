@@ -516,8 +516,32 @@ pub fn scan_folder(
     paths: &mut HashMap<String, PathBuf>,
     stats: &mut ScanStats,
 ) -> Result<Vec<SessionImage>, String> {
-    let records = scan_folder_records(folder, catalog, paths, stats)?;
+    // Asked here, ahead of the scan's transaction: answering it takes
+    // the disk (the candidates are each canonicalized), and disk work
+    // does not belong inside a transaction.
+    let spelled = known_spelling(catalog, folder).map_err(|e| e.to_string())?;
+    let records = scan_folder_records(folder, spelled.as_deref(), catalog, paths, stats)?;
     Ok(sessions_from_records(&records))
+}
+
+/// The catalog's word on a folder's spelling, with no disk in it: the
+/// spelling is the catalog's own already, or these rows could be the
+/// same folder by name and are for the caller to check against the
+/// folder's canonicalized path. Split out of known_spelling so the
+/// checking can run with the catalog let go (spelled_home).
+enum SpellingAnswer {
+    /// The asked spelling has the folder's rows already.
+    Known,
+    /// Rows that could be the same folder by name, to resolve and
+    /// compare.
+    Check(Vec<String>),
+}
+
+fn spelling_answer(catalog: &Catalog, spelling: &Path) -> Result<SpellingAnswer, heeler_catalog::CatalogError> {
+    if catalog.folder_id(spelling)?.is_some() {
+        return Ok(SpellingAnswer::Known);
+    }
+    Ok(SpellingAnswer::Check(catalog.folder_spelling_candidates(spelling)?))
 }
 
 /// Another spelling of `folder` the catalog already files photographs
@@ -530,28 +554,22 @@ pub fn scan_folder(
 /// whose names differ only in case, on a disk that tells them apart,
 /// stay two. None when the catalog knows this spelling, or no other.
 pub fn known_spelling(catalog: &Catalog, folder: &Path) -> Result<Option<PathBuf>, heeler_catalog::CatalogError> {
-    if catalog.folder_id(folder)?.is_some() {
-        return Ok(None);
-    }
-    let Ok(here) = std::fs::canonicalize(folder) else { return Ok(None) };
-    // The folder's own resolved path first: a link opened after the folder
-    // it points at.
-    let resolved = plain_path(here.clone());
-    if resolved != folder && catalog.folder_id(&resolved)?.is_some() {
-        return Ok(Some(resolved));
-    }
-    // Then rows that could be the same folder by name, the opened name's
-    // and the resolved one's, each resolved and compared.
-    let mut candidates = catalog.folder_spelling_candidates(folder)?;
-    if resolved != folder {
-        candidates.extend(catalog.folder_spelling_candidates(&resolved)?);
-    }
-    for candidate in candidates {
-        if std::fs::canonicalize(&candidate).ok().as_ref() == Some(&here) {
-            return Ok(Some(PathBuf::from(candidate)));
+    match spelling_answer(catalog, folder)? {
+        SpellingAnswer::Known => Ok(None),
+        SpellingAnswer::Check(mut candidates) => {
+            let Ok(here) = std::fs::canonicalize(folder) else { return Ok(None) };
+            // The folder's own resolved path next: a link opened after
+            // the folder it points at.
+            let resolved = plain_path(here.clone());
+            if resolved != folder {
+                match spelling_answer(catalog, &resolved)? {
+                    SpellingAnswer::Known => return Ok(Some(resolved)),
+                    SpellingAnswer::Check(more) => candidates.extend(more),
+                }
+            }
+            Ok(candidates.into_iter().find(|c| std::fs::canonicalize(c).ok().as_ref() == Some(&here)).map(PathBuf::from))
         }
     }
-    Ok(None)
 }
 
 /// The ribbon's rows for catalog records, sorted by file name. Reads
@@ -567,8 +585,14 @@ pub fn sessions_from_records(records: &[heeler_catalog::ImageRecord]) -> Vec<Ses
 /// The catalog half of a folder scan: registers the folder's files and
 /// answers its records, present and missing, without reading any file
 /// beyond the folder listing (sessions_from_records does that, after).
+/// `spelled` is the spelling to file under when the catalog already
+/// knows the same folder by another name, worked out by the caller:
+/// scan_folder asks known_spelling itself, and open_folder does it with
+/// the catalog let go, since the asking is quick reads but the checking
+/// is the disk.
 pub fn scan_folder_records(
     folder: &Path,
+    spelled: Option<&Path>,
     catalog: &Catalog,
     paths: &mut HashMap<String, PathBuf>,
     stats: &mut ScanStats,
@@ -580,9 +604,8 @@ pub fn scan_folder_records(
         .batch(|catalog| {
             // The spelling the catalog files this folder's photographs
             // under, which is the one it was opened by unless the catalog
-            // already knows the same folder by another name (known_spelling).
-            let spelled = known_spelling(catalog, folder)?;
-            let home: &Path = spelled.as_deref().unwrap_or(folder);
+            // already knows the same folder by another name.
+            let home: &Path = spelled.unwrap_or(folder);
             // (the path the catalog knows a file by, the path it is read from)
             let files: Vec<(PathBuf, PathBuf)> = on_disk
                 .iter()
@@ -9993,6 +10016,29 @@ fn roi_slice_store(app: &tauri::AppHandle, key: u64, value: Value) {
     });
 }
 
+/// The spelling to file `folder`'s photographs under, for open_folder:
+/// known_spelling split at the catalog boundary, so the checking (each
+/// candidate canonicalized, on the disk) runs with the catalog let go.
+/// A candidate whose folder row went away between the asking and the
+/// scan is filed under anyway, which is the answer the scan gave before
+/// spellings were shared; nothing worse.
+fn spelled_home(app: &tauri::AppHandle, issued: u64, folder: &Path) -> Result<Option<PathBuf>, String> {
+    match with_catalog_at(app, issued, |c| spelling_answer(c, folder).map_err(|e| e.to_string()))? {
+        SpellingAnswer::Known => Ok(None),
+        SpellingAnswer::Check(mut candidates) => {
+            let Ok(here) = std::fs::canonicalize(folder) else { return Ok(None) };
+            let resolved = plain_path(here.clone());
+            if resolved != folder {
+                match with_catalog_at(app, issued, |c| spelling_answer(c, &resolved).map_err(|e| e.to_string()))? {
+                    SpellingAnswer::Known => return Ok(Some(resolved)),
+                    SpellingAnswer::Check(more) => candidates.extend(more),
+                }
+            }
+            Ok(candidates.into_iter().find(|c| std::fs::canonicalize(c).ok().as_ref() == Some(&here)).map(PathBuf::from))
+        }
+    }
+}
+
 // Async like every other command that raises a native dialog: a sync
 // command runs on the main thread, and on macOS blocking_pick_folder
 // parks it while the dialog service waits for that same thread's run
@@ -10035,10 +10081,15 @@ async fn open_folder(app: tauri::AppHandle, path: Option<String>) -> Result<Fold
         }
         let subfolders = subfolder_payload(&folder)?;
         let scan_t0 = std::time::Instant::now();
+        // The spelling to file under, worked out with the catalog let go
+        // between the asking and the checking: the asking is quick reads,
+        // the checking is the disk, and a candidate on a drive that is
+        // slow to answer must not hold every other catalog call waiting.
+        let spelled = spelled_home(&app, issued, &folder)?;
         let ((result, scan), paths) = with_catalog_at(&app, issued, |catalog| {
             Ok(path_delta(|paths| {
                 let mut stats = ScanStats::default();
-                let result = scan_folder_records(&folder, catalog, paths, &mut stats);
+                let result = scan_folder_records(&folder, spelled.as_deref(), catalog, paths, &mut stats);
                 (result, stats)
             }))
         })?;
@@ -31231,6 +31282,30 @@ mod tests {
         assert_eq!(catalog.counts().unwrap().0, 1, "no second row");
         assert!(catalog.folder_id(&link).unwrap().is_none(), "nor a second folder");
         assert_eq!(paths.get(&first[0].id), Some(&link.join("a.png")), "read where it was opened");
+    }
+
+    /// scan_folder_records files under the spelling it is handed: the
+    /// caller works the spelling out (open_folder does it with the
+    /// catalog let go, scan_folder asks known_spelling itself), the scan
+    /// only files.
+    #[cfg(unix)]
+    #[test]
+    fn a_scan_files_under_the_spelling_it_is_handed() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real");
+        std::fs::create_dir(&real).unwrap();
+        std::fs::write(real.join("a.png"), heeler_io::encode_png(&ImageBuf::filled(8, 8, [0.5, 0.5, 0.5, 1.0])).unwrap()).unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let catalog = Catalog::open_in_memory().unwrap();
+        let mut paths = HashMap::new();
+        let records = scan_folder_records(&link, Some(&real), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].path, real.join("a.png").to_string_lossy(), "filed under the handed spelling, not the opened one");
+        assert_eq!(paths.get(&records[0].id), Some(&link.join("a.png")), "read where it was opened");
+        // And the handed spelling is what known_spelling would have said:
+        // the link itself is unknown, the folder it points at is known.
+        assert_eq!(known_spelling(&catalog, &link).unwrap(), Some(real.clone()));
     }
 
     /// The same folder typed with other capitals, on a disk that ignores
