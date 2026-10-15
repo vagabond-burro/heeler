@@ -1233,3 +1233,7 @@ control the outline has to stay put.*/
    action without nesting controls or changing what a photo click does. */
 .thumb-action { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: inherit; cursor: pointer; }
 .thumb-action:focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 1px !important; }
+
+/* The folder tree's rows take keyboard focus (role="treeitem"), and
+   all: unset buttons inside them show nothing of it on their own. */
+.tree-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }

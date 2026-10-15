@@ -3432,9 +3432,11 @@ function TabRailImpl({ state, dispatch }: { state: State; dispatch: D }) {
  * opens (scans that folder). Parents and siblings stay visible while
  * descending, so deep archives navigate like a RAW editor's folder panel. */
 function TreeRows({
-  node, depth, activePath, dispatch, onOpen, onMenu, editedPaths, trashPaths, hiddenPaths,
+  node, depth, activePath, tabStop, dispatch, onOpen, onMenu, editedPaths, trashPaths, hiddenPaths,
 }: {
   node: TreeNode; depth: number; activePath: string | null; dispatch: D;
+  /** The one row Tab lands on: the open folder, or the root. */
+  tabStop: string;
   onOpen: (path: string) => void; onMenu: (x: number, y: number, path: string) => void;
   editedPaths: string[];
   trashPaths: string[];
@@ -3450,6 +3452,17 @@ function TreeRows({
     <>
       <div
         data-testid={`tree-row-${node.path}`}
+        // A tree to the keyboard and to a screen reader: one row in the
+        // Tab order, arrows to move and open (treeKeys), and each row
+        // saying its level and whether it is open.
+        role="treeitem"
+        aria-level={depth + 1}
+        aria-expanded={expandable ? node.expanded : undefined}
+        aria-selected={active}
+        aria-label={node.name}
+        tabIndex={tabStop === node.path ? 0 : -1}
+        className="tree-row"
+        data-tree-path={node.path}
         onContextMenu={(e) => {
           e.preventDefault();
           onMenu(e.clientX, e.clientY, node.path);
@@ -3464,6 +3477,7 @@ function TreeRows({
         {/* A drawn chevron, not a text glyph: at this size "▸" renders
             as a dot and stops signaling open vs closed. */}
         <button
+          tabIndex={-1}
           style={{ all: "unset", cursor: expandable ? "pointer" : "default", width: 14, display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--text-faint)" }}
           data-testid={`tree-toggle-${node.path}`}
           aria-label={node.expanded ? `Collapse ${node.name}` : `Expand ${node.name}`}
@@ -3499,6 +3513,7 @@ function TreeRows({
           )}
         </button>
         <button
+          tabIndex={-1}
           // Its own color too, for the reason spelled out on the
           // collection name: an `all: unset` button does not reliably
           // inherit one in the webview this app ships in.
@@ -3525,12 +3540,64 @@ function TreeRows({
           {trashPaths.includes(node.path) && <TrashBadge path={node.path} />}
         </button>
       </div>
-      {node.expanded &&
-        (children ?? []).map((c) => (
-          <TreeRows key={c.path} node={c} depth={depth + 1} activePath={activePath} dispatch={dispatch} onOpen={onOpen} onMenu={onMenu} editedPaths={editedPaths} trashPaths={trashPaths} hiddenPaths={hiddenPaths} />
-        ))}
+      {node.expanded && (children ?? []).length > 0 && (
+        <div role="group">
+          {(children ?? []).map((c) => (
+            <TreeRows key={c.path} node={c} depth={depth + 1} activePath={activePath} tabStop={tabStop} dispatch={dispatch} onOpen={onOpen} onMenu={onMenu} editedPaths={editedPaths} trashPaths={trashPaths} hiddenPaths={hiddenPaths} />
+          ))}
+        </div>
+      )}
     </>
   );
+}
+
+/** Arrow keys over the folder tree, the usual tree keys: Up and Down move
+ * between the rows on screen, Right opens a row or steps into it, Left
+ * closes it or steps out to its parent, Home and End go to the ends, and
+ * Enter opens the folder. The keyboard had no way into the tree at all. */
+export function treeKeys(e: React.KeyboardEvent<HTMLElement>): void {
+  const tree = e.currentTarget;
+  const rows = Array.from(tree.querySelectorAll<HTMLElement>('[role="treeitem"]'));
+  const here = (e.target as HTMLElement).closest<HTMLElement>('[role="treeitem"]');
+  if (!here || rows.length === 0) return;
+  const at = rows.indexOf(here);
+  const level = Number(here.getAttribute("aria-level"));
+  const move = (row: HTMLElement | undefined) => {
+    if (!row) return;
+    for (const r of rows) r.tabIndex = r === row ? 0 : -1;
+    row.focus();
+    row.scrollIntoView?.({ block: "nearest" });
+  };
+  const toggle = () => here.querySelector<HTMLElement>('[data-testid^="tree-toggle-"]')?.click();
+  switch (e.key) {
+    case "ArrowDown":
+      move(rows[at + 1]);
+      break;
+    case "ArrowUp":
+      move(rows[at - 1]);
+      break;
+    case "Home":
+      move(rows[0]);
+      break;
+    case "End":
+      move(rows[rows.length - 1]);
+      break;
+    case "ArrowRight":
+      if (here.getAttribute("aria-expanded") === "false") toggle();
+      else if (here.getAttribute("aria-expanded") === "true" && Number(rows[at + 1]?.getAttribute("aria-level")) === level + 1) move(rows[at + 1]);
+      break;
+    case "ArrowLeft":
+      if (here.getAttribute("aria-expanded") === "true") toggle();
+      else move(rows.slice(0, at).reverse().find((r) => Number(r.getAttribute("aria-level")) === level - 1));
+      break;
+    case "Enter":
+    case " ":
+      here.querySelector<HTMLElement>('[data-testid^="tree-open-"]')?.click();
+      break;
+    default:
+      return;
+  }
+  e.preventDefault();
 }
 
 /** Collapsible section header for the library panel. */
@@ -3722,6 +3789,16 @@ function BrowserPanelImpl({ state, dispatch }: { state: State; dispatch: D }) {
   // Where "out of this collection" leads. See deselectCollection.
   const lastFolderRef = useRef<string | null>(null);
   if (state.activeFolderPath) lastFolderRef.current = state.activeFolderPath;
+  // The open folder's row is brought into the tree's box when it lands
+  // somewhere the box does not show, after a restore or a descent deep
+  // into a tall tree.
+  const treeBoxRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const path = state.activeFolderPath;
+    if (!path || !treeBoxRef.current) return;
+    const row = Array.from(treeBoxRef.current.querySelectorAll<HTMLElement>("[data-tree-path]")).find((r) => r.dataset.treePath === path);
+    row?.scrollIntoView?.({ block: "nearest" });
+  }, [state.activeFolderPath, state.folderTree]);
   // A hidden or flushed folder is no way back out of a collection: going
   // back to it would add it to the catalog again.
   useEffect(
@@ -4032,10 +4109,15 @@ see fit."
             <div
               style={{ height: state.panelSizes.libraryTree, overflowY: "auto" }}
               data-testid="folder-tree-scroll"
+              role="tree"
+              aria-label="Folders"
+              onKeyDown={treeKeys}
+              ref={treeBoxRef}
             >
               <TreeRows
                 node={state.folderTree}
                 depth={0}
+                tabStop={state.activeFolderPath && treeContains(state.folderTree, state.activeFolderPath) ? state.activeFolderPath : state.folderTree.path}
                 activePath={state.activeCollection === null ? state.activeFolderPath : null}
                 dispatch={dispatch}
                 onOpen={openByPath}
@@ -4928,12 +5010,11 @@ its rejects.*/}
               </SubMenu>
             );
           })()}
-          {/* Hiding is any photograph's, and with the Edit menu item gone (The
-report: 'Remove "Hide from Catalog..." from the Edit menu'), this
-right-click is the menu path to it. Bake and Delete still live on
-merges only: "The context menu for merged should have an option to
-delete. Not for photos." A merge is a recipe you made and can remake;
-a negative is not.*/}
+          {/* Hiding a photograph left the app along with the Edit menu's
+Hide from Catalog; Move to Trash below is the way a photograph leaves
+a folder. Bake and Delete still live on merges only: "The context menu
+for merged should have an option to delete. Not for photos." A merge is
+a recipe you made and can remake; a negative is not.*/}
           <div className="sep" />
           {bakeable(state).length > 0 && (
             /* "an option for stacks to bake an image. To take the
@@ -4951,11 +5032,9 @@ closes the menu.*/
               Bake to Image…
             </button>
           )}
-          {/* Below hiding, because it is the bigger of the two and the
-              order should let somebody stop at the smaller one. Not
-              styled as a danger: it renames a file into a folder beside
-              itself, and coloring that red would put it in the same
-              class as the thing this app no longer does. */}
+          {/* Not styled as a danger: it renames a file into a folder
+              beside itself, and coloring that red would put it in the
+              same class as the thing this app no longer does. */}
           {/* Only for a photograph that has actually moved. An always-on
               Relink invites people to re-point files that are exactly
               where they should be. */}

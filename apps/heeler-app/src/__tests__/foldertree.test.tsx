@@ -7,7 +7,7 @@
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../app";
 import { loadSession, mockAddSubfolder, mockSetRelink, mockRemoveFolder, mockResetSessions, mockSetFolderSession, mockSetSubfolderHold } from "../bridge";
 import { initialState } from "../data";
@@ -214,5 +214,71 @@ describe("a relink that takes a while", () => {
     release();
     await relinking;
     expect(h.get().activeFolderPath).toBe("mock://trip");
+  });
+});
+
+// The tree had no way in from the keyboard and said nothing to a screen
+// reader.
+describe("the tree from the keyboard", () => {
+  it("is a tree of rows with levels, one of them in the Tab order", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openTrip(user);
+    expect(screen.getByRole("tree", { name: "Folders" })).toBeInTheDocument();
+    const trip = screen.getByTestId("tree-row-mock://trip");
+    expect(trip).toHaveAttribute("role", "treeitem");
+    expect(trip).toHaveAttribute("aria-level", "1");
+    expect(trip).toHaveAttribute("aria-expanded", "true");
+    expect(trip).toHaveAttribute("aria-selected", "true");
+    expect(trip.tabIndex).toBe(0);
+    expect(screen.getByTestId("tree-row-mock://trip/day1")).toHaveAttribute("aria-level", "2");
+    expect(screen.getByTestId("tree-row-mock://trip/day1").tabIndex).toBe(-1);
+  });
+
+  it("moves with the arrows, opens and closes branches, and opens a folder on Enter", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    mockAddSubfolder("mock://trip/day1", "Dawn");
+    await openTrip(user);
+    const row = (p: string) => screen.getByTestId(`tree-row-${p}`);
+    row("mock://trip").focus();
+    fireEvent.keyDown(row("mock://trip"), { key: "ArrowDown" });
+    expect(document.activeElement).toBe(row("mock://trip/day1"));
+    fireEvent.keyDown(row("mock://trip/day1"), { key: "ArrowRight" });
+    expect(await screen.findByTestId("tree-row-mock://trip/day1/dawn")).toBeInTheDocument();
+    fireEvent.keyDown(row("mock://trip/day1"), { key: "ArrowRight" });
+    // Into its first child (other tests in this file add more under it).
+    const child = document.activeElement as HTMLElement;
+    expect(child.getAttribute("aria-level")).toBe("3");
+    expect(child.dataset.treePath?.startsWith("mock://trip/day1/")).toBe(true);
+    fireEvent.keyDown(child, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(row("mock://trip/day1"));
+    fireEvent.keyDown(row("mock://trip/day1"), { key: "ArrowLeft" });
+    await waitFor(() => expect(screen.queryByTestId("tree-row-mock://trip/day1/dawn")).toBeNull());
+    fireEvent.keyDown(row("mock://trip/day1"), { key: "End" });
+    const rows = screen.getAllByRole("treeitem");
+    const last = rows[rows.length - 1];
+    expect(document.activeElement).toBe(last);
+    fireEvent.keyDown(last, { key: "Enter" });
+    await waitFor(() => expect(screen.getByTestId("library-label")).toHaveTextContent(last.getAttribute("aria-label")!));
+  });
+});
+
+describe("the open folder's row", () => {
+  it("is brought into the tree's box when a folder opens", async () => {
+    const seen: string[] = [];
+    const before = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      seen.push(this.getAttribute("data-tree-path") ?? "");
+    });
+    try {
+      const user = userEvent.setup();
+      render(<App />);
+      await openTrip(user);
+      await user.click(screen.getByTestId("tree-open-mock://trip/day2"));
+      await waitFor(() => expect(seen).toContain("mock://trip/day2"));
+    } finally {
+      Element.prototype.scrollIntoView = before;
+    }
   });
 });
