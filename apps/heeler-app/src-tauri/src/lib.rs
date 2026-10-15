@@ -520,6 +520,40 @@ pub fn scan_folder(
     Ok(sessions_from_records(&records))
 }
 
+/// Another spelling of `folder` the catalog already files photographs
+/// under, when there is one: the same folder reached through a link, or
+/// typed with different capitals on a disk that ignores case. Rows are
+/// keyed by the path's text, so each spelling used to get rows of its
+/// own, a second record per photograph, with the edits, ratings and
+/// keywords on one invisible from the other. A candidate counts only
+/// when the disk says both spellings are the same folder, so two folders
+/// whose names differ only in case, on a disk that tells them apart,
+/// stay two. None when the catalog knows this spelling, or no other.
+pub fn known_spelling(catalog: &Catalog, folder: &Path) -> Result<Option<PathBuf>, heeler_catalog::CatalogError> {
+    if catalog.folder_id(folder)?.is_some() {
+        return Ok(None);
+    }
+    let Ok(here) = std::fs::canonicalize(folder) else { return Ok(None) };
+    // The folder's own resolved path first: a link opened after the folder
+    // it points at.
+    let resolved = plain_path(here.clone());
+    if resolved != folder && catalog.folder_id(&resolved)?.is_some() {
+        return Ok(Some(resolved));
+    }
+    // Then rows that could be the same folder by name, the opened name's
+    // and the resolved one's, each resolved and compared.
+    let mut candidates = catalog.folder_spelling_candidates(folder)?;
+    if resolved != folder {
+        candidates.extend(catalog.folder_spelling_candidates(&resolved)?);
+    }
+    for candidate in candidates {
+        if std::fs::canonicalize(&candidate).ok().as_ref() == Some(&here) {
+            return Ok(Some(PathBuf::from(candidate)));
+        }
+    }
+    Ok(None)
+}
+
 /// The ribbon's rows for catalog records, sorted by file name. Reads
 /// each file (its size and kind, a DNG's headers, a stack's manifest),
 /// so open_folder calls it after the catalog is released rather than
@@ -539,13 +573,23 @@ pub fn scan_folder_records(
     paths: &mut HashMap<String, PathBuf>,
     stats: &mut ScanStats,
 ) -> Result<Vec<heeler_catalog::ImageRecord>, String> {
-    let files = heeler_catalog::discover_files_shallow(folder).map_err(|e| e.to_string())?;
-    stats.discovered = files.len();
-    let discovered: std::collections::HashSet<String> = files.iter().map(|f| f.to_string_lossy().into_owned()).collect();
+    let on_disk = heeler_catalog::discover_files_shallow(folder).map_err(|e| e.to_string())?;
+    stats.discovered = on_disk.len();
     let mut out = Vec::new();
     catalog
         .batch(|catalog| {
-            let folder_id = catalog.add_folder(folder)?;
+            // The spelling the catalog files this folder's photographs
+            // under, which is the one it was opened by unless the catalog
+            // already knows the same folder by another name (known_spelling).
+            let spelled = known_spelling(catalog, folder)?;
+            let home: &Path = spelled.as_deref().unwrap_or(folder);
+            // (the path the catalog knows a file by, the path it is read from)
+            let files: Vec<(PathBuf, PathBuf)> = on_disk
+                .iter()
+                .map(|f| (f.file_name().map(|n| home.join(n)).unwrap_or_else(|| f.clone()), f.clone()))
+                .collect();
+            let discovered: std::collections::HashSet<String> = files.iter().map(|(k, _)| k.to_string_lossy().into_owned()).collect();
+            let folder_id = catalog.add_folder(home)?;
             catalog.touch_folder(folder_id)?;
 
             // The folder's `.trash`, read back into the catalog: a
@@ -564,7 +608,7 @@ pub fn scan_folder_records(
                         continue;
                     }
                     let original = PathBuf::from(&entry.original);
-                    if original.parent() != Some(folder) {
+                    if original.parent() != Some(folder) && original.parent() != Some(home) {
                         continue;
                     }
                     // Its old place, unless a file or a record has it now:
@@ -619,8 +663,8 @@ pub fn scan_folder_records(
             let mut flushed = read_flushed_ids(catalog)?;
             let flushed_before = flushed.len();
 
-            for file in &files {
-                let found = match catalog.image_id_by_path(file)? {
+            for (key, file) in &files {
+                let found = match catalog.image_id_by_path(key)? {
                     // A trashed photograph whose file is still in the trash:
                     // the file at its old path is a different one that took
                     // its name, a card re-imported from IMG_0001, say. It
@@ -648,11 +692,11 @@ pub fn scan_folder_records(
                         existing
                     }
                     None => {
-                        let id = match flushed.remove(file.to_string_lossy().as_ref()) {
+                        let id = match flushed.remove(key.to_string_lossy().as_ref()) {
                             Some(old) if !catalog.image_id_taken(&old)? => old,
-                            _ => fresh_image_id(catalog, file)?,
+                            _ => fresh_image_id(catalog, key)?,
                         };
-                        catalog.add_image(&id, file, Some(folder_id))?;
+                        catalog.add_image(&id, key, Some(folder_id))?;
                         stats.added += 1;
                         id
                     }
@@ -665,6 +709,8 @@ pub fn scan_folder_records(
                     stats.hidden_skipped += 1;
                     continue;
                 }
+                // Read from where it is on the disk, under whatever
+                // spelling the folder was opened by.
                 paths.insert(id.clone(), file.clone());
             }
 
@@ -30611,6 +30657,70 @@ mod tests {
         let listed = scan_folder(dir.path(), &catalog, &mut paths, &mut healing).unwrap();
         assert_eq!(healing.healed, 1);
         assert_eq!(listed.len(), 2);
+    }
+
+    /// The same folder reached through a link got rows of its own, a
+    /// second record per photograph with the first one's edits and rating
+    /// out of sight.
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_reached_through_a_link_shares_its_records() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real");
+        std::fs::create_dir(&real).unwrap();
+        std::fs::write(real.join("a.png"), heeler_io::encode_png(&ImageBuf::filled(8, 8, [0.5, 0.5, 0.5, 1.0])).unwrap()).unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let catalog = Catalog::open_in_memory().unwrap();
+        let mut paths = HashMap::new();
+        let first = scan_folder(&real, &catalog, &mut paths, &mut ScanStats::default()).unwrap();
+        catalog.set_rating(&first[0].id, 4).unwrap();
+
+        let through = scan_folder(&link, &catalog, &mut paths, &mut ScanStats::default()).unwrap();
+        assert_eq!(through.len(), 1);
+        assert_eq!(through[0].id, first[0].id, "one photograph, one record");
+        assert_eq!(through[0].stars, 4);
+        assert_eq!(catalog.counts().unwrap().0, 1, "no second row");
+        assert!(catalog.folder_id(&link).unwrap().is_none(), "nor a second folder");
+        assert_eq!(paths.get(&first[0].id), Some(&link.join("a.png")), "read where it was opened");
+    }
+
+    /// The same folder typed with other capitals, on a disk that ignores
+    /// case (as macOS and Windows disks do by default), is the same
+    /// folder. Where the disk tells them apart the other spelling is not
+    /// there, and nothing is shared.
+    #[test]
+    fn a_folder_typed_with_other_capitals_shares_its_records_where_the_disk_ignores_case() {
+        let dir = tempfile::tempdir().unwrap();
+        let shoot = dir.path().join("Shoot");
+        std::fs::create_dir(&shoot).unwrap();
+        std::fs::write(shoot.join("a.png"), heeler_io::encode_png(&ImageBuf::filled(8, 8, [0.5, 0.5, 0.5, 1.0])).unwrap()).unwrap();
+        let catalog = Catalog::open_in_memory().unwrap();
+        let mut paths = HashMap::new();
+        let first = scan_folder(&shoot, &catalog, &mut paths, &mut ScanStats::default()).unwrap();
+        let lower = dir.path().join("shoot");
+        if !lower.is_dir() {
+            assert!(known_spelling(&catalog, &lower).unwrap().is_none());
+            return;
+        }
+        let again = scan_folder(&lower, &catalog, &mut paths, &mut ScanStats::default()).unwrap();
+        assert_eq!(again[0].id, first[0].id);
+        assert_eq!(catalog.counts().unwrap().0, 1);
+    }
+
+    /// Two folders whose names differ only in case stay two where the disk
+    /// tells them apart; a link that is not the same folder is not taken.
+    #[test]
+    fn a_folder_with_a_lookalike_name_is_not_taken_for_another() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("shoot");
+        let b = dir.path().join("other").join("shoot");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        let catalog = Catalog::open_in_memory().unwrap();
+        catalog.add_folder(&a).unwrap();
+        assert!(known_spelling(&catalog, &b).unwrap().is_none(), "same last name, different folder");
+        assert!(known_spelling(&catalog, &a).unwrap().is_none(), "its own spelling");
     }
 
     /// Hiding must survive reopening the folder: the scan walks the disk,

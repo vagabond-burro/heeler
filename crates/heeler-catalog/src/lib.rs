@@ -354,6 +354,30 @@ pub fn discover_files_shallow(dir: &Path) -> Result<Vec<PathBuf>, CatalogError> 
     Ok(found)
 }
 
+/// The folders Windows keeps for itself at the top of a drive or card,
+/// which cannot be opened and are no place for photographs: by name, and
+/// on Windows by the hidden and system attributes.
+fn system_folder(name: &str, entry: &std::fs::DirEntry) -> bool {
+    if name.eq_ignore_ascii_case("$RECYCLE.BIN") || name.eq_ignore_ascii_case("System Volume Information") {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const HIDDEN: u32 = 0x2;
+        const SYSTEM: u32 = 0x4;
+        if let Ok(meta) = entry.metadata() {
+            let attrs = meta.file_attributes();
+            if attrs & HIDDEN != 0 && attrs & SYSTEM != 0 {
+                return true;
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = entry;
+    false
+}
+
 /// Immediate subdirectories of `dir`, hidden ones skipped, sorted. The
 /// folder browser shows these for navigation without scanning them.
 pub fn list_subfolders(dir: &Path) -> Result<Vec<PathBuf>, CatalogError> {
@@ -364,12 +388,10 @@ pub fn list_subfolders(dir: &Path) -> Result<Vec<PathBuf>, CatalogError> {
         // is still an error, from read_dir above.
         let Ok(entry) = entry else { continue };
         let path = entry.path();
-        let hidden = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .map(|n| n.starts_with('.'))
-            .unwrap_or(true);
-        if path.is_dir() && !hidden {
+        // A name that is not valid Unicode is shown as best it can be,
+        // not dropped without a word.
+        let name = entry.file_name().to_string_lossy().to_string();
+        if path.is_dir() && !name.starts_with('.') && !system_folder(&name, &entry) {
             found.push(path);
         }
     }
@@ -1095,6 +1117,20 @@ impl Catalog {
             .conn
             .query_row("SELECT id FROM folders WHERE path = ?1", params![path.to_string_lossy()], |r| r.get(0))
             .optional()?)
+    }
+
+    /// Folder rows whose path could be another spelling of `path`: the
+    /// same text ignoring case, or the same last name (a link elsewhere
+    /// to the same folder). The caller decides by asking the disk.
+    pub fn folder_spelling_candidates(&self, path: &Path) -> Result<Vec<String>, CatalogError> {
+        let text = path.to_string_lossy();
+        let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let mut stmt = self.conn.prepare(
+            "SELECT path FROM folders WHERE path <> ?1 AND (path = ?1 COLLATE NOCASE OR path LIKE ?2 ESCAPE '!' OR path LIKE ?3 ESCAPE '!')",
+        )?;
+        let esc = |s: &str| s.replace('!', "!!").replace('%', "!%").replace('_', "!_");
+        let rows = stmt.query_map(params![text, format!("%/{}", esc(&name)), format!("%\\{}", esc(&name))], |r| r.get::<_, String>(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     /// The paths of every hidden folder, for leaving them out of the tree.
@@ -2981,6 +3017,18 @@ mod tests {
         assert_eq!(c.hide_folder(Path::new("/shoot/day3")).unwrap(), 1);
         c.add_folder(Path::new("/shoot/day3")).unwrap();
         assert!(c.hidden_folder_paths().unwrap().is_empty());
+    }
+
+    /// At the top of a Windows drive or card these were listed, and
+    /// opening them failed with access denied.
+    #[test]
+    fn subfolders_leave_out_the_folders_windows_keeps_for_itself() {
+        let d = tempfile::tempdir().unwrap();
+        for name in ["DCIM", "$RECYCLE.BIN", "System Volume Information", ".hidden", "Misc"] {
+            std::fs::create_dir(d.path().join(name)).unwrap();
+        }
+        let names: Vec<String> = list_subfolders(d.path()).unwrap().iter().map(|p| p.file_name().unwrap().to_string_lossy().to_string()).collect();
+        assert_eq!(names, vec!["DCIM", "Misc"]);
     }
 
     #[test]
