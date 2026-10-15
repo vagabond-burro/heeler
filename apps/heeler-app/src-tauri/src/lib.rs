@@ -1018,29 +1018,6 @@ async fn tether_stop(app: tauri::AppHandle) -> Result<(), String> {
     .map_err(|e| e.to_string())?
 }
 
-/// Register settled arrivals exactly the way the folder scan does:
-/// one shallow scan per touched folder (idempotent, hidden and trashed
-/// rules included), then optional collection membership. The folder
-/// watch and direct USB capture both land here, so there is one import
-/// path and one set of file-safety rules. The commands go through
-/// register_arrivals_unlocked, which does the same in three steps with
-/// the catalog held for the middle one only; this is the whole of it
-/// under one catalog, for the tests.
-#[cfg(test)]
-fn register_arrivals(
-    catalog: &Catalog,
-    paths: &mut HashMap<String, PathBuf>,
-    settled: &[PathBuf],
-    collection: Option<i64>,
-) -> Result<Vec<TetherImage>, String> {
-    let mut spellings = HashMap::new();
-    for dir in arrival_folders(settled) {
-        let spelled = known_spelling(catalog, &dir).map_err(|e| e.to_string())?;
-        spellings.insert(dir, spelled);
-    }
-    let records = register_arrival_records(catalog, paths, settled, collection, &spellings)?;
-    Ok(arrival_images(&records))
-}
 
 /// The folders a batch of arrivals landed in, each once.
 fn arrival_folders(settled: &[PathBuf]) -> Vec<PathBuf> {
@@ -30282,6 +30259,29 @@ mod tests {
     /// added to it"): an arrival registered with a collection chosen is
     /// a member of that collection, and with none chosen is a member of
     /// nothing.
+    /// Register settled arrivals exactly the way the folder scan does:
+    /// one shallow scan per touched folder (idempotent, hidden and trashed
+    /// rules included), then optional collection membership. The folder
+    /// watch and direct USB capture both land here, so there is one import
+    /// path and one set of file-safety rules. The commands go through
+    /// register_arrivals_unlocked, which does the same in three steps with
+    /// the catalog held for the middle one only; this is the whole of it
+    /// under one catalog, for the tests.
+    fn register_arrivals(
+        catalog: &Catalog,
+        paths: &mut HashMap<String, PathBuf>,
+        settled: &[PathBuf],
+        collection: Option<i64>,
+    ) -> Result<Vec<TetherImage>, String> {
+        let mut spellings = HashMap::new();
+        for dir in arrival_folders(settled) {
+            let spelled = known_spelling(catalog, &dir).map_err(|e| e.to_string())?;
+            spellings.insert(dir, spelled);
+        }
+        let records = register_arrival_records(catalog, paths, settled, collection, &spellings)?;
+        Ok(arrival_images(&records))
+    }
+
     /// The commands' registration, the catalog's part alone: an arrival
     /// in a folder reached through a link is filed under the spelling it
     /// is handed, joins the collection, and its row is read afterwards.
