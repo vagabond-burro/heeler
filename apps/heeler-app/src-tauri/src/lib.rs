@@ -696,6 +696,22 @@ pub fn scan_folder_records(
             let mut flushed = read_flushed_ids(catalog)?;
             let flushed_before = flushed.len();
 
+            // Records here whose own name the listing does not hold but
+            // which still answer on the disk: the disk calls their name and
+            // a listed file one file, after a case-only or Unicode-form
+            // rename outside Heeler on a disk that folds either. A file with
+            // no record at its exact name takes such a record, the one that
+            // fits, instead of a second, blank one; the old record's path
+            // still answering kept it from being listed or called missing,
+            // and its rating and edits dropped out of sight. On a disk that
+            // keeps the names apart the old path does not answer, so a
+            // photograph that is really gone is never moved onto another.
+            let mut renamed: Vec<heeler_catalog::ImageRecord> = catalog
+                .list_images(&heeler_catalog::Filter { folder_id: Some(folder_id), include_hidden: true, ..heeler_catalog::Filter::default() })?
+                .into_iter()
+                .filter(|r| !discovered.contains(&r.path) && Path::new(&r.path).exists())
+                .collect();
+
             for (key, file) in &files {
                 let found = match catalog.image_id_by_path(key)? {
                     // A trashed photograph whose file is still in the trash:
@@ -725,13 +741,29 @@ pub fn scan_folder_records(
                         existing
                     }
                     None => {
-                        let id = match flushed.remove(key.to_string_lossy().as_ref()) {
-                            Some(old) if !catalog.image_id_taken(&old)? => old,
-                            _ => fresh_image_id(catalog, key)?,
-                        };
-                        catalog.add_image(&id, key, Some(folder_id))?;
-                        stats.added += 1;
-                        id
+                        let name = name_key(file.file_name().unwrap_or_default(), true);
+                        let fits: Vec<usize> = renamed
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, r)| name_key(std::ffi::OsStr::new(&r.file_name), true) == name && one_file_on_disk(Path::new(&r.path), file))
+                            .map(|(i, _)| i)
+                            .collect();
+                        if let [only] = fits[..] {
+                            // The one record that fits: it follows the name
+                            // the disk lists. Two that fit would be a guess.
+                            let record = renamed.remove(only);
+                            catalog.set_image_path(&record.id, key, Some(folder_id))?;
+                            stats.healed += 1;
+                            record.id
+                        } else {
+                            let id = match flushed.remove(key.to_string_lossy().as_ref()) {
+                                Some(old) if !catalog.image_id_taken(&old)? => old,
+                                _ => fresh_image_id(catalog, key)?,
+                            };
+                            catalog.add_image(&id, key, Some(folder_id))?;
+                            stats.added += 1;
+                            id
+                        }
                     }
                 };
                 if trashed.contains(&id) {
@@ -14303,6 +14335,34 @@ fn nfc(name: &std::ffi::OsStr) -> String {
     icu_normalizer::ComposingNormalizerBorrowed::new_nfc().normalize(&name.to_string_lossy()).into_owned()
 }
 
+/// A file name as the folder's listing and a catalog row are matched by:
+/// NFC, and without regard to case where the disk folds case (`folded`).
+/// The one rule for missing_by_folder and for the scan's healing of a
+/// record whose name the disk now lists differently.
+fn name_key(name: &std::ffi::OsStr, folded: bool) -> String {
+    let k = nfc(name);
+    if folded { k.to_lowercase() } else { k }
+}
+
+/// Whether two existing paths answer as one file on this disk: the same
+/// device and inode where the platform says so; elsewhere, both
+/// answering. Not same_file, which resolves paths, and a Mac's resolved
+/// path keeps whatever capitals it was asked with.
+fn one_file_on_disk(a: &Path, b: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        match (std::fs::metadata(a), std::fs::metadata(b)) {
+            (Ok(x), Ok(y)) => x.dev() == y.dev() && x.ino() == y.ino(),
+            _ => false,
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        a.exists() && b.exists()
+    }
+}
+
 /// Whether the volume holding `dir` calls names that differ only in
 /// case the same file, asked once per volume (per folder on the system
 /// drive, which has no volume_root) and cached. The probe writes
@@ -14362,10 +14422,7 @@ pub fn missing_by_folder(rows: Vec<(String, Vec<(String, String)>)>) -> Vec<Fold
         let Ok(entries) = std::fs::read_dir(dir) else { continue };
         let entries: Vec<std::ffi::OsString> = entries.flatten().map(|e| e.file_name()).collect();
         let folded = case_blind(dir, &entries, &mut blind);
-        let key = |name: &std::ffi::OsStr| {
-            let k = nfc(name);
-            if folded { k.to_lowercase() } else { k }
-        };
+        let key = |name: &std::ffi::OsStr| name_key(name, folded);
         let names: std::collections::HashSet<String> = entries.iter().map(|e| key(e)).collect();
         let missing: Vec<String> = records
             .into_iter()
@@ -31288,6 +31345,129 @@ mod tests {
         assert_eq!(catalog.counts().unwrap().0, 1, "no second row");
         assert!(catalog.folder_id(&link).unwrap().is_none(), "nor a second folder");
         assert_eq!(paths.get(&first[0].id), Some(&link.join("a.png")), "read where it was opened");
+    }
+
+    /// Whether names that differ only in case are one file on this disk.
+    fn disk_ignores_case(dir: &Path) -> bool {
+        std::fs::write(dir.join("Case_Probe.txt"), b"x").unwrap();
+        let ignores = dir.join("case_probe.TXT").exists();
+        std::fs::remove_file(dir.join("Case_Probe.txt")).unwrap();
+        ignores
+    }
+
+    /// A case-only rename outside Heeler, on a disk that ignores case,
+    /// gave the photograph a second, blank record: the scan looked the
+    /// file up by its exact name, found nothing, and made a row, while
+    /// the old row's path still answered and so was neither listed nor
+    /// called missing. Its rating and edits dropped out of sight.
+    #[test]
+    fn a_case_only_rename_outside_heeler_keeps_the_photographs_record() {
+        let d = tempfile::tempdir().unwrap();
+        if !disk_ignores_case(d.path()) {
+            eprintln!("case-sensitive volume; a case-only rename is a new name here");
+            return;
+        }
+        std::fs::write(d.path().join("IMG_1.png"), b"x").unwrap();
+        let c = Catalog::open_in_memory().unwrap();
+        let mut paths = HashMap::new();
+        let id = scan_folder(d.path(), &c, &mut paths, &mut ScanStats::default()).unwrap()[0].id.clone();
+        c.set_rating(&id, 4).unwrap();
+        std::fs::rename(d.path().join("IMG_1.png"), d.path().join("step.png")).unwrap();
+        std::fs::rename(d.path().join("step.png"), d.path().join("img_1.png")).unwrap();
+        let mut stats = ScanStats::default();
+        let again = scan_folder(d.path(), &c, &mut paths, &mut stats).unwrap();
+        assert_eq!(again.iter().map(|i| (i.id.as_str(), i.name.as_str(), i.stars)).collect::<Vec<_>>(), vec![(id.as_str(), "img_1.png", 4)]);
+        assert_eq!(c.counts().unwrap().0, 1, "no second record");
+        assert_eq!(c.image(&id).unwrap().path, d.path().join("img_1.png").to_string_lossy(), "the record follows the new name");
+        assert_eq!(paths.get(&id), Some(&d.path().join("img_1.png")));
+        assert_eq!((stats.added, stats.healed), (0, 1));
+    }
+
+    /// The same for a name the record holds in another Unicode form than
+    /// the disk lists it in (a Mac can hold NFD; a row written elsewhere,
+    /// or before a rename, NFC).
+    #[test]
+    fn a_record_in_another_unicode_form_is_the_photograph_on_disk() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("e\u{301}.png"), b"x").unwrap();
+        let nfc = d.path().join("\u{E9}.png");
+        if !nfc.exists() {
+            eprintln!("this volume keeps the two forms apart; the case cannot arise");
+            return;
+        }
+        let c = Catalog::open_in_memory().unwrap();
+        let f = c.add_folder(d.path()).unwrap();
+        c.add_image("row", &nfc, Some(f)).unwrap();
+        c.set_rating("row", 5).unwrap();
+        let mut paths = HashMap::new();
+        let listed = scan_folder(d.path(), &c, &mut paths, &mut ScanStats::default()).unwrap();
+        assert_eq!(listed.iter().map(|i| (i.id.as_str(), i.stars)).collect::<Vec<_>>(), vec![("row", 5)]);
+        assert_eq!(c.counts().unwrap().0, 1, "no second record");
+    }
+
+    /// A photograph that is really gone is never moved onto a different
+    /// file: only a record whose own path still answers on the disk (the
+    /// disk calling the two names one file) is healed.
+    #[test]
+    fn a_photograph_that_is_gone_is_not_moved_onto_another_file() {
+        let d = tempfile::tempdir().unwrap();
+        let c = Catalog::open_in_memory().unwrap();
+        let f = c.add_folder(d.path()).unwrap();
+        c.add_image("gone", &d.path().join("IMG_2.png"), Some(f)).unwrap();
+        c.set_rating("gone", 3).unwrap();
+        std::fs::write(d.path().join("IMG_3.png"), b"x").unwrap();
+        let mut paths = HashMap::new();
+        let listed = scan_folder(d.path(), &c, &mut paths, &mut ScanStats::default()).unwrap();
+        let gone = listed.iter().find(|i| i.id == "gone").expect("still listed");
+        assert!(gone.missing, "and missing");
+        assert_eq!(c.image("gone").unwrap().path, d.path().join("IMG_2.png").to_string_lossy());
+        assert_eq!(listed.len(), 2, "the other file has a record of its own");
+    }
+
+    /// On a disk that keeps case apart, a record whose file is gone is
+    /// not moved onto a file whose name differs from it only in case:
+    /// there the two are different photographs. (Runs where the disk keeps
+    /// case apart, a Linux test run; a disk that folds case cannot hold
+    /// the two names apart to try it.)
+    #[test]
+    fn a_gone_photograph_is_not_healed_onto_other_capitals_where_the_disk_keeps_case() {
+        let d = tempfile::tempdir().unwrap();
+        if disk_ignores_case(d.path()) {
+            eprintln!("this disk folds case; the two names are one file here");
+            return;
+        }
+        let c = Catalog::open_in_memory().unwrap();
+        let f = c.add_folder(d.path()).unwrap();
+        c.add_image("gone", &d.path().join("IMG_6.png"), Some(f)).unwrap();
+        c.set_rating("gone", 2).unwrap();
+        std::fs::write(d.path().join("img_6.png"), b"x").unwrap();
+        let mut paths = HashMap::new();
+        let listed = scan_folder(d.path(), &c, &mut paths, &mut ScanStats::default()).unwrap();
+        assert_eq!(c.image("gone").unwrap().path, d.path().join("IMG_6.png").to_string_lossy(), "left where it was, missing");
+        assert!(listed.iter().any(|i| i.id == "gone" && i.missing));
+        assert!(listed.iter().any(|i| i.id != "gone" && i.name == "img_6.png" && i.stars == 0), "the other file is a photograph of its own");
+    }
+
+    /// Two records that both fit a file's name (a catalog that already
+    /// holds the same photograph twice under two capitalizations) are
+    /// left alone: guessing which one the file is would put the wrong
+    /// rating on it.
+    #[test]
+    fn two_records_that_both_fit_a_name_are_left_alone() {
+        let d = tempfile::tempdir().unwrap();
+        if !disk_ignores_case(d.path()) {
+            eprintln!("case-sensitive volume; the case cannot arise");
+            return;
+        }
+        let c = Catalog::open_in_memory().unwrap();
+        let f = c.add_folder(d.path()).unwrap();
+        c.add_image("upper", &d.path().join("IMG_4.png"), Some(f)).unwrap();
+        c.add_image("lower", &d.path().join("img_4.png"), Some(f)).unwrap();
+        std::fs::write(d.path().join("Img_4.png"), b"x").unwrap();
+        let mut paths = HashMap::new();
+        scan_folder(d.path(), &c, &mut paths, &mut ScanStats::default()).unwrap();
+        assert_eq!(c.image("upper").unwrap().path, d.path().join("IMG_4.png").to_string_lossy());
+        assert_eq!(c.image("lower").unwrap().path, d.path().join("img_4.png").to_string_lossy());
     }
 
     /// Only photographs come back from a `.trash` index: a text file, a
