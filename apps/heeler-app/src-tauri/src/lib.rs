@@ -559,6 +559,12 @@ pub fn scan_folder(
                 .into_iter()
                 .collect();
 
+            // Ids a flush wrote down because the path alone would not give
+            // them back (FLUSHED_IDS): a file returning to one of those
+            // paths gets its old id, and with it its edits.
+            let mut flushed = read_flushed_ids(catalog)?;
+            let flushed_before = flushed.len();
+
             for file in &files {
                 let id = match catalog.image_id_by_path(file)? {
                     Some(existing) => {
@@ -569,7 +575,10 @@ pub fn scan_folder(
                         existing
                     }
                     None => {
-                        let id = fresh_image_id(catalog, file)?;
+                        let id = match flushed.remove(file.to_string_lossy().as_ref()) {
+                            Some(old) if !catalog.image_id_taken(&old)? => old,
+                            _ => fresh_image_id(catalog, file)?,
+                        };
                         catalog.add_image(&id, file, Some(folder_id))?;
                         stats.added += 1;
                         id
@@ -586,6 +595,10 @@ pub fn scan_folder(
                 let record = catalog.image(&id)?;
                 paths.insert(id.clone(), file.clone());
                 out.push(record_to_session(&record));
+            }
+
+            if flushed.len() != flushed_before {
+                write_flushed_ids(catalog, &flushed)?;
             }
 
             // Photographs the catalog has here that the disk does not.
@@ -13267,11 +13280,50 @@ pub fn hide_folder_payload(c: &Catalog, path: &Path) -> Result<usize, String> {
 /// back without its records. Returns (folders, photographs) forgotten.
 pub fn flush_folder_payload(c: &Catalog, path: &Path) -> Result<(usize, i64), String> {
     c.batch_with(|c| {
+        remember_flushed_ids(c, path)?;
         let counts = c.flush_folder(path)?;
         sessions_leave_folder(c, path, true)?;
         Ok::<_, SessionLeave>(counts)
     })
     .map_err(|e| e.0)
+}
+
+/// Catalog meta key holding, as JSON, path to id for photographs a flush
+/// forgot whose id is not the hash of their path.
+///
+/// Flush promises the edits come back when the folder is added again,
+/// because the edits are kept by id outside the catalog and the scan
+/// gives a file the hash of its path. A relinked photograph keeps the id
+/// its first path gave it, and a file whose hash was taken got a stepped
+/// one (fresh_image_id), so after a flush their files came back under
+/// other ids and their edits were orphaned (vagabond-burro/heeler#42).
+/// Only those few are written down; every other id is its path's hash
+/// and needs no record.
+pub const FLUSHED_IDS: &str = "flushed_ids";
+
+fn read_flushed_ids(c: &Catalog) -> Result<std::collections::BTreeMap<String, String>, heeler_catalog::CatalogError> {
+    Ok(c.meta(FLUSHED_IDS)?.and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default())
+}
+
+fn write_flushed_ids(c: &Catalog, map: &std::collections::BTreeMap<String, String>) -> Result<(), heeler_catalog::CatalogError> {
+    c.set_meta(FLUSHED_IDS, &serde_json::to_string(map).unwrap_or_else(|_| "{}".into()))
+}
+
+/// Writes down the ids a flush of `path` is about to forget that a later
+/// scan could not work out from the path alone.
+fn remember_flushed_ids(c: &Catalog, path: &Path) -> Result<(), heeler_catalog::CatalogError> {
+    let mut map = read_flushed_ids(c)?;
+    let mut changed = false;
+    for (id, file) in c.subtree_images(path)? {
+        if id != image_id_for(Path::new(&file)) {
+            map.insert(file, id);
+            changed = true;
+        }
+    }
+    if changed {
+        write_flushed_ids(c, &map)?;
+    }
+    Ok(())
 }
 
 /// Why a flush or hide and its session update failed, as the words the
@@ -13375,13 +13427,30 @@ pub struct RelinkReport {
     pub taken: usize,
 }
 
-/// Whether `target` already belongs to a catalog row other than `id`:
-/// the paths column is unique, so pointing `id` at it can only fail.
-fn path_taken_by_another(catalog: &Catalog, id: &str, target: &Path) -> Result<bool, String> {
-    Ok(catalog
-        .image_id_by_path(target)
-        .map_err(|e| e.to_string())?
-        .is_some_and(|other| other != id))
+/// Points photograph `id` at `target`, in folder `folder_id`. Answers
+/// false, changing nothing, when the file already belongs to another row
+/// that carries work of its own (a rating, flag, keyword, collection or
+/// edits): the paths column is unique, and one of the two would have to
+/// lose its work.
+///
+/// A row with nothing on it is what a folder scan makes for a file it
+/// has not seen before, which is what happens when a photograph is moved
+/// in the file browser and the new folder is opened before Relink: the
+/// move's record stays behind as a missing photograph and the file gets a
+/// blank one. That blank row is folded into the moved photograph, which
+/// keeps its id and everything on it (vagabond-burro/heeler#42).
+fn point_at(catalog: &Catalog, id: &str, target: &Path, folder_id: i64) -> Result<bool, String> {
+    let e = |e: heeler_catalog::CatalogError| e.to_string();
+    match catalog.image_id_by_path(target).map_err(e)? {
+        Some(other) if other != id => {
+            if catalog.image_has_own_work(&other).map_err(e)? {
+                return Ok(false);
+            }
+            catalog.absorb_image(id, &other).map_err(e)?;
+        }
+        _ => catalog.set_image_path(id, target, Some(folder_id)).map_err(e)?,
+    }
+    Ok(true)
 }
 
 /// Points a photograph at the file it moved to, and brings its
@@ -13424,9 +13493,12 @@ pub fn relink_in(
 
     let old_folder_id = catalog.image(image_id).map_err(|e| e.to_string())?.folder_id;
     let folder_id = catalog.add_folder(&new_folder).map_err(|e| e.to_string())?;
-    catalog
-        .set_image_path(image_id, target, Some(folder_id))
-        .map_err(|e| e.to_string())?;
+    if !point_at(catalog, image_id, target, folder_id)? {
+        let name = target.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        return Err(format!(
+            "{name} is already in the catalog as another photograph with its own ratings, flags, keywords or edits, so this one was left as it was. Remove the one you don't want from the catalog, then relink."
+        ));
+    }
 
     let mut moved = vec![(image_id.to_string(), target.to_path_buf())];
     let mut report = RelinkReport { relinked: 1, ..RelinkReport::default() };
@@ -13447,18 +13519,18 @@ pub fn relink_in(
                 continue;
             }
             let candidate = new_folder.join(&rec.file_name);
-            if candidate.is_file() && path_taken_by_another(catalog, &rec.id, &candidate)? {
-                report.taken += 1;
+            if !candidate.is_file() {
+                report.still_missing += 1;
                 continue;
             }
-            if candidate.is_file()
-                && catalog.set_image_path(&rec.id, &candidate, Some(folder_id)).is_ok()
-            {
-                moved.push((rec.id.clone(), candidate));
-                report.relinked += 1;
-                continue;
+            match point_at(catalog, &rec.id, &candidate, folder_id) {
+                Ok(true) => {
+                    moved.push((rec.id.clone(), candidate));
+                    report.relinked += 1;
+                }
+                Ok(false) => report.taken += 1,
+                Err(_) => report.still_missing += 1,
             }
-            report.still_missing += 1;
         }
     }
 
@@ -13587,20 +13659,18 @@ fn relink_one(
         report.still_missing += 1;
         return Ok(());
     };
-    if path_taken_by_another(catalog, id, &found)? {
-        report.taken += 1;
-        return Ok(());
-    }
     // Found under the root, so it always has a folder.
     let parent = found.parent().unwrap_or(root);
     let landed = catalog
         .add_folder(parent)
-        .and_then(|folder_id| catalog.set_image_path(id, &found, Some(folder_id)));
+        .map_err(|e| e.to_string())
+        .and_then(|folder_id| point_at(catalog, id, &found, folder_id));
     match landed {
-        Ok(()) => {
+        Ok(true) => {
             moved.push((id.to_string(), found));
             report.relinked += 1;
         }
+        Ok(false) => report.taken += 1,
         Err(_) => report.still_missing += 1,
     }
     Ok(())
@@ -13684,6 +13754,41 @@ async fn missing_images(app: tauri::AppHandle) -> Result<Vec<SessionImage>, Stri
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// The rows among (id, recorded path) whose file is gone, on a drive
+/// that is there: a photograph on an unplugged drive is not known to be
+/// gone and is never offered for forgetting.
+pub fn gone_for_good(rows: &[(String, String)]) -> Vec<String> {
+    let mut check = trash::VolumeCheck::default();
+    rows.iter()
+        .filter(|(_, path)| {
+            let p = Path::new(path);
+            !p.exists() && check.unmounted(p).is_none()
+        })
+        .map(|(id, _)| id.clone())
+        .collect()
+}
+
+/// Forgets the photographs among `ids` whose file is STILL gone now, on a
+/// drive that is there, asked again at the moment of the deed. Move to
+/// Trash had nothing to move for such a photograph and failed with
+/// "is not there", and the only other way out was flushing its whole
+/// folder (vagabond-burro/heeler#36). Nothing on disk is touched and the
+/// edits are kept outside the catalog. Returns the ids forgotten.
+pub fn forget_missing_in(catalog: &Catalog, ids: &[String]) -> Result<Vec<String>, String> {
+    let rows: Vec<(String, String)> = ids
+        .iter()
+        .filter_map(|id| catalog.image(id).ok().map(|r| (r.id, r.path)))
+        .collect();
+    let gone = gone_for_good(&rows);
+    catalog.forget_images(&gone).map_err(|e| e.to_string())?;
+    Ok(gone)
+}
+
+#[tauri::command]
+async fn forget_missing_photos(app: tauri::AppHandle, image_ids: Vec<String>) -> Result<Vec<String>, String> {
+    catalog_command(app, move |c| forget_missing_in(c, &image_ids)).await
 }
 
 // Move to Trash ------------------------------------------------------------
@@ -20683,6 +20788,7 @@ pub fn run() {
             forget_missing_trashed_photos,
             folders_with_hidden,
             hidden_folder_paths,
+            forget_missing_photos,
             folders_with_trash,
             reveal_trash,
             brush_tip_preview,
@@ -21148,6 +21254,7 @@ mod tests {
         for name in [
             "folders_with_hidden",
             "hidden_folder_paths",
+            "forget_missing_photos",
             "folders_with_trash",
             "list_collections",
             "create_collection",
@@ -24802,6 +24909,28 @@ mod tests {
         assert_eq!((report.relinked, report.still_missing), (1, 1));
     }
 
+    /// A photograph whose file is gone can leave its folder on its own;
+    /// Move to Trash had nothing to move and the only way out was a
+    /// flush of the whole folder (vagabond-burro/heeler#36).
+    #[test]
+    fn forgetting_missing_photographs_takes_only_the_ones_still_gone() {
+        let d = tempfile::tempdir().unwrap();
+        let c = Catalog::open_in_memory().unwrap();
+        let f = c.add_folder(d.path()).unwrap();
+        let here = d.path().join("here.png");
+        std::fs::write(&here, b"x").unwrap();
+        c.add_image("ghost", &d.path().join("gone.png"), Some(f)).unwrap();
+        c.add_image("here", &here, Some(f)).unwrap();
+        // A photograph on a drive that is not plugged in is not known to be gone.
+        let absent_drive = if cfg!(windows) { PathBuf::from("Q:\\shoot\\away.png") } else { PathBuf::from("/Volumes/heeler-no-such-drive/away.png") };
+        c.add_image("away", &absent_drive, None).unwrap();
+        let ids: Vec<String> = ["ghost", "here", "away", "never"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(forget_missing_in(&c, &ids).unwrap(), vec!["ghost".to_string()]);
+        assert!(c.image("ghost").is_err());
+        assert!(c.image("here").is_ok(), "a photograph whose file is there stays");
+        assert!(c.image("away").is_ok(), "one on an unplugged drive stays");
+    }
+
     /// A folder relink used to stop at the first photograph it could not
     /// relink, with the earlier ones already moved in the catalog but
     /// never handed to the session, so the viewer decoded their old paths
@@ -24820,8 +24949,10 @@ mod tests {
         for name in ["one.dng", "two.dng", "three.dng"] {
             std::fs::write(root.join(name), b"x").unwrap();
         }
-        // two.dng is already in the catalog in its new place, as its own row.
+        // two.dng is already in the catalog in its new place, as its own
+        // row with a rating of its own.
         c.add_image("b_new", &root.join("two.dng"), None).unwrap();
+        c.set_rating("b_new", 2).unwrap();
         let mut paths: HashMap<String, PathBuf> = HashMap::new();
         let ids: Vec<String> = ["a", "b", "flushed", "c"].iter().map(|s| s.to_string()).collect();
         let report = relink_in_folder(&c, &mut paths, &ids, &root).expect("the run finishes");
@@ -24847,9 +24978,91 @@ mod tests {
             std::fs::write(to.path().join(name), b"x").unwrap();
         }
         c.add_image("b_new", &to.path().join("b.png"), None).unwrap();
+        c.set_rating("b_new", 2).unwrap();
         let mut paths = HashMap::new();
         let report = relink_in(&c, &mut paths, "a", &to.path().join("a.png")).unwrap();
         assert_eq!(report, RelinkReport { relinked: 1, still_missing: 1, taken: 1 });
+    }
+
+    /// The owner's ghost: a photograph moved in the file browser, the new
+    /// folder opened first (so the file got a blank row of its own), and
+    /// Relink then failed on the unique path. The blank row now folds
+    /// into the moved photograph, which keeps its id, rating and edits
+    /// (vagabond-burro/heeler#42).
+    #[test]
+    fn relinking_onto_a_file_with_a_blank_row_folds_the_row_in() {
+        let d = tempfile::tempdir().unwrap();
+        let c = Catalog::open_in_memory().unwrap();
+        let root = c.add_folder(d.path()).unwrap();
+        let day = d.path().join("2025-11-23");
+        std::fs::create_dir(&day).unwrap();
+        std::fs::write(day.join("P1.RW2"), b"x").unwrap();
+        c.add_image("ghost", &d.path().join("P1.RW2"), Some(root)).unwrap();
+        c.set_rating("ghost", 4).unwrap();
+        // Opening the new folder made the blank row.
+        let mut paths = HashMap::new();
+        let listed = scan_folder(&day, &c, &mut paths, &mut ScanStats::default()).unwrap();
+        let blank = listed[0].id.clone();
+        assert_ne!(blank, "ghost");
+        let report = relink_in(&c, &mut paths, "ghost", &day.join("P1.RW2")).expect("the relink lands");
+        assert_eq!(report.relinked, 1);
+        assert_eq!(c.image("ghost").unwrap().path, day.join("P1.RW2").to_string_lossy());
+        assert_eq!(c.image("ghost").unwrap().rating, 4, "the moved photograph keeps its rating");
+        assert!(c.image(&blank).is_err(), "the blank row is gone");
+        let again = scan_folder(&day, &c, &mut paths, &mut ScanStats::default()).unwrap();
+        assert_eq!(again.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), vec!["ghost"], "one photograph, under its old id");
+        assert!(scan_folder(d.path(), &c, &mut paths, &mut ScanStats::default()).unwrap().is_empty(), "and no ghost in the old folder");
+    }
+
+    /// Flush promises the edits come back when the folder is added again,
+    /// which held only for photographs whose id is their path's hash. A
+    /// relinked one came back under another id, its edits orphaned
+    /// (vagabond-burro/heeler#42).
+    #[test]
+    fn a_relinked_photograph_comes_back_under_its_own_id_after_a_flush() {
+        let d = tempfile::tempdir().unwrap();
+        let c = Catalog::open_in_memory().unwrap();
+        let png = heeler_io::encode_png(&ImageBuf::filled(8, 8, [0.5, 0.5, 0.5, 1.0])).unwrap();
+        let shoot = d.path().join("shoot");
+        let moved = d.path().join("moved");
+        std::fs::create_dir_all(&shoot).unwrap();
+        std::fs::create_dir_all(&moved).unwrap();
+        std::fs::write(shoot.join("a.png"), &png).unwrap();
+        std::fs::write(moved.join("plain.png"), &png).unwrap();
+        let mut paths = HashMap::new();
+        let first = scan_folder(&shoot, &c, &mut paths, &mut ScanStats::default()).unwrap();
+        let id = first[0].id.clone();
+        std::fs::rename(shoot.join("a.png"), moved.join("a.png")).unwrap();
+        relink_in(&c, &mut paths, &id, &moved.join("a.png")).unwrap();
+        let plain = scan_folder(&moved, &c, &mut paths, &mut ScanStats::default()).unwrap()
+            .into_iter().find(|i| i.name == "plain.png").unwrap().id;
+
+        flush_folder_payload(&c, &moved).unwrap();
+        assert!(c.image(&id).is_err(), "flushed");
+        let back = scan_folder(&moved, &c, &mut paths, &mut ScanStats::default()).unwrap();
+        let ids: std::collections::BTreeMap<String, String> = back.into_iter().map(|i| (i.name, i.id)).collect();
+        assert_eq!(ids["a.png"], id, "the relinked photograph has its own id back, and with it its edits");
+        assert_eq!(ids["plain.png"], plain, "a plain one comes back by its hash, as before");
+        assert!(read_flushed_ids(&c).unwrap().is_empty(), "the record is spent once used");
+    }
+
+    /// When the file's own row has work on it, neither row loses anything
+    /// and the relink says why in plain words, not as a database error.
+    #[test]
+    fn relinking_onto_a_file_whose_row_has_work_of_its_own_says_why_and_changes_nothing() {
+        let d = tempfile::tempdir().unwrap();
+        let c = Catalog::open_in_memory().unwrap();
+        std::fs::write(d.path().join("P1.RW2"), b"x").unwrap();
+        c.add_image("ghost", &d.path().join("gone").join("P1.RW2"), None).unwrap();
+        c.add_image("owned", &d.path().join("P1.RW2"), None).unwrap();
+        c.set_keywords("owned", &["fox".into()]).unwrap();
+        let mut paths = HashMap::new();
+        let err = relink_in(&c, &mut paths, "ghost", &d.path().join("P1.RW2")).unwrap_err();
+        assert!(err.contains("already in the catalog as another photograph"), "{err}");
+        assert!(!err.contains("UNIQUE"), "{err}");
+        assert!(c.image("ghost").unwrap().path.contains("gone"));
+        assert_eq!(c.image("owned").unwrap().path, d.path().join("P1.RW2").to_string_lossy());
+        assert!(paths.is_empty());
     }
 
     #[test]

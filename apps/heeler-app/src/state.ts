@@ -8929,7 +8929,12 @@ export type ConfirmAction =
   // One prompt, because one prompt is what a reversible action is worth:
   // the photograph is still on the disk afterwards and Put Back brings
   // it home. Deleting it for real is the file manager's job.
-  | { kind: "trash_images"; ids: string[]; names: string[] }
+  //
+  // A photograph whose file is not where the catalog says has nothing to
+  // move, and the rename failed with "is not there" (vagabond-burro/heeler#36).
+  // Those are listed in `missing` and leave the catalog instead, under the
+  // same one prompt, which says so.
+  | { kind: "trash_images"; ids: string[]; names: string[]; missing?: string[] }
   // Deleting a merge or a panorama is the one delete this app does,
   // and it is allowed because the thing deleted is a recipe Heeler
   // wrote, not a photograph anybody shot: the frames it names stay
@@ -9342,6 +9347,17 @@ export function cropPreviewGraph(s: State): {
 export function taggingTargets(s: State): string[] {
   if (s.imageSelection.length > 1) return s.imageSelection;
   return s.activeImage ? [s.activeImage] : [];
+}
+
+/** Move to Trash's question for the selection, or null with nothing
+ * selected. The ones whose file is missing are named apart: there is
+ * nothing to move for them, so they leave the catalog instead. */
+export function trashConfirmAction(s: State): ConfirmAction | null {
+  const ids = taggingTargets(s);
+  if (!ids.length) return null;
+  const names = ids.map((id) => s.images.find((i) => i.id === id)?.name ?? id);
+  const missing = ids.filter((id) => s.images.find((i) => i.id === id)?.missing);
+  return { kind: "trash_images", ids, names, ...(missing.length ? { missing } : {}) };
 }
 
 /** Every available photograph can freeze its current edits. */

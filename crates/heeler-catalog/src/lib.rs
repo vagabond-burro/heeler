@@ -1162,6 +1162,20 @@ impl Catalog {
         Ok(out)
     }
 
+    /// Every photograph row (id, path) in the folders at `path` and
+    /// beneath it, trashed and hidden ones included.
+    pub fn subtree_images(&self, path: &Path) -> Result<Vec<(String, String)>, CatalogError> {
+        let mut out = Vec::new();
+        let mut stmt = self.conn.prepare("SELECT id, path FROM images WHERE folder_id = ?1")?;
+        for (folder, _) in self.folder_subtree(path)? {
+            let rows = stmt.query_map(params![folder], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            for row in rows {
+                out.push(row?);
+            }
+        }
+        Ok(out)
+    }
+
     /// How many folder rows and photographs a folder command at `path`
     /// would reach, subfolders included, so the prompt can say a number.
     pub fn subtree_counts(&self, path: &Path) -> Result<(usize, i64), CatalogError> {
@@ -1248,6 +1262,66 @@ impl Catalog {
                 forgotten += c.conn.execute("DELETE FROM images WHERE id = ?1 AND trashed = 1", params![id])?;
             }
             Ok(forgotten)
+        })
+    }
+
+    /// Forgets photographs by id, whatever their state: the same removal
+    /// as flush_folder (the row and everything hanging off it: keywords,
+    /// EXIF, thumbnails, collection membership) for just these, in one
+    /// transaction. Nothing on disk is touched, and the saved edits are
+    /// not in this database. The caller decides which ones may go; this
+    /// is how a photograph whose file is gone leaves a folder without
+    /// flushing the whole folder (vagabond-burro/heeler#36). Returns how
+    /// many were forgotten.
+    pub fn forget_images(&self, ids: &[String]) -> Result<usize, CatalogError> {
+        self.batch(|c| {
+            let mut forgotten = 0;
+            for id in ids {
+                for table in ["keywords", "exif", "thumbnails", "collection_members", "decoded_dims"] {
+                    c.conn.execute(&format!("DELETE FROM {table} WHERE image_id = ?1"), params![id])?;
+                }
+                forgotten += c.conn.execute("DELETE FROM images WHERE id = ?1", params![id])?;
+            }
+            Ok(forgotten)
+        })
+    }
+
+    /// Whether a photograph's row carries anything a person put there: a
+    /// rating, a flag, keywords, a collection, or edits. A row with none
+    /// of it is what a folder scan makes for a file it has not seen
+    /// before, and is safe to fold into another row.
+    pub fn image_has_own_work(&self, id: &str) -> Result<bool, CatalogError> {
+        let marked: i64 = self.conn.query_row(
+            "SELECT (rating > 0) + (flag <> 'none') + edited
+                  + (SELECT COUNT(*) FROM keywords WHERE image_id = ?1)
+                  + (SELECT COUNT(*) FROM collection_members WHERE image_id = ?1)
+             FROM images WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        ).map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => CatalogError::ImageNotFound(id.to_string()),
+            other => CatalogError::Sql(other),
+        })?;
+        Ok(marked > 0)
+    }
+
+    /// Folds `newcomer` into `keeper`: the keeper takes the newcomer's
+    /// path and folder and keeps its own id, rating, flags, keywords,
+    /// collections and edits; the newcomer's row and everything hanging
+    /// off it go. This is how a photograph moved in the file browser gets
+    /// its record back once the new place already has a blank row of its
+    /// own (vagabond-burro/heeler#42). One transaction.
+    pub fn absorb_image(&self, keeper: &str, newcomer: &str) -> Result<(), CatalogError> {
+        self.batch(|c| {
+            let new = c.image(newcomer)?;
+            c.image(keeper)?;
+            for table in ["keywords", "exif", "thumbnails", "collection_members", "decoded_dims"] {
+                c.conn.execute(&format!("DELETE FROM {table} WHERE image_id = ?1"), params![newcomer])?;
+            }
+            c.conn.execute("DELETE FROM images WHERE id = ?1", params![newcomer])?;
+            c.set_image_path(keeper, Path::new(&new.path), new.folder_id)?;
+            c.conn.execute("UPDATE images SET trashed = 0, hidden = 0 WHERE id = ?1", params![keeper])?;
+            Ok(())
         })
     }
 
@@ -2868,6 +2942,53 @@ mod tests {
         assert_eq!(c.hide_folder(Path::new("/shoot/day3")).unwrap(), 1);
         c.add_folder(Path::new("/shoot/day3")).unwrap();
         assert!(c.hidden_folder_paths().unwrap().is_empty());
+    }
+
+    #[test]
+    fn forgetting_photographs_takes_their_rows_and_leaves_the_rest() {
+        let c = Catalog::open_in_memory().unwrap();
+        let f = c.add_folder(Path::new("/shoot")).unwrap();
+        c.add_image("ghost", Path::new("/shoot/gone.dng"), Some(f)).unwrap();
+        c.add_image("kept", Path::new("/shoot/here.dng"), Some(f)).unwrap();
+        c.set_keywords("ghost", &["wedding".into()]).unwrap();
+        c.store_thumbnail("ghost", ThumbKind::Embedded, &[1; 10]).unwrap();
+        let col = c.create_collection("picks").unwrap();
+        c.add_to_collection(col, "ghost").unwrap();
+        c.add_to_collection(col, "kept").unwrap();
+        assert_eq!(c.forget_images(&["ghost".into(), "never".into()]).unwrap(), 1);
+        assert!(matches!(c.image("ghost"), Err(CatalogError::ImageNotFound(_))));
+        assert_eq!(c.image("kept").unwrap().path, "/shoot/here.dng");
+        assert_eq!(c.list_images(&Filter { collection_id: Some(col), ..Default::default() }).unwrap().len(), 1, "membership went with the row");
+        assert!(c.list_folders().unwrap().iter().any(|(_, p)| p == "/shoot"), "the folder stays");
+    }
+
+    #[test]
+    fn a_blank_newcomer_folds_into_the_photograph_that_moved() {
+        let c = Catalog::open_in_memory().unwrap();
+        let old = c.add_folder(Path::new("/shoot")).unwrap();
+        let day = c.add_folder(Path::new("/shoot/day2")).unwrap();
+        c.add_image("ghost", Path::new("/shoot/P1.RW2"), Some(old)).unwrap();
+        c.set_rating("ghost", 4).unwrap();
+        c.set_keywords("ghost", &["fox".into()]).unwrap();
+        c.add_image("blank", Path::new("/shoot/day2/P1.RW2"), Some(day)).unwrap();
+        c.store_thumbnail("blank", ThumbKind::Embedded, &[1; 10]).unwrap();
+        assert!(c.image_has_own_work("ghost").unwrap());
+        assert!(!c.image_has_own_work("blank").unwrap());
+        c.absorb_image("ghost", "blank").unwrap();
+        let kept = c.image("ghost").unwrap();
+        assert_eq!(kept.path, "/shoot/day2/P1.RW2");
+        assert_eq!(kept.folder_id, Some(day));
+        assert_eq!(kept.rating, 4);
+        assert!(matches!(c.image("blank"), Err(CatalogError::ImageNotFound(_))));
+        assert_eq!(c.image_id_by_path(Path::new("/shoot/day2/P1.RW2")).unwrap().as_deref(), Some("ghost"));
+        // A row with a flag, a keyword or a collection has work of its own.
+        c.add_image("flagged", Path::new("/shoot/f.RW2"), Some(old)).unwrap();
+        c.set_flag("flagged", Flag::Pick).unwrap();
+        assert!(c.image_has_own_work("flagged").unwrap());
+        c.add_image("collected", Path::new("/shoot/c.RW2"), Some(old)).unwrap();
+        let col = c.create_collection("picks").unwrap();
+        c.add_to_collection(col, "collected").unwrap();
+        assert!(c.image_has_own_work("collected").unwrap());
     }
 
     #[test]

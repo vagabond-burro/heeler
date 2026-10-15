@@ -20,6 +20,7 @@ import {
   catalogInfo,
   createCatalog,
   flushFolder,
+  forgetMissingPhotos,
   forgetMissingTrashedPhotos,
   hideFolder,
   importCatalog,
@@ -41,6 +42,7 @@ import {
 import { refreshLibrary, restoreCatalogSession } from "./chrome";
 import { askCatalogUpgrade, forgetCatalogUpgradeApproval } from "../catalogupgrade";
 import { logMsg } from "../log";
+import { flashStatus } from "./hints";
 import { flushRecoverySaves } from "../savebarrier";
 import { watchOp } from "./opprogress";
 import { RIBBON_ICON_CHIP } from "./ribbontable";
@@ -89,15 +91,30 @@ export function confirmCopy(confirm: Confirm): {
     };
   }
 
+  if (a.kind === "trash_images" && a.missing?.length === a.ids.length) {
+    // Nothing here has a file to move: the question is a different one.
+    const what = a.ids.length === 1 ? names(a.names) : `These ${a.ids.length} photographs`;
+    const its = a.ids.length === 1 ? "Its" : "Their";
+    return {
+      title: "Remove from catalog",
+      body: `${what} ${a.ids.length === 1 ? "is" : "are"} not where the catalog says, so there is nothing to move to the trash. ${its} catalog record${a.ids.length === 1 ? "" : "s"} will be removed instead: ratings, flags, keywords and collections are forgotten, the edits are kept, and nothing on disk is touched. If the file moved, Relink finds it instead.`,
+      ok: "Remove from catalog",
+      danger: false,
+    };
+  }
   if (a.kind === "trash_images") {
     const what = a.ids.length === 1 ? names(a.names) : `${a.ids.length} photographs`;
+    const gone = a.missing?.length ?? 0;
+    const missingNote = gone
+      ? ` ${gone} of them ${gone === 1 ? "is" : "are"} not where the catalog says, so there is nothing to move: ${gone === 1 ? "its record is" : "their records are"} removed from the catalog instead.`
+      : "";
     return {
       title: "Move to trash",
       // Says where the file goes, in words the user can act on without
       // this app: the folder is plain, visible and beside the images.
       // Nothing here empties it, which is the other half of the promise
       // and the reason this is not called Delete.
-      body: `${what} will be moved into a .trash folder beside them. The files are not deleted and nothing is lost: ratings, flags and edits are kept, and Put Back returns them. Heeler never empties the trash, so delete that folder yourself when you are sure.`,
+      body: `${what} will be moved into a .trash folder beside them. The files are not deleted and nothing is lost: ratings, flags and edits are kept, and Put Back returns them. Heeler never empties the trash, so delete that folder yourself when you are sure.${missingNote}`,
       ok: "Move to trash",
       danger: false,
     };
@@ -229,14 +246,35 @@ async function perform(confirm: Confirm, state: State, dispatch: D): Promise<voi
     return;
   }
   if (a.kind === "trash_images") {
-    const report = await moveImagesToTrash(a.ids);
+    const missing = new Set(a.missing ?? []);
+    const present = a.ids.filter((id) => !missing.has(id));
+    const report = present.length ? await moveImagesToTrash(present) : { failed: [], moved_ids: [] as string[] };
+    // A photograph with no file leaves the catalog rather than failing
+    // the rename (vagabond-burro/heeler#36). The backend asks the disk
+    // again, so one whose file came back meanwhile is left alone.
+    let forgotten: string[] = [];
+    if (missing.size) {
+      try {
+        forgotten = await forgetMissingPhotos([...missing]);
+        if (forgotten.length) {
+          logMsg("info", `Removed ${forgotten.length} photograph${forgotten.length === 1 ? "" : "s"} whose file was missing from the catalog. No file was touched.`);
+        }
+      } catch (e) {
+        logMsg("error", `Could not remove the missing photographs from the catalog: ${String(e)}`);
+        flashStatus(`Could not remove the missing photographs from the catalog: ${String(e)}`);
+      }
+    }
     if (report.failed.length) {
       logMsg("error", trashFailure(report.failed));
+      // Where the user is looking, too: the dialog closes either way,
+      // and a failure only the console heard looked like nothing happened.
+      flashStatus(trashFailure(report.failed));
     }
     // Only the ones that actually moved leave the ribbon: the backend
     // names them, so a photograph whose rename failed (read-only,
     // permission) stays in the library it is still sitting in.
-    if (report.moved_ids.length) dispatch({ type: "remove_images", ids: report.moved_ids });
+    const gone = [...report.moved_ids, ...forgotten];
+    if (gone.length) dispatch({ type: "remove_images", ids: gone });
   } else if (a.kind === "forget_missing_trashed") {
     try {
       // The backend asks the disk again: one put back, or whose drive

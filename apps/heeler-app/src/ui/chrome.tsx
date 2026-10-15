@@ -8,7 +8,7 @@ import { panePropsEqual } from "./viewmemo";
 import { createPortal } from "react-dom";
 import type { Command, ImageEntry, Mode, State, TreeNode } from "../state";
 import { exportDpi, photoFlipBlocked, photoFlips, photoTurnBlocked, layerMaskToggleTarget } from "../state";
-import { ART_CONTENT_KINDS, ART_KINDS, CROP_RATIOS, DOC_SEL_ID, cropRatioList, LAYER_MASK_TYPES, SELECT_METHODS, availableMaskTypes, activeSelectionMask, ancestorsBetween, bakeable, filtersActive, folderHasEdits, isPano, isStack, parseAspect, selectionHasContent, selectionLoadSource, stackAppendTargets, taggingTargets, thumbCell, visibleImages, duplicable } from "../state";
+import { ART_CONTENT_KINDS, ART_KINDS, CROP_RATIOS, DOC_SEL_ID, cropRatioList, LAYER_MASK_TYPES, SELECT_METHODS, availableMaskTypes, activeSelectionMask, ancestorsBetween, bakeable, filtersActive, folderHasEdits, isPano, isStack, parseAspect, selectionHasContent, selectionLoadSource, stackAppendTargets, taggingTargets, thumbCell, trashConfirmAction, visibleImages, duplicable } from "../state";
 import { layerActionHint, layerActions, maskToggleItem } from "../layeractions";
 import { bakeMaskRaster, entryFromRow } from "../bridge";
 import { reportToolError } from "./hints";
@@ -536,19 +536,16 @@ export function flagSelection(state: State, dispatch: D, flag: ImageEntry["flag"
   for (const id of targets) void persistFlag(id, flag);
 }
 
-function namesOf(state: State, ids: string[]): string[] {
-  return ids.map((id) => state.images.find((i) => i.id === id)?.name ?? id);
-}
-
 
 /** What a relink says about photographs it found but left alone: the
- * file there is already in the catalog as another photograph, and one
- * file cannot be two (vagabond-burro/heeler#38). */
+ * file there is already in the catalog as another photograph with work
+ * of its own, and one file cannot be two (vagabond-burro/heeler#38). A
+ * blank row there is folded in instead and needs no word. */
 export function takenNote(taken: number): string {
   if (!taken) return "";
   return taken === 1
-    ? " 1 was left as it was: the file found for it is already in the catalog as another photograph."
-    : ` ${taken} were left as they were: the files found for them are already in the catalog as other photographs.`;
+    ? " 1 was left as it was: the file found for it is already in the catalog as another photograph, with its own ratings, flags, keywords or edits."
+    : ` ${taken} were left as they were: the files found for them are already in the catalog as other photographs, with their own ratings, flags, keywords or edits.`;
 }
 
 /** Finds a moved photograph again, and everything that moved with it.
@@ -627,9 +624,8 @@ export async function relinkFrom(state: State, dispatch: D) {
  * and there is no longer an action in this app like that.
  */
 export function askTrash(state: State, dispatch: D) {
-  const ids = taggingTargets(state);
-  if (!ids.length) return;
-  dispatch({ type: "ask_confirm", action: { kind: "trash_images", ids, names: namesOf(state, ids) } });
+  const action = trashConfirmAction(state);
+  if (action) dispatch({ type: "ask_confirm", action });
 }
 
 /** Forget Missing Trashed Photos: asks the disk which trashed
@@ -4813,16 +4809,27 @@ closes the menu.*/
               Relink…
             </button>
           )}
-          <button
-            data-testid="thumb-menu-trash"
-            data-hint="Move the files into a .trash folder beside them; nothing is deleted"
-            onClick={() => {
-              askTrash(state, dispatch);
-              setThumbMenu(null);
-            }}
-          >
-            Move to Trash…
-          </button>
+          {(() => {
+            // A photograph whose file is gone has nothing to move: the
+            // same item takes its record out of the catalog instead, and
+            // says so (vagabond-burro/heeler#36).
+            const targets = taggingTargets(state);
+            const allMissing = targets.length > 0 && targets.every((id) => state.images.find((i) => i.id === id)?.missing);
+            return (
+              <button
+                data-testid="thumb-menu-trash"
+                data-hint={allMissing
+                  ? "The file is not where the catalog says: remove the record from the catalog. Nothing on disk is touched"
+                  : "Move the files into a .trash folder beside them; nothing is deleted"}
+                onClick={() => {
+                  askTrash(state, dispatch);
+                  setThumbMenu(null);
+                }}
+              >
+                {allMissing ? "Remove from Catalog…" : "Move to Trash…"}
+              </button>
+            );
+          })()}
         </MenuSurface>
     </FixedMenu>
   );

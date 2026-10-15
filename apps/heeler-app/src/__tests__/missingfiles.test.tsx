@@ -10,14 +10,15 @@
 // said about any of it. The library looked correct, which is worse than
 // an error.
 
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { initialState } from "../data";
 import { BrowserPanel, Ribbon, loadSessionImages, takenNote } from "../ui/chrome";
-import { reduce, type Command, type ImageEntry, type State } from "../state";
-import type { FolderImage } from "../bridge";
+import { reduce, trashConfirmAction, type Command, type ImageEntry, type State } from "../state";
+import { mockRemovalCalls, mockResetRemovalCalls, type FolderImage } from "../bridge";
+import { ConfirmDialog, confirmCopy } from "../ui/catalogui";
 import { isMissingSource } from "../previewretry";
 
 const files: FolderImage[] = [
@@ -197,7 +198,58 @@ describe("finding a folder's trash", () => {
 describe("a relink's report of files that belong to another photograph", () => {
   it("says nothing when there are none, and counts them when there are", () => {
     expect(takenNote(0)).toBe("");
-    expect(takenNote(1)).toMatch(/^ 1 was left as it was: the file found for it is already in the catalog/);
-    expect(takenNote(3)).toMatch(/^ 3 were left as they were: the files found for them are already in the catalog as other photographs/);
+    expect(takenNote(1)).toMatch(/^ 1 was left as it was: the file found for it is already in the catalog as another photograph, with its own ratings/);
+    expect(takenNote(3)).toMatch(/^ 3 were left as they were: the files found for them are already in the catalog as other photographs, with their own ratings/);
+  });
+});
+
+// Move to Trash on a photograph whose file is gone had nothing to move:
+// it failed with "is not there" in the console, the dialog closed as if
+// it had worked, and the only way to clear the record was to flush the
+// whole folder (vagabond-burro/heeler#36).
+describe("a missing photograph leaves the catalog instead of the folder", () => {
+  beforeEach(() => mockResetRemovalCalls());
+
+  const select = (s: State, ids: string[]): State => ({ ...s, activeImage: ids[0], imageSelection: ids });
+
+  it("the question names the missing ones apart", () => {
+    const s = loaded();
+    expect(trashConfirmAction(select(s, ["img_gone"]))).toEqual({ kind: "trash_images", ids: ["img_gone"], names: ["gone.NEF"], missing: ["img_gone"] });
+    expect(trashConfirmAction(select(s, ["img_here"]))).toEqual({ kind: "trash_images", ids: ["img_here"], names: ["here.NEF"] });
+    expect(trashConfirmAction({ ...s, activeImage: "", imageSelection: [] })).toBeNull();
+  });
+
+  it("asks to remove the record, in words that say nothing on disk is touched", () => {
+    const only = confirmCopy({ action: { kind: "trash_images", ids: ["g"], names: ["gone.NEF"], missing: ["g"] }, step: 1 });
+    expect(only.title).toBe("Remove from catalog");
+    expect(only.ok).toBe("Remove from catalog");
+    expect(only.body).toMatch(/nothing to move to the trash/);
+    expect(only.body).toMatch(/the edits are kept, and nothing on disk is touched/);
+    expect(only.body).toMatch(/Relink/);
+    const mixed = confirmCopy({ action: { kind: "trash_images", ids: ["h", "g"], names: ["a", "b"], missing: ["g"] }, step: 1 });
+    expect(mixed.title).toBe("Move to trash");
+    expect(mixed.body).toMatch(/1 of them is not where the catalog says, so there is nothing to move: its record is removed from the catalog instead/);
+  });
+
+  it("the thumbnail menu says what the item will do", async () => {
+    render(<RibbonHost start={loaded()} />);
+    fireEvent.contextMenu(screen.getByTestId("thumb-img_gone"), { clientX: 40, clientY: 40 });
+    expect(await screen.findByTestId("thumb-menu-trash")).toHaveTextContent("Remove from Catalog…");
+    fireEvent.mouseDown(document.body);
+  });
+
+  it("trashes the ones that are there, forgets the ones that are not, and both leave the ribbon", async () => {
+    let s: State = loaded();
+    s = { ...s, confirm: { action: trashConfirmAction(select(s, ["img_here", "img_gone"]))!, step: 1 } };
+    const dispatch = (cmd: Command) => {
+      s = reduce(s, cmd);
+    };
+    render(<ConfirmDialog state={s} dispatch={dispatch as React.Dispatch<Command>} />);
+    fireEvent.click(screen.getByTestId("confirm-ok"));
+    await waitFor(() => expect(s.images).toHaveLength(0));
+    expect(mockRemovalCalls).toEqual([
+      { command: "trash", ids: ["img_here"] },
+      { command: "forget_missing", ids: ["img_gone"] },
+    ]);
   });
 });

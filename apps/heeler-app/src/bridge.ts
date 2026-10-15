@@ -530,8 +530,18 @@ export async function recoverHidden(path: string): Promise<number> {
 /** Moves photographs into the `.trash` beside them. A rename, not a
  * deletion: the file is still on the disk, under a folder the user can
  * open, and Put Back returns it. */
+/** What the browser mock was asked to trash or forget, in order, for
+ * tests that care which photographs went which way. */
+export let mockRemovalCalls: { command: "trash" | "forget_missing"; ids: string[] }[] = [];
+export function mockResetRemovalCalls(): void {
+  mockRemovalCalls = [];
+}
+
 export async function moveImagesToTrash(imageIds: string[]): Promise<TrashReport> {
-  if (!isTauri()) return { moved: imageIds.length, moved_ids: imageIds, failed: [] };
+  if (!isTauri()) {
+    mockRemovalCalls.push({ command: "trash", ids: imageIds });
+    return { moved: imageIds.length, moved_ids: imageIds, failed: [] };
+  }
   return (await call("move_images_to_trash", { imageIds })) as TrashReport;
 }
 
@@ -562,6 +572,17 @@ export async function missingTrashedPhotos(): Promise<MissingTrashed> {
 export async function forgetMissingTrashedPhotos(imageIds: string[]): Promise<number> {
   if (!isTauri()) return imageIds.length;
   return (await call("forget_missing_trashed_photos", { imageIds })) as number;
+}
+
+/** Forgets the photographs among the ids whose file is still gone, on a
+ * drive that is there, asked again at the deed. No file is touched.
+ * Returns the ids forgotten. */
+export async function forgetMissingPhotos(imageIds: string[]): Promise<string[]> {
+  if (!isTauri()) {
+    mockRemovalCalls.push({ command: "forget_missing", ids: imageIds });
+    return imageIds;
+  }
+  return (await call("forget_missing_photos", { imageIds })) as string[];
 }
 
 /** What a folder's trash is holding. The number behind the badge, and

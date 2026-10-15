@@ -7,7 +7,7 @@
 // stay in step.
 
 import type { Command, SelectRegion, State } from "./state";
-import { ART_ID, DEFAULT_PREFS, artMaskNode, DOC_SEL_ID, SELECT_METHODS, TEXTURED_TIPS, activeSelectionMask, selectShapeTarget, shapeActsOnNothing, shapeToolOf, photoFlipBlocked, photoTurnBlocked, ungroupBlocked, artFindLayer, artToolbarVisible, bakeable, editOrigin, layerPixelRegions, layerViaCopySource, reduce, clampGrainStep, removalPending, selectionHasContent, taggingTargets, anyPickerArmed } from "./state";
+import { ART_ID, DEFAULT_PREFS, artMaskNode, DOC_SEL_ID, SELECT_METHODS, TEXTURED_TIPS, activeSelectionMask, selectShapeTarget, shapeActsOnNothing, shapeToolOf, photoFlipBlocked, photoTurnBlocked, ungroupBlocked, artFindLayer, artToolbarVisible, bakeable, editOrigin, layerPixelRegions, layerViaCopySource, reduce, clampGrainStep, removalPending, selectionHasContent, taggingTargets, trashConfirmAction, anyPickerArmed } from "./state";
 import { activeFillLayer } from "./ui/filltool";
 import { activeSmartMask } from "./ui/smarttool";
 import { openPolish } from "./polishdoor";
@@ -169,12 +169,6 @@ export function inScope(scope: Scope, mode: State["mode"]): boolean {
 
 /** Runs a command. Returns false when it did nothing, so the caller can
  * let the key through to whatever else might want it. */
-/** Filenames for a confirmation, so it can name what it is about to do
- * rather than showing ids. */
-function namesOf(state: State, ids: string[]): string[] {
-  return ids.map((id) => state.images.find((i) => i.id === id)?.name ?? id);
-}
-
 export function runCommand(
   id: string,
   state: State,
@@ -213,17 +207,12 @@ export function runCommand(
     // a question and nothing else. What it does when answered is a
     // rename into `.trash`, so this is reversible too, just further
     // than hiding is.
-    case "image.trash":
-      if (!taggingTargets(state).length) return false;
-      dispatch({
-        type: "ask_confirm",
-        action: {
-          kind: "trash_images",
-          ids: taggingTargets(state),
-          names: namesOf(state, taggingTargets(state)),
-        },
-      });
+    case "image.trash": {
+      const action = trashConfirmAction(state);
+      if (!action) return false;
+      dispatch({ type: "ask_confirm", action });
       return true;
+    }
     case "edit.reset":
       // The disk-side aftermath (graph file, catalog badge, thumbnail)
       // drains from the resetPending queue (ResetAftermath). Every photo in
