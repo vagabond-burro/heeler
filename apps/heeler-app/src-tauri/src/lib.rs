@@ -627,11 +627,17 @@ pub fn scan_folder_records(
                 for entry in trash::read_manifest(&trash_dir).items {
                     let in_trash = trash_dir.join(&entry.file);
                     let named_plainly = Path::new(&entry.file).file_name() == Some(std::ffi::OsStr::new(&entry.file));
-                    // The manifest is the trash's index, never a
-                    // photograph in it; an entry naming it would
-                    // register the index itself as a trashed image.
-                    let is_the_index = in_trash == trash::manifest_path(&trash_dir);
-                    if entry.pending || !named_plainly || is_the_index || !in_trash.is_file() || catalog.image_id_taken(&entry.image_id)? {
+                    // Only a photograph comes back: a name the scan would
+                    // catalog itself. The index (under any capitals a disk
+                    // that ignores case answers to), a broken index's kept
+                    // copy or any other file a person left in the trash
+                    // would otherwise register as a trashed photograph, and
+                    // Put Back would move it out.
+                    let a_photograph = Path::new(&entry.file)
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .is_some_and(heeler_catalog::is_supported_extension);
+                    if entry.pending || !named_plainly || !a_photograph || !in_trash.is_file() || catalog.image_id_taken(&entry.image_id)? {
                         continue;
                     }
                     let original = PathBuf::from(&entry.original);
@@ -31282,6 +31288,40 @@ mod tests {
         assert_eq!(catalog.counts().unwrap().0, 1, "no second row");
         assert!(catalog.folder_id(&link).unwrap().is_none(), "nor a second folder");
         assert_eq!(paths.get(&first[0].id), Some(&link.join("a.png")), "read where it was opened");
+    }
+
+    /// Only photographs come back from a `.trash` index: a text file, a
+    /// broken manifest's kept copy, or the index itself under other
+    /// capitals (which a disk that ignores case answers to) used to pass
+    /// the read-back's checks and register as trashed photographs, and
+    /// Put Back would then have moved the index out of the trash.
+    #[test]
+    fn only_photographs_come_back_from_a_trash_index() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.png"), b"x").unwrap();
+        let trash = dir.path().join(trash::TRASH_DIR);
+        std::fs::create_dir(&trash).unwrap();
+        for name in ["notes.txt", "manifest.json.7.broken", "kept.png", "merge.stack"] {
+            std::fs::write(trash.join(name), b"x").unwrap();
+        }
+        let folder = dir.path().to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"");
+        let entry = |file: &str, id: &str| format!(r#"{{"file":"{file}","original":"{folder}/{file}","image_id":"{id}","trashed_at":1,"pending":false}}"#);
+        let manifest = format!(
+            r#"{{"note":"","items":[{},{},{},{},{}]}}"#,
+            entry("notes.txt", "text"),
+            entry("manifest.json.7.broken", "kept_copy"),
+            entry("Manifest.json", "index"),
+            entry("kept.png", "photo"),
+            entry("merge.stack", "recipe"),
+        );
+        std::fs::write(trash.join("manifest.json"), manifest).unwrap();
+        let catalog = Catalog::open_in_memory().unwrap();
+        let mut paths = HashMap::new();
+        scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
+        let mut trashed: Vec<String> = catalog.list_trashed(None).unwrap().into_iter().map(|r| r.id).collect();
+        trashed.sort();
+        assert_eq!(trashed, vec!["photo".to_string(), "recipe".to_string()], "the photograph and the recipe, and nothing else");
+        assert!(trash.join("manifest.json").is_file());
     }
 
     /// scan_folder_records files under the spelling it is handed: the
