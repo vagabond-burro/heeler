@@ -3099,22 +3099,33 @@ mod tests {
 
     #[test]
     fn renaming_a_folder_moves_its_records_and_its_subfolders_and_nothing_else() {
+        // Spelled with the platform's own separator, as real catalog paths
+        // are: the rename joins with it, so a path written with "/" on
+        // Windows would come back with a "\" in the middle.
+        let at = |rel: &str| -> PathBuf {
+            let mut p = PathBuf::from(std::path::MAIN_SEPARATOR_STR);
+            for part in rel.split('/') {
+                p.push(part);
+            }
+            p
+        };
+        let text = |rel: &str| at(rel).to_string_lossy().into_owned();
         let c = Catalog::open_in_memory().unwrap();
-        let top = c.add_folder(Path::new("/shoot")).unwrap();
-        let sub = c.add_folder(Path::new("/shoot/day2")).unwrap();
-        let other = c.add_folder(Path::new("/shootout")).unwrap();
-        c.add_image("a", Path::new("/shoot/a.dng"), Some(top)).unwrap();
-        c.add_image("b", Path::new("/shoot/day2/b.dng"), Some(sub)).unwrap();
-        c.add_image("z", Path::new("/shootout/z.dng"), Some(other)).unwrap();
+        let top = c.add_folder(&at("shoot")).unwrap();
+        let sub = c.add_folder(&at("shoot/day2")).unwrap();
+        let other = c.add_folder(&at("shootout")).unwrap();
+        c.add_image("a", &at("shoot/a.dng"), Some(top)).unwrap();
+        c.add_image("b", &at("shoot/day2/b.dng"), Some(sub)).unwrap();
+        c.add_image("z", &at("shootout/z.dng"), Some(other)).unwrap();
         c.set_rating("a", 3).unwrap();
-        assert_eq!(c.rename_folder_paths(Path::new("/shoot"), Path::new("/wedding")).unwrap(), (2, 2));
-        assert_eq!(c.image("a").unwrap().path, "/wedding/a.dng");
+        assert_eq!(c.rename_folder_paths(&at("shoot"), &at("wedding")).unwrap(), (2, 2));
+        assert_eq!(c.image("a").unwrap().path, text("wedding/a.dng"));
         assert_eq!(c.image("a").unwrap().rating, 3);
-        assert_eq!(c.image("b").unwrap().path, "/wedding/day2/b.dng");
-        assert_eq!(c.image("z").unwrap().path, "/shootout/z.dng", "the lookalike stays");
-        assert_eq!(c.folder_id(Path::new("/wedding")).unwrap(), Some(top));
-        assert_eq!(c.folder_id(Path::new("/wedding/day2")).unwrap(), Some(sub));
-        assert!(c.folder_id(Path::new("/shoot")).unwrap().is_none());
+        assert_eq!(c.image("b").unwrap().path, text("wedding/day2/b.dng"));
+        assert_eq!(c.image("z").unwrap().path, text("shootout/z.dng"), "the lookalike stays");
+        assert_eq!(c.folder_id(&at("wedding")).unwrap(), Some(top));
+        assert_eq!(c.folder_id(&at("wedding/day2")).unwrap(), Some(sub));
+        assert!(c.folder_id(&at("shoot")).unwrap().is_none());
     }
 
     #[test]
