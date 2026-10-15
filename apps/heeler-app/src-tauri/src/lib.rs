@@ -14242,13 +14242,56 @@ fn nfc(name: &std::ffi::OsStr) -> String {
     icu_normalizer::ComposingNormalizerBorrowed::new_nfc().normalize(&name.to_string_lossy()).into_owned()
 }
 
+/// Whether the volume holding `dir` calls names that differ only in
+/// case the same file, asked once per volume (per folder on the system
+/// drive, which has no volume_root) and cached. The probe writes
+/// nothing: flip the case of an entry's name and ask the disk for it. A
+/// spelling the listing does not hold that still answers is the same
+/// file, so case does not matter here; one that names nothing, or that
+/// the listing holds as a file of its own, means it does. A folder with
+/// nothing cased to probe gets the platform's usual answer: a Mac's and
+/// Windows' volumes ignore case out of the box, Linux's do not.
+fn case_blind(dir: &Path, entries: &[std::ffi::OsString], cache: &mut std::collections::HashMap<PathBuf, bool>) -> bool {
+    let key = trash::volume_root(dir).unwrap_or(dir).to_path_buf();
+    *cache
+        .entry(key)
+        .or_insert_with(|| {
+            let probe = |name: &std::ffi::OsStr| -> Option<bool> {
+                let s = name.to_string_lossy();
+                if !s.chars().any(|c| c.is_alphabetic()) {
+                    return None;
+                }
+                let flipped: String = s
+                    .chars()
+                    .flat_map(|c| {
+                        if c.is_lowercase() { c.to_uppercase().collect::<Vec<char>>() } else { c.to_lowercase().collect() }
+                    })
+                    .collect();
+                if flipped == s {
+                    return None;
+                }
+                if entries.iter().any(|e| e.as_os_str() == std::ffi::OsStr::new(&flipped)) {
+                    return Some(false);
+                }
+                match std::fs::metadata(dir.join(&flipped)) {
+                    Ok(_) => Some(true),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(false),
+                    Err(_) => None,
+                }
+            };
+            entries.iter().find_map(|name| probe(name)).unwrap_or(cfg!(any(target_os = "macos", target_os = "windows")))
+        })
+}
+
 /// The photographs among each folder's records whose file is not there,
 /// one folder listing each rather than a question per photograph, and
 /// none for a folder on a drive that is not plugged in or that is gone
 /// itself (a folder gone from the disk is the tree's to say). `rows` are
-/// (folder path, its records as (id, path)).
+/// (folder path, its records as (id, path)). Names match in NFC, and
+/// without regard to case where the volume itself ignores it.
 pub fn missing_by_folder(rows: Vec<(String, Vec<(String, String)>)>) -> Vec<FolderMissing> {
     let mut check = trash::VolumeCheck::default();
+    let mut blind = std::collections::HashMap::new();
     let mut out = Vec::new();
     for (folder, records) in rows {
         let dir = Path::new(&folder);
@@ -14256,13 +14299,19 @@ pub fn missing_by_folder(rows: Vec<(String, Vec<(String, String)>)>) -> Vec<Fold
             continue;
         }
         let Ok(entries) = std::fs::read_dir(dir) else { continue };
-        let names: std::collections::HashSet<String> = entries.flatten().map(|e| nfc(&e.file_name())).collect();
+        let entries: Vec<std::ffi::OsString> = entries.flatten().map(|e| e.file_name()).collect();
+        let folded = case_blind(dir, &entries, &mut blind);
+        let key = |name: &std::ffi::OsStr| {
+            let k = nfc(name);
+            if folded { k.to_lowercase() } else { k }
+        };
+        let names: std::collections::HashSet<String> = entries.iter().map(|e| key(e)).collect();
         let missing: Vec<String> = records
             .into_iter()
             .filter(|(_, path)| {
                 let p = Path::new(path);
                 match (p.parent(), p.file_name()) {
-                    (Some(parent), Some(name)) if parent == dir => !names.contains(&nfc(name)),
+                    (Some(parent), Some(name)) if parent == dir => !names.contains(&key(name)),
                     _ => !p.exists(),
                 }
             })
@@ -25628,6 +25677,23 @@ mod tests {
         let s = |p: &Path| p.to_string_lossy().into_owned();
         let rows = vec![(s(d.path()), vec![("r".to_string(), s(&in_the_row))])];
         assert!(missing_by_folder(rows).is_empty(), "present on disk, in the other Unicode form");
+    }
+
+    /// The same name under other capitals: on a disk that ignores case,
+    /// a file whose name differs from the row's only in case (a case-only
+    /// rename outside Heeler) was reported missing although it was there.
+    #[test]
+    fn a_present_file_with_other_capitals_is_not_called_missing() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("IMG_1.png"), b"x").unwrap();
+        let in_the_row = d.path().join("img_1.png");
+        if !in_the_row.exists() {
+            eprintln!("case-sensitive volume; the case cannot differ here");
+            return;
+        }
+        let s = |p: &Path| p.to_string_lossy().into_owned();
+        let rows = vec![(s(d.path()), vec![("r".to_string(), s(&in_the_row))])];
+        assert!(missing_by_folder(rows).is_empty(), "present on disk, under other capitals");
     }
 
     #[test]
