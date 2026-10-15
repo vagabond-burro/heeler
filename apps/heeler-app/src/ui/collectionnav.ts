@@ -73,3 +73,24 @@ export async function leaveCollection(s: State, dispatch: D, back: string | null
   loadSessionImages([], dispatch, s.prefs.thumbnailEdge);
   dispatch({ type: "set_library", label: "No folder open", collection: null, path: null });
 }
+
+/** Whether `candidate` is `root` or somewhere inside it, as paths. */
+export function isWithin(candidate: string, root: string): boolean {
+  const norm = (p: string) => p.replace(/[\\/]+$/, "").replace(/\\/g, "/");
+  const c = norm(candidate);
+  const r = norm(root);
+  return c === r || c.startsWith(r + "/");
+}
+
+/** Told the path of every folder a hide or flush takes off the list, so
+ * a remembered way back out of a collection can let go of it. */
+const folderLeftListeners = new Set<(path: string) => void>();
+export function onFolderLeft(listener: (path: string) => void): () => void {
+  folderLeftListeners.add(listener);
+  return () => {
+    folderLeftListeners.delete(listener);
+  };
+}
+export function folderLeft(path: string): void {
+  for (const listener of folderLeftListeners) listener(path);
+}

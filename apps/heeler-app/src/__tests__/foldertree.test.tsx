@@ -1,4 +1,4 @@
-// The folder tree keeping up with the disk (vagabond-burro/heeler#44).
+// The folder tree keeping up with the disk.
 //
 // The tree listed each folder once and never again, so a folder made,
 // renamed or removed outside Heeler showed only if its exact parent was

@@ -194,7 +194,7 @@ describe("finding a folder's trash", () => {
 
 // A relink that finds a file already in the catalog as another
 // photograph leaves its own alone, and says so rather than calling it
-// still missing (vagabond-burro/heeler#38).
+// still missing.
 describe("a relink's report of files that belong to another photograph", () => {
   it("says nothing when there are none, and counts them when there are", () => {
     expect(takenNote(0)).toBe("");
@@ -206,7 +206,7 @@ describe("a relink's report of files that belong to another photograph", () => {
 // Move to Trash on a photograph whose file is gone had nothing to move:
 // it failed with "is not there" in the console, the dialog closed as if
 // it had worked, and the only way to clear the record was to flush the
-// whole folder (vagabond-burro/heeler#36).
+// whole folder.
 describe("a missing photograph leaves the catalog instead of the folder", () => {
   beforeEach(() => mockResetRemovalCalls());
 

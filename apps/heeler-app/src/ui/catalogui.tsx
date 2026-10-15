@@ -40,7 +40,7 @@ import {
   type CatalogInfo,
 } from "../bridge";
 import { currentNavigation, refreshLibrary, restoreCatalogSession } from "./chrome";
-import { reloadCollection } from "./collectionnav";
+import { folderLeft, isWithin, reloadCollection } from "./collectionnav";
 import { askCatalogUpgrade, forgetCatalogUpgradeApproval } from "../catalogupgrade";
 import { logMsg } from "../log";
 import { flashStatus } from "./hints";
@@ -147,7 +147,7 @@ export function confirmCopy(confirm: Confirm): {
     const inside = a.folders > 1 ? ` and the ${a.folders - 1} folder${a.folders === 2 ? "" : "s"} inside it` : "";
     const photos = `${a.images.toLocaleString()} photograph${a.images === 1 ? "" : "s"}`;
     // The trashed ones go from the catalog too, which the count used to
-    // leave out (vagabond-burro/heeler#43). Their files stay in .trash,
+    // leave out. Their files stay in .trash,
     // and opening the folder again reads them back from its index.
     const t = a.trashed ?? 0;
     const trashNote = t
@@ -258,7 +258,7 @@ async function perform(confirm: Confirm, state: State, dispatch: D): Promise<voi
     const present = a.ids.filter((id) => !missing.has(id));
     const report = present.length ? await moveImagesToTrash(present) : { failed: [], moved_ids: [] as string[] };
     // A photograph with no file leaves the catalog rather than failing
-    // the rename (vagabond-burro/heeler#36). The backend asks the disk
+    // the rename. The backend asks the disk
     // again, so one whose file came back meanwhile is left alone.
     let forgotten: string[] = [];
     if (missing.size) {
@@ -328,15 +328,15 @@ export async function leaveFolder(command: "hide" | "flush", path: string, dispa
   } finally {
     // Whatever still remembers this folder as the way back out of a
     // collection lets go of it: stepping off the collection would open
-    // it again, and opening it adds it back (vagabond-burro/heeler#40).
-    for (const listener of folderLeftListeners) listener(path);
+    // it again, and opening it adds it back.
+    folderLeft(path);
     if (affected) {
       try { await restoreCatalogSession(dispatch); }
       catch (e) { logMsg("error", `Could not restore the catalog session: ${String(e)}`); }
     } else if (collection) {
       // A collection on screen may hold photographs from the folder that
       // left. A flush forgot them and a hide hid them, so the ribbon
-      // must not go on showing them (vagabond-burro/heeler#40).
+      // must not go on showing them.
       try { await reloadCollection(collection.id, collection.label, dispatch, collection.thumbnailEdge, nav); }
       catch (e) { logMsg("error", `Could not show the collection again: ${String(e)}`); }
     }
@@ -359,20 +359,9 @@ export function noteActiveFolder(
   currentCollection = collection;
 }
 
-/** Told the path of every folder a hide or flush takes off the list. */
-const folderLeftListeners = new Set<(path: string) => void>();
-export function onFolderLeft(listener: (path: string) => void): () => void {
-  folderLeftListeners.add(listener);
-  return () => folderLeftListeners.delete(listener);
-}
 
-/** Whether `candidate` is `root` or somewhere inside it, as paths. */
-export function isWithin(candidate: string, root: string): boolean {
-  const norm = (p: string) => p.replace(/[\\/]+$/, "").replace(/\\/g, "/");
-  const c = norm(candidate);
-  const r = norm(root);
-  return c === r || c.startsWith(r + "/");
-}
+
+export { isWithin };
 
 export function ConfirmDialog({ state, dispatch }: { state: State; dispatch: D }) {
   const confirm = state.confirm;

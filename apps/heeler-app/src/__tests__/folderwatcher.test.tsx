@@ -24,8 +24,7 @@ it("a stalled directory poll stays off the next ticks and cannot update after un
 });
 // An ejected card's folder answers with an error now, not an empty
 // listing, and the watcher must leave the branch as it was: the empty
-// answer collapsed it to a leaf, expanded state and all
-// (vagabond-burro/heeler#44).
+// answer collapsed it to a leaf, expanded state and all.
 it("a folder that is not there leaves the tree alone", async () => {
   vi.useFakeTimers();
   vi.mocked(listSubfolders).mockRejectedValue(new Error("/Volumes/Card/DCIM is not there"));

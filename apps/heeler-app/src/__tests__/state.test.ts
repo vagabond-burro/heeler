@@ -1972,7 +1972,7 @@ describe("graph state semantics", () => {
   });
 
   // A drive root already ends in its separator, and the badge never
-  // matched under it (vagabond-burro/heeler#45).
+  // matched under it.
   it("folderHasEdits marks a drive root above edited folders", async () => {
     const { folderHasEdits } = await import("../state");
     expect(folderHasEdits(["E:\\DCIM\\100MSDCF"], "E:\\")).toBe(true);

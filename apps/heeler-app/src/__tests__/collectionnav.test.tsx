@@ -330,8 +330,7 @@ describe("the commands behind it", () => {
 
 // A folder hidden or flushed while a collection was open: the
 // collection kept showing the flushed photographs, and stepping off it
-// went back to the folder, which added it to the catalog again
-// (vagabond-burro/heeler#40).
+// went back to the folder, which added it to the catalog again.
 describe("a folder that leaves while a collection is open", () => {
   beforeEach(() => mockSetSubtreeCounts({ folders: 1, images: 0 }));
 

@@ -8023,7 +8023,7 @@ export function ancestorsBetween(root: string, path: string): string[] {
 export function folderHasEdits(editedPaths: string[], folder: string): boolean {
   // A drive root ("/", "E:\\") already ends in its separator, and adding
   // another never matched, so a card opened at its root never showed the
-  // badge (vagabond-burro/heeler#45).
+  // badge.
   const root = folder.replace(/[\\/]+$/, "");
   return editedPaths.some(
     (p) =>
@@ -8935,7 +8935,7 @@ export type ConfirmAction =
   // it home. Deleting it for real is the file manager's job.
   //
   // A photograph whose file is not where the catalog says has nothing to
-  // move, and the rename failed with "is not there" (vagabond-burro/heeler#36).
+  // move, and the rename failed with "is not there".
   // Those are listed in `missing` and leave the catalog instead, under the
   // same one prompt, which says so.
   | { kind: "trash_images"; ids: string[]; names: string[]; missing?: string[] }

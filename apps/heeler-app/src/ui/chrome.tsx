@@ -296,7 +296,7 @@ export async function openFolderPlain(
 /** A folder that would not open says so where the user is looking, and
  * its parent is listed again so a folder that is gone leaves the tree.
  * The failure only reached the log as an unhandled rejection, and the
- * dead row stayed (vagabond-burro/heeler#44). */
+ * dead row stayed. */
 function folderWouldNotOpen(path: string, e: unknown, dispatch: D): void {
   const why = String(e).replace(/^Error: /, "");
   logMsg("warn", `Could not open ${path}: ${why}`);
@@ -441,7 +441,7 @@ import { useTopBarFit } from "./layoutroom";
 import { ADJUST_SEAT, CONTENT_ITEMS, IMAGE_ITEMS, IMAGE_SEAT, UTILITY_ITEMS, addContentLayer, adjustmentItems } from "./finishnew";
 import { SuggestField } from "./suggestfield";
 import { canRedo, canUndo, redo, undo } from "../libraryundo";
-import { folderBehind, leaveCollection, openCollection, reloadCollection } from "./collectionnav";
+import { folderBehind, isWithin, leaveCollection, onFolderLeft, openCollection, reloadCollection } from "./collectionnav";
 export { GroupGlyph };
 
 function Star({ on }: { on: boolean }) {
@@ -565,7 +565,7 @@ export function flagSelection(state: State, dispatch: D, flag: ImageEntry["flag"
 
 /** What a relink says about photographs it found but left alone: the
  * file there is already in the catalog as another photograph with work
- * of its own, and one file cannot be two (vagabond-burro/heeler#38). A
+ * of its own, and one file cannot be two. A
  * blank row there is folded in instead and needs no word. */
 export function takenNote(taken: number): string {
   if (!taken) return "";
@@ -3382,7 +3382,7 @@ function TreeRows({
   trashPaths: string[];
   /** Folders hidden from the library. The listing comes from the disk,
    * which knows nothing of hiding, so a hidden folder stayed in the tree
-   * after Hide said it would leave (vagabond-burro/heeler#39). */
+   * after Hide said it would leave. */
   hiddenPaths: string[];
 }) {
   const active = activePath === node.path;
@@ -3414,7 +3414,7 @@ function TreeRows({
             if (!expandable) return;
             if (node.children === null) {
               // A folder that cannot be read said nothing and showed as
-              // empty (vagabond-burro/heeler#44).
+              // empty.
               const children = await listSubfolders(node.path).catch((e) => {
                 flashStatus(`Could not read ${node.name}: ${String(e).replace(/^Error: /, "")}`);
                 return null;
@@ -3424,8 +3424,7 @@ function TreeRows({
               dispatch({ type: "set_tree_node", path: node.path, expanded: false });
             } else {
               // Open at once with what is known, then list again: folders
-              // made, renamed or removed since the last look show up
-              // (vagabond-burro/heeler#44).
+              // made, renamed or removed since the last look show up.
               dispatch({ type: "set_tree_node", path: node.path, expanded: true });
               const children = await listSubfolders(node.path).catch(() => null);
               if (children) dispatch({ type: "set_tree_node", path: node.path, children });
@@ -3505,7 +3504,7 @@ function SectionHead({
 
 /** Looks at the disk again for one folder. The tree listed a folder
  * once and never again, so folders made, renamed or removed under any
- * folder but the open one never showed (vagabond-burro/heeler#44). The
+ * folder but the open one never showed. The
  * folder on screen is opened again, which rescans its photographs too. */
 export async function refreshFolder(path: string, state: State, dispatch: D): Promise<void> {
   if (state.activeCollection === null && state.activeFolderPath === path) {
@@ -3648,21 +3647,14 @@ function BrowserPanelImpl({ state, dispatch }: { state: State; dispatch: D }) {
   const lastFolderRef = useRef<string | null>(null);
   if (state.activeFolderPath) lastFolderRef.current = state.activeFolderPath;
   // A hidden or flushed folder is no way back out of a collection: going
-  // back to it would add it to the catalog again (vagabond-burro/heeler#40).
-  useEffect(() => {
-    let off: (() => void) | undefined;
-    let live = true;
-    void import("./catalogui").then(({ isWithin, onFolderLeft }) => {
-      if (!live) return;
-      off = onFolderLeft((path) => {
+  // back to it would add it to the catalog again.
+  useEffect(
+    () =>
+      onFolderLeft((path) => {
         if (lastFolderRef.current && isWithin(lastFolderRef.current, path)) lastFolderRef.current = null;
-      });
-    });
-    return () => {
-      live = false;
-      off?.();
-    };
-  }, []);
+      }),
+    [],
+  );
   const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const folderMenuRef = useDismiss<HTMLDivElement>(folderMenu !== null, () => setFolderMenu(null));
   // Catalog-known edited folders, plus a live check for the open folder so
@@ -3827,7 +3819,7 @@ file.*/}
                 void folderSubtreeCounts(path).then((c) => {
                   // A folder seen in the tree but never opened has no
                   // records to forget. Asking twice to flush nothing, then
-                  // doing nothing, was the old answer (vagabond-burro/heeler#39).
+                  // doing nothing, was the old answer.
                   if (c.folders === 0) {
                     flashStatus("Nothing to flush: the catalog has no records for this folder yet.");
                     return;
@@ -3917,7 +3909,7 @@ the file browser's job too, and the next scan notices.*/}
               // for "this one is live", the same as the collection
               // below it. White lettering said "selected" in a language
               // nothing else in this panel speaks. By path, not name: two
-              // folders called DCIM lit up together (vagabond-burro/heeler#45).
+              // folders called DCIM lit up together.
               color: state.activeFolderPath === f.path && state.activeCollection === null ? "var(--accent)" : "var(--text-hi)",
               background: state.activeFolderPath === f.path && state.activeCollection === null ? "#202326" : "transparent",
             }}
@@ -4898,7 +4890,7 @@ closes the menu.*/
           {(() => {
             // A photograph whose file is gone has nothing to move: the
             // same item takes its record out of the catalog instead, and
-            // says so (vagabond-burro/heeler#36).
+            // says so.
             const targets = taggingTargets(state);
             const allMissing = targets.length > 0 && targets.every((id) => state.images.find((i) => i.id === id)?.missing);
             return (

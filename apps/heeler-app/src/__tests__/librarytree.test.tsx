@@ -212,7 +212,7 @@ describe("the height the seam is allowed to reach", () => {
 });
 
 // Two picked folders with the same name both lit up, because the test
-// was the name, not the path (vagabond-burro/heeler#45).
+// was the name, not the path.
 describe("the shortlist lights the folder you are in by its path", () => {
   it("leaves another folder with the same name alone", () => {
     const s: State = {

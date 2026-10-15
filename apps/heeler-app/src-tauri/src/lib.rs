@@ -320,7 +320,7 @@ pub fn image_id_for(path: &Path) -> String {
 /// of a path is not proof that the id is free: a file that later turns
 /// up at a relinked photograph's first path hashes to the id that
 /// photograph still has, and inserting it failed the whole folder scan
-/// on the primary key (vagabond-burro/heeler#37). A taken hash steps
+/// on the primary key. A taken hash steps
 /// on to the path's hash with a counter, which is just as stable from
 /// one scan to the next, since the scan finds the row by path first.
 pub fn fresh_image_id(catalog: &Catalog, path: &Path) -> Result<String, heeler_catalog::CatalogError> {
@@ -529,7 +529,7 @@ pub fn scan_folder(
             // flushed, or this is a new catalog) is registered again under
             // the id its index names, trashed. Without it a flush took the
             // trash badge, Show Trash and Put Back with it while the files
-            // sat on in `.trash` (vagabond-burro/heeler#43), and the edits
+            // sat on in `.trash`, and the edits
             // kept by that id come back with it.
             let trash_dir = folder.join(trash::TRASH_DIR);
             if trash_dir.is_dir() {
@@ -544,7 +544,7 @@ pub fn scan_folder(
                         continue;
                     }
                     // Its old place, unless a file or a record has it now:
-                    // then the record waits inside `.trash`, as #41 does.
+                    // then the record waits inside `.trash`, as a record that stepped aside does.
                     let at = if original.exists() || catalog.image_id_by_path(&original)?.is_some() { in_trash } else { original };
                     if catalog.image_id_by_path(&at)?.is_some() {
                         continue;
@@ -602,7 +602,7 @@ pub fn scan_folder(
                     // its name, a card re-imported from IMG_0001, say. It
                     // used to be taken for the photograph come home: it
                     // wore the trashed one's rating and edits, and the
-                    // trash lost track of the original (vagabond-burro/heeler#41).
+                    // trash lost track of the original.
                     // The trashed record steps aside to where its file
                     // really is, and the newcomer gets a record of its own.
                     Some(existing) if trashed.contains(&existing) => match trash::still_in_trash(file, &existing) {
@@ -9946,7 +9946,7 @@ async fn open_folder(app: tauri::AppHandle, path: Option<String>) -> Result<Fold
         if !folder.is_dir() {
             // A folder the catalog knows that is gone from the disk opens
             // as a list of its missing photographs, so they can be relinked
-            // or removed folder by folder (vagabond-burro/heeler#44).
+            // or removed folder by folder.
             let (listing, paths) = with_catalog_at(&app, issued, |catalog| {
                 Ok(path_delta(|paths| missing_folder_listing(catalog, &folder, paths)))
             })?;
@@ -11059,7 +11059,7 @@ async fn list_subfolders(app: tauri::AppHandle, path: String) -> Result<Vec<Subf
         let folder = PathBuf::from(&path);
         // A folder that is not there is an error, not an empty listing:
         // an empty answer for an ejected card collapsed its whole branch in
-        // the tree, expanded state and all (vagabond-burro/heeler#44).
+        // the tree, expanded state and all.
         let result = if folder.is_dir() { subfolder_payload(&folder) } else { Err(format!("{} is not there", folder.display())) };
         debug_log!(&app, "subfolders: total {:.3}ms path={path}", t.elapsed().as_secs_f64() * 1000.0);
         result
@@ -13333,8 +13333,7 @@ fn place_zone_blocking(app: &tauri::AppHandle, graph: UiGraph, image_id: String,
 pub struct FolderSubtreeCounts {
     pub folders: usize,
     pub images: i64,
-    /// Trashed photographs beneath it, which a flush forgets as well
-    /// (vagabond-burro/heeler#43).
+    /// Trashed photographs beneath it, which a flush forgets as well.
     pub trashed: i64,
 }
 
@@ -13389,7 +13388,7 @@ pub fn flush_folder_payload(c: &Catalog, path: &Path) -> Result<(usize, i64), St
 /// gives a file the hash of its path. A relinked photograph keeps the id
 /// its first path gave it, and a file whose hash was taken got a stepped
 /// one (fresh_image_id), so after a flush their files came back under
-/// other ids and their edits were orphaned (vagabond-burro/heeler#42).
+/// other ids and their edits were orphaned.
 /// Only those few are written down; every other id is its path's hash
 /// and needs no record.
 pub const FLUSHED_IDS: &str = "flushed_ids";
@@ -13516,8 +13515,7 @@ pub struct RelinkReport {
     pub still_missing: usize,
     /// Found, but the file there is already in the catalog as another
     /// photograph, so this one was left as it was. Counted apart from
-    /// still_missing, which used to swallow these without a reason
-    /// (vagabond-burro/heeler#38).
+    /// still_missing, which used to swallow these without a reason.
     pub taken: usize,
 }
 
@@ -13532,7 +13530,7 @@ pub struct RelinkReport {
 /// in the file browser and the new folder is opened before Relink: the
 /// move's record stays behind as a missing photograph and the file gets a
 /// blank one. That blank row is folded into the moved photograph, which
-/// keeps its id and everything on it (vagabond-burro/heeler#42).
+/// keeps its id and everything on it.
 fn point_at(catalog: &Catalog, id: &str, target: &Path, folder_id: i64) -> Result<bool, String> {
     let e = |e: heeler_catalog::CatalogError| e.to_string();
     match catalog.image_id_by_path(target).map_err(e)? {
@@ -13701,8 +13699,7 @@ pub fn relink_in_folder_watched(
     // session's path map has to learn about every one of them however
     // the run ends: whole, stopped, or failed. A run that returned early
     // on an error used to skip this, and the viewer went on decoding the
-    // old paths of photographs the catalog had already moved
-    // (vagabond-burro/heeler#38).
+    // old paths of photographs the catalog had already moved.
     for (id, path) in moved {
         paths.insert(id, path);
     }
@@ -13868,7 +13865,7 @@ pub fn gone_for_good(rows: &[(String, String)]) -> Vec<String> {
 /// drive that is there, asked again at the moment of the deed. Move to
 /// Trash had nothing to move for such a photograph and failed with
 /// "is not there", and the only other way out was flushing its whole
-/// folder (vagabond-burro/heeler#36). Nothing on disk is touched and the
+/// folder. Nothing on disk is touched and the
 /// edits are kept outside the catalog. Returns the ids forgotten.
 pub fn forget_missing_in(catalog: &Catalog, ids: &[String]) -> Result<Vec<String>, String> {
     let rows: Vec<(String, String)> = ids
@@ -13953,7 +13950,7 @@ async fn restore_images_from_trash(
                     continue;
                 }
             };
-            // A record that stepped aside into `.trash` (scan_folder, #41)
+            // A record that stepped aside into `.trash` (scan_folder)
             // goes home to the place the trash's index names.
             let home = trash::put_back_target(&path, id);
             trash::record_outcome(&mut report, id, trash::restore_recorded(&home, id), || {
@@ -14055,8 +14052,7 @@ async fn folders_with_hidden(app: tauri::AppHandle) -> Result<Vec<String>, Strin
 }
 
 /// The folders hidden from the library, for the tree to leave out: it
-/// lists folders from the disk, which knows nothing of hiding
-/// (vagabond-burro/heeler#39). Asked with the rest of the library's
+/// lists folders from the disk, which knows nothing of hiding. Asked with the rest of the library's
 /// refresh rather than inside every subfolder listing, so expanding a
 /// branch never waits on the catalog.
 #[tauri::command]
@@ -25016,7 +25012,7 @@ mod tests {
 
     /// A photograph whose file is gone can leave its folder on its own;
     /// Move to Trash had nothing to move and the only way out was a
-    /// flush of the whole folder (vagabond-burro/heeler#36).
+    /// flush of the whole folder.
     #[test]
     fn forgetting_missing_photographs_takes_only_the_ones_still_gone() {
         let d = tempfile::tempdir().unwrap();
@@ -25038,8 +25034,7 @@ mod tests {
 
     /// A folder relink used to stop at the first photograph it could not
     /// relink, with the earlier ones already moved in the catalog but
-    /// never handed to the session, so the viewer decoded their old paths
-    /// (vagabond-burro/heeler#38). One that cannot move is counted and
+    /// never handed to the session, so the viewer decoded their old paths. One that cannot move is counted and
     /// the run carries on.
     #[test]
     fn a_folder_relink_counts_a_file_that_belongs_to_another_photograph_and_carries_on() {
@@ -25092,8 +25087,7 @@ mod tests {
     /// The owner's ghost: a photograph moved in the file browser, the new
     /// folder opened first (so the file got a blank row of its own), and
     /// Relink then failed on the unique path. The blank row now folds
-    /// into the moved photograph, which keeps its id, rating and edits
-    /// (vagabond-burro/heeler#42).
+    /// into the moved photograph, which keeps its id, rating and edits.
     #[test]
     fn relinking_onto_a_file_with_a_blank_row_folds_the_row_in() {
         let d = tempfile::tempdir().unwrap();
@@ -25121,8 +25115,7 @@ mod tests {
 
     /// Flush promises the edits come back when the folder is added again,
     /// which held only for photographs whose id is their path's hash. A
-    /// relinked one came back under another id, its edits orphaned
-    /// (vagabond-burro/heeler#42).
+    /// relinked one came back under another id, its edits orphaned.
     #[test]
     fn a_relinked_photograph_comes_back_under_its_own_id_after_a_flush() {
         let d = tempfile::tempdir().unwrap();
@@ -30271,7 +30264,7 @@ mod tests {
 
     /// A relinked photograph keeps the id its first path gave it, so a
     /// file that turns up at that first path again hashes to an id that
-    /// is taken (vagabond-burro/heeler#37). The scan gave every such file
+    /// is taken. The scan gave every such file
     /// the taken id, the insert failed on the primary key, the whole
     /// batch rolled back, and the folder never opened again.
     #[test]
@@ -30319,7 +30312,7 @@ mod tests {
 
     /// A new file under a trashed photograph's name used to be taken for
     /// that photograph come home: it wore the old rating and edits, and
-    /// the original in `.trash` was lost track of (vagabond-burro/heeler#41).
+    /// the original in `.trash` was lost track of.
     #[test]
     fn a_new_file_under_a_trashed_photographs_name_is_a_photograph_of_its_own() {
         let dir = tempfile::tempdir().unwrap();
@@ -30352,7 +30345,7 @@ mod tests {
 
     /// A flush forgot the trashed photographs too, and nothing brought
     /// them back: the trash badge, Show Trash and Put Back were gone
-    /// while the files sat on in `.trash` (vagabond-burro/heeler#43).
+    /// while the files sat on in `.trash`.
     #[test]
     fn opening_a_flushed_folder_again_finds_its_trash() {
         let dir = tempfile::tempdir().unwrap();
@@ -30383,8 +30376,7 @@ mod tests {
     }
 
     /// A folder deleted or moved on disk could not be opened at all, so
-    /// its missing photographs were out of reach folder by folder
-    /// (vagabond-burro/heeler#44).
+    /// its missing photographs were out of reach folder by folder.
     #[test]
     fn a_folder_gone_from_the_disk_lists_its_missing_photographs() {
         let dir = tempfile::tempdir().unwrap();

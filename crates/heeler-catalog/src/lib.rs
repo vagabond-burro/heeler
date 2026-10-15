@@ -360,8 +360,7 @@ pub fn list_subfolders(dir: &Path) -> Result<Vec<PathBuf>, CatalogError> {
     let mut found = Vec::new();
     for entry in std::fs::read_dir(dir)? {
         // One entry that cannot be read is skipped rather than failing the
-        // whole listing, which showed the folder as empty
-        // (vagabond-burro/heeler#44). A folder that cannot be read at all
+        // whole listing, which showed the folder as empty. A folder that cannot be read at all
         // is still an error, from read_dir above.
         let Ok(entry) = entry else { continue };
         let path = entry.path();
@@ -1225,8 +1224,7 @@ impl Catalog {
     ///
     /// A folder seen in the tree but never opened has no row yet, so one
     /// is made for it, already hidden: without it the command found
-    /// nothing to flag, said the folder was hidden, and left it listed
-    /// (vagabond-burro/heeler#39).
+    /// nothing to flag, said the folder was hidden, and left it listed.
     pub fn hide_folder(&self, path: &Path) -> Result<usize, CatalogError> {
         self.batch(|c| {
             c.conn.execute(
@@ -1299,7 +1297,7 @@ impl Catalog {
     /// transaction. Nothing on disk is touched, and the saved edits are
     /// not in this database. The caller decides which ones may go; this
     /// is how a photograph whose file is gone leaves a folder without
-    /// flushing the whole folder (vagabond-burro/heeler#36). Returns how
+    /// flushing the whole folder. Returns how
     /// many were forgotten.
     pub fn forget_images(&self, ids: &[String]) -> Result<usize, CatalogError> {
         self.batch(|c| {
@@ -1338,7 +1336,7 @@ impl Catalog {
     /// collections and edits; the newcomer's row and everything hanging
     /// off it go. This is how a photograph moved in the file browser gets
     /// its record back once the new place already has a blank row of its
-    /// own (vagabond-burro/heeler#42). One transaction.
+    /// own. One transaction.
     pub fn absorb_image(&self, keeper: &str, newcomer: &str) -> Result<(), CatalogError> {
         self.batch(|c| {
             let new = c.image(newcomer)?;
@@ -2936,7 +2934,7 @@ mod tests {
     }
 
     /// The Folders shortlist is the picked folders, and a hidden one
-    /// stayed on it after Hide said it would leave (vagabond-burro/heeler#39).
+    /// stayed on it after Hide said it would leave.
     #[test]
     fn a_hidden_picked_folder_leaves_the_shortlist_until_it_is_opened_again() {
         let c = Catalog::open_in_memory().unwrap();
@@ -2957,7 +2955,7 @@ mod tests {
     }
 
     /// A folder seen in the tree but never opened has no row, so Hide
-    /// had nothing to flag and the folder stayed (vagabond-burro/heeler#39).
+    /// had nothing to flag and the folder stayed.
     #[test]
     fn hiding_a_folder_never_opened_records_it_hidden() {
         let c = Catalog::open_in_memory().unwrap();

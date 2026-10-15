@@ -61,7 +61,7 @@ describe("Hide folder", () => {
   });
 
   // The dialog says the folder "will leave the Folders list", and it
-  // stayed on it (vagabond-burro/heeler#39).
+  // stayed on it.
   it("takes the folder off the shortlist", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -129,7 +129,7 @@ describe("Flush folder", () => {
   });
 
   // A folder seen in the tree but never opened has no records: Flush
-  // asked twice for 0 photographs and then did nothing (vagabond-burro/heeler#39).
+  // asked twice for 0 photographs and then did nothing.
   it("says there is nothing to flush for a folder the catalog has no records for", async () => {
     mockSetSubtreeCounts({ folders: 0, images: 0 });
     const user = userEvent.setup();
@@ -141,8 +141,7 @@ describe("Flush folder", () => {
     expect(mockFolderCommands).toEqual([]);
   });
 
-  // The trashed ones are forgotten too, and the prompt left them out
-  // (vagabond-burro/heeler#43).
+  // The trashed ones are forgotten too, and the prompt left them out.
   it("says what happens to the photographs in the folder's trash", () => {
     const some = confirmCopy({ action: { kind: "flush_folder", path: "/shoot", folders: 1, images: 5, trashed: 2 }, step: 1 });
     expect(some.body).toMatch(/The 2 photographs in its \.trash are forgotten too; the files stay in \.trash, and opening the folder again finds them there/);

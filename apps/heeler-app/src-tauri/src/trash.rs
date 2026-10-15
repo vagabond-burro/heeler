@@ -323,7 +323,7 @@ pub fn still_in_trash(original: &Path, image_id: &str) -> Option<PathBuf> {
 
 /// Where Put Back returns a trashed photograph to. Normally the path its
 /// record holds; a record that had to step aside into `.trash`, because
-/// a different file took its name (vagabond-burro/heeler#41), names the
+/// a different file took its name, names the
 /// way home in the trash's index instead.
 pub fn put_back_target(recorded: &Path, image_id: &str) -> PathBuf {
     if !in_trash_dir(recorded) {
