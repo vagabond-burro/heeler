@@ -1254,6 +1254,40 @@ impl Catalog {
         Ok(n)
     }
 
+    /// Moves every record at `old` and beneath it to `new`: folder rows and
+    /// photograph rows, after the folder itself was renamed on the disk.
+    /// Ids, ratings and everything else on the rows stay. One
+    /// transaction; a row already at a new path fails it whole. Returns
+    /// (folders, photographs) moved.
+    pub fn rename_folder_paths(&self, old: &Path, new: &Path) -> Result<(usize, usize), CatalogError> {
+        let moved = |p: &str| -> Option<String> {
+            Path::new(p).strip_prefix(old).ok().map(|rest| {
+                if rest.as_os_str().is_empty() { new.to_string_lossy().into_owned() } else { new.join(rest).to_string_lossy().into_owned() }
+            })
+        };
+        self.batch(|c| {
+            let folders = c.folder_subtree(old)?;
+            for (id, p) in &folders {
+                if let Some(to) = moved(p) {
+                    c.conn.execute("UPDATE folders SET path = ?2 WHERE id = ?1", params![id, to])?;
+                }
+            }
+            let prefix = old.to_string_lossy();
+            let mut stmt = c.conn.prepare("SELECT id, path FROM images WHERE substr(path, 1, length(?1)) = ?1")?;
+            let rows: Vec<(String, String)> = stmt
+                .query_map(params![prefix], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<Result<_, _>>()?;
+            let mut images = 0;
+            for (id, p) in rows {
+                if let Some(to) = moved(&p) {
+                    c.conn.execute("UPDATE images SET path = ?2 WHERE id = ?1", params![id, to])?;
+                    images += 1;
+                }
+            }
+            Ok((folders.len(), images))
+        })
+    }
+
     /// Hides `path` and every folder beneath it from the library. Every
     /// record stays; browsing to the folder again (add_folder) unhides
     /// it. Returns how many folder rows were flagged.
@@ -3029,6 +3063,26 @@ mod tests {
         }
         let names: Vec<String> = list_subfolders(d.path()).unwrap().iter().map(|p| p.file_name().unwrap().to_string_lossy().to_string()).collect();
         assert_eq!(names, vec!["DCIM", "Misc"]);
+    }
+
+    #[test]
+    fn renaming_a_folder_moves_its_records_and_its_subfolders_and_nothing_else() {
+        let c = Catalog::open_in_memory().unwrap();
+        let top = c.add_folder(Path::new("/shoot")).unwrap();
+        let sub = c.add_folder(Path::new("/shoot/day2")).unwrap();
+        let other = c.add_folder(Path::new("/shootout")).unwrap();
+        c.add_image("a", Path::new("/shoot/a.dng"), Some(top)).unwrap();
+        c.add_image("b", Path::new("/shoot/day2/b.dng"), Some(sub)).unwrap();
+        c.add_image("z", Path::new("/shootout/z.dng"), Some(other)).unwrap();
+        c.set_rating("a", 3).unwrap();
+        assert_eq!(c.rename_folder_paths(Path::new("/shoot"), Path::new("/wedding")).unwrap(), (2, 2));
+        assert_eq!(c.image("a").unwrap().path, "/wedding/a.dng");
+        assert_eq!(c.image("a").unwrap().rating, 3);
+        assert_eq!(c.image("b").unwrap().path, "/wedding/day2/b.dng");
+        assert_eq!(c.image("z").unwrap().path, "/shootout/z.dng", "the lookalike stays");
+        assert_eq!(c.folder_id(Path::new("/wedding")).unwrap(), Some(top));
+        assert_eq!(c.folder_id(Path::new("/wedding/day2")).unwrap(), Some(sub));
+        assert!(c.folder_id(Path::new("/shoot")).unwrap().is_none());
     }
 
     #[test]

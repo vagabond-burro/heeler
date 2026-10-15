@@ -2,6 +2,11 @@
 
 ## 2026.5.5
 
+### New
+
+- **Make, rename and find folders from the tree.** Right-click a folder for **New Folder…**, **Rename…** and **Copy Path**. Renaming moves the folder on the disk and takes everything in the catalog with it: ratings, flags, keywords, collections and edits stay on their photographs, and photographs in its trash can still be put back. If the catalog cannot follow, the folder keeps its old name. [Library](user-guide/library.md).
+- **The folder tree from the keyboard.** Tab into the tree and use the arrow keys to move, open and close folders, and Enter to open one. The tree remembers which folders you left open, and the folder you are in stays in view. [Library](user-guide/library.md).
+
 ### Fixes
 
 - **One folder, one set of records.** A folder opened once by its own name and again through a link, or typed with different capitals on a Mac or Windows disk, was treated as two folders: each photograph got a second record, and the ratings, keywords and edits on one were out of sight from the other. Opening a folder the catalog already knows by another name now uses the records it has. Photographs that already have two records keep both. On Windows, the tree no longer lists the `$RECYCLE.BIN` and System Volume Information folders at the top of a drive or card, which could not be opened anyway. [Library](user-guide/library.md).

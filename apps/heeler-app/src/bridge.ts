@@ -3365,6 +3365,43 @@ export function mockRemoveFolder(path: string): () => void {
   };
 }
 
+/** Makes a folder named `name` in `parent`; answers its path. */
+export async function createFolder(parent: string, name: string): Promise<string> {
+  if (isTauri()) return call<string>("create_folder", { parent, name });
+  const listing = MOCK_LISTINGS[parent];
+  if (!listing) throw new Error(`${parent} is not there`);
+  const path = `${parent}/${name}`;
+  if (listing.subfolders.some((s) => s.path === path)) throw new Error(`${name} is already there.`);
+  listing.subfolders = [...listing.subfolders, { name, path }];
+  MOCK_LISTINGS[path] = { name, path, images: [], subfolders: [] };
+  return path;
+}
+
+/** Renames a folder on the disk and in the catalog; answers its new
+ * path and any `.trash` index that could not be updated. */
+export async function renameFolder(path: string, name: string): Promise<{ path: string; problems: string[] }> {
+  if (isTauri()) return call<{ path: string; problems: string[] }>("rename_folder", { path, name });
+  const parentPath = path.replace(/\/[^/]*$/, "");
+  const to = `${parentPath}/${name}`;
+  if (MOCK_LISTINGS[to]) throw new Error(`${name} is already there.`);
+  for (const key of Object.keys(MOCK_LISTINGS)) {
+    if (key === path || key.startsWith(path + "/")) {
+      const moved = to + key.slice(path.length);
+      const l = MOCK_LISTINGS[key];
+      MOCK_LISTINGS[moved] = {
+        ...l,
+        path: moved,
+        name: key === path ? name : l.name,
+        subfolders: l.subfolders.map((s) => ({ ...s, path: to + s.path.slice(path.length) })),
+      };
+      delete MOCK_LISTINGS[key];
+    }
+  }
+  const parent = MOCK_LISTINGS[parentPath];
+  if (parent) parent.subfolders = parent.subfolders.map((s) => (s.path === path ? { name, path: to } : s));
+  return { path: to, problems: [] };
+}
+
 /** Test hook: grows the mock filesystem so watcher behavior is testable. */
 export function mockAddSubfolder(parent: string, name: string): void {
   const listing = MOCK_LISTINGS[parent];

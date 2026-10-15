@@ -21,7 +21,7 @@ Right-click a folder for two ways to take it off the list. **Hide folder** remov
 - The count at the right is the number of photographs known in that folder.
 - An edited badge marks folders containing edits.
 - A trash badge marks folders with a Heeler `.trash` folder.
-- Right-click a folder for folder-specific actions. **Refresh** looks at the disk again for that folder; on the folder you are in, it also picks up photographs added or removed outside Heeler.
+- Right-click a folder for folder-specific actions. **Refresh** looks at the disk again for that folder; on the folder you are in, it also picks up photographs added or removed outside Heeler. **New Folder…** makes a folder inside it. **Rename…** renames the folder on the disk; its photographs, and those in its subfolders, keep their ratings, flags, keywords, collections and edits, and photographs in its trash can still be put back. **Copy Path** copies where the folder is.
 - A folder that is no longer on the disk says so when you click it and leaves the tree. If the catalog has photographs from it, it opens as a list of those photographs, each marked missing, so you can relink or remove them.
 
 The divider under the tree changes how much height Folders receives; Collections uses the remainder and scrolls independently.

@@ -41,7 +41,7 @@ import {
   type FolderImage, type FolderListing, type ServeStatus,
 } from "../bridge";
 import { UPDATE_DOWNLOAD_WORDS, checkForUpdates } from "../updates";
-import { allKeywords, buildInfo, clearRecentCatalogs, folderSubtreeCounts, foldersWithHidden, foldersWithTrash, hiddenFolderPaths, forgetRecentCatalog, missingTrashedPhotos, recentCatalogs, revealTrash, hiddenInFolder, type RecentCatalog, imageKeywords, imagesWithKeyword, pickRelinkFolder, pickRelinkTarget, relinkFolder, relinkImage, setImageKeywords } from "../bridge";
+import { allKeywords, buildInfo, clearRecentCatalogs, createFolder, folderSubtreeCounts, foldersWithHidden, foldersWithTrash, hiddenFolderPaths, renameFolder, forgetRecentCatalog, missingTrashedPhotos, recentCatalogs, revealTrash, hiddenInFolder, type RecentCatalog, imageKeywords, imagesWithKeyword, pickRelinkFolder, pickRelinkTarget, relinkFolder, relinkImage, setImageKeywords } from "../bridge";
 import { logMsg } from "../log";
 import { beginThumbSession, thumbnailGraph } from "../thumbs";
 import { ThumbBox } from "./thumbbox";
@@ -3635,6 +3635,105 @@ export function treeKeys(e: React.KeyboardEvent<HTMLElement>): void {
   e.preventDefault();
 }
 
+/** The name field for New Folder and Rename: Enter confirms, Escape or a
+ * click elsewhere cancels, and a refusal (a name taken, a character a
+ * disk will not take) is said under the field rather than closing it. */
+function FolderNameField({
+  title, initial, x, y, onSubmit, onClose,
+}: {
+  title: string; initial: string; x: number; y: number;
+  /** answers the reason it was refused, or null once done */
+  onSubmit: (name: string) => Promise<string | null>;
+  onClose: () => void;
+}) {
+  const [value, setValue] = useState(initial);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const ref = useDismiss<HTMLDivElement>(true, onClose);
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true);
+    const refused = await onSubmit(value);
+    setBusy(false);
+    if (refused) setError(refused);
+    else onClose();
+  };
+  return (
+    <FixedMenu>
+      <MenuSurface
+        aria-label={title}
+        ref={ref}
+        className="ctx-menu"
+        data-testid="folder-name"
+        style={{ position: "fixed", left: x, top: y, width: 230, padding: 8 }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="kicker" style={{ marginBottom: 6 }}>{title}</div>
+        <input
+          autoFocus
+          data-testid="folder-name-input"
+          aria-label={title}
+          value={value}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => {
+            setValue(e.target.value);
+            setError(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void submit();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onClose();
+            }
+          }}
+          style={{ width: "100%", boxSizing: "border-box" }}
+        />
+        {error && (
+          <div data-testid="folder-name-error" role="alert" style={{ marginTop: 6, fontSize: 11, color: "var(--danger, #e06c6c)" }}>
+            {error}
+          </div>
+        )}
+      </MenuSurface>
+    </FixedMenu>
+  );
+}
+
+/** Makes a folder in `parent` and shows it in the tree, the branch open. */
+export async function newFolderIn(parent: string, name: string, dispatch: D): Promise<string | null> {
+  try {
+    const made = await createFolder(parent, name);
+    const children = await listSubfolders(parent).catch(() => null);
+    if (children) dispatch({ type: "set_tree_node", path: parent, children, expanded: true });
+    flashStatus(`Made ${leafName(made)}.`);
+    return null;
+  } catch (e) {
+    return String(e).replace(/^Error: /, "");
+  }
+}
+
+/** Renames a folder, then the tree and the library follow: its branch
+ * takes the new name with its open folders kept, and if you were inside
+ * it the folder you were in opens again under its new path. */
+export async function renameFolderTo(path: string, name: string, state: State, dispatch: D): Promise<string | null> {
+  try {
+    const r = await renameFolder(path, name);
+    const wasInside = state.activeFolderPath !== null && isWithin(state.activeFolderPath, path);
+    dispatch({ type: "rename_tree_node", from: path, to: r.path, name: leafName(r.path) });
+    if (wasInside && state.activeCollection === null) {
+      const now = r.path + state.activeFolderPath!.slice(path.replace(/[\\/]+$/, "").length);
+      await openFolderPlain(now, state.folderTree, dispatch, state.prefs.thumbnailEdge);
+    }
+    for (const p of r.problems) logMsg("warn", `Renamed, but this trash could not be updated: ${p}`);
+    flashStatus(r.problems.length ? `Renamed to ${leafName(r.path)}, but ${r.problems.length} trash folder could not be updated; see the Console.` : `Renamed to ${leafName(r.path)}.`);
+    void refreshLibrary(dispatch);
+    return null;
+  } catch (e) {
+    return String(e).replace(/^Error: /, "");
+  }
+}
+
 /** Collapsible section header for the library panel. */
 function SectionHead({
   id, label, collapsed, onToggle, extra,
@@ -3849,6 +3948,8 @@ function BrowserPanelImpl({ state, dispatch }: { state: State; dispatch: D }) {
   );
   const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const folderMenuRef = useDismiss<HTMLDivElement>(folderMenu !== null, () => setFolderMenu(null));
+  // New Folder and Rename ask for a name in a small field where the menu was.
+  const [naming, setNaming] = useState<{ mode: "new" | "rename"; path: string; x: number; y: number } | null>(null);
   // Catalog-known edited folders, plus a live check for the open folder so
   // the badge appears the moment an edit lands, before any refresh.
   // Ancestors light up via folderHasEdits, marking the trail down.
@@ -3964,6 +4065,41 @@ big it is, same as +NEW beside it.*/}
               </>
             )}
             <button
+              data-testid="folder-menu-new"
+              data-hint="Make a new folder inside this one"
+              onClick={() => {
+                setNaming({ mode: "new", path: folderMenu.path, x: folderMenu.x, y: folderMenu.y });
+                setFolderMenu(null);
+              }}
+            >
+              New Folder…
+            </button>
+            <button
+              data-testid="folder-menu-rename"
+              data-hint="Rename this folder on the disk; its photographs keep their ratings, edits and collections"
+              onClick={() => {
+                setNaming({ mode: "rename", path: folderMenu.path, x: folderMenu.x, y: folderMenu.y });
+                setFolderMenu(null);
+              }}
+            >
+              Rename…
+            </button>
+            <button
+              data-testid="folder-menu-copy-path"
+              data-hint="Copy where this folder is, to paste elsewhere"
+              onClick={() => {
+                const path = folderMenu.path;
+                setFolderMenu(null);
+                void navigator.clipboard?.writeText(path)?.then(
+                  () => flashStatus("Path copied."),
+                  () => flashStatus("Could not copy the path."),
+                );
+              }}
+            >
+              Copy Path
+            </button>
+            <div className="sep" />
+            <button
               data-testid="folder-menu-refresh"
               data-hint="Look at the disk again: subfolders made, renamed or removed since, and, for the folder you are in, its photographs"
               onClick={() => {
@@ -4073,6 +4209,18 @@ the file browser's job too, and the next scan notices.*/}
             )}
           </MenuSurface>
           </FixedMenu>
+        )}
+        {naming && (
+          <FolderNameField
+            title={naming.mode === "new" ? "New folder" : "Rename folder"}
+            initial={naming.mode === "new" ? "" : leafName(naming.path)}
+            x={naming.x}
+            y={naming.y}
+            onSubmit={(name) =>
+              naming.mode === "new" ? newFolderIn(naming.path, name, dispatch) : renameFolderTo(naming.path, name, state, dispatch)
+            }
+            onClose={() => setNaming(null)}
+          />
         )}
         {!collapsed.has("folders") && (
           <>

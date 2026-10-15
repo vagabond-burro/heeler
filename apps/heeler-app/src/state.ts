@@ -4721,6 +4721,9 @@ export type Command =
   | { type: "collapse_tree_below"; path: string }
   /** puts a whole branch back at its path, as it was */
   | { type: "graft_tree_node"; node: TreeNode }
+  /** a folder renamed on disk: its branch takes the new name and paths,
+   * open branches kept, and the library follows if it was inside */
+  | { type: "rename_tree_node"; from: string; to: string; name: string }
   | { type: "set_rating"; ids: string[]; stars: number }
   | { type: "set_flag"; ids: string[]; flag: ImageEntry["flag"] }
   | { type: "select_nodes"; ids: string[]; additive?: boolean }
@@ -19366,6 +19369,17 @@ function reduceInner(s: State, cmd: Command): State {
       return { ...s, folders: cmd.folders };
     case "set_folder_tree":
       return { ...s, folderTree: cmd.root };
+    case "rename_tree_node": {
+      const move = (p: string) => (p === cmd.from || p.startsWith(cmd.from + "/") || p.startsWith(cmd.from + "\\") ? cmd.to + p.slice(cmd.from.length) : p);
+      const rename = (n: TreeNode): TreeNode => ({ ...n, path: move(n.path), children: n.children?.map(rename) ?? null });
+      const renamed = (n: TreeNode): TreeNode => (n.path === cmd.from ? { ...rename(n), name: cmd.name } : { ...n, children: n.children?.map(renamed) ?? null });
+      return {
+        ...s,
+        folderTree: s.folderTree ? renamed(s.folderTree) : s.folderTree,
+        activeFolderPath: s.activeFolderPath === null ? null : move(s.activeFolderPath),
+        libraryLabel: s.activeFolderPath === cmd.from ? cmd.name : s.libraryLabel,
+      };
+    }
     case "graft_tree_node":
       if (!s.folderTree) return s;
       return { ...s, folderTree: updateTreeNode(s.folderTree, cmd.node.path, () => cmd.node) };

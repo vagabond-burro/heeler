@@ -323,3 +323,73 @@ describe("the folders left open", () => {
     expect(expandedPaths(null)).toEqual([]);
   });
 });
+
+describe("New Folder, Rename and Copy Path", () => {
+  it("makes a folder inside the one right-clicked and shows it in the tree", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openTrip(user);
+    await menuOn(user, "mock://trip", "new");
+    await user.type(await screen.findByTestId("folder-name-input"), "Day 9{Enter}");
+    expect(await screen.findByTestId("tree-row-mock://trip/Day 9")).toBeInTheDocument();
+    expect(screen.queryByTestId("folder-name")).toBeNull();
+  });
+
+  it("says why a name is refused and keeps the field open", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openTrip(user);
+    await menuOn(user, "mock://trip", "new");
+    await user.type(await screen.findByTestId("folder-name-input"), "Day 8{Enter}");
+    await screen.findByTestId("tree-row-mock://trip/Day 8");
+    await menuOn(user, "mock://trip", "new");
+    await user.type(await screen.findByTestId("folder-name-input"), "Day 8{Enter}");
+    expect(await screen.findByTestId("folder-name-error")).toHaveTextContent("already there");
+    expect(screen.getByTestId("folder-name")).toBeInTheDocument();
+  });
+
+  it("renames a folder in the tree, keeping where it sits", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openTrip(user);
+    await menuOn(user, "mock://trip", "new");
+    await user.type(await screen.findByTestId("folder-name-input"), "Spare{Enter}");
+    await screen.findByTestId("tree-row-mock://trip/Spare");
+    await menuOn(user, "mock://trip/Spare", "rename");
+    const field = await screen.findByTestId("folder-name-input");
+    expect(field).toHaveValue("Spare");
+    await user.clear(field);
+    await user.type(field, "Extras{Enter}");
+    expect(await screen.findByTestId("tree-row-mock://trip/Extras")).toBeInTheDocument();
+    expect(screen.queryByTestId("tree-row-mock://trip/Spare")).toBeNull();
+    expect(screen.getByTestId("library-label")).toHaveTextContent("Trip");
+  });
+
+  it("renaming the folder you are in takes the library with it", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openTrip(user);
+    await menuOn(user, "mock://trip", "new");
+    await user.type(await screen.findByTestId("folder-name-input"), "Here{Enter}");
+    await user.click(await screen.findByTestId("tree-open-mock://trip/Here"));
+    await waitFor(() => expect(screen.getByTestId("library-label")).toHaveTextContent("Here"));
+    await menuOn(user, "mock://trip/Here", "rename");
+    const field = await screen.findByTestId("folder-name-input");
+    await user.clear(field);
+    await user.type(field, "There{Enter}");
+    await waitFor(() => expect(screen.getByTestId("library-label")).toHaveTextContent("There"));
+    expect(screen.getByTestId("tree-row-mock://trip/There")).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("copies the folder's path", async () => {
+    const copied: string[] = [];
+    const user = userEvent.setup();
+    // After setup, which puts a clipboard of its own on navigator.
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: async (t: string) => { copied.push(t); } }, configurable: true });
+    render(<App />);
+    await openTrip(user);
+    await menuOn(user, "mock://trip/day2", "copy-path");
+    await waitFor(() => expect(copied).toEqual(["mock://trip/day2"]));
+    await waitFor(() => expect(currentFlash()).toMatch(/Path copied/));
+  });
+});

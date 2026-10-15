@@ -13560,6 +13560,179 @@ pub fn sessions_leave_folder(c: &Catalog, path: &Path, flushed: bool) -> Result<
     Ok(())
 }
 
+/// A folder name Heeler will make or rename to: one name, no separators
+/// or characters Windows refuses, nothing a file browser would hide (a
+/// leading dot) or quietly change (a trailing dot or space).
+pub fn folder_name_ok(name: &str) -> Result<&str, String> {
+    let name = name.trim();
+    if name.is_empty() || name == "." || name == ".." {
+        return Err("Give the folder a name.".into());
+    }
+    if let Some(c) = name.chars().find(|c| matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || c.is_control()) {
+        return Err(format!("A folder name cannot contain {c:?}."));
+    }
+    if name.starts_with('.') {
+        return Err("A folder name starting with a dot would be hidden.".into());
+    }
+    if name.ends_with('.') {
+        return Err("A folder name cannot end with a dot.".into());
+    }
+    Ok(name)
+}
+
+/// Makes a folder named `name` inside `parent`. Never over anything: a
+/// folder or file already there is an error.
+pub fn create_folder_in(parent: &Path, name: &str) -> Result<PathBuf, String> {
+    let name = folder_name_ok(name)?;
+    if !parent.is_dir() {
+        return Err(format!("{} is not there", parent.display()));
+    }
+    let target = parent.join(name);
+    std::fs::create_dir(&target).map_err(|e| match e.kind() {
+        std::io::ErrorKind::AlreadyExists => format!("{name} is already there."),
+        _ => format!("Could not make {name}: {e}"),
+    })?;
+    Ok(target)
+}
+
+#[tauri::command]
+async fn create_folder(parent: String, name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || create_folder_in(Path::new(&parent), &name).map(|p| p.to_string_lossy().into_owned()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// The catalog's half of renaming a folder, in one transaction: the
+/// folder and photograph rows under it, the remembered sessions, and the
+/// flush's record of ids by path all move from `old` to `new`.
+pub fn rename_folder_records(c: &Catalog, old: &Path, new: &Path) -> Result<(usize, usize), String> {
+    let moved = |p: &str| -> Option<String> {
+        Path::new(p).strip_prefix(old).ok().map(|rest| {
+            if rest.as_os_str().is_empty() { new.to_string_lossy().into_owned() } else { new.join(rest).to_string_lossy().into_owned() }
+        })
+    };
+    c.batch_with(|c| {
+        let counts = c.rename_folder_paths(old, new)?;
+        for key in ["tree_root", "active_folder"] {
+            if let Some(to) = c.meta(key)?.as_deref().and_then(moved) {
+                c.set_meta(key, &to)?;
+            }
+        }
+        for key in c.meta_keys("session:")? {
+            let root = key["session:".len()..].to_string();
+            let Some(value) = c.meta(&key)? else { continue };
+            let mut json: serde_json::Value = serde_json::from_str(&value).unwrap_or(serde_json::Value::Null);
+            if let Some(to) = json.get("active_folder").and_then(|v| v.as_str()).and_then(moved) {
+                json["active_folder"] = serde_json::Value::String(to);
+            }
+            match moved(&root) {
+                Some(to) => {
+                    c.delete_meta(&key)?;
+                    c.set_meta(&format!("session:{to}"), &json.to_string())?;
+                }
+                None => c.set_meta(&key, &json.to_string())?,
+            }
+        }
+        let flushed = read_flushed_ids(c)?;
+        if flushed.keys().any(|k| moved(k).is_some()) {
+            let renamed = flushed.into_iter().map(|(k, v)| (moved(&k).unwrap_or(k), v)).collect();
+            write_flushed_ids(c, &renamed)?;
+        }
+        Ok::<_, heeler_catalog::CatalogError>(counts)
+    })
+    .map_err(|e| e.to_string())
+}
+
+/// Renames folder `old` to `name` in the same parent, on the disk and in
+/// the catalog, and returns its new path. Nothing is deleted: the disk
+/// half is a rename, and if the catalog cannot follow, the folder is
+/// renamed back and nothing has changed. The `.trash` indexes inside it
+/// then learn the new way home for their photographs; a failure there
+/// is reported, not undone, since the files themselves are fine.
+pub fn rename_folder_in(c: &Catalog, old: &Path, name: &str) -> Result<(PathBuf, Vec<String>), String> {
+    let name = folder_name_ok(name)?;
+    if !old.is_dir() {
+        return Err(format!("{} is not there", old.display()));
+    }
+    let parent = old.parent().filter(|p| !p.as_os_str().is_empty()).ok_or("A drive's own top folder cannot be renamed here.")?;
+    let new = parent.join(name);
+    if new == old {
+        return Ok((new, Vec::new()));
+    }
+    // A change of case alone is the same name to a disk that ignores case.
+    let same_entry = std::fs::canonicalize(&new).ok().is_some_and(|n| Some(n) == std::fs::canonicalize(old).ok());
+    if new.exists() && !same_entry {
+        return Err(format!("{name} is already there."));
+    }
+    if c.folder_id(&new).map_err(|e| e.to_string())?.is_some() && !same_entry {
+        return Err(format!("The catalog still has records for {}. Flush that folder first.", new.display()));
+    }
+    std::fs::rename(old, &new).map_err(|e| format!("Could not rename {}: {e}", old.display()))?;
+    if let Err(e) = rename_folder_records(c, old, &new) {
+        let back = std::fs::rename(&new, old);
+        return Err(match back {
+            Ok(()) => format!("The catalog could not follow the rename, so the folder keeps its name: {e}"),
+            Err(b) => format!("The catalog could not follow the rename ({e}), and the folder could not be renamed back ({b}). It is now {}.", new.display()),
+        });
+    }
+    let mut problems = Vec::new();
+    let subtree: Vec<PathBuf> = c
+        .list_folders()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(_, p)| PathBuf::from(p))
+        .filter(|p| p.starts_with(&new))
+        .collect();
+    for folder in subtree {
+        let trash_dir = folder.join(trash::TRASH_DIR);
+        if !trash::manifest_path(&trash_dir).is_file() {
+            continue;
+        }
+        let mut m = trash::read_manifest(&trash_dir);
+        let mut changed = false;
+        for item in &mut m.items {
+            if let Ok(rest) = Path::new(&item.original).strip_prefix(old) {
+                item.original = new.join(rest).to_string_lossy().into_owned();
+                changed = true;
+            }
+        }
+        if changed {
+            if let Err(e) = trash::write_manifest(&trash_dir, &m) {
+                problems.push(format!("{}: {e}", trash_dir.display()));
+            }
+        }
+    }
+    Ok((new, problems))
+}
+
+#[derive(serde::Serialize)]
+struct RenamedFolder {
+    path: String,
+    /// `.trash` indexes that could not be updated, one line each.
+    problems: Vec<String>,
+}
+
+#[tauri::command]
+async fn rename_folder(app: tauri::AppHandle, path: String, name: String) -> Result<RenamedFolder, String> {
+    let issued = catalog_generation(&app)?;
+    tauri::async_runtime::spawn_blocking(move || -> Result<RenamedFolder, String> {
+        let old = PathBuf::from(&path);
+        let (new, problems) = with_catalog_at(&app, issued, |c| rename_folder_in(c, &old, &name))?;
+        // The open session's paths for photographs under it, too.
+        with_session(&app, |s| {
+            for p in s.paths.values_mut() {
+                if let Ok(rest) = p.strip_prefix(&old) {
+                    *p = new.join(rest);
+                }
+            }
+            Ok(())
+        })?;
+        Ok(RenamedFolder { path: new.to_string_lossy().into_owned(), problems })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Forgets a folder and its subfolders: the catalog's records for their
 /// photographs go. No file is touched, and the per-image edits are not
 /// in the catalog, so a folder added again gets them back.
@@ -21048,6 +21221,8 @@ pub fn run() {
             folders_with_hidden,
             hidden_folder_paths,
             forget_missing_photos,
+            create_folder,
+            rename_folder,
             folders_with_trash,
             reveal_trash,
             brush_tip_preview,
@@ -21514,6 +21689,8 @@ mod tests {
             "folders_with_hidden",
             "hidden_folder_paths",
             "forget_missing_photos",
+            "create_folder",
+            "rename_folder",
             "folders_with_trash",
             "list_collections",
             "create_collection",
@@ -25230,6 +25407,97 @@ mod tests {
         let ids: Vec<String> = ["a", "b", "c"].iter().map(|s| s.to_string()).collect();
         let report = relink_in_folder(&c, &mut paths, &ids, &root).unwrap();
         assert_eq!(report, RelinkReport { relinked: 1, still_missing: 1, taken: 0, ambiguous: 1 });
+    }
+
+    #[test]
+    fn folder_names_are_one_plain_name() {
+        assert_eq!(folder_name_ok("  Day 3 ").unwrap(), "Day 3");
+        for bad in ["", "  ", ".", "..", "a/b", "a\\b", "x:y", ".hidden", "trailing.", "q?"] {
+            assert!(folder_name_ok(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn a_new_folder_is_made_and_never_over_anything() {
+        let d = tempfile::tempdir().unwrap();
+        let made = create_folder_in(d.path(), "Day 3").unwrap();
+        assert!(made.is_dir());
+        assert!(create_folder_in(d.path(), "Day 3").unwrap_err().contains("already there"));
+        std::fs::write(d.path().join("notes"), b"x").unwrap();
+        assert!(create_folder_in(d.path(), "notes").is_err());
+        assert!(create_folder_in(&d.path().join("gone"), "x").is_err());
+    }
+
+    /// Renaming a folder moves it on the disk and every record that names
+    /// it: its photographs and subfolders keep their ratings, the session
+    /// follows, and the trash inside still knows the way home.
+    #[test]
+    fn renaming_a_folder_takes_its_records_sessions_and_trash_with_it() {
+        let d = tempfile::tempdir().unwrap();
+        let shoot = d.path().join("shoot");
+        std::fs::create_dir_all(shoot.join("day2")).unwrap();
+        let png = heeler_io::encode_png(&ImageBuf::filled(8, 8, [0.5, 0.5, 0.5, 1.0])).unwrap();
+        std::fs::write(shoot.join("a.png"), &png).unwrap();
+        std::fs::write(shoot.join("t.png"), &png).unwrap();
+        std::fs::write(shoot.join("day2").join("b.png"), &png).unwrap();
+        let c = Catalog::open_in_memory().unwrap();
+        let mut paths = HashMap::new();
+        let top = scan_folder(&shoot, &c, &mut paths, &mut ScanStats::default()).unwrap();
+        let a = top.iter().find(|i| i.name == "a.png").unwrap().id.clone();
+        let t = top.iter().find(|i| i.name == "t.png").unwrap().id.clone();
+        let b = scan_folder(&shoot.join("day2"), &c, &mut paths, &mut ScanStats::default()).unwrap()[0].id.clone();
+        c.set_rating(&a, 4).unwrap();
+        trash::move_to_trash(&shoot.join("t.png"), &t).unwrap();
+        c.set_trashed(&t, true).unwrap();
+        c.set_meta("tree_root", &shoot.to_string_lossy()).unwrap();
+        c.set_meta("active_folder", &shoot.join("day2").to_string_lossy()).unwrap();
+        c.set_meta(&format!("session:{}", shoot.display()), &serde_json::json!({ "active_folder": shoot.join("day2").to_string_lossy(), "active_image": b }).to_string()).unwrap();
+
+        let (wedding, problems) = rename_folder_in(&c, &shoot, "wedding").unwrap();
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(wedding, d.path().join("wedding"));
+        assert!(wedding.join("a.png").is_file() && !shoot.exists(), "renamed on the disk, nothing left behind");
+        assert_eq!(c.image(&a).unwrap().path, wedding.join("a.png").to_string_lossy());
+        assert_eq!(c.image(&a).unwrap().rating, 4);
+        assert_eq!(c.image(&b).unwrap().path, wedding.join("day2").join("b.png").to_string_lossy());
+        assert_eq!(c.meta("tree_root").unwrap().as_deref(), Some(wedding.to_string_lossy().as_ref()));
+        assert_eq!(c.meta("active_folder").unwrap().as_deref(), Some(wedding.join("day2").to_string_lossy().as_ref()));
+        let sess = folder_session_payload(&c, &wedding.to_string_lossy()).unwrap().expect("the session moved with it");
+        assert_eq!(sess.active_folder, wedding.join("day2").to_string_lossy());
+        assert_eq!(trash::put_back_target(Path::new(&c.list_trashed(None).unwrap()[0].path), &t), wedding.join("t.png"));
+        let m = trash::read_manifest(&wedding.join(trash::TRASH_DIR));
+        assert_eq!(m.items[0].original, wedding.join("t.png").to_string_lossy(), "Put Back's way home");
+        // Opening it under its new name finds the same photographs.
+        let again = scan_folder(&wedding, &c, &mut paths, &mut ScanStats::default()).unwrap();
+        assert_eq!(again.iter().map(|i| i.id.clone()).collect::<Vec<_>>(), vec![a.clone()]);
+    }
+
+    #[test]
+    fn a_rename_the_catalog_cannot_follow_is_undone_on_the_disk() {
+        let d = tempfile::tempdir().unwrap();
+        let shoot = d.path().join("shoot");
+        std::fs::create_dir(&shoot).unwrap();
+        std::fs::write(shoot.join("a.png"), b"x").unwrap();
+        let c = Catalog::open_in_memory().unwrap();
+        let f = c.add_folder(&shoot).unwrap();
+        c.add_image("a", &shoot.join("a.png"), Some(f)).unwrap();
+        // A stray record already at the new photograph's path.
+        c.add_image("stray", &d.path().join("wedding").join("a.png"), None).unwrap();
+        let err = rename_folder_in(&c, &shoot, "wedding").unwrap_err();
+        assert!(err.contains("keeps its name"), "{err}");
+        assert!(shoot.join("a.png").is_file(), "renamed back");
+        assert!(!d.path().join("wedding").exists());
+        assert_eq!(c.image("a").unwrap().path, shoot.join("a.png").to_string_lossy());
+    }
+
+    #[test]
+    fn a_rename_onto_a_folder_that_is_there_is_refused() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::create_dir(d.path().join("a")).unwrap();
+        std::fs::create_dir(d.path().join("b")).unwrap();
+        let c = Catalog::open_in_memory().unwrap();
+        assert!(rename_folder_in(&c, &d.path().join("a"), "b").unwrap_err().contains("already there"));
+        assert!(d.path().join("a").is_dir());
     }
 
     /// A whole unplugged drive was listed as missing photographs.
