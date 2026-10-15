@@ -9,7 +9,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "../app";
 import * as bridge from "../bridge";
-import { addToCollection, createCollection, mockResetCollections } from "../bridge";
+import { addToCollection, createCollection, mockResetCollections, mockSetSubtreeCounts } from "../bridge";
 import { initialState } from "../data";
 import { deleteCollectionStep, resetLibraryUndo } from "../libraryundo";
 import type { Command, State } from "../state";
@@ -325,5 +325,51 @@ describe("the commands behind it", () => {
     const closed = recorder(null);
     await editCollectionMembership(closed.state, closed.dispatch, ["a"], "remove-all");
     expect(closed.sent.some((c) => c.type === "load_images" || c.type === "set_library")).toBe(false);
+  });
+});
+
+// A folder hidden or flushed while a collection was open: the
+// collection kept showing the flushed photographs, and stepping off it
+// went back to the folder, which added it to the catalog again
+// (vagabond-burro/heeler#40).
+describe("a folder that leaves while a collection is open", () => {
+  beforeEach(() => mockSetSubtreeCounts({ folders: 1, images: 0 }));
+
+  it("a flush takes its photographs out of the open collection, and stepping off does not go back to it", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const id = await picks(user);
+    await addToCollection(Number(id), "mock_1", "IMG_0001.dng");
+    await user.click(screen.getByTestId("folder-row-1"));
+    await waitFor(() => expect(screen.getByTestId("library-label")).toHaveTextContent("Wedding"));
+    await user.click(screen.getByTestId(`collection-open-${id}`));
+    await waitFor(() => expect(screen.getByTestId("library-label")).toHaveTextContent("Picks"));
+    expect(await screen.findByTestId("thumb-4871")).toBeInTheDocument();
+    expect(screen.getByTestId("thumb-mock_1")).toBeInTheDocument();
+
+    mockSetSubtreeCounts({ folders: 1, images: 3 });
+    fireEvent.contextMenu(screen.getByTestId("folder-row-1"));
+    await user.click(await screen.findByTestId("folder-menu-flush"));
+    await user.click(await screen.findByTestId("confirm-ok"));
+    await user.click(await screen.findByTestId("confirm-ok"));
+    await waitFor(() => expect(screen.queryByTestId("thumb-mock_1")).not.toBeInTheDocument());
+    expect(screen.getByTestId("thumb-4871")).toBeInTheDocument();
+    expect(screen.getByTestId("library-label")).toHaveTextContent("Picks");
+
+    await user.click(screen.getByTestId("collections-section"));
+    await waitFor(() => expect(screen.getByTestId("library-label")).toHaveTextContent("No folder open"));
+  });
+
+  it("after a hide, stepping off does not open the hidden folder again", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const id = await picks(user);
+    await fromWedding(user, id);
+    fireEvent.contextMenu(screen.getByTestId("folder-row-1"));
+    await user.click(await screen.findByTestId("folder-menu-hide"));
+    await waitFor(() => expect(screen.queryByTestId("folder-row-1")).not.toBeInTheDocument());
+
+    await user.click(screen.getByTestId("collections-section"));
+    await waitFor(() => expect(screen.getByTestId("library-label")).toHaveTextContent("No folder open"));
   });
 });

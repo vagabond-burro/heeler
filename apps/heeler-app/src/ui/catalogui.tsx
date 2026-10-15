@@ -39,7 +39,8 @@ import {
   revealCatalog,
   type CatalogInfo,
 } from "../bridge";
-import { refreshLibrary, restoreCatalogSession } from "./chrome";
+import { currentNavigation, refreshLibrary, restoreCatalogSession } from "./chrome";
+import { reloadCollection } from "./collectionnav";
 import { askCatalogUpgrade, forgetCatalogUpgradeApproval } from "../catalogupgrade";
 import { logMsg } from "../log";
 import { flashStatus } from "./hints";
@@ -300,7 +301,11 @@ async function perform(confirm: Confirm, state: State, dispatch: D): Promise<voi
  * rather than left showing a folder the list no longer has. */
 export async function leaveFolder(command: "hide" | "flush", path: string, dispatch: D): Promise<void> {
   const viewing = currentActiveFolder;
+  const collection = currentCollection;
   const affected = viewing !== null && isWithin(viewing, path);
+  // Noted before the wait: a folder clicked while the command runs is
+  // newer than the collection reload below, which must give way to it.
+  const nav = currentNavigation();
   if (affected) {
     await flushRecoverySaves();
     dispatch({ type: "begin_session_load" });
@@ -314,9 +319,19 @@ export async function leaveFolder(command: "hide" | "flush", path: string, dispa
       logMsg("info", `Flushed ${path}: the catalog forgot ${r.images.toLocaleString()} photograph${r.images === 1 ? "" : "s"} in ${r.folders} folder${r.folders === 1 ? "" : "s"}. No file was touched.`);
     }
   } finally {
+    // Whatever still remembers this folder as the way back out of a
+    // collection lets go of it: stepping off the collection would open
+    // it again, and opening it adds it back (vagabond-burro/heeler#40).
+    for (const listener of folderLeftListeners) listener(path);
     if (affected) {
       try { await restoreCatalogSession(dispatch); }
       catch (e) { logMsg("error", `Could not restore the catalog session: ${String(e)}`); }
+    } else if (collection) {
+      // A collection on screen may hold photographs from the folder that
+      // left. A flush forgot them and a hide hid them, so the ribbon
+      // must not go on showing them (vagabond-burro/heeler#40).
+      try { await reloadCollection(collection.id, collection.label, dispatch, collection.thumbnailEdge, nav); }
+      catch (e) { logMsg("error", `Could not show the collection again: ${String(e)}`); }
     }
     await refreshLibrary(dispatch);
   }
@@ -324,10 +339,24 @@ export async function leaveFolder(command: "hide" | "flush", path: string, dispa
 
 /** The folder the library is showing, told to this module by the
  * dialog that has the state; folder commands read it to know whether
- * they are pulling the rug out from under the view. */
+ * they are pulling the rug out from under the view. With a collection
+ * open there is no folder on screen, and the collection is noted
+ * instead, so a folder command can show it again. */
 let currentActiveFolder: string | null = null;
-export function noteActiveFolder(path: string | null): void {
+let currentCollection: { id: number; label: string; thumbnailEdge: number } | null = null;
+export function noteActiveFolder(
+  path: string | null,
+  collection: { id: number; label: string; thumbnailEdge: number } | null = null,
+): void {
   currentActiveFolder = path;
+  currentCollection = collection;
+}
+
+/** Told the path of every folder a hide or flush takes off the list. */
+const folderLeftListeners = new Set<(path: string) => void>();
+export function onFolderLeft(listener: (path: string) => void): () => void {
+  folderLeftListeners.add(listener);
+  return () => folderLeftListeners.delete(listener);
 }
 
 /** Whether `candidate` is `root` or somewhere inside it, as paths. */
@@ -343,7 +372,12 @@ export function ConfirmDialog({ state, dispatch }: { state: State; dispatch: D }
   const confirmFocus = useDialogFocus(!!confirm);
   // The folder commands need to know what the library is showing, and
   // this dialog is the one place that has both the state and the deed.
-  noteActiveFolder(state.activeFolderPath);
+  noteActiveFolder(
+    state.activeFolderPath,
+    state.activeCollection === null
+      ? null
+      : { id: state.activeCollection, label: state.libraryLabel, thumbnailEdge: state.prefs.thumbnailEdge },
+  );
   const [busy, setBusy] = useState(false);
   // "Don't show this again", offered on delete_take only. Fresh per
   // prompt: the component stays mounted between dialogs, and a tick

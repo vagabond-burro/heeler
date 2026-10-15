@@ -665,6 +665,9 @@ export async function hideFolder(path: string): Promise<number> {
 export async function flushFolder(path: string): Promise<FolderSubtreeCounts> {
   if (!isTauri()) {
     mockFolderCommands.push({ command: "flush", path });
+    // As the catalog does: the folder's photographs leave every collection.
+    const gone = new Set((MOCK_LISTINGS[path]?.images ?? []).map((i) => i.id));
+    for (const members of mockLibrary.members.values()) for (const id of gone) members.delete(id);
     return mockSubtreeCounts;
   }
   return (await call("flush_folder", { path })) as FolderSubtreeCounts;

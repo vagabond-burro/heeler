@@ -3588,6 +3588,22 @@ function BrowserPanelImpl({ state, dispatch }: { state: State; dispatch: D }) {
   // Where "out of this collection" leads. See deselectCollection.
   const lastFolderRef = useRef<string | null>(null);
   if (state.activeFolderPath) lastFolderRef.current = state.activeFolderPath;
+  // A hidden or flushed folder is no way back out of a collection: going
+  // back to it would add it to the catalog again (vagabond-burro/heeler#40).
+  useEffect(() => {
+    let off: (() => void) | undefined;
+    let live = true;
+    void import("./catalogui").then(({ isWithin, onFolderLeft }) => {
+      if (!live) return;
+      off = onFolderLeft((path) => {
+        if (lastFolderRef.current && isWithin(lastFolderRef.current, path)) lastFolderRef.current = null;
+      });
+    });
+    return () => {
+      live = false;
+      off?.();
+    };
+  }, []);
   const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const folderMenuRef = useDismiss<HTMLDivElement>(folderMenu !== null, () => setFolderMenu(null));
   // Catalog-known edited folders, plus a live check for the open folder so
