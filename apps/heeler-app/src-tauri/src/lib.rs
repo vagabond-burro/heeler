@@ -1020,28 +1020,57 @@ async fn tether_stop(app: tauri::AppHandle) -> Result<(), String> {
 /// one shallow scan per touched folder (idempotent, hidden and trashed
 /// rules included), then optional collection membership. The folder
 /// watch and direct USB capture both land here, so there is one import
-/// path and one set of file-safety rules.
+/// path and one set of file-safety rules. The commands go through
+/// register_arrivals_unlocked, which does the same in three steps with
+/// the catalog held for the middle one only; this is the whole of it
+/// under one catalog, for the tests.
+#[cfg(test)]
 fn register_arrivals(
     catalog: &Catalog,
     paths: &mut HashMap<String, PathBuf>,
     settled: &[PathBuf],
     collection: Option<i64>,
 ) -> Result<Vec<TetherImage>, String> {
-    let mut images: Vec<TetherImage> = Vec::new();
-    let mut folders: Vec<PathBuf> =
-        settled.iter().filter_map(|p| p.parent().map(|d| d.to_path_buf())).collect();
+    let mut spellings = HashMap::new();
+    for dir in arrival_folders(settled) {
+        let spelled = known_spelling(catalog, &dir).map_err(|e| e.to_string())?;
+        spellings.insert(dir, spelled);
+    }
+    let records = register_arrival_records(catalog, paths, settled, collection, &spellings)?;
+    Ok(arrival_images(&records))
+}
+
+/// The folders a batch of arrivals landed in, each once.
+fn arrival_folders(settled: &[PathBuf]) -> Vec<PathBuf> {
+    let mut folders: Vec<PathBuf> = settled.iter().filter_map(|p| p.parent().map(|d| d.to_path_buf())).collect();
     folders.sort();
     folders.dedup();
-    for dir in &folders {
-        let listed = scan_folder(dir, catalog, paths, &mut ScanStats::default())?;
+    folders
+}
+
+/// The catalog half of register_arrivals: each touched folder scanned
+/// under the spelling worked out for it beforehand (`spellings`, from
+/// known_spelling or spelled_home), the arrivals' records picked out,
+/// and the collection joined. Reads no file beyond the folder listings,
+/// so a caller can hold the catalog for this alone: the tether poll and
+/// the USB capture used to hold it through the spelling check's disk
+/// work and every arrival's header reads as well.
+fn register_arrival_records(
+    catalog: &Catalog,
+    paths: &mut HashMap<String, PathBuf>,
+    settled: &[PathBuf],
+    collection: Option<i64>,
+    spellings: &HashMap<PathBuf, Option<PathBuf>>,
+) -> Result<Vec<(String, heeler_catalog::ImageRecord)>, String> {
+    let mut out = Vec::new();
+    for dir in arrival_folders(settled) {
+        let spelled = spellings.get(&dir).cloned().flatten();
+        let records = scan_folder_records(&dir, spelled.as_deref(), catalog, paths, &mut ScanStats::default())?;
         for file in settled {
             if file.parent() == Some(dir.as_path()) {
                 if let Some((id, _)) = paths.iter().find(|(_, p)| *p == file) {
-                    if let Some(rec) = listed.iter().find(|r| &r.id == id) {
-                        images.push(TetherImage {
-                            folder: dir.to_string_lossy().to_string(),
-                            image: rec.clone(),
-                        });
+                    if let Some(rec) = records.iter().find(|r| &r.id == id) {
+                        out.push((dir.to_string_lossy().to_string(), rec.clone()));
                     }
                     if let Some(col) = collection {
                         catalog.add_to_collection(col, id).map_err(|e| e.to_string())?;
@@ -1050,8 +1079,39 @@ fn register_arrivals(
             }
         }
     }
+    Ok(out)
+}
+
+/// The ribbon's rows for registered arrivals, sorted by name: the file
+/// reads, done after the catalog is let go.
+fn arrival_images(records: &[(String, heeler_catalog::ImageRecord)]) -> Vec<TetherImage> {
+    let mut images: Vec<TetherImage> = records
+        .iter()
+        .map(|(folder, rec)| TetherImage { folder: folder.clone(), image: record_to_session(rec) })
+        .collect();
     images.sort_by(|a, b| a.image.name.cmp(&b.image.name));
-    Ok(images)
+    images
+}
+
+/// register_arrivals for a command: the spellings worked out and the
+/// files read with the catalog let go, so only the registration itself
+/// waits on it.
+fn register_arrivals_unlocked(
+    app: &tauri::AppHandle,
+    issued: u64,
+    settled: &[PathBuf],
+    collection: Option<i64>,
+) -> Result<Vec<TetherImage>, String> {
+    let mut spellings = HashMap::new();
+    for dir in arrival_folders(settled) {
+        let spelled = spelled_home(app, issued, &dir)?;
+        spellings.insert(dir, spelled);
+    }
+    let (result, paths) = with_catalog_at(app, issued, |catalog| {
+        Ok(path_delta(|paths| register_arrival_records(catalog, paths, settled, collection, &spellings)))
+    })?;
+    merge_session_paths(app, issued, paths)?;
+    Ok(arrival_images(&result?))
 }
 
 /// One poll of the hot folder: settle each stable arrival (move and
@@ -1090,11 +1150,7 @@ async fn tether_poll(
         if settled.is_empty() {
             return Ok(TetherArrivals { images: Vec::new(), session_count: seq });
         }
-        let (result, paths) = with_catalog_at(&app, issued, |catalog| {
-            Ok(path_delta(|paths| register_arrivals(catalog, paths, &settled, collection)))
-        })?;
-        merge_session_paths(&app, issued, paths)?;
-        let images = result?;
+        let images = register_arrivals_unlocked(&app, issued, &settled, collection)?;
         Ok(TetherArrivals { images, session_count: seq })
     })
     .await
@@ -1292,12 +1348,8 @@ fn land_frames(
         }
         Ok(settled)
     })?;
-    let (result, paths) = with_catalog_at(app, issued, |catalog| {
-        Ok(path_delta(|paths| register_arrivals(catalog, paths, &settled, collection)))
-    })?;
-    merge_session_paths(app, issued, paths)?;
+    let images = register_arrivals_unlocked(app, issued, &settled, collection)?;
     let seq = with_session(app, |session| Ok(session.tether.seq))?;
-    let images = result?;
     Ok(TetherArrivals { images, session_count: seq })
 }
 
@@ -30092,6 +30144,33 @@ mod tests {
     /// added to it"): an arrival registered with a collection chosen is
     /// a member of that collection, and with none chosen is a member of
     /// nothing.
+    /// The commands' registration, the catalog's part alone: an arrival
+    /// in a folder reached through a link is filed under the spelling it
+    /// is handed, joins the collection, and its row is read afterwards.
+    #[cfg(unix)]
+    #[test]
+    fn arrivals_register_under_the_spelling_worked_out_beforehand() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real");
+        std::fs::create_dir(&real).unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let png = heeler_io::encode_png(&ImageBuf::filled(8, 8, [0.5, 0.5, 0.5, 1.0])).unwrap();
+        std::fs::write(real.join("shot.png"), &png).unwrap();
+        let catalog = Catalog::open_in_memory().unwrap();
+        let col = catalog.create_collection("Shoot").unwrap();
+        let mut paths = HashMap::new();
+        let arrived = link.join("shot.png");
+        let spellings: HashMap<PathBuf, Option<PathBuf>> = [(link.clone(), Some(real.clone()))].into_iter().collect();
+        let records = register_arrival_records(&catalog, &mut paths, &[arrived.clone()], Some(col), &spellings).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].1.path, real.join("shot.png").to_string_lossy(), "filed under the handed spelling");
+        assert_eq!(paths.get(&records[0].1.id), Some(&arrived), "read where it arrived");
+        assert_eq!(collection_images(&catalog, col, &mut paths).unwrap().len(), 1, "joined the collection");
+        let images = arrival_images(&records);
+        assert_eq!((images[0].folder.as_str(), images[0].image.name.as_str()), (link.to_string_lossy().as_ref(), "shot.png"));
+    }
+
     #[test]
     fn tether_arrivals_join_the_chosen_collection() {
         let dir = tempfile::tempdir().unwrap();
