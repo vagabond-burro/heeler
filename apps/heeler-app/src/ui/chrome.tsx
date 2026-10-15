@@ -34,21 +34,21 @@ import { PHOTO } from "../data";
 import { LEGAL_MENU_LABEL, OPEN_SOURCE_MENU_PATH } from "../legaldocs";
 import {
   addToCollection, createCollection, editedFolders, exportTo, isTauri,
-  exportImage, lastSessionFolder, listCollections, listFolders, listSubfolders, loadCollection, loadFolderSession, loadGraph, loadSession, loadThumbnail, openFolder, pickExportFolder, writeGallery,
+  exportImage, lastSessionFolder, listCollections, listFolders, loadCollection, loadFolderSession, loadGraph, loadSession, loadThumbnail, openFolder, pickExportFolder, writeGallery,
   STACK_KINDS, createStack, createPano, persistFlag, persistRating, removeFromCollection, renameCollection, revealFolder, saveSession, stackAppend,
   serializeGraph, serializeLoadedGraph, serveCacheDir, serveFileName, serveStart, serveStatus, serveStop,
   filePassesAt, pickImageFile,
   type FolderImage, type FolderListing, type ServeStatus,
 } from "../bridge";
 import { UPDATE_DOWNLOAD_WORDS, checkForUpdates } from "../updates";
-import { allKeywords, buildInfo, clearRecentCatalogs, createFolder, folderSubtreeCounts, foldersMissing, foldersWithHidden, foldersWithTrash, hiddenFolderPaths, renameFolder, forgetRecentCatalog, missingTrashedPhotos, recentCatalogs, revealTrash, hiddenInFolder, type RecentCatalog, imageKeywords, imagesWithKeyword, pickRelinkFolder, pickRelinkTarget, relinkFolder, relinkImage, setImageKeywords } from "../bridge";
+import { allKeywords, buildInfo, clearRecentCatalogs, folderSubtreeCounts, foldersMissing, foldersWithHidden, foldersWithTrash, hiddenFolderPaths, renameFolder, forgetRecentCatalog, missingTrashedPhotos, recentCatalogs, revealTrash, hiddenInFolder, type RecentCatalog, imageKeywords, imagesWithKeyword, pickRelinkFolder, pickRelinkTarget, relinkFolder, relinkImage, setImageKeywords } from "../bridge";
 import { logMsg } from "../log";
 import { beginThumbSession, thumbnailGraph } from "../thumbs";
 import { ThumbBox } from "./thumbbox";
 import { watchMaximizeButton } from "../snaplayouts";
 import { bindingFor, formatBinding } from "../hotkeys";
 import { TOOL_WINDOWS, rememberPopoutOpener, type ToolWindowKind } from "../popout";
-import { CHROME_ZOOM_DEFAULT, CHROME_ZOOM_STEPS, applyChromeZoom, chromeZoomFactor, rememberExpanded, rememberedExpanded, setUiPref, uiPref } from "../uiprefs";
+import { CHROME_ZOOM_DEFAULT, CHROME_ZOOM_STEPS, applyChromeZoom, chromeZoomFactor, rememberExpanded, setUiPref, uiPref } from "../uiprefs";
 import { centerMainWindow, toggleFullscreen } from "../windowops";
 import { menuTree } from "../nodes";
 import { addNodeAt, addRecipeAt } from "./addnode";
@@ -220,12 +220,6 @@ export function visibleFolderPaths(tree: TreeNode | null, shortlist: { path: str
   return [...out].sort();
 }
 
-function treeContains(node: TreeNode | null, path: string): boolean {
-  if (!node) return false;
-  if (node.path === path) return true;
-  return (node.children ?? []).some((c) => treeContains(c, path));
-}
-
 /** Applies an opened folder's listing to state: images into the ribbon,
  * subfolders into the tree. If the folder isn't in the current tree it
  * becomes a new root; otherwise its node updates in place, keeping
@@ -266,61 +260,7 @@ export function applyFolderListing(
   catalogSaves.arm("session", 600, () => saveSession(inTree && tree ? tree.path : listing.path, listing.path));
 }
 
-/** Lists the branch from the tree's root down to `path` where the tree
- * has not loaded it yet, so a folder picked from inside the tree lands
- * in it rather than replacing the root. Gives way to newer navigation. */
-async function revealInTree(tree: TreeNode | null, path: string, dispatch: D, nav: number): Promise<void> {
-  if (!tree || treeContains(tree, path) || !isWithin(path, tree.path)) return;
-  for (const ancestor of ancestorsBetween(tree.path, path)) {
-    const children = await listSubfolders(ancestor).catch(() => null);
-    if (navStale(nav) || !children) return;
-    dispatch({ type: "set_tree_node", path: ancestor, children, expanded: true });
-  }
-}
-
-/** Opens again the folders that were open under `root` when the tree was
- * last left, shallowest first, so each one's parent is listed before it.
- * One listing each, at most TREE_PATHS; a folder no longer there is
- * skipped. Gives way to newer navigation. */
-export async function restoreExpanded(root: string, dispatch: D, nav: number): Promise<void> {
-  const depth = (p: string) => p.split(/[\\/]/).length;
-  const paths = rememberedExpanded(root)
-    .filter((p) => p !== root && isWithin(p, root))
-    .sort((a, b) => depth(a) - depth(b));
-  for (const path of paths) {
-    const children = await listSubfolders(path).catch(() => null);
-    if (navStale(nav)) return;
-    if (children) dispatch({ type: "set_tree_node", path, children, expanded: true });
-  }
-}
-
-/** The folders open in a tree, root left out. */
-export function expandedPaths(node: TreeNode | null): string[] {
-  if (!node) return [];
-  const out: string[] = [];
-  const walk = (n: TreeNode, top: boolean) => {
-    if (!n.expanded) return;
-    if (!top) out.push(n.path);
-    for (const c of n.children ?? []) walk(c, false);
-  };
-  walk(node, true);
-  return out;
-}
-
-/** When a folder above the old tree's root becomes the new root, the old
- * tree goes back in under it as it was, expanded branches and all,
- * instead of being rebuilt collapsed. */
-async function regraftOldTree(old: TreeNode | null, newRoot: string, dispatch: D, nav: number): Promise<void> {
-  if (!old || old.path === newRoot || !isWithin(old.path, newRoot)) return;
-  for (const ancestor of ancestorsBetween(newRoot, old.path)) {
-    const children = await listSubfolders(ancestor).catch(() => null);
-    if (navStale(nav) || !children) return;
-    dispatch({ type: "set_tree_node", path: ancestor, children, expanded: true });
-  }
-  if (!navStale(nav)) dispatch({ type: "graft_tree_node", node: old });
-}
-
-const leafName = (p: string) =>
+export const leafName = (p: string) =>
   p
     .replace(/[\\/]+$/, "")
     .split(/[\\/]/)
@@ -359,11 +299,11 @@ async function descendTo(
 ): Promise<FolderListing | null> {
   for (const ancestor of ancestorsBetween(root, folder)) {
     // A folder on the way that cannot be listed (gone, or on a drive
-    // that went away) keeps what the tree already had for it.
-    const children = await listSubfolders(ancestor).catch(() => null);
-    if (navStale(nav)) return null;
-    if (children) dispatch({ type: "set_tree_node", path: ancestor, children, expanded: true });
-    else dispatch({ type: "set_tree_node", path: ancestor, expanded: true });
+    // that went away) keeps what the tree already had for it, and still
+    // opens, so the way down shows.
+    const listed = await listIntoTree(ancestor, dispatch, { open: true, overtaken: () => navStale(nav) });
+    if (listed.kind === "overtaken") return null;
+    if (listed.kind === "failed") dispatch({ type: "set_tree_node", path: ancestor, expanded: true });
   }
   const listing = await openFolder(folder).catch(() => null);
   if (navStale(nav) || !listing || !listing.path) return null;
@@ -394,22 +334,6 @@ export async function openFolderPlain(
   void regraftOldTree(tree, listing.path, dispatch, nav);
   if (newRoot) void restoreExpanded(listing.path, dispatch, nav);
   void refreshLibrary(dispatch);
-}
-
-/** A folder that would not open says so where the user is looking, and
- * its parent is listed again so a folder that is gone leaves the tree.
- * The failure only reached the log as an unhandled rejection, and the
- * dead row stayed. */
-function folderWouldNotOpen(path: string, e: unknown, dispatch: D): void {
-  const why = String(e).replace(/^Error: /, "");
-  logMsg("warn", `Could not open ${path}: ${why}`);
-  flashStatus(`Could not open ${leafName(path)}: ${why}`);
-  const parent = path.replace(/[\\/]+$/, "").replace(/[\\/][^\\/]*$/, "");
-  if (parent && parent !== path) {
-    void listSubfolders(parent)
-      .then((children) => dispatch({ type: "set_tree_node", path: parent, children }))
-      .catch(() => {});
-  }
 }
 
 /** Opens a folder the way picking one should work: the listing lands in
@@ -553,6 +477,7 @@ import { ADJUST_SEAT, CONTENT_ITEMS, IMAGE_ITEMS, IMAGE_SEAT, UTILITY_ITEMS, add
 import { SuggestField } from "./suggestfield";
 import { canRedo, canUndo, redo, undo } from "../libraryundo";
 import { folderBehind, isWithin, leaveCollection, onFolderLeft, openCollection, reloadCollection } from "./collectionnav";
+import { expandAllChildren, expandedPaths, folderWouldNotOpen, listIntoTree, newFolderIn, refreshFolder, regraftOldTree, restoreExpanded, revealInTree, stopExpanding, treeContains } from "./foldertree";
 export { GroupGlyph };
 
 function Star({ on }: { on: boolean }) {
@@ -3559,19 +3484,15 @@ function TreeRows({
             if (node.children === null) {
               // A folder that cannot be read said nothing and showed as
               // empty.
-              const children = await listSubfolders(node.path).catch((e) => {
-                flashStatus(`Could not read ${node.name}: ${String(e).replace(/^Error: /, "")}`);
-                return null;
-              });
-              if (children) dispatch({ type: "set_tree_node", path: node.path, children, expanded: true });
+              const listed = await listIntoTree(node.path, dispatch, { open: true });
+              if (listed.kind === "failed") flashStatus(`Could not read ${node.name}: ${String(listed.error).replace(/^Error: /, "")}`);
             } else if (node.expanded) {
               dispatch({ type: "set_tree_node", path: node.path, expanded: false });
             } else {
               // Open at once with what is known, then list again: folders
               // made, renamed or removed since the last look show up.
               dispatch({ type: "set_tree_node", path: node.path, expanded: true });
-              const children = await listSubfolders(node.path).catch(() => null);
-              if (children) dispatch({ type: "set_tree_node", path: node.path, children });
+              await listIntoTree(node.path, dispatch);
             }
           }}
         >
@@ -3744,19 +3665,6 @@ function FolderNameField({
   );
 }
 
-/** Makes a folder in `parent` and shows it in the tree, the branch open. */
-export async function newFolderIn(parent: string, name: string, dispatch: D): Promise<string | null> {
-  try {
-    const made = await createFolder(parent, name);
-    const children = await listSubfolders(parent).catch(() => null);
-    if (children) dispatch({ type: "set_tree_node", path: parent, children, expanded: true });
-    flashStatus(`Made ${leafName(made)}.`);
-    return null;
-  } catch (e) {
-    return String(e).replace(/^Error: /, "");
-  }
-}
-
 /** Renames a folder, then the tree and the library follow: its branch
  * takes the new name with its open folders kept, and if you were inside
  * it the folder you were in opens again under its new path. */
@@ -3803,59 +3711,6 @@ function SectionHead({
       {extra}
     </div>
   );
-}
-
-/** Looks at the disk again for one folder. The tree listed a folder
- * once and never again, so folders made, renamed or removed under any
- * folder but the open one never showed. The
- * folder on screen is opened again, which rescans its photographs too. */
-export async function refreshFolder(path: string, state: State, dispatch: D): Promise<void> {
-  if (state.activeCollection === null && state.activeFolderPath === path) {
-    await openFolderPlain(path, state.folderTree, dispatch, state.prefs.thumbnailEdge);
-    return;
-  }
-  try {
-    const children = await listSubfolders(path);
-    dispatch({ type: "set_tree_node", path, children });
-  } catch (e) {
-    folderWouldNotOpen(path, e, dispatch);
-  }
-  void refreshLibrary(dispatch);
-}
-
-/** Bumped to stop an Expand all children still under way: by Collapse
- * all children, and by a new tree root. A slow expand used to open the
- * branches again one by one after the user had collapsed them, or force
- * them open in a tree that had changed under it. */
-let expandRun = 0;
-export function stopExpanding(): void {
-  expandRun += 1;
-}
-
-/** How many folders one Expand all children lists at most. */
-export const EXPAND_ALL_CAP = 200;
-
-/** Recursively expands the subtree under `path`, breadth-first, capped so
- * a monster archive cannot flood the panel with directory listings. Stops
- * when stopExpanding is called, and says so when it reaches the cap. */
-export async function expandAllChildren(path: string, dispatch: D): Promise<void> {
-  const run = ++expandRun;
-  const queue = [path];
-  let visited = 0;
-  while (queue.length > 0 && visited < EXPAND_ALL_CAP) {
-    const p = queue.shift()!;
-    const children = await listSubfolders(p).catch(() => null);
-    if (run !== expandRun) return;
-    visited += 1;
-    // One that cannot be listed keeps what the tree had, and the walk
-    // goes on with the rest.
-    if (!children) continue;
-    dispatch({ type: "set_tree_node", path: p, children, expanded: true });
-    queue.push(...children.map((c) => c.path));
-  }
-  if (queue.length > 0) {
-    flashStatus(`Expanded the first ${EXPAND_ALL_CAP} folders. Expand the rest one branch at a time.`);
-  }
 }
 
 function BrowserPanelImpl({ state, dispatch }: { state: State; dispatch: D }) {
