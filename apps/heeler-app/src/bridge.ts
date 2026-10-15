@@ -3377,9 +3377,22 @@ export function mockRemoveFolder(path: string): () => void {
   };
 }
 
+/** The mock's copy of the backend's folder_name_ok, so the browser build
+ * refuses what the app refuses. */
+function mockFolderName(raw: string): string {
+  const name = raw.trim();
+  if (!name || name === "." || name === "..") throw new Error("Give the folder a name.");
+  const bad = [...name].find((c) => '/\\:*?"<>|'.includes(c));
+  if (bad) throw new Error(`A folder name cannot contain "${bad}".`);
+  if (name.startsWith(".")) throw new Error("A folder name starting with a dot would be hidden.");
+  if (name.endsWith(".")) throw new Error("A folder name cannot end with a dot.");
+  return name;
+}
+
 /** Makes a folder named `name` in `parent`; answers its path. */
-export async function createFolder(parent: string, name: string): Promise<string> {
-  if (isTauri()) return call<string>("create_folder", { parent, name });
+export async function createFolder(parent: string, raw: string): Promise<string> {
+  if (isTauri()) return call<string>("create_folder", { parent, name: raw });
+  const name = mockFolderName(raw);
   const listing = MOCK_LISTINGS[parent];
   if (!listing) throw new Error(`${parent} is not there`);
   const path = `${parent}/${name}`;
@@ -3391,8 +3404,9 @@ export async function createFolder(parent: string, name: string): Promise<string
 
 /** Renames a folder on the disk and in the catalog; answers its new
  * path and any `.trash` index that could not be updated. */
-export async function renameFolder(path: string, name: string): Promise<{ path: string; problems: string[] }> {
-  if (isTauri()) return call<{ path: string; problems: string[] }>("rename_folder", { path, name });
+export async function renameFolder(path: string, raw: string): Promise<{ path: string; problems: string[] }> {
+  if (isTauri()) return call<{ path: string; problems: string[] }>("rename_folder", { path, name: raw });
+  const name = mockFolderName(raw);
   const parentPath = path.replace(/\/[^/]*$/, "");
   const to = `${parentPath}/${name}`;
   if (MOCK_LISTINGS[to]) throw new Error(`${name} is already there.`);

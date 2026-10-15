@@ -3726,7 +3726,13 @@ function FolderNameField({
               onClose();
             }
           }}
-          style={{ width: "100%", boxSizing: "border-box" }}
+          // The same field as the new collection's name.
+          style={{
+            width: "100%", boxSizing: "border-box", background: "var(--bg-app)",
+            border: "1px solid var(--line-4)", color: "var(--text-body)",
+            fontSize: 11, padding: "3px 6px", outline: "none",
+            borderRadius: "var(--radius-btn)",
+          }}
         />
         {error && (
           <div data-testid="folder-name-error" role="alert" style={{ marginTop: 6, fontSize: 11, color: "var(--danger, #e06c6c)" }}>
@@ -4129,7 +4135,7 @@ big it is, same as +NEW beside it.*/}
                 setFolderMenu(null);
               }}
             >
-              New Folder…
+              New folder…
             </button>
             <button
               data-testid="folder-menu-rename"
@@ -4153,7 +4159,7 @@ big it is, same as +NEW beside it.*/}
                 );
               }}
             >
-              Copy Path
+              Copy path
             </button>
             <div className="sep" />
             <button
@@ -4238,7 +4244,7 @@ file.*/}
                 }).catch((e) => logMsg("error", `Could not read the folder: ${String(e)}`));
               }}
             >
-              Flush This Folder Only…
+              Flush this folder only…
             </button>
             {(state.foldersMissing[folderMenu.path]?.length ?? 0) > 0 && (
               <button
@@ -4250,7 +4256,7 @@ file.*/}
                   dispatch({ type: "ask_confirm", action: { kind: "forget_missing_folder", path, ids: state.foldersMissing[path] } });
                 }}
               >
-                Forget Missing Photos…
+                Forget missing photos…
               </button>
             )}
             {/* "if a folder has a .trash in it then in the context menu

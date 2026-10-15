@@ -393,3 +393,14 @@ describe("New Folder, Rename and Copy Path", () => {
     await waitFor(() => expect(currentFlash()).toMatch(/Path copied/));
   });
 });
+
+describe("folder names", () => {
+  it("are refused with a separator in them, as the app refuses them", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openTrip(user);
+    await menuOn(user, "mock://trip", "new");
+    await user.type(await screen.findByTestId("folder-name-input"), "a/b{Enter}");
+    expect(await screen.findByTestId("folder-name-error")).toHaveTextContent('cannot contain "/"');
+  });
+});

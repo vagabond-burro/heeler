@@ -4,9 +4,9 @@
 
 ### New
 
-- **Make, rename and find folders from the tree.** Right-click a folder for **New Folder…**, **Rename…** and **Copy Path**. Renaming moves the folder on the disk and takes everything in the catalog with it: ratings, flags, keywords, collections and edits stay on their photographs, and photographs in its trash can still be put back. If the catalog cannot follow, the folder keeps its old name. [Library](user-guide/library.md).
+- **Make, rename and find folders from the tree.** Right-click a folder for **New folder…**, **Rename…** and **Copy path**. Renaming moves the folder on the disk and takes everything in the catalog with it: ratings, flags, keywords, collections and edits stay on their photographs, and photographs in its trash can still be put back. If the catalog cannot follow, the folder keeps its old name. [Library](user-guide/library.md).
 - **The folder tree from the keyboard.** Tab into the tree and use the arrow keys to move, open and close folders, and Enter to open one. The tree remembers which folders you left open, and the folder you are in stays in view. [Library](user-guide/library.md).
-- **Find and clear missing photographs folder by folder.** A folder holding photographs whose file is gone now shows a missing badge in the tree and the Folders list, and its count leaves them out. Right-click it for **Forget Missing Photos…**, which removes just those records, and **Flush This Folder Only…**, which flushes the folder without the folders inside it. Before, a single missing photograph in a tree's top folder could only be cleared by flushing the whole tree. [Library](user-guide/library.md).
+- **Find and clear missing photographs folder by folder.** A folder holding photographs whose file is gone now shows a missing badge in the tree and the Folders list, and its count leaves them out. Right-click it for **Forget missing photos…**, which removes just those records, and **Flush this folder only…**, which flushes the folder without the folders inside it. Before, a single missing photograph in a tree's top folder could only be cleared by flushing the whole tree. [Library](user-guide/library.md).
 
 ### Fixes
 
