@@ -442,6 +442,7 @@ export async function openFolder(path?: string): Promise<FolderListing | null> {
   const folder = mockLibrary.folders.find((f) => f.path === path);
   if (folder) folder.lastOpened = Date.now();
   const key = path ?? "mock://wedding";
+  if (mockGone.has(key)) throw new Error(`${key} is not there`);
   mockLibrary.hiddenFolders.delete(key);
   return (
     MOCK_LISTINGS[key] ?? {
@@ -3335,7 +3336,25 @@ export async function listSubfolders(path: string): Promise<SubfolderEntry[]> {
   if (isTauri()) {
       return call<SubfolderEntry[]>("list_subfolders", { path });
   }
+  if (mockGone.has(path)) throw new Error(`${path} is not there`);
   return MOCK_LISTINGS[path]?.subfolders ?? [];
+}
+
+/** Folders taken off the mock disk (mockRemoveFolder): listing or opening
+ * one fails the way the real commands do for a folder that is not there. */
+const mockGone = new Set<string>();
+
+/** Test hook: deletes a folder from the mock disk, as if removed in the
+ * file browser or on a card that was ejected. Returns the undo. */
+export function mockRemoveFolder(path: string): () => void {
+  const parent = Object.values(MOCK_LISTINGS).find((l) => l.subfolders.some((s) => s.path === path));
+  const before = parent?.subfolders;
+  if (parent) parent.subfolders = parent.subfolders.filter((s) => s.path !== path);
+  mockGone.add(path);
+  return () => {
+    mockGone.delete(path);
+    if (parent && before) parent.subfolders = before;
+  };
 }
 
 /** Test hook: grows the mock filesystem so watcher behavior is testable. */

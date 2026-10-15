@@ -260,9 +260,12 @@ async function descendTo(
   thumbnailEdge: number,
 ): Promise<FolderListing | null> {
   for (const ancestor of ancestorsBetween(root, folder)) {
-    const children = await listSubfolders(ancestor).catch(() => []);
+    // A folder on the way that cannot be listed (gone, or on a drive
+    // that went away) keeps what the tree already had for it.
+    const children = await listSubfolders(ancestor).catch(() => null);
     if (navStale(nav)) return null;
-    dispatch({ type: "set_tree_node", path: ancestor, children, expanded: true });
+    if (children) dispatch({ type: "set_tree_node", path: ancestor, children, expanded: true });
+    else dispatch({ type: "set_tree_node", path: ancestor, expanded: true });
   }
   const listing = await openFolder(folder).catch(() => null);
   if (navStale(nav) || !listing || !listing.path) return null;
@@ -281,10 +284,29 @@ export async function openFolderPlain(
   thumbnailEdge = 480,
 ): Promise<void> {
   const nav = beginNavigation();
-  const listing = await openFolder(path);
+  const listing = await openFolder(path).catch((e) => {
+    if (!navStale(nav)) folderWouldNotOpen(path, e, dispatch);
+    return null;
+  });
   if (navStale(nav) || !listing || !listing.path) return;
   applyFolderListing(listing, tree, dispatch, thumbnailEdge);
   void refreshLibrary(dispatch);
+}
+
+/** A folder that would not open says so where the user is looking, and
+ * its parent is listed again so a folder that is gone leaves the tree.
+ * The failure only reached the log as an unhandled rejection, and the
+ * dead row stayed (vagabond-burro/heeler#44). */
+function folderWouldNotOpen(path: string, e: unknown, dispatch: D): void {
+  const why = String(e).replace(/^Error: /, "");
+  logMsg("warn", `Could not open ${path}: ${why}`);
+  flashStatus(`Could not open ${leafName(path)}: ${why}`);
+  const parent = path.replace(/[\\/]+$/, "").replace(/[\\/][^\\/]*$/, "");
+  if (parent && parent !== path) {
+    void listSubfolders(parent)
+      .then((children) => dispatch({ type: "set_tree_node", path: parent, children }))
+      .catch(() => {});
+  }
 }
 
 /** Opens a folder the way picking one should work: the listing lands in
@@ -299,7 +321,11 @@ export async function openFolderRemembering(
   thumbnailEdge = 480,
 ): Promise<void> {
   const nav = beginNavigation();
-  const listing = await openFolder(path);
+  const listing = await openFolder(path).catch((e) => {
+    if (!navStale(nav) && path) folderWouldNotOpen(path, e, dispatch);
+    else if (!navStale(nav)) logMsg("error", `Could not open the folder: ${String(e)}`);
+    return null;
+  });
   if (navStale(nav) || !listing || !listing.path) return;
   // Where did work in this folder stop? Asked BEFORE the listing is
   // applied: applying saves the session, and that save must never be
@@ -3387,10 +3413,22 @@ function TreeRows({
           onClick={async () => {
             if (!expandable) return;
             if (node.children === null) {
-              const children = await listSubfolders(node.path).catch(() => []);
-              dispatch({ type: "set_tree_node", path: node.path, children, expanded: true });
+              // A folder that cannot be read said nothing and showed as
+              // empty (vagabond-burro/heeler#44).
+              const children = await listSubfolders(node.path).catch((e) => {
+                flashStatus(`Could not read ${node.name}: ${String(e).replace(/^Error: /, "")}`);
+                return null;
+              });
+              if (children) dispatch({ type: "set_tree_node", path: node.path, children, expanded: true });
+            } else if (node.expanded) {
+              dispatch({ type: "set_tree_node", path: node.path, expanded: false });
             } else {
-              dispatch({ type: "set_tree_node", path: node.path, expanded: !node.expanded });
+              // Open at once with what is known, then list again: folders
+              // made, renamed or removed since the last look show up
+              // (vagabond-burro/heeler#44).
+              dispatch({ type: "set_tree_node", path: node.path, expanded: true });
+              const children = await listSubfolders(node.path).catch(() => null);
+              if (children) dispatch({ type: "set_tree_node", path: node.path, children });
             }
           }}
         >
@@ -3465,6 +3503,24 @@ function SectionHead({
   );
 }
 
+/** Looks at the disk again for one folder. The tree listed a folder
+ * once and never again, so folders made, renamed or removed under any
+ * folder but the open one never showed (vagabond-burro/heeler#44). The
+ * folder on screen is opened again, which rescans its photographs too. */
+export async function refreshFolder(path: string, state: State, dispatch: D): Promise<void> {
+  if (state.activeCollection === null && state.activeFolderPath === path) {
+    await openFolderPlain(path, state.folderTree, dispatch, state.prefs.thumbnailEdge);
+    return;
+  }
+  try {
+    const children = await listSubfolders(path);
+    dispatch({ type: "set_tree_node", path, children });
+  } catch (e) {
+    folderWouldNotOpen(path, e, dispatch);
+  }
+  void refreshLibrary(dispatch);
+}
+
 /** Recursively expands the subtree under `path`, breadth-first, capped so
  * a monster archive cannot flood the panel with directory listings. */
 export async function expandAllChildren(path: string, dispatch: D): Promise<void> {
@@ -3472,9 +3528,12 @@ export async function expandAllChildren(path: string, dispatch: D): Promise<void
   let visited = 0;
   while (queue.length > 0 && visited < 200) {
     const p = queue.shift()!;
-    const children = await listSubfolders(p).catch(() => []);
-    dispatch({ type: "set_tree_node", path: p, children, expanded: true });
+    const children = await listSubfolders(p).catch(() => null);
     visited += 1;
+    // One that cannot be listed keeps what the tree had, and the walk
+    // goes on with the rest.
+    if (!children) continue;
+    dispatch({ type: "set_tree_node", path: p, children, expanded: true });
     queue.push(...children.map((c) => c.path));
   }
 }
@@ -3711,6 +3770,16 @@ big it is, same as +NEW beside it.*/}
               }}
             >
               Collapse all children
+            </button>
+            <button
+              data-testid="folder-menu-refresh"
+              data-hint="Look at the disk again: subfolders made, renamed or removed since, and, for the folder you are in, its photographs"
+              onClick={() => {
+                void refreshFolder(folderMenu.path, state, dispatch);
+                setFolderMenu(null);
+              }}
+            >
+              Refresh
             </button>
             <div className="sep" />
             <button

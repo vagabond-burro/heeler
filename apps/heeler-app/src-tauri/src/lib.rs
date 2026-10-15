@@ -9944,7 +9944,14 @@ async fn open_folder(app: tauri::AppHandle, path: Option<String>) -> Result<Fold
             }
         };
         if !folder.is_dir() {
-            return Err(format!("{} is not a folder", folder.display()));
+            // A folder the catalog knows that is gone from the disk opens
+            // as a list of its missing photographs, so they can be relinked
+            // or removed folder by folder (vagabond-burro/heeler#44).
+            let (listing, paths) = with_catalog_at(&app, issued, |catalog| {
+                Ok(path_delta(|paths| missing_folder_listing(catalog, &folder, paths)))
+            })?;
+            merge_session_paths(&app, issued, paths)?;
+            return listing?.ok_or_else(|| format!("{} is not there", folder.display()));
         }
         let subfolders = subfolder_payload(&folder)?;
         let scan_t0 = std::time::Instant::now();
@@ -9990,6 +9997,37 @@ async fn open_folder(app: tauri::AppHandle, path: Option<String>) -> Result<Fold
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// The listing of a folder the catalog knows that is not on the disk:
+/// its photographs, every one missing, and no subfolders. None when the
+/// catalog has no record of the folder.
+pub fn missing_folder_listing(
+    catalog: &Catalog,
+    folder: &Path,
+    paths: &mut HashMap<String, PathBuf>,
+) -> Result<Option<FolderListing>, String> {
+    let e = |e: heeler_catalog::CatalogError| e.to_string();
+    let Some(folder_id) = catalog.folder_id(folder).map_err(e)? else {
+        return Ok(None);
+    };
+    let records = catalog
+        .list_images(&heeler_catalog::Filter { folder_id: Some(folder_id), ..heeler_catalog::Filter::default() })
+        .map_err(e)?;
+    let mut images: Vec<SessionImage> = records
+        .iter()
+        .map(|r| {
+            paths.insert(r.id.clone(), PathBuf::from(&r.path));
+            record_to_session(r)
+        })
+        .collect();
+    images.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(Some(FolderListing {
+        name: folder.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| folder.to_string_lossy().to_string()),
+        path: folder.to_string_lossy().to_string(),
+        images,
+        subfolders: Vec::new(),
+    }))
 }
 
 /// Name of the file holding the path of the catalog currently in use.
@@ -11019,7 +11057,10 @@ async fn list_subfolders(app: tauri::AppHandle, path: String) -> Result<Vec<Subf
         let t = std::time::Instant::now();
         debug_log!(&app, "subfolders: start path={path}");
         let folder = PathBuf::from(&path);
-        let result = if folder.is_dir() { subfolder_payload(&folder) } else { Ok(Vec::new()) };
+        // A folder that is not there is an error, not an empty listing:
+        // an empty answer for an ejected card collapsed its whole branch in
+        // the tree, expanded state and all (vagabond-burro/heeler#44).
+        let result = if folder.is_dir() { subfolder_payload(&folder) } else { Err(format!("{} is not there", folder.display())) };
         debug_log!(&app, "subfolders: total {:.3}ms path={path}", t.elapsed().as_secs_f64() * 1000.0);
         result
     }).await.map_err(|e| e.to_string())?
@@ -30339,6 +30380,31 @@ mod tests {
         // Once is enough.
         scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
         assert_eq!(catalog.list_trashed(None).unwrap().len(), 1);
+    }
+
+    /// A folder deleted or moved on disk could not be opened at all, so
+    /// its missing photographs were out of reach folder by folder
+    /// (vagabond-burro/heeler#44).
+    #[test]
+    fn a_folder_gone_from_the_disk_lists_its_missing_photographs() {
+        let dir = tempfile::tempdir().unwrap();
+        let shoot = dir.path().join("shoot");
+        std::fs::create_dir(&shoot).unwrap();
+        std::fs::write(shoot.join("a.png"), heeler_io::encode_png(&ImageBuf::filled(8, 8, [0.5, 0.5, 0.5, 1.0])).unwrap()).unwrap();
+        let catalog = Catalog::open_in_memory().unwrap();
+        let mut paths = HashMap::new();
+        let id = scan_folder(&shoot, &catalog, &mut paths, &mut ScanStats::default()).unwrap()[0].id.clone();
+        std::fs::remove_dir_all(&shoot).unwrap();
+
+        let mut fresh = HashMap::new();
+        let listing = missing_folder_listing(&catalog, &shoot, &mut fresh).unwrap().expect("the catalog knows it");
+        assert_eq!(listing.path, shoot.to_string_lossy());
+        assert_eq!(listing.images.len(), 1);
+        assert_eq!(listing.images[0].id, id);
+        assert!(listing.images[0].missing, "shown as missing");
+        assert!(listing.subfolders.is_empty());
+        assert_eq!(fresh.get(&id), Some(&shoot.join("a.png")), "Relink knows where it was");
+        assert!(missing_folder_listing(&catalog, &dir.path().join("never"), &mut fresh).unwrap().is_none());
     }
 
     /// The other half of the rule, unchanged: the photograph itself

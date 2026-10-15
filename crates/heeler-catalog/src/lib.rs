@@ -359,7 +359,12 @@ pub fn discover_files_shallow(dir: &Path) -> Result<Vec<PathBuf>, CatalogError> 
 pub fn list_subfolders(dir: &Path) -> Result<Vec<PathBuf>, CatalogError> {
     let mut found = Vec::new();
     for entry in std::fs::read_dir(dir)? {
-        let path = entry?.path();
+        // One entry that cannot be read is skipped rather than failing the
+        // whole listing, which showed the folder as empty
+        // (vagabond-burro/heeler#44). A folder that cannot be read at all
+        // is still an error, from read_dir above.
+        let Ok(entry) = entry else { continue };
+        let path = entry.path();
         let hidden = path
             .file_name()
             .and_then(|n| n.to_str())
@@ -1082,6 +1087,15 @@ impl Catalog {
             .query_row("SELECT id FROM folders WHERE path = ?1", params![text], |r| {
                 r.get(0)
             })?)
+    }
+
+    /// The id of the folder row at exactly `path`, if the catalog has one.
+    pub fn folder_id(&self, path: &Path) -> Result<Option<i64>, CatalogError> {
+        use rusqlite::OptionalExtension;
+        Ok(self
+            .conn
+            .query_row("SELECT id FROM folders WHERE path = ?1", params![path.to_string_lossy()], |r| r.get(0))
+            .optional()?)
     }
 
     /// The paths of every hidden folder, for leaving them out of the tree.

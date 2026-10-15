@@ -17,11 +17,12 @@ The Folders section shows cataloged roots and, after a folder is opened, a navig
 Right-click a folder for two ways to take it off the list. **Hide folder** removes the folder and its subfolders from the list and from the tree, and keeps every record: ratings, flags, keywords, collections and edits all stay, and opening the folder again with the folder button brings it back. It asks once when there are photographs under the folder and not at all when there are none, since an empty folder opened by mistake is what it is for. **Flush folder…** forgets the catalog's records for the folder and its subfolders, which is why it asks twice: ratings, flags, keywords and collection membership cannot be brought back once flushed. A folder you have only seen in the tree and never opened has no records yet, so there is nothing to flush and Heeler says so. Photographs in the folder's `.trash` are forgotten by a flush too, and the question says how many; their files stay in `.trash`, and opening the folder again finds them there. Neither command touches a file on disk, and the edits are kept outside the catalog either way, so a folder added again after a flush returns with its edits and without its ratings.
 
 - Click a folder to show its supported photographs in Thumbnails.
-- Expand a tree row to browse subfolders.
+- Expand a tree row to browse subfolders. Each time you expand a row, Heeler looks at the disk again, so folders made, renamed or removed outside Heeler show up.
 - The count at the right is the number of photographs known in that folder.
 - An edited badge marks folders containing edits.
 - A trash badge marks folders with a Heeler `.trash` folder.
-- Right-click a folder for folder-specific actions.
+- Right-click a folder for folder-specific actions. **Refresh** looks at the disk again for that folder; on the folder you are in, it also picks up photographs added or removed outside Heeler.
+- A folder that is no longer on the disk says so when you click it and leaves the tree. If the catalog has photographs from it, it opens as a list of those photographs, each marked missing, so you can relink or remove them.
 
 The divider under the tree changes how much height Folders receives; Collections uses the remainder and scrolls independently.
 
