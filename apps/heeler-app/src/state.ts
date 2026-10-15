@@ -4719,6 +4719,8 @@ export type Command =
    * for a multi-selection, `id` for one. */
   | { type: "reset_image_edits"; id?: string; ids?: string[] }
   | { type: "collapse_tree_below"; path: string }
+  /** puts a whole branch back at its path, as it was */
+  | { type: "graft_tree_node"; node: TreeNode }
   | { type: "set_rating"; ids: string[]; stars: number }
   | { type: "set_flag"; ids: string[]; flag: ImageEntry["flag"] }
   | { type: "select_nodes"; ids: string[]; additive?: boolean }
@@ -19364,6 +19366,9 @@ function reduceInner(s: State, cmd: Command): State {
       return { ...s, folders: cmd.folders };
     case "set_folder_tree":
       return { ...s, folderTree: cmd.root };
+    case "graft_tree_node":
+      if (!s.folderTree) return s;
+      return { ...s, folderTree: updateTreeNode(s.folderTree, cmd.node.path, () => cmd.node) };
     case "set_tree_node": {
       if (!s.folderTree) return s;
       return {

@@ -204,10 +204,15 @@ export function applyFolderListing(
   // Applied even when the folder holds no images of its own: the ribbon
   // must show the folder that was picked, not the one before it.
   loadSessionImages(listing.images, dispatch, thumbnailEdge);
-  const inTree = treeContains(tree, listing.path);
+  // Anywhere under the tree's root counts, loaded or not: a folder picked
+  // from deep inside the tree used to replace the root when the branch
+  // down to it had not been expanded yet, and a folder in a loaded branch
+  // kept it. revealInTree lists the branch first, so the node is there.
+  const inTree = tree !== null && (treeContains(tree, listing.path) || isWithin(listing.path, tree.path));
   if (inTree) {
     dispatch({ type: "set_tree_node", path: listing.path, children: listing.subfolders, expanded: true });
   } else {
+    stopExpanding();
     dispatch({
       type: "set_folder_tree",
       root: {
@@ -224,6 +229,31 @@ export function applyFolderListing(
   // command is async now, and a bare void let an older navigation's
   // record land after a newer one.
   catalogSaves.arm("session", 600, () => saveSession(inTree && tree ? tree.path : listing.path, listing.path));
+}
+
+/** Lists the branch from the tree's root down to `path` where the tree
+ * has not loaded it yet, so a folder picked from inside the tree lands
+ * in it rather than replacing the root. Gives way to newer navigation. */
+async function revealInTree(tree: TreeNode | null, path: string, dispatch: D, nav: number): Promise<void> {
+  if (!tree || treeContains(tree, path) || !isWithin(path, tree.path)) return;
+  for (const ancestor of ancestorsBetween(tree.path, path)) {
+    const children = await listSubfolders(ancestor).catch(() => null);
+    if (navStale(nav) || !children) return;
+    dispatch({ type: "set_tree_node", path: ancestor, children, expanded: true });
+  }
+}
+
+/** When a folder above the old tree's root becomes the new root, the old
+ * tree goes back in under it as it was, expanded branches and all,
+ * instead of being rebuilt collapsed. */
+async function regraftOldTree(old: TreeNode | null, newRoot: string, dispatch: D, nav: number): Promise<void> {
+  if (!old || old.path === newRoot || !isWithin(old.path, newRoot)) return;
+  for (const ancestor of ancestorsBetween(newRoot, old.path)) {
+    const children = await listSubfolders(ancestor).catch(() => null);
+    if (navStale(nav) || !children) return;
+    dispatch({ type: "set_tree_node", path: ancestor, children, expanded: true });
+  }
+  if (!navStale(nav)) dispatch({ type: "graft_tree_node", node: old });
 }
 
 const leafName = (p: string) =>
@@ -258,6 +288,10 @@ async function descendTo(
   dispatch: D,
   nav: number,
   thumbnailEdge: number,
+  // The root the tree on screen has, for the session: re-picking a folder
+  // inside the tree descends from that folder, and saving it as the root
+  // made the next launch restore a different tree from the one on screen.
+  treeRoot: string = root,
 ): Promise<FolderListing | null> {
   for (const ancestor of ancestorsBetween(root, folder)) {
     // A folder on the way that cannot be listed (gone, or on a drive
@@ -272,7 +306,7 @@ async function descendTo(
   dispatch({ type: "set_tree_node", path: listing.path, children: listing.subfolders, expanded: true });
   loadSessionImages(listing.images, dispatch, thumbnailEdge);
   dispatch({ type: "set_library", label: listing.name, collection: null, path: listing.path });
-  catalogSaves.arm("session", 600, () => saveSession(root, listing.path));
+  catalogSaves.arm("session", 600, () => saveSession(treeRoot, listing.path));
   return listing;
 }
 
@@ -289,7 +323,10 @@ export async function openFolderPlain(
     return null;
   });
   if (navStale(nav) || !listing || !listing.path) return;
+  await revealInTree(tree, listing.path, dispatch, nav);
+  if (navStale(nav)) return;
   applyFolderListing(listing, tree, dispatch, thumbnailEdge);
+  void regraftOldTree(tree, listing.path, dispatch, nav);
   void refreshLibrary(dispatch);
 }
 
@@ -334,12 +371,16 @@ export async function openFolderRemembering(
   // the ribbon empty.)
   const sess = await loadFolderSession(listing.path).catch(() => null);
   if (navStale(nav)) return;
+  await revealInTree(tree, listing.path, dispatch, nav);
+  if (navStale(nav)) return;
   applyFolderListing(listing, tree, dispatch, thumbnailEdge);
+  void regraftOldTree(tree, listing.path, dispatch, nav);
   void refreshLibrary(dispatch);
   if (!sess) return;
+  const treeRoot = tree && isWithin(listing.path, tree.path) ? tree.path : listing.path;
   let images = listing.images;
   if (sess.activeFolder !== listing.path) {
-    const sub = await descendTo(listing.path, sess.activeFolder, dispatch, nav, thumbnailEdge);
+    const sub = await descendTo(listing.path, sess.activeFolder, dispatch, nav, thumbnailEdge, treeRoot);
     if (!sub) return; // remembered folder is gone (or a newer click won); stay put
     images = sub.images;
   }
@@ -589,6 +630,10 @@ export async function relinkFrom(state: State, dispatch: D) {
   const id = missing[0];
   if (!id) return;
   const name = state.images.find((i) => i.id === id)?.name ?? "the photograph";
+  // Noted once the file or folder is picked, before the relink runs: a
+  // folder clicked while it runs is newer, and the re-read below must
+  // not take the library back to the folder from before it.
+  let nav = currentNavigation();
   try {
     let report: { relinked: number; stillMissing: number; taken: number };
     let told: string;
@@ -598,6 +643,7 @@ export async function relinkFrom(state: State, dispatch: D) {
       // found by name under the picked root, subfolders included.
       const root = await pickRelinkFolder();
       if (!root) return;
+      nav = currentNavigation();
       let stopped: string | null = null;
       try {
         report = await watchOp("relink", () => relinkFolder(missing, root));
@@ -616,6 +662,7 @@ export async function relinkFrom(state: State, dispatch: D) {
     } else {
       const target = await pickRelinkTarget(id);
       if (!target) return;
+      nav = currentNavigation();
       report = await relinkImage(id, target);
       const swept = report.relinked > 1 ? ` and ${report.relinked - 1} more that moved with it` : "";
       const left = report.stillMissing
@@ -632,13 +679,14 @@ export async function relinkFrom(state: State, dispatch: D) {
     // would just have to switch folders to where it lives now." Re-reading
     // gets both right without the frontend having to guess which one
     // happened.
-    if (state.activeFolderPath) {
+    if (state.activeFolderPath && !navStale(nav)) {
       await openFolderPlain(state.activeFolderPath, state.folderTree, dispatch, state.prefs.thumbnailEdge);
     } else {
       await refreshLibrary(dispatch);
     }
   } catch (e) {
     logMsg("error", `Could not relink ${name}: ${String(e)}`);
+    flashStatus(`Could not relink ${name}: ${String(e).replace(/^Error: /, "")}`);
   }
 }
 
@@ -3520,20 +3568,38 @@ export async function refreshFolder(path: string, state: State, dispatch: D): Pr
   void refreshLibrary(dispatch);
 }
 
+/** Bumped to stop an Expand all children still under way: by Collapse
+ * all children, and by a new tree root. A slow expand used to open the
+ * branches again one by one after the user had collapsed them, or force
+ * them open in a tree that had changed under it. */
+let expandRun = 0;
+export function stopExpanding(): void {
+  expandRun += 1;
+}
+
+/** How many folders one Expand all children lists at most. */
+export const EXPAND_ALL_CAP = 200;
+
 /** Recursively expands the subtree under `path`, breadth-first, capped so
- * a monster archive cannot flood the panel with directory listings. */
+ * a monster archive cannot flood the panel with directory listings. Stops
+ * when stopExpanding is called, and says so when it reaches the cap. */
 export async function expandAllChildren(path: string, dispatch: D): Promise<void> {
+  const run = ++expandRun;
   const queue = [path];
   let visited = 0;
-  while (queue.length > 0 && visited < 200) {
+  while (queue.length > 0 && visited < EXPAND_ALL_CAP) {
     const p = queue.shift()!;
     const children = await listSubfolders(p).catch(() => null);
+    if (run !== expandRun) return;
     visited += 1;
     // One that cannot be listed keeps what the tree had, and the walk
     // goes on with the rest.
     if (!children) continue;
     dispatch({ type: "set_tree_node", path: p, children, expanded: true });
     queue.push(...children.map((c) => c.path));
+  }
+  if (queue.length > 0) {
+    flashStatus(`Expanded the first ${EXPAND_ALL_CAP} folders. Expand the rest one branch at a time.`);
   }
 }
 
@@ -3745,24 +3811,32 @@ big it is, same as +NEW beside it.*/}
             style={{ position: "fixed", left: folderMenu.x, top: folderMenu.y, width: 190 }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <button
-              data-testid="folder-menu-expand"
-              onClick={() => {
-                void expandAllChildren(folderMenu.path, dispatch);
-                setFolderMenu(null);
-              }}
-            >
-              Expand all children
-            </button>
-            <button
-              data-testid="folder-menu-collapse"
-              onClick={() => {
-                dispatch({ type: "collapse_tree_below", path: folderMenu.path });
-                setFolderMenu(null);
-              }}
-            >
-              Collapse all children
-            </button>
+            {/* Only for a folder the tree holds: on a shortlist folder
+                outside it, expanding listed up to the cap of folders and
+                changed nothing on screen. */}
+            {treeContains(state.folderTree, folderMenu.path) && (
+              <>
+                <button
+                  data-testid="folder-menu-expand"
+                  onClick={() => {
+                    void expandAllChildren(folderMenu.path, dispatch);
+                    setFolderMenu(null);
+                  }}
+                >
+                  Expand all children
+                </button>
+                <button
+                  data-testid="folder-menu-collapse"
+                  onClick={() => {
+                    stopExpanding();
+                    dispatch({ type: "collapse_tree_below", path: folderMenu.path });
+                    setFolderMenu(null);
+                  }}
+                >
+                  Collapse all children
+                </button>
+              </>
+            )}
             <button
               data-testid="folder-menu-refresh"
               data-hint="Look at the disk again: subfolders made, renamed or removed since, and, for the folder you are in, its photographs"

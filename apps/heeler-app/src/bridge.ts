@@ -3336,8 +3336,16 @@ export async function listSubfolders(path: string): Promise<SubfolderEntry[]> {
   if (isTauri()) {
       return call<SubfolderEntry[]>("list_subfolders", { path });
   }
+  if (mockSubfolderHold) await mockSubfolderHold;
   if (mockGone.has(path)) throw new Error(`${path} is not there`);
   return MOCK_LISTINGS[path]?.subfolders ?? [];
+}
+
+/** Test hook: while set, the mock's subfolder listings wait on it, the
+ * slow-drive stand-in. */
+let mockSubfolderHold: Promise<void> | null = null;
+export function mockSetSubfolderHold(next: Promise<void> | null): void {
+  mockSubfolderHold = next;
 }
 
 /** Folders taken off the mock disk (mockRemoveFolder): listing or opening
@@ -5070,7 +5078,10 @@ export interface TrashSummary {
 /** Points a photograph at the file it moved to, sweeping up the others
  * that moved with it. Nobody moves one photograph. */
 export async function relinkImage(imageId: string, newPath: string): Promise<RelinkReport> {
-  if (!isTauri()) return { relinked: 1, stillMissing: 0, taken: 0 };
+  if (!isTauri()) {
+    if (mockRelinkHold) await mockRelinkHold;
+    return { relinked: 1, stillMissing: 0, taken: 0 };
+  }
   const r = await call<{ relinked: number; still_missing: number; taken?: number }>("relink_image", {
     imageId,
     newPath,
@@ -5086,8 +5097,17 @@ export interface RelinkReport {
 }
 
 /** Asks the user where a missing photograph went. */
+/** Test hooks: what the mock's relink file picker answers, and a hold
+ * the mock relink waits on, the slow-drive stand-in. */
+let mockRelinkPick: string | null = null;
+let mockRelinkHold: Promise<void> | null = null;
+export function mockSetRelink(pick: string | null, hold: Promise<void> | null = null): void {
+  mockRelinkPick = pick;
+  mockRelinkHold = hold;
+}
+
 export async function pickRelinkTarget(imageId: string): Promise<string | null> {
-  if (!isTauri()) return null;
+  if (!isTauri()) return mockRelinkPick;
   return call<string | null>("pick_relink_target", { imageId });
 }
 
