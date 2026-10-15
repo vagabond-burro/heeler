@@ -533,6 +533,10 @@ const READ_SLICE: std::time::Duration = std::time::Duration::from_millis(100);
 const WRITE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 /// How often the listener looks at the stop flag between connections.
 const ACCEPT_POLL: std::time::Duration = std::time::Duration::from_millis(25);
+/// How much of a refused request is read and thrown away after its
+/// answer, and for how long at most, before the connection closes.
+const DRAIN_LIMIT: usize = 1024 * 1024;
+const DRAIN_TIME: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// Connection threads still running, across every share: what a stop
 /// must bring back to zero.
@@ -619,24 +623,54 @@ fn read_head(r: &mut impl Read, stopped: impl Fn() -> bool) -> Result<(String, S
     }
 }
 
+/// Reads and throws away what a client is still sending, until it closes
+/// its side, `limit` bytes have gone, `time` has passed, or `stopped`.
+fn drain(r: &mut impl Read, stopped: impl Fn() -> bool, limit: usize, time: std::time::Duration) {
+    let started = std::time::Instant::now();
+    let mut gone = 0;
+    let mut chunk = [0u8; 8192];
+    while gone < limit && started.elapsed() < time && !stopped() {
+        match r.read(&mut chunk) {
+            Ok(0) => return,
+            Ok(n) => gone += n,
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut | std::io::ErrorKind::Interrupted
+                ) => {}
+            Err(_) => return,
+        }
+    }
+}
+
 /// Serves one connection: one request, one answer, then closed.
 fn serve_connection(mut stream: std::net::TcpStream, site: &Site) {
     let _ = stream.set_read_timeout(Some(READ_SLICE));
     let _ = stream.set_write_timeout(Some(WRITE_TIMEOUT));
-    let (answer, head_only) = match read_head(&mut stream, || site.stop.load(Ordering::Relaxed)) {
+    let (answer, head_only, refused) = match read_head(&mut stream, || site.stop.load(Ordering::Relaxed)) {
         Ok((method, target)) if method == "GET" || method == "HEAD" => {
-            (handle(&target, &site.token, site.simple, &site.name, &site.dir, &site.shared), method == "HEAD")
+            (handle(&target, &site.token, site.simple, &site.name, &site.dir, &site.shared), method == "HEAD", false)
         }
         Ok(_) => {
             let mut a = respond(405, "text/plain", b"method not allowed".to_vec());
             a.headers.push(("Allow", "GET, HEAD".to_string()));
-            (a, false)
+            (a, false, true)
         }
-        Err(HeadError::TooLarge) => (respond(431, "text/plain", b"request too large".to_vec()), false),
-        Err(HeadError::Malformed) => (respond(400, "text/plain", b"bad request".to_vec()), false),
+        Err(HeadError::TooLarge) => (respond(431, "text/plain", b"request too large".to_vec()), false, true),
+        Err(HeadError::Malformed) => (respond(400, "text/plain", b"bad request".to_vec()), false, true),
         Err(HeadError::Gone) => return,
     };
     let _ = write_answer(&mut stream, &answer, head_only);
+    // A refused request may not have been read to its end: the rest of
+    // an oversized head, or a POST's body. Closing a socket with input
+    // unread sends a reset, and on Windows the client then throws away
+    // the answer it had not read yet. So the answer is sent, the sending
+    // side closed, and what the client is still sending read and dropped
+    // until it closes too.
+    if refused {
+        let _ = stream.shutdown(std::net::Shutdown::Write);
+        drain(&mut stream, || site.stop.load(Ordering::Relaxed), DRAIN_LIMIT, DRAIN_TIME);
+    }
     let _ = stream.shutdown(std::net::Shutdown::Both);
 }
 
@@ -1111,6 +1145,41 @@ mod tests {
         assert_eq!(got, Err(HeadError::Gone));
         assert_eq!(reads.load(Ordering::SeqCst), 3);
         assert!(started.elapsed() < std::time::Duration::from_secs(1));
+    }
+
+    /// What a refused client is still sending is read to its end, and no
+    /// further than the limit, the time or the stop flag allow.
+    #[test]
+    fn a_refused_request_is_read_to_its_end_before_the_close() {
+        let rest = vec![b'a'; 20_000];
+        let mut r: &[u8] = &rest;
+        drain(&mut r, || false, DRAIN_LIMIT, DRAIN_TIME);
+        assert!(r.is_empty(), "{} bytes left unread", r.len());
+
+        struct Endless(usize);
+        impl Read for Endless {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                self.0 += buf.len();
+                Ok(buf.len())
+            }
+        }
+        let mut endless = Endless(0);
+        drain(&mut endless, || false, 100_000, DRAIN_TIME);
+        assert!(endless.0 >= 100_000 && endless.0 < 100_000 + 8192, "{}", endless.0);
+
+        struct Silent;
+        impl Read for Silent {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+                Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out"))
+            }
+        }
+        let started = std::time::Instant::now();
+        drain(&mut Silent, || false, DRAIN_LIMIT, std::time::Duration::from_millis(50));
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+        let started = std::time::Instant::now();
+        drain(&mut Silent, || true, DRAIN_LIMIT, DRAIN_TIME);
+        assert!(started.elapsed() < std::time::Duration::from_millis(500));
     }
 
     #[test]
