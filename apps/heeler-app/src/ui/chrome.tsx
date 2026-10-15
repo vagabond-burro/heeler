@@ -3763,7 +3763,7 @@ file.*/}
                     flashStatus("Nothing to flush: the catalog has no records for this folder yet.");
                     return;
                   }
-                  dispatch({ type: "ask_confirm", action: { kind: "flush_folder", path, folders: c.folders, images: c.images } });
+                  dispatch({ type: "ask_confirm", action: { kind: "flush_folder", path, folders: c.folders, images: c.images, trashed: c.trashed ?? 0 } });
                 }).catch((e) => logMsg("error", `Could not read the folder: ${String(e)}`));
               }}
             >

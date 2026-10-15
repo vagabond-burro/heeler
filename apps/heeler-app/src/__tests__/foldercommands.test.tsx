@@ -141,6 +141,15 @@ describe("Flush folder", () => {
     expect(mockFolderCommands).toEqual([]);
   });
 
+  // The trashed ones are forgotten too, and the prompt left them out
+  // (vagabond-burro/heeler#43).
+  it("says what happens to the photographs in the folder's trash", () => {
+    const some = confirmCopy({ action: { kind: "flush_folder", path: "/shoot", folders: 1, images: 5, trashed: 2 }, step: 1 });
+    expect(some.body).toMatch(/The 2 photographs in its \.trash are forgotten too; the files stay in \.trash, and opening the folder again finds them there/);
+    const none = confirmCopy({ action: { kind: "flush_folder", path: "/shoot", folders: 1, images: 5, trashed: 0 }, step: 1 });
+    expect(none.body).not.toMatch(/\.trash/);
+  });
+
   it("the words count photographs and folders honestly", () => {
     const one = confirmCopy({ action: { kind: "flush_folder", path: "/shoot/day1", folders: 1, images: 1 }, step: 2 });
     expect(one.ok).toBe("Flush 1 photograph");

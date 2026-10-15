@@ -524,6 +524,36 @@ pub fn scan_folder(
             let folder_id = catalog.add_folder(folder)?;
             catalog.touch_folder(folder_id)?;
 
+            // The folder's `.trash`, read back into the catalog: a
+            // photograph in it whose record is gone (the folder was
+            // flushed, or this is a new catalog) is registered again under
+            // the id its index names, trashed. Without it a flush took the
+            // trash badge, Show Trash and Put Back with it while the files
+            // sat on in `.trash` (vagabond-burro/heeler#43), and the edits
+            // kept by that id come back with it.
+            let trash_dir = folder.join(trash::TRASH_DIR);
+            if trash_dir.is_dir() {
+                for entry in trash::read_manifest(&trash_dir).items {
+                    let in_trash = trash_dir.join(&entry.file);
+                    let named_plainly = Path::new(&entry.file).file_name() == Some(std::ffi::OsStr::new(&entry.file));
+                    if entry.pending || !named_plainly || !in_trash.is_file() || catalog.image_id_taken(&entry.image_id)? {
+                        continue;
+                    }
+                    let original = PathBuf::from(&entry.original);
+                    if original.parent() != Some(folder) {
+                        continue;
+                    }
+                    // Its old place, unless a file or a record has it now:
+                    // then the record waits inside `.trash`, as #41 does.
+                    let at = if original.exists() || catalog.image_id_by_path(&original)?.is_some() { in_trash } else { original };
+                    if catalog.image_id_by_path(&at)?.is_some() {
+                        continue;
+                    }
+                    catalog.add_image(&entry.image_id, &at, Some(folder_id))?;
+                    catalog.set_trashed(&entry.image_id, true)?;
+                }
+            }
+
             // Photographs this folder has in the trash, so a file that
             // has come BACK can stop being trashed.
             //
@@ -13262,13 +13292,17 @@ fn place_zone_blocking(app: &tauri::AppHandle, graph: UiGraph, image_id: String,
 pub struct FolderSubtreeCounts {
     pub folders: usize,
     pub images: i64,
+    /// Trashed photographs beneath it, which a flush forgets as well
+    /// (vagabond-burro/heeler#43).
+    pub trashed: i64,
 }
 
 #[tauri::command]
 async fn folder_subtree_counts(app: tauri::AppHandle, path: String) -> Result<FolderSubtreeCounts, String> {
     catalog_command(app, move |c| {
         let (folders, images) = c.subtree_counts(Path::new(&path)).map_err(|e| e.to_string())?;
-        Ok(FolderSubtreeCounts { folders, images })
+        let trashed = c.subtree_trashed_count(Path::new(&path)).map_err(|e| e.to_string())?;
+        Ok(FolderSubtreeCounts { folders, images, trashed })
     })
     .await
 }
@@ -13413,8 +13447,9 @@ pub fn sessions_leave_folder(c: &Catalog, path: &Path, flushed: bool) -> Result<
 #[tauri::command]
 async fn flush_folder(app: tauri::AppHandle, path: String) -> Result<FolderSubtreeCounts, String> {
     catalog_command(app, move |c| {
+        let trashed = c.subtree_trashed_count(Path::new(&path)).map_err(|e| e.to_string())?;
         let (folders, images) = flush_folder_payload(c, Path::new(&path))?;
-        Ok(FolderSubtreeCounts { folders, images })
+        Ok(FolderSubtreeCounts { folders, images, trashed })
     })
     .await
 }
@@ -30271,6 +30306,38 @@ mod tests {
         // Rescanning changes nothing.
         let again = scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
         assert_eq!(again[0].id, listed[0].id);
+        assert_eq!(catalog.list_trashed(None).unwrap().len(), 1);
+    }
+
+    /// A flush forgot the trashed photographs too, and nothing brought
+    /// them back: the trash badge, Show Trash and Put Back were gone
+    /// while the files sat on in `.trash` (vagabond-burro/heeler#43).
+    #[test]
+    fn opening_a_flushed_folder_again_finds_its_trash() {
+        let dir = tempfile::tempdir().unwrap();
+        let png = heeler_io::encode_png(&ImageBuf::filled(8, 8, [0.5, 0.5, 0.5, 1.0])).unwrap();
+        for name in ["a.png", "b.png"] {
+            std::fs::write(dir.path().join(name), &png).unwrap();
+        }
+        let catalog = Catalog::open_in_memory().unwrap();
+        let mut paths = HashMap::new();
+        let first = scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
+        let a = first.iter().find(|i| i.name == "a.png").unwrap().id.clone();
+        trash::move_to_trash(&dir.path().join("a.png"), &a).unwrap();
+        catalog.set_trashed(&a, true).unwrap();
+        assert_eq!(catalog.subtree_trashed_count(dir.path()).unwrap(), 1, "the flush prompt can say so");
+
+        flush_folder_payload(&catalog, dir.path()).unwrap();
+        assert!(catalog.folders_with_trash().unwrap().is_empty(), "the flush forgot it");
+
+        let back = scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
+        assert_eq!(back.iter().map(|i| i.name.as_str()).collect::<Vec<_>>(), vec!["b.png"], "the trashed one is not listed");
+        let trashed = catalog.list_trashed(None).unwrap();
+        assert_eq!(trashed.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), vec![a.as_str()], "under its own id, so its edits come back");
+        assert_eq!(trashed[0].path, dir.path().join("a.png").to_string_lossy(), "Put Back's way home");
+        assert_eq!(catalog.folders_with_trash().unwrap(), vec![dir.path().to_string_lossy().to_string()], "and the badge is back");
+        // Once is enough.
+        scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
         assert_eq!(catalog.list_trashed(None).unwrap().len(), 1);
     }
 

@@ -621,6 +621,8 @@ export async function foldersWithHidden(): Promise<string[]> {
 export interface FolderSubtreeCounts {
   folders: number;
   images: number;
+  /** Trashed photographs beneath it, which a flush forgets too. */
+  trashed?: number;
 }
 
 export let mockSubtreeCounts: FolderSubtreeCounts = { folders: 1, images: 0 };

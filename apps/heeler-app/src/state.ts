@@ -8952,7 +8952,7 @@ export type ConfirmAction =
   // flags, keywords, collection membership. No file is touched and the
   // edits live outside the catalog, but the records have no undo, so
   // this is the one gesture that asks twice.
-  | { kind: "flush_folder"; path: string; folders: number; images: number }
+  | { kind: "flush_folder"; path: string; folders: number; images: number; trashed?: number }
   // Deleting a take destroys the edits in it and nothing else. Worth one
   // prompt: history is per-take and switching between them clears it, so
   // there is no undo behind this one.

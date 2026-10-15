@@ -1191,6 +1191,20 @@ impl Catalog {
         Ok((folders.len(), images))
     }
 
+    /// How many trashed photographs the folders at `path` and beneath it
+    /// hold: a flush forgets these too, and its prompt says so.
+    pub fn subtree_trashed_count(&self, path: &Path) -> Result<i64, CatalogError> {
+        let mut n = 0;
+        for (id, _) in self.folder_subtree(path)? {
+            n += self.conn.query_row(
+                "SELECT COUNT(*) FROM images WHERE folder_id = ?1 AND trashed = 1",
+                params![id],
+                |r| r.get::<_, i64>(0),
+            )?;
+        }
+        Ok(n)
+    }
+
     /// Hides `path` and every folder beneath it from the library. Every
     /// record stays; browsing to the folder again (add_folder) unhides
     /// it. Returns how many folder rows were flagged.

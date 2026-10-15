@@ -146,13 +146,20 @@ export function confirmCopy(confirm: Confirm): {
     const name = a.path.split(/[\\/]/).filter(Boolean).pop() ?? a.path;
     const inside = a.folders > 1 ? ` and the ${a.folders - 1} folder${a.folders === 2 ? "" : "s"} inside it` : "";
     const photos = `${a.images.toLocaleString()} photograph${a.images === 1 ? "" : "s"}`;
+    // The trashed ones go from the catalog too, which the count used to
+    // leave out (vagabond-burro/heeler#43). Their files stay in .trash,
+    // and opening the folder again reads them back from its index.
+    const t = a.trashed ?? 0;
+    const trashNote = t
+      ? ` The ${t.toLocaleString()} photograph${t === 1 ? "" : "s"} in its .trash ${t === 1 ? "is" : "are"} forgotten too; the file${t === 1 ? " stays" : "s stay"} in .trash, and opening the folder again finds ${t === 1 ? "it" : "them"} there.`
+      : "";
     return confirm.step === 1
       ? {
           title: "Flush folder",
           // The first page says what goes and what stays. The second
           // says something the first did not: that there is no undo,
           // and exactly what would have to be redone.
-          body: `${name}${inside} will be forgotten by the catalog, with the ratings, flags, keywords and collection membership of ${photos}. The files stay where they are, and their edits are kept outside the catalog and return if the folder is added again. To keep the records and only clear the list, use Hide folder instead.`,
+          body: `${name}${inside} will be forgotten by the catalog, with the ratings, flags, keywords and collection membership of ${photos}. The files stay where they are, and their edits are kept outside the catalog and return if the folder is added again. To keep the records and only clear the list, use Hide folder instead.${trashNote}`,
           ok: "Flush folder…",
           danger: true,
         }
