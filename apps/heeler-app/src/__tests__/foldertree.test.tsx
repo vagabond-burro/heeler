@@ -12,14 +12,20 @@ import { App } from "../app";
 import { loadSession, mockAddSubfolder, mockSetRelink, mockRemoveFolder, mockResetSessions, mockSetFolderSession, mockSetSubfolderHold } from "../bridge";
 import { initialState } from "../data";
 import { catalogSaves } from "../savebarrier";
+import { rememberExpanded, rememberedExpanded } from "../uiprefs";
 import { reduce, type Command, type State, type TreeNode } from "../state";
-import { EXPAND_ALL_CAP, expandAllChildren, openFolderPlain, openFolderRemembering, relinkFrom, stopExpanding } from "../ui/chrome";
+import { EXPAND_ALL_CAP, expandAllChildren, expandedPaths, openFolderPlain, openFolderRemembering, relinkFrom, stopExpanding } from "../ui/chrome";
 import { _clearFlashForTests, currentFlash } from "../ui/hints";
 
 type User = ReturnType<typeof userEvent.setup>;
 let undo: (() => void)[] = [];
 
-beforeEach(() => _clearFlashForTests());
+beforeEach(() => {
+  _clearFlashForTests();
+  // The open folders are remembered between launches; between tests
+  // they would leak one test's tree into the next.
+  localStorage.removeItem("heeler.ui.treeExpanded");
+});
 afterEach(() => {
   for (const u of undo) u();
   undo = [];
@@ -280,5 +286,40 @@ describe("the open folder's row", () => {
     } finally {
       Element.prototype.scrollIntoView = before;
     }
+  });
+});
+
+// Only the restored session's one path came back open after a launch.
+describe("the folders left open", () => {
+  it("are remembered for the tree's root as they open and close", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    mockAddSubfolder("mock://trip/day2", "Dusk");
+    await openTrip(user);
+    await user.click(screen.getByTestId("tree-toggle-mock://trip/day2"));
+    await waitFor(() => expect(rememberedExpanded("mock://trip")).toContain("mock://trip/day2"));
+    await user.click(screen.getByTestId("tree-toggle-mock://trip/day2"));
+    await waitFor(() => expect(rememberedExpanded("mock://trip")).not.toContain("mock://trip/day2"));
+  });
+
+  it("open again when the root is opened again", async () => {
+    mockAddSubfolder("mock://trip/day1", "Sunrise");
+    rememberExpanded("mock://trip", ["mock://trip/day1", "mock://elsewhere/x"]);
+    const h = harness();
+    await openFolderPlain("mock://trip", null, h.dispatch);
+    await waitFor(() => expect(find(h.get().folderTree, "mock://trip/day1")?.expanded).toBe(true));
+    expect(find(h.get().folderTree, "mock://trip/day1/sunrise")).not.toBeNull();
+  });
+
+  it("are read off a tree, the root left out", () => {
+    const tree: TreeNode = {
+      name: "r", path: "/r", expanded: true,
+      children: [
+        { name: "a", path: "/r/a", expanded: true, children: [{ name: "b", path: "/r/a/b", expanded: false, children: null }] },
+        { name: "c", path: "/r/c", expanded: false, children: [{ name: "d", path: "/r/c/d", expanded: true, children: [] }] },
+      ],
+    };
+    expect(expandedPaths(tree)).toEqual(["/r/a"]);
+    expect(expandedPaths(null)).toEqual([]);
   });
 });

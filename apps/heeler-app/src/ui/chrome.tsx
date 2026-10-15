@@ -48,7 +48,7 @@ import { ThumbBox } from "./thumbbox";
 import { watchMaximizeButton } from "../snaplayouts";
 import { bindingFor, formatBinding } from "../hotkeys";
 import { TOOL_WINDOWS, rememberPopoutOpener, type ToolWindowKind } from "../popout";
-import { CHROME_ZOOM_DEFAULT, CHROME_ZOOM_STEPS, applyChromeZoom, chromeZoomFactor, setUiPref, uiPref } from "../uiprefs";
+import { CHROME_ZOOM_DEFAULT, CHROME_ZOOM_STEPS, applyChromeZoom, chromeZoomFactor, rememberExpanded, rememberedExpanded, setUiPref, uiPref } from "../uiprefs";
 import { centerMainWindow, toggleFullscreen } from "../windowops";
 import { menuTree } from "../nodes";
 import { addNodeAt, addRecipeAt } from "./addnode";
@@ -243,6 +243,35 @@ async function revealInTree(tree: TreeNode | null, path: string, dispatch: D, na
   }
 }
 
+/** Opens again the folders that were open under `root` when the tree was
+ * last left, shallowest first, so each one's parent is listed before it.
+ * One listing each, at most TREE_PATHS; a folder no longer there is
+ * skipped. Gives way to newer navigation. */
+export async function restoreExpanded(root: string, dispatch: D, nav: number): Promise<void> {
+  const depth = (p: string) => p.split(/[\\/]/).length;
+  const paths = rememberedExpanded(root)
+    .filter((p) => p !== root && isWithin(p, root))
+    .sort((a, b) => depth(a) - depth(b));
+  for (const path of paths) {
+    const children = await listSubfolders(path).catch(() => null);
+    if (navStale(nav)) return;
+    if (children) dispatch({ type: "set_tree_node", path, children, expanded: true });
+  }
+}
+
+/** The folders open in a tree, root left out. */
+export function expandedPaths(node: TreeNode | null): string[] {
+  if (!node) return [];
+  const out: string[] = [];
+  const walk = (n: TreeNode, top: boolean) => {
+    if (!n.expanded) return;
+    if (!top) out.push(n.path);
+    for (const c of n.children ?? []) walk(c, false);
+  };
+  walk(node, true);
+  return out;
+}
+
 /** When a folder above the old tree's root becomes the new root, the old
  * tree goes back in under it as it was, expanded branches and all,
  * instead of being rebuilt collapsed. */
@@ -325,8 +354,10 @@ export async function openFolderPlain(
   if (navStale(nav) || !listing || !listing.path) return;
   await revealInTree(tree, listing.path, dispatch, nav);
   if (navStale(nav)) return;
+  const newRoot = !tree || !isWithin(listing.path, tree.path);
   applyFolderListing(listing, tree, dispatch, thumbnailEdge);
   void regraftOldTree(tree, listing.path, dispatch, nav);
+  if (newRoot) void restoreExpanded(listing.path, dispatch, nav);
   void refreshLibrary(dispatch);
 }
 
@@ -373,9 +404,11 @@ export async function openFolderRemembering(
   if (navStale(nav)) return;
   await revealInTree(tree, listing.path, dispatch, nav);
   if (navStale(nav)) return;
+  const newRoot = !tree || !isWithin(listing.path, tree.path);
   applyFolderListing(listing, tree, dispatch, thumbnailEdge);
   void regraftOldTree(tree, listing.path, dispatch, nav);
   void refreshLibrary(dispatch);
+  if (newRoot) await restoreExpanded(listing.path, dispatch, nav);
   if (!sess) return;
   const treeRoot = tree && isWithin(listing.path, tree.path) ? tree.path : listing.path;
   let images = listing.images;
@@ -411,6 +444,8 @@ export async function restoreCatalogSession(
     if (rootListing && rootListing.path) {
       applyFolderListing(rootListing, null, dispatch, thumbnailEdge);
       onStep?.("photos", `${rootListing.images.length} in ${leafName(rootListing.path)}`);
+      await restoreExpanded(rootListing.path, dispatch, nav);
+      if (navStale(nav)) return "none";
       let images = rootListing.images;
       if (sess.activeFolder !== sess.treeRoot) {
         onStep?.("folders", sess.activeFolder);
@@ -3793,6 +3828,10 @@ function BrowserPanelImpl({ state, dispatch }: { state: State; dispatch: D }) {
   // somewhere the box does not show, after a restore or a descent deep
   // into a tall tree.
   const treeBoxRef = useRef<HTMLDivElement | null>(null);
+  // Which folders are open, remembered per root for the next launch.
+  useEffect(() => {
+    if (state.folderTree) rememberExpanded(state.folderTree.path, expandedPaths(state.folderTree));
+  }, [state.folderTree]);
   useEffect(() => {
     const path = state.activeFolderPath;
     if (!path || !treeBoxRef.current) return;

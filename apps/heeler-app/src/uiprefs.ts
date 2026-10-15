@@ -72,3 +72,34 @@ export function chromeZoomFactor(): number {
     ? stored
     : CHROME_ZOOM_DEFAULT;
 }
+
+// Which folders were open in the folder tree, per tree root, so the tree
+// comes back the way it was left. Only the restored session's one path
+// used to re-open after a launch. Capped: the roots most recently
+// touched, and a bounded number of open folders under each.
+const TREE_KEY = "treeExpanded";
+const TREE_ROOTS = 20;
+export const TREE_PATHS = 100;
+
+function treeMap(): Record<string, string[]> {
+  try {
+    const v: unknown = JSON.parse(uiPref(TREE_KEY, "{}"));
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, string[]>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** The folders that were open under `root`, shallowest first. */
+export function rememberedExpanded(root: string): string[] {
+  const paths = treeMap()[root];
+  return Array.isArray(paths) ? paths.filter((p) => typeof p === "string") : [];
+}
+
+/** Remembers the folders open under `root`. */
+export function rememberExpanded(root: string, paths: string[]): void {
+  const map = treeMap();
+  delete map[root];
+  const kept = Object.fromEntries([...Object.entries(map).slice(-(TREE_ROOTS - 1)), [root, paths.slice(0, TREE_PATHS)]]);
+  setUiPref(TREE_KEY, JSON.stringify(kept));
+}
