@@ -1413,12 +1413,13 @@ impl Catalog {
     }
 
     /// Whether a photograph's row carries anything a person put there: a
-    /// rating, a flag, keywords, a collection, or edits. A row with none
-    /// of it is what a folder scan makes for a file it has not seen
-    /// before, and is safe to fold into another row.
+    /// rating, a flag, keywords, a collection, a link group, or edits. A
+    /// row with none of it is what a folder scan makes for a file it has
+    /// not seen before, and is safe to fold into another row.
     pub fn image_has_own_work(&self, id: &str) -> Result<bool, CatalogError> {
         let marked: i64 = self.conn.query_row(
             "SELECT (rating > 0) + (flag <> 'none') + edited
+                  + (link_group IS NOT NULL)
                   + (SELECT COUNT(*) FROM keywords WHERE image_id = ?1)
                   + (SELECT COUNT(*) FROM collection_members WHERE image_id = ?1)
              FROM images WHERE id = ?1",
@@ -3160,6 +3161,20 @@ mod tests {
         let col = c.create_collection("picks").unwrap();
         c.add_to_collection(col, "collected").unwrap();
         assert!(c.image_has_own_work("collected").unwrap());
+    }
+
+    /// A link group is work of its own too: a row whose only mark is the
+    /// link answered "blank" to image_has_own_work, so a fold would have
+    /// deleted it, and the link with it, without a word.
+    #[test]
+    fn a_linked_row_counts_as_having_work_of_its_own() {
+        let c = Catalog::open_in_memory().unwrap();
+        c.add_image("linked", Path::new("/shoot/P2.RW2"), None).unwrap();
+        assert!(!c.image_has_own_work("linked").unwrap());
+        c.set_link_group(&["linked".into()], Some("link_a")).unwrap();
+        assert!(c.image_has_own_work("linked").unwrap());
+        c.set_link_group(&["linked".into()], None).unwrap();
+        assert!(!c.image_has_own_work("linked").unwrap());
     }
 
     #[test]

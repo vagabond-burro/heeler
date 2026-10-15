@@ -13791,9 +13791,9 @@ pub struct RelinkReport {
 
 /// Points photograph `id` at `target`, in folder `folder_id`. Answers
 /// false, changing nothing, when the file already belongs to another row
-/// that carries work of its own (a rating, flag, keyword, collection or
-/// edits): the paths column is unique, and one of the two would have to
-/// lose its work.
+/// that carries work of its own (a rating, flag, keyword, collection,
+/// link group or edits): the paths column is unique, and one of the two
+/// would have to lose its work.
 ///
 /// A row with nothing on it is what a folder scan makes for a file it
 /// has not seen before, which is what happens when a photograph is moved
@@ -25760,6 +25760,27 @@ mod tests {
         assert!(!err.contains("UNIQUE"), "{err}");
         assert!(c.image("ghost").unwrap().path.contains("gone"));
         assert_eq!(c.image("owned").unwrap().path, d.path().join("P1.RW2").to_string_lossy());
+        assert!(paths.is_empty());
+    }
+
+    /// A link group is work of its own too: the file's row being only
+    /// linked to another photograph is still a reason to refuse, in the
+    /// same plain words, changing nothing.
+    #[test]
+    fn relinking_onto_a_file_whose_row_is_linked_says_why_and_changes_nothing() {
+        let d = tempfile::tempdir().unwrap();
+        let c = Catalog::open_in_memory().unwrap();
+        std::fs::write(d.path().join("P1.RW2"), b"x").unwrap();
+        c.add_image("ghost", &d.path().join("gone").join("P1.RW2"), None).unwrap();
+        c.add_image("owned", &d.path().join("P1.RW2"), None).unwrap();
+        c.set_link_group(&["owned".into()], Some("link_a")).unwrap();
+        let mut paths = HashMap::new();
+        let err = relink_in(&c, &mut paths, "ghost", &d.path().join("P1.RW2")).unwrap_err();
+        assert!(err.contains("already in the catalog as another photograph"), "{err}");
+        assert!(!err.contains("UNIQUE"), "{err}");
+        assert!(c.image("ghost").unwrap().path.contains("gone"));
+        assert_eq!(c.image("owned").unwrap().path, d.path().join("P1.RW2").to_string_lossy());
+        assert_eq!(c.image("owned").unwrap().link_group.as_deref(), Some("link_a"), "the link is untouched");
         assert!(paths.is_empty());
     }
 
