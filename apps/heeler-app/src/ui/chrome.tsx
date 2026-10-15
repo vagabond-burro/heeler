@@ -541,6 +541,16 @@ function namesOf(state: State, ids: string[]): string[] {
 }
 
 
+/** What a relink says about photographs it found but left alone: the
+ * file there is already in the catalog as another photograph, and one
+ * file cannot be two (vagabond-burro/heeler#38). */
+export function takenNote(taken: number): string {
+  if (!taken) return "";
+  return taken === 1
+    ? " 1 was left as it was: the file found for it is already in the catalog as another photograph."
+    : ` ${taken} were left as they were: the files found for them are already in the catalog as other photographs.`;
+}
+
 /** Finds a moved photograph again, and everything that moved with it.
  *
  * The owner's design for this: relink "re-homes an image to its new
@@ -557,7 +567,7 @@ export async function relinkFrom(state: State, dispatch: D) {
   if (!id) return;
   const name = state.images.find((i) => i.id === id)?.name ?? "the photograph";
   try {
-    let report: { relinked: number; stillMissing: number };
+    let report: { relinked: number; stillMissing: number; taken: number };
     let told: string;
     if (missing.length > 1) {
       // A multi-selection relinks at the FOLDER level ("I just
@@ -574,12 +584,12 @@ export async function relinkFrom(state: State, dispatch: D) {
         // them the same way a whole run does, so the re-read below
         // still happens.
         stopped = String(e);
-        report = { relinked: 0, stillMissing: 0 };
+        report = { relinked: 0, stillMissing: 0, taken: 0 };
       }
       const left = report.stillMissing
         ? ` ${report.stillMissing} of them ${report.stillMissing === 1 ? "was" : "were"} not under that folder.`
         : "";
-      told = stopped ? `Relinking stopped: ${stopped}` : `Relinked ${report.relinked} of ${missing.length} selected.${left}`;
+      told = stopped ? `Relinking stopped: ${stopped}` : `Relinked ${report.relinked} of ${missing.length} selected.${left}${takenNote(report.taken)}`;
     } else {
       const target = await pickRelinkTarget(id);
       if (!target) return;
@@ -588,7 +598,7 @@ export async function relinkFrom(state: State, dispatch: D) {
       const left = report.stillMissing
         ? ` ${report.stillMissing} in that folder are still missing.`
         : "";
-      told = `Relinked ${name}${swept}.${left}`;
+      told = `Relinked ${name}${swept}.${left}${takenNote(report.taken)}`;
     }
     logMsg("info", told);
     // Re-read the folder that is open rather than patching the ribbon. A

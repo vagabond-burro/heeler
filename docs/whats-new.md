@@ -4,6 +4,7 @@
 
 ### Fixes
 
+- **Relinking a folder's worth of photographs finishes the job.** Relinking several missing photographs at once by pointing at a folder stopped at the first one it could not relink, usually because the file it found was already in the library as another photograph. The ones relinked before it had moved, but Heeler went on looking for them in their old places. It now relinks every one it can, leaves the others as they were, and tells you how many found a file that already belongs to another photograph. [Library](user-guide/library.md).
 - **A hidden folder leaves the list.** **Hide folder** said the folder would leave the Folders list, but a folder you had opened stayed on it, and a folder in the tree stayed in the tree. It now leaves both until you open it again with the folder button. Hiding a folder you had only seen in the tree, never opened, now works too, and **Flush folder** on such a folder says there is nothing to flush instead of asking twice and doing nothing. [Library](user-guide/library.md).
 - **A folder opens again after a relinked photograph's old spot fills up.** If you relinked a photograph to where it had moved, and later a file turned up at its old location (moved back, or copied again from the card), the old folder would no longer open. The new file now gets a record of its own, and the relinked photograph keeps its ratings and edits where it is. [Library](user-guide/library.md).
 

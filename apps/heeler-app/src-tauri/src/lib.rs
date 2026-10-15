@@ -13361,13 +13361,27 @@ async fn recover_hidden(app: tauri::AppHandle, path: String) -> Result<i64, Stri
 
 // Missing files, and finding them again ------------------------------------
 
-#[derive(serde::Serialize, Debug)]
+#[derive(serde::Serialize, Debug, Default, PartialEq)]
 pub struct RelinkReport {
     /// The photograph the user pointed at, plus every other one in the
     /// same move that turned up beside it.
     pub relinked: usize,
     /// Still missing in the folder the relinked one came from.
     pub still_missing: usize,
+    /// Found, but the file there is already in the catalog as another
+    /// photograph, so this one was left as it was. Counted apart from
+    /// still_missing, which used to swallow these without a reason
+    /// (vagabond-burro/heeler#38).
+    pub taken: usize,
+}
+
+/// Whether `target` already belongs to a catalog row other than `id`:
+/// the paths column is unique, so pointing `id` at it can only fail.
+fn path_taken_by_another(catalog: &Catalog, id: &str, target: &Path) -> Result<bool, String> {
+    Ok(catalog
+        .image_id_by_path(target)
+        .map_err(|e| e.to_string())?
+        .is_some_and(|other| other != id))
 }
 
 /// Points a photograph at the file it moved to, and brings its
@@ -13415,7 +13429,7 @@ pub fn relink_in(
         .map_err(|e| e.to_string())?;
 
     let mut moved = vec![(image_id.to_string(), target.to_path_buf())];
-    let mut report = RelinkReport { relinked: 1, still_missing: 0 };
+    let mut report = RelinkReport { relinked: 1, ..RelinkReport::default() };
 
     // The sweep. Only over the folder the relinked photograph came from:
     // photographs that were somewhere else were not part of this move,
@@ -13433,6 +13447,10 @@ pub fn relink_in(
                 continue;
             }
             let candidate = new_folder.join(&rec.file_name);
+            if candidate.is_file() && path_taken_by_another(catalog, &rec.id, &candidate)? {
+                report.taken += 1;
+                continue;
+            }
             if candidate.is_file()
                 && catalog.set_image_path(&rec.id, &candidate, Some(folder_id)).is_ok()
             {
@@ -13510,44 +13528,82 @@ pub fn relink_in_folder_watched(
     if !root.is_dir() {
         return Err(format!("{} is not a folder", root.display()));
     }
-    let mut report = RelinkReport { relinked: 0, still_missing: 0 };
+    let mut report = RelinkReport::default();
     let mut moved = Vec::new();
+    let outcome = relink_each(catalog, ids, root, should_stop, progress, &mut report, &mut moved);
+    // Every catalog row that moved is committed as it goes, so the
+    // session's path map has to learn about every one of them however
+    // the run ends: whole, stopped, or failed. A run that returned early
+    // on an error used to skip this, and the viewer went on decoding the
+    // old paths of photographs the catalog had already moved
+    // (vagabond-burro/heeler#38).
+    for (id, path) in moved {
+        paths.insert(id, path);
+    }
+    outcome.map(|()| report)
+}
+
+/// The per-photograph loop of a folder relink. One photograph that cannot
+/// be relinked (its file already belongs to another row, its row was
+/// flushed meanwhile, the catalog refused the write) is counted and the
+/// run carries on; only a stop ends it early.
+fn relink_each(
+    catalog: &Catalog,
+    ids: &[String],
+    root: &Path,
+    should_stop: &dyn Fn() -> bool,
+    progress: &mut dyn FnMut(u64, u64),
+    report: &mut RelinkReport,
+    moved: &mut Vec<(String, PathBuf)>,
+) -> Result<(), String> {
     for (checked, id) in ids.iter().enumerate() {
         if should_stop() {
-            for (id, path) in moved {
-                paths.insert(id, path);
-            }
             return Err(format!(
                 "canceled; {checked} of {} photographs were checked and the {} already relinked stand",
                 ids.len(),
                 report.relinked
             ));
         }
-        let rec = catalog.image(id).map_err(|e| e.to_string())?;
-        if Path::new(&rec.path).exists() {
-            progress(checked as u64 + 1, ids.len() as u64);
-            continue;
-        }
-        match find_one_by_name(root, &rec.file_name) {
-            Some(found) => {
-                let parent = found
-                    .parent()
-                    .ok_or_else(|| format!("{} has no folder", found.display()))?;
-                let folder_id = catalog.add_folder(parent).map_err(|e| e.to_string())?;
-                catalog
-                    .set_image_path(id, &found, Some(folder_id))
-                    .map_err(|e| e.to_string())?;
-                moved.push((id.clone(), found));
-                report.relinked += 1;
-            }
-            None => report.still_missing += 1,
-        }
+        relink_one(catalog, id, root, report, moved)?;
         progress(checked as u64 + 1, ids.len() as u64);
     }
-    for (id, path) in moved {
-        paths.insert(id, path);
+    Ok(())
+}
+
+/// One photograph of a folder relink, counted into the report.
+fn relink_one(
+    catalog: &Catalog,
+    id: &str,
+    root: &Path,
+    report: &mut RelinkReport,
+    moved: &mut Vec<(String, PathBuf)>,
+) -> Result<(), String> {
+    // Flushed since the selection was made: nothing left to relink.
+    let Ok(rec) = catalog.image(id) else { return Ok(()) };
+    if Path::new(&rec.path).exists() {
+        return Ok(());
     }
-    Ok(report)
+    let Some(found) = find_one_by_name(root, &rec.file_name) else {
+        report.still_missing += 1;
+        return Ok(());
+    };
+    if path_taken_by_another(catalog, id, &found)? {
+        report.taken += 1;
+        return Ok(());
+    }
+    // Found under the root, so it always has a folder.
+    let parent = found.parent().unwrap_or(root);
+    let landed = catalog
+        .add_folder(parent)
+        .and_then(|folder_id| catalog.set_image_path(id, &found, Some(folder_id)));
+    match landed {
+        Ok(()) => {
+            moved.push((id.to_string(), found));
+            report.relinked += 1;
+        }
+        Err(_) => report.still_missing += 1,
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -24744,6 +24800,56 @@ mod tests {
         // And an unwatched run finds the second one under its subfolder.
         let report = relink_in_folder(&c, &mut paths, &["b".into(), "c".into()], &root).unwrap();
         assert_eq!((report.relinked, report.still_missing), (1, 1));
+    }
+
+    /// A folder relink used to stop at the first photograph it could not
+    /// relink, with the earlier ones already moved in the catalog but
+    /// never handed to the session, so the viewer decoded their old paths
+    /// (vagabond-burro/heeler#38). One that cannot move is counted and
+    /// the run carries on.
+    #[test]
+    fn a_folder_relink_counts_a_file_that_belongs_to_another_photograph_and_carries_on() {
+        let d = tempfile::tempdir().unwrap();
+        let c = Catalog::open(&d.path().join("catalog.sqlite")).unwrap();
+        let gone = d.path().join("old");
+        for (id, name) in [("a", "one.dng"), ("b", "two.dng"), ("c", "three.dng")] {
+            c.add_image(id, &gone.join(name), None).unwrap();
+        }
+        let root = d.path().join("new");
+        std::fs::create_dir_all(&root).unwrap();
+        for name in ["one.dng", "two.dng", "three.dng"] {
+            std::fs::write(root.join(name), b"x").unwrap();
+        }
+        // two.dng is already in the catalog in its new place, as its own row.
+        c.add_image("b_new", &root.join("two.dng"), None).unwrap();
+        let mut paths: HashMap<String, PathBuf> = HashMap::new();
+        let ids: Vec<String> = ["a", "b", "flushed", "c"].iter().map(|s| s.to_string()).collect();
+        let report = relink_in_folder(&c, &mut paths, &ids, &root).expect("the run finishes");
+        assert_eq!(report, RelinkReport { relinked: 2, still_missing: 0, taken: 1 });
+        assert_eq!(paths.get("a"), Some(&root.join("one.dng")));
+        assert_eq!(paths.get("c"), Some(&root.join("three.dng")), "the one after the clash moved, and the session knows");
+        assert!(!paths.contains_key("b"));
+        assert!(c.image("b").unwrap().path.starts_with(gone.to_string_lossy().as_ref()), "b is left as it was");
+    }
+
+    /// The single relink's sweep counted a neighbor whose file already
+    /// had its own row as "still missing", which it is not.
+    #[test]
+    fn a_relink_sweep_tells_a_taken_file_from_a_missing_one() {
+        let from = tempfile::tempdir().unwrap();
+        let to = tempfile::tempdir().unwrap();
+        let c = Catalog::open_in_memory().unwrap();
+        let old_folder = c.add_folder(from.path()).unwrap();
+        for (id, name) in [("a", "a.png"), ("b", "b.png"), ("z", "z.png")] {
+            c.add_image(id, &from.path().join(name), Some(old_folder)).unwrap();
+        }
+        for name in ["a.png", "b.png"] {
+            std::fs::write(to.path().join(name), b"x").unwrap();
+        }
+        c.add_image("b_new", &to.path().join("b.png"), None).unwrap();
+        let mut paths = HashMap::new();
+        let report = relink_in(&c, &mut paths, "a", &to.path().join("a.png")).unwrap();
+        assert_eq!(report, RelinkReport { relinked: 1, still_missing: 1, taken: 1 });
     }
 
     #[test]

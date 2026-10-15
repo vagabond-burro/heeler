@@ -5025,17 +5025,19 @@ export interface TrashSummary {
 /** Points a photograph at the file it moved to, sweeping up the others
  * that moved with it. Nobody moves one photograph. */
 export async function relinkImage(imageId: string, newPath: string): Promise<RelinkReport> {
-  if (!isTauri()) return { relinked: 1, stillMissing: 0 };
-  const r = await call<{ relinked: number; still_missing: number }>("relink_image", {
+  if (!isTauri()) return { relinked: 1, stillMissing: 0, taken: 0 };
+  const r = await call<{ relinked: number; still_missing: number; taken?: number }>("relink_image", {
     imageId,
     newPath,
   });
-  return { relinked: r.relinked, stillMissing: r.still_missing };
+  return { relinked: r.relinked, stillMissing: r.still_missing, taken: r.taken ?? 0 };
 }
 
 export interface RelinkReport {
   relinked: number;
   stillMissing: number;
+  /** Found, but the file is already in the catalog as another photograph. */
+  taken: number;
 }
 
 /** Asks the user where a missing photograph went. */
@@ -5047,12 +5049,12 @@ export async function pickRelinkTarget(imageId: string): Promise<string | null> 
 /** Folder-level relink for a multi-selection: each missing photograph
  * among the ids is found by name under the root, subfolders included. */
 export async function relinkFolder(imageIds: string[], root: string): Promise<RelinkReport> {
-  if (!isTauri()) return { relinked: imageIds.length, stillMissing: 0 };
-  const r = await call<{ relinked: number; still_missing: number }>("relink_folder", {
+  if (!isTauri()) return { relinked: imageIds.length, stillMissing: 0, taken: 0 };
+  const r = await call<{ relinked: number; still_missing: number; taken?: number }>("relink_folder", {
     imageIds,
     root,
   });
-  return { relinked: r.relinked, stillMissing: r.still_missing };
+  return { relinked: r.relinked, stillMissing: r.still_missing, taken: r.taken ?? 0 };
 }
 
 /** Asks the user for the folder a moved batch now lives under. */

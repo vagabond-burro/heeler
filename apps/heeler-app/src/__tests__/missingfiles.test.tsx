@@ -15,7 +15,7 @@ import { useState } from "react";
 import { describe, expect, it } from "vitest";
 
 import { initialState } from "../data";
-import { BrowserPanel, Ribbon, loadSessionImages } from "../ui/chrome";
+import { BrowserPanel, Ribbon, loadSessionImages, takenNote } from "../ui/chrome";
 import { reduce, type Command, type ImageEntry, type State } from "../state";
 import type { FolderImage } from "../bridge";
 import { isMissingSource } from "../previewretry";
@@ -188,5 +188,16 @@ describe("finding a folder's trash", () => {
     rerender(withMenu([]));
     expect(screen.queryByTestId("folder-menu-trash")).not.toBeInTheDocument();
     expect(screen.getByTestId("folder-menu-reveal")).toBeInTheDocument();
+  });
+});
+
+// A relink that finds a file already in the catalog as another
+// photograph leaves its own alone, and says so rather than calling it
+// still missing (vagabond-burro/heeler#38).
+describe("a relink's report of files that belong to another photograph", () => {
+  it("says nothing when there are none, and counts them when there are", () => {
+    expect(takenNote(0)).toBe("");
+    expect(takenNote(1)).toMatch(/^ 1 was left as it was: the file found for it is already in the catalog/);
+    expect(takenNote(3)).toMatch(/^ 3 were left as they were: the files found for them are already in the catalog as other photographs/);
   });
 });
