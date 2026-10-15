@@ -1900,6 +1900,16 @@ impl Catalog {
         Ok(())
     }
 
+    /// Whether any row, trashed and hidden ones included, has this id.
+    pub fn image_id_taken(&self, id: &str) -> Result<bool, CatalogError> {
+        use rusqlite::OptionalExtension;
+        Ok(self
+            .conn
+            .query_row("SELECT 1 FROM images WHERE id = ?1", params![id], |_| Ok(()))
+            .optional()?
+            .is_some())
+    }
+
     pub fn image_id_by_path(&self, path: &Path) -> Result<Option<String>, CatalogError> {
         let result = self.conn.query_row(
             "SELECT id FROM images WHERE path = ?1",

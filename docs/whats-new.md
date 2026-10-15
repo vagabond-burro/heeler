@@ -1,5 +1,11 @@
 # What's new
 
+## 2026.5.5
+
+### Fixes
+
+- **A folder opens again after a relinked photograph's old spot fills up.** If you relinked a photograph to where it had moved, and later a file turned up at its old location (moved back, or copied again from the card), the old folder would no longer open. The new file now gets a record of its own, and the relinked photograph keeps its ratings and edits where it is. [Library](user-guide/library.md).
+
 ## 2026.5.4
 
 ### New

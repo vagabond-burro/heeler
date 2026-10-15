@@ -312,6 +312,33 @@ pub fn image_id_for(path: &Path) -> String {
     format!("img_{:012x}", fnv1a64(path.to_string_lossy().as_bytes()) & 0xffff_ffff_ffff)
 }
 
+/// The id a NEW row at `path` gets: the path's own hash, unless a row
+/// already wears it.
+///
+/// Relinking keeps a photograph's id while its path changes, because
+/// the edits, thumbnail and collections all hang off the id. So the hash
+/// of a path is not proof that the id is free: a file that later turns
+/// up at a relinked photograph's first path hashes to the id that
+/// photograph still has, and inserting it failed the whole folder scan
+/// on the primary key (vagabond-burro/heeler#37). A taken hash steps
+/// on to the path's hash with a counter, which is just as stable from
+/// one scan to the next, since the scan finds the row by path first.
+pub fn fresh_image_id(catalog: &Catalog, path: &Path) -> Result<String, heeler_catalog::CatalogError> {
+    let first = image_id_for(path);
+    if !catalog.image_id_taken(&first)? {
+        return Ok(first);
+    }
+    let base = path.to_string_lossy();
+    let mut n = 2u64;
+    loop {
+        let id = format!("img_{:012x}", fnv1a64(format!("{base}#{n}").as_bytes()) & 0xffff_ffff_ffff);
+        if !catalog.image_id_taken(&id)? {
+            return Ok(id);
+        }
+        n += 1;
+    }
+}
+
 #[derive(Serialize)]
 pub struct SessionFolder {
     pub id: i64,
@@ -542,7 +569,7 @@ pub fn scan_folder(
                         existing
                     }
                     None => {
-                        let id = image_id_for(file);
+                        let id = fresh_image_id(catalog, file)?;
                         catalog.add_image(&id, file, Some(folder_id))?;
                         stats.added += 1;
                         id
@@ -16966,7 +16993,7 @@ async fn create_stack(
             let folder_id = catalog.add_folder(&folder).map_err(|e| e.to_string())?;
             let target = stack_target(catalog, &folder, &stem, heeler_catalog::STACK_EXTENSION);
             write_stack(&target, &StackManifest { version: 1, mode, align, members })?;
-            let id = image_id_for(&target);
+            let id = fresh_image_id(catalog, &target).map_err(|e| e.to_string())?;
             catalog
                 .add_image(&id, &target, Some(folder_id))
                 .map_err(|e| e.to_string())?;
@@ -17057,7 +17084,7 @@ async fn create_pano(
                     members,
                 },
             )?;
-            let id = image_id_for(&target);
+            let id = fresh_image_id(catalog, &target).map_err(|e| e.to_string())?;
             catalog.add_image(&id, &target, Some(folder_id)).map_err(|e| e.to_string())?;
             let record = catalog.image(&id).map_err(|e| e.to_string())?;
             Ok((id, record_to_session(&record), target))
@@ -19711,7 +19738,7 @@ fn write_bake_named(
 /// paths entry) is the caller's, taken after this lock is released.
 fn register_bake_in_catalog(catalog: &Catalog, target: &Path, stars: u8, keywords: &[String]) -> Result<(String, SessionImage), String> {
     let folder_id = catalog.add_folder(target.parent().ok_or("no folder")?).map_err(|e| e.to_string())?;
-    let id = image_id_for(target);
+    let id = fresh_image_id(catalog, target).map_err(|e| e.to_string())?;
     catalog.add_image(&id, target, Some(folder_id)).map_err(|e| e.to_string())?;
     catalog.set_rating(&id, stars).map_err(|e| e.to_string())?;
     catalog.set_keywords(&id, keywords).map_err(|e| e.to_string())?;
@@ -29799,6 +29826,54 @@ mod tests {
         let rescanned = scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
         assert_eq!(rescanned[0].id, images[0].id, "ids stable across rescans");
         assert_eq!(rescanned[0].stars, 4, "rating survives the rescan");
+    }
+
+    /// A relinked photograph keeps the id its first path gave it, so a
+    /// file that turns up at that first path again hashes to an id that
+    /// is taken (vagabond-burro/heeler#37). The scan gave every such file
+    /// the taken id, the insert failed on the primary key, the whole
+    /// batch rolled back, and the folder never opened again.
+    #[test]
+    fn a_file_back_at_a_relinked_photographs_old_path_gets_an_id_of_its_own() {
+        let dir = tempfile::tempdir().unwrap();
+        let png = heeler_io::encode_png(&ImageBuf::filled(8, 8, [0.5, 0.5, 0.5, 1.0])).unwrap();
+        let old = dir.path().join("a.png");
+        std::fs::write(&old, &png).unwrap();
+        let catalog = Catalog::open_in_memory().unwrap();
+        let mut paths = HashMap::new();
+        let first = scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
+        let id = first[0].id.clone();
+        catalog.set_rating(&id, 3).unwrap();
+
+        // Moved into a subfolder and relinked there: same id, new path.
+        let sub = dir.path().join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::rename(&old, sub.join("a.png")).unwrap();
+        relink_in(&catalog, &mut paths, &id, &sub.join("a.png")).unwrap();
+
+        // A different file arrives at the old path.
+        std::fs::write(&old, &png).unwrap();
+        let again = scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default())
+            .expect("the folder opens");
+        assert_eq!(again.len(), 1);
+        assert_ne!(again[0].id, id, "the newcomer does not take the relinked photograph's id");
+        assert_eq!(again[0].stars, 0, "nor its rating");
+        assert_eq!(catalog.image(&id).unwrap().path, sub.join("a.png").to_string_lossy(), "the relinked row is where it was");
+        let rescanned = scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
+        assert_eq!(rescanned[0].id, again[0].id, "and the newcomer's id is stable across rescans");
+    }
+
+    #[test]
+    fn fresh_image_ids_step_past_taken_ones() {
+        let catalog = Catalog::open_in_memory().unwrap();
+        let path = Path::new("/photos/a.png");
+        assert_eq!(fresh_image_id(&catalog, path).unwrap(), image_id_for(path), "a free hash is the id");
+        catalog.add_image(&image_id_for(path), Path::new("/photos/sub/a.png"), None).unwrap();
+        let second = fresh_image_id(&catalog, path).unwrap();
+        assert_ne!(second, image_id_for(path));
+        catalog.add_image(&second, Path::new("/elsewhere/a.png"), None).unwrap();
+        let third = fresh_image_id(&catalog, path).unwrap();
+        assert!(third != second && third != image_id_for(path), "every taken id is stepped past");
     }
 
     /// Hiding must survive reopening the folder: the scan walks the disk,
