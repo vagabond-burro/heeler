@@ -993,6 +993,7 @@ export function initialState(): State {
     collections: [],
     editedFolders: [],
     foldersWithHidden: [],
+    hiddenFolders: [],
     foldersWithTrash: [],
     missingTrashed: { count: 0, skipped: 0 },
     thumbProgress: null,

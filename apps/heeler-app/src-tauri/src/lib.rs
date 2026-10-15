@@ -13788,6 +13788,21 @@ async fn folders_with_hidden(app: tauri::AppHandle) -> Result<Vec<String>, Strin
     catalog_command(app, |c| c.folders_with_hidden().map_err(|e| e.to_string())).await
 }
 
+/// The folders hidden from the library, for the tree to leave out: it
+/// lists folders from the disk, which knows nothing of hiding
+/// (vagabond-burro/heeler#39). Asked with the rest of the library's
+/// refresh rather than inside every subfolder listing, so expanding a
+/// branch never waits on the catalog.
+#[tauri::command]
+async fn hidden_folder_paths(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    catalog_command(app, |c| {
+        let mut v: Vec<String> = c.hidden_folder_paths().map_err(|e| e.to_string())?.into_iter().collect();
+        v.sort();
+        Ok(v)
+    })
+    .await
+}
+
 #[tauri::command]
 async fn folders_with_trash(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     catalog_command(app, |c| c.folders_with_trash().map_err(|e| e.to_string())).await
@@ -20611,6 +20626,7 @@ pub fn run() {
             missing_trashed_photos,
             forget_missing_trashed_photos,
             folders_with_hidden,
+            hidden_folder_paths,
             folders_with_trash,
             reveal_trash,
             brush_tip_preview,
@@ -21075,6 +21091,7 @@ mod tests {
         let src = src_all();
         for name in [
             "folders_with_hidden",
+            "hidden_folder_paths",
             "folders_with_trash",
             "list_collections",
             "create_collection",

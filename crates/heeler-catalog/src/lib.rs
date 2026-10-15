@@ -1084,6 +1084,13 @@ impl Catalog {
             })?)
     }
 
+    /// The paths of every hidden folder, for leaving them out of the tree.
+    pub fn hidden_folder_paths(&self) -> Result<std::collections::HashSet<String>, CatalogError> {
+        let mut stmt = self.conn.prepare("SELECT path FROM folders WHERE hidden = 1")?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     pub fn list_folders(&self) -> Result<Vec<(i64, String)>, CatalogError> {
         let mut stmt = self.conn.prepare("SELECT id, path FROM folders ORDER BY path")?;
         let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
@@ -1173,9 +1180,18 @@ impl Catalog {
     /// Hides `path` and every folder beneath it from the library. Every
     /// record stays; browsing to the folder again (add_folder) unhides
     /// it. Returns how many folder rows were flagged.
+    ///
+    /// A folder seen in the tree but never opened has no row yet, so one
+    /// is made for it, already hidden: without it the command found
+    /// nothing to flag, said the folder was hidden, and left it listed
+    /// (vagabond-burro/heeler#39).
     pub fn hide_folder(&self, path: &Path) -> Result<usize, CatalogError> {
-        let folders = self.folder_subtree(path)?;
         self.batch(|c| {
+            c.conn.execute(
+                "INSERT INTO folders (path, hidden) VALUES (?1, 1) ON CONFLICT(path) DO NOTHING",
+                params![path.to_string_lossy()],
+            )?;
+            let folders = c.folder_subtree(path)?;
             for (id, _) in &folders {
                 c.conn.execute("UPDATE folders SET hidden = 1 WHERE id = ?1", params![id])?;
             }
@@ -1272,7 +1288,7 @@ impl Catalog {
         let mut stmt = self.conn.prepare(
             "SELECT f.id, f.path, f.last_opened, COUNT(i.id)
              FROM folders f LEFT JOIN images i ON i.folder_id = f.id AND i.trashed = 0
-             WHERE f.picked_at > 0
+             WHERE f.picked_at > 0 AND f.hidden = 0
              GROUP BY f.id
              ORDER BY f.picked_at DESC, f.path
              LIMIT ?1",
@@ -2815,6 +2831,43 @@ mod tests {
         assert_eq!(c.add_folder(Path::new("/shoot")).unwrap(), top);
         assert!(c.folder_summaries().unwrap().iter().any(|f| f.path == "/shoot"));
         assert!(!c.folder_summaries().unwrap().iter().any(|f| f.path == "/shoot/day2"), "the subfolder stays hidden until it is browsed to");
+    }
+
+    /// The Folders shortlist is the picked folders, and a hidden one
+    /// stayed on it after Hide said it would leave (vagabond-burro/heeler#39).
+    #[test]
+    fn a_hidden_picked_folder_leaves_the_shortlist_until_it_is_opened_again() {
+        let c = Catalog::open_in_memory().unwrap();
+        for p in ["/shoot", "/other"] {
+            let id = c.add_folder(Path::new(p)).unwrap();
+            c.pick_folder(id).unwrap();
+        }
+        let picked = |c: &Catalog| -> Vec<String> {
+            let mut v: Vec<String> = c.recent_picked_folders(10).unwrap().into_iter().map(|f| f.path).collect();
+            v.sort();
+            v
+        };
+        assert_eq!(picked(&c), vec!["/other", "/shoot"]);
+        c.hide_folder(Path::new("/shoot")).unwrap();
+        assert_eq!(picked(&c), vec!["/other"]);
+        c.add_folder(Path::new("/shoot")).unwrap();
+        assert_eq!(picked(&c), vec!["/other", "/shoot"], "opening it again brings it back, still picked");
+    }
+
+    /// A folder seen in the tree but never opened has no row, so Hide
+    /// had nothing to flag and the folder stayed (vagabond-burro/heeler#39).
+    #[test]
+    fn hiding_a_folder_never_opened_records_it_hidden() {
+        let c = Catalog::open_in_memory().unwrap();
+        c.add_folder(Path::new("/shoot")).unwrap();
+        assert!(c.hidden_folder_paths().unwrap().is_empty());
+        assert_eq!(c.hide_folder(Path::new("/shoot/day3")).unwrap(), 1);
+        assert_eq!(c.hidden_folder_paths().unwrap(), ["/shoot/day3".to_string()].into_iter().collect());
+        assert!(!c.folder_summaries().unwrap().iter().any(|f| f.path == "/shoot/day3"));
+        // Hiding it again changes nothing, and opening it is the unhide.
+        assert_eq!(c.hide_folder(Path::new("/shoot/day3")).unwrap(), 1);
+        c.add_folder(Path::new("/shoot/day3")).unwrap();
+        assert!(c.hidden_folder_paths().unwrap().is_empty());
     }
 
     #[test]

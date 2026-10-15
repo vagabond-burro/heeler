@@ -4048,6 +4048,8 @@ export interface State {
   /** folders holding at least one hidden image, so the tree offers
    * Recover Hidden only where it would do something */
   foldersWithHidden: string[];
+  /** Folders hidden from the library; the tree leaves them out. */
+  hiddenFolders: string[];
   /** Folders with a `.trash` beside them. The tree badges these and
    * the folder menu offers to open the trash in the system browser;
    * both read one list so they cannot disagree. */
@@ -4773,6 +4775,7 @@ export type Command =
   | { type: "set_collections"; collections: CollectionEntry[] }
   | { type: "set_edited_folders"; paths: string[] }
   | { type: "set_folders_with_hidden"; paths: string[] }
+  | { type: "set_hidden_folders"; paths: string[] }
   | { type: "set_folders_with_trash"; paths: string[] }
   | { type: "set_missing_trashed"; count: number; skipped: number }
   | {
@@ -19360,6 +19363,8 @@ function reduceInner(s: State, cmd: Command): State {
       return { ...s, editedFolders: cmd.paths };
     case "set_folders_with_hidden":
       return { ...s, foldersWithHidden: cmd.paths };
+    case "set_hidden_folders":
+      return { ...s, hiddenFolders: cmd.paths };
     case "set_folders_with_trash":
       return { ...s, foldersWithTrash: cmd.paths };
     case "set_missing_trashed":

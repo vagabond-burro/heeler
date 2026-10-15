@@ -41,7 +41,7 @@ import {
   type FolderImage, type FolderListing, type ServeStatus,
 } from "../bridge";
 import { UPDATE_DOWNLOAD_WORDS, checkForUpdates } from "../updates";
-import { allKeywords, buildInfo, clearRecentCatalogs, folderSubtreeCounts, foldersWithHidden, foldersWithTrash, forgetRecentCatalog, missingTrashedPhotos, recentCatalogs, revealTrash, hiddenInFolder, type RecentCatalog, imageKeywords, imagesWithKeyword, pickRelinkFolder, pickRelinkTarget, relinkFolder, relinkImage, setImageKeywords } from "../bridge";
+import { allKeywords, buildInfo, clearRecentCatalogs, folderSubtreeCounts, foldersWithHidden, foldersWithTrash, hiddenFolderPaths, forgetRecentCatalog, missingTrashedPhotos, recentCatalogs, revealTrash, hiddenInFolder, type RecentCatalog, imageKeywords, imagesWithKeyword, pickRelinkFolder, pickRelinkTarget, relinkFolder, relinkImage, setImageKeywords } from "../bridge";
 import { logMsg } from "../log";
 import { beginThumbSession, thumbnailGraph } from "../thumbs";
 import { ThumbBox } from "./thumbbox";
@@ -79,7 +79,7 @@ export function loadSessionImages(files: FolderImage[], dispatch: D, thumbnailEd
 
 /** Re-pulls folders, collections, and edited-folder badges into state. */
 export async function refreshLibrary(dispatch: D) {
-  const [folders, collections, edited, hidden, trash, missing] = await Promise.all([
+  const [folders, collections, edited, hidden, trash, missing, hiddenFolders] = await Promise.all([
     listFolders(),
     listCollections(),
     editedFolders(),
@@ -88,12 +88,14 @@ export async function refreshLibrary(dispatch: D) {
     // A failed look leaves the menu item grayed rather than the library
     // unrefreshed.
     missingTrashedPhotos().catch(() => ({ ids: [], paths: [], skipped: 0, skipped_volumes: [] })),
+    hiddenFolderPaths().catch(() => [] as string[]),
   ]);
   dispatch({ type: "set_folders", folders });
   dispatch({ type: "set_collections", collections });
   dispatch({ type: "set_edited_folders", paths: edited });
   dispatch({ type: "set_folders_with_hidden", paths: hidden });
   dispatch({ type: "set_folders_with_trash", paths: trash });
+  dispatch({ type: "set_hidden_folders", paths: hiddenFolders });
   dispatch({ type: "set_missing_trashed", count: missing?.ids?.length ?? 0, skipped: missing?.skipped ?? 0 });
 }
 
@@ -3340,15 +3342,20 @@ function TabRailImpl({ state, dispatch }: { state: State; dispatch: D }) {
  * opens (scans that folder). Parents and siblings stay visible while
  * descending, so deep archives navigate like a RAW editor's folder panel. */
 function TreeRows({
-  node, depth, activePath, dispatch, onOpen, onMenu, editedPaths, trashPaths,
+  node, depth, activePath, dispatch, onOpen, onMenu, editedPaths, trashPaths, hiddenPaths,
 }: {
   node: TreeNode; depth: number; activePath: string | null; dispatch: D;
   onOpen: (path: string) => void; onMenu: (x: number, y: number, path: string) => void;
   editedPaths: string[];
   trashPaths: string[];
+  /** Folders hidden from the library. The listing comes from the disk,
+   * which knows nothing of hiding, so a hidden folder stayed in the tree
+   * after Hide said it would leave (vagabond-burro/heeler#39). */
+  hiddenPaths: string[];
 }) {
   const active = activePath === node.path;
-  const expandable = node.children === null || node.children.length > 0;
+  const children = node.children?.filter((c) => !hiddenPaths.includes(c.path)) ?? null;
+  const expandable = children === null || children.length > 0;
   return (
     <>
       <div
@@ -3418,8 +3425,8 @@ function TreeRows({
         </button>
       </div>
       {node.expanded &&
-        (node.children ?? []).map((c) => (
-          <TreeRows key={c.path} node={c} depth={depth + 1} activePath={activePath} dispatch={dispatch} onOpen={onOpen} onMenu={onMenu} editedPaths={editedPaths} trashPaths={trashPaths} />
+        (children ?? []).map((c) => (
+          <TreeRows key={c.path} node={c} depth={depth + 1} activePath={activePath} dispatch={dispatch} onOpen={onOpen} onMenu={onMenu} editedPaths={editedPaths} trashPaths={trashPaths} hiddenPaths={hiddenPaths} />
         ))}
     </>
   );
@@ -3727,6 +3734,13 @@ file.*/}
                 const path = folderMenu.path;
                 setFolderMenu(null);
                 void folderSubtreeCounts(path).then((c) => {
+                  // A folder seen in the tree but never opened has no
+                  // records to forget. Asking twice to flush nothing, then
+                  // doing nothing, was the old answer (vagabond-burro/heeler#39).
+                  if (c.folders === 0) {
+                    flashStatus("Nothing to flush: the catalog has no records for this folder yet.");
+                    return;
+                  }
                   dispatch({ type: "ask_confirm", action: { kind: "flush_folder", path, folders: c.folders, images: c.images } });
                 }).catch((e) => logMsg("error", `Could not read the folder: ${String(e)}`));
               }}
@@ -3860,6 +3874,7 @@ see fit."
                 onMenu={(x, y, path) => setFolderMenu({ x, y, path })}
                 editedPaths={editedPaths}
                 trashPaths={state.foldersWithTrash}
+                hiddenPaths={state.hiddenFolders}
               />
             </div>
           </>

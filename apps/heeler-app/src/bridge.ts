@@ -399,7 +399,12 @@ const mockLibrary = {
   // reproduce a save overwriting the session being restored from. Tests
   // isolate through mockResetSessions instead.
   folderSessions: new Map<string, { activeFolder: string; activeImage: string }>(),
+  // Hidden folders, as the catalog's hidden flag: opening one clears it.
+  hiddenFolders: new Set<string>(),
 };
+
+const mockHidden = (path: string) =>
+  [...mockLibrary.hiddenFolders].some((h) => path === h || path.startsWith(h + "/"));
 
 const MOCK_FILES: FolderImage[] = [
   { id: "mock_1", name: "IMG_0001.dng", stars: 0, flag: "" },
@@ -437,6 +442,7 @@ export async function openFolder(path?: string): Promise<FolderListing | null> {
   const folder = mockLibrary.folders.find((f) => f.path === path);
   if (folder) folder.lastOpened = Date.now();
   const key = path ?? "mock://wedding";
+  mockLibrary.hiddenFolders.delete(key);
   return (
     MOCK_LISTINGS[key] ?? {
       name: key.split("/").pop() ?? key,
@@ -579,6 +585,12 @@ export async function revealTrash(path: string): Promise<void> {
   await call("reveal_trash", { path });
 }
 
+/** Folders hidden from the library, which the tree leaves out. */
+export async function hiddenFolderPaths(): Promise<string[]> {
+  if (!isTauri()) return [...mockLibrary.hiddenFolders];
+  return (await call("hidden_folder_paths")) as string[];
+}
+
 export async function foldersWithHidden(): Promise<string[]> {
   if (!isTauri()) return [];
   return (await call("folders_with_hidden")) as string[];
@@ -596,6 +608,7 @@ export let mockFolderCommands: { command: "hide" | "flush"; path: string }[] = [
 export function mockSetSubtreeCounts(next: FolderSubtreeCounts): void {
   mockSubtreeCounts = next;
   mockFolderCommands = [];
+  mockLibrary.hiddenFolders.clear();
 }
 
 /** Test hook for the stall plan's probes: while set, the browser
@@ -618,6 +631,9 @@ export async function folderSubtreeCounts(path: string): Promise<FolderSubtreeCo
 export async function hideFolder(path: string): Promise<number> {
   if (!isTauri()) {
     mockFolderCommands.push({ command: "hide", path });
+    // As the catalog does: the folder leaves the shortlist and the tree
+    // until it is opened again.
+    mockLibrary.hiddenFolders.add(path);
     return mockSubtreeCounts.folders;
   }
   return (await call("hide_folder", { path })) as number;
@@ -3310,7 +3326,7 @@ export async function listFolders(): Promise<BridgeFolder[]> {
       const raw = await call<any[]>("list_folders");
     return raw.map((f) => ({ id: f.id, name: f.name, path: f.path, count: f.count, lastOpened: f.last_opened }));
   }
-  return [...mockLibrary.folders].sort((a, b) => b.lastOpened - a.lastOpened);
+  return [...mockLibrary.folders].filter((f) => !mockHidden(f.path)).sort((a, b) => b.lastOpened - a.lastOpened);
 }
 
 export async function listCollections(): Promise<BridgeCollection[]> {

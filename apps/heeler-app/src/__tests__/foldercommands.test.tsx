@@ -60,6 +60,29 @@ describe("Hide folder", () => {
     expect(promptsFor({ kind: "hide_folder", path: "/x", folders: 1, images: 1 })).toBe(1);
   });
 
+  // The dialog says the folder "will leave the Folders list", and it
+  // stayed on it (vagabond-burro/heeler#39).
+  it("takes the folder off the shortlist", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openFolderMenu(user);
+    await user.click(screen.getByTestId("folder-menu-hide"));
+    await waitFor(() => expect(screen.queryByTestId("folder-row-1")).toBeNull());
+    expect(screen.getByTestId("folder-row-2")).toBeInTheDocument();
+  });
+
+  it("takes a subfolder out of the tree and leaves its parent and siblings", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByTestId("folder-row-3"));
+    const day1 = await screen.findByTestId("tree-row-mock://trip/day1");
+    fireEvent.contextMenu(day1);
+    await user.click(await screen.findByTestId("folder-menu-hide"));
+    await waitFor(() => expect(screen.queryByTestId("tree-row-mock://trip/day1")).toBeNull());
+    expect(screen.getByTestId("tree-row-mock://trip/day2")).toBeInTheDocument();
+    expect(screen.getByTestId("tree-row-mock://trip")).toBeInTheDocument();
+  });
+
   it("the library keeps answering while a folder's counts are on their way", async () => {
     // The injected delay stands in for the slow volume: the subtree count stays unresolved while the
     // user moves on to another folder. Against the old synchronous
@@ -103,6 +126,19 @@ describe("Flush folder", () => {
     await user.click(screen.getByTestId("confirm-ok"));
     await waitFor(() => expect(mockFolderCommands).toEqual([{ command: "flush", path: expect.any(String) }]));
     expect(promptsFor({ kind: "flush_folder", path: "/x", folders: 1, images: 1 })).toBe(2);
+  });
+
+  // A folder seen in the tree but never opened has no records: Flush
+  // asked twice for 0 photographs and then did nothing (vagabond-burro/heeler#39).
+  it("says there is nothing to flush for a folder the catalog has no records for", async () => {
+    mockSetSubtreeCounts({ folders: 0, images: 0 });
+    const user = userEvent.setup();
+    render(<App />);
+    await openFolderMenu(user);
+    await user.click(screen.getByTestId("folder-menu-flush"));
+    await waitFor(() => expect(currentFlash()).toMatch(/Nothing to flush/));
+    expect(screen.queryByTestId("confirm-dialog")).toBeNull();
+    expect(mockFolderCommands).toEqual([]);
   });
 
   it("the words count photographs and folders honestly", () => {
