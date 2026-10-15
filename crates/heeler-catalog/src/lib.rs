@@ -1413,12 +1413,13 @@ impl Catalog {
     }
 
     /// Whether a photograph's row carries anything a person put there: a
-    /// rating, a flag, keywords, a collection, a link group, or edits. A
-    /// row with none of it is what a folder scan makes for a file it has
-    /// not seen before, and is safe to fold into another row.
+    /// rating, a flag, keywords, a collection, a link group, or edits, or
+    /// being hidden or in the trash, which are choices too. A row with none
+    /// of it is what a folder scan makes for a file it has not seen before,
+    /// and is safe to fold into another row.
     pub fn image_has_own_work(&self, id: &str) -> Result<bool, CatalogError> {
         let marked: i64 = self.conn.query_row(
-            "SELECT (rating > 0) + (flag <> 'none') + edited
+            "SELECT (rating > 0) + (flag <> 'none') + edited + hidden + trashed
                   + (link_group IS NOT NULL)
                   + (SELECT COUNT(*) FROM keywords WHERE image_id = ?1)
                   + (SELECT COUNT(*) FROM collection_members WHERE image_id = ?1)
@@ -3175,6 +3176,23 @@ mod tests {
         assert!(c.image_has_own_work("linked").unwrap());
         c.set_link_group(&["linked".into()], None).unwrap();
         assert!(!c.image_has_own_work("linked").unwrap());
+    }
+
+    /// Hiding a photograph, or moving it to the trash, is a choice its row
+    /// keeps too: a fold would have deleted the row, and with the keeper
+    /// shown again, undone the choice without a word.
+    #[test]
+    fn a_hidden_or_trashed_row_counts_as_having_work_of_its_own() {
+        let c = Catalog::open_in_memory().unwrap();
+        c.add_image("hid", Path::new("/shoot/P3.RW2"), None).unwrap();
+        c.add_image("bin", Path::new("/shoot/P4.RW2"), None).unwrap();
+        assert!(!c.image_has_own_work("hid").unwrap());
+        c.set_hidden("hid", true).unwrap();
+        c.set_trashed("bin", true).unwrap();
+        assert!(c.image_has_own_work("hid").unwrap());
+        assert!(c.image_has_own_work("bin").unwrap());
+        c.set_hidden("hid", false).unwrap();
+        assert!(!c.image_has_own_work("hid").unwrap());
     }
 
     #[test]

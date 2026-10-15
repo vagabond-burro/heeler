@@ -13939,8 +13939,8 @@ pub struct RelinkReport {
 /// Points photograph `id` at `target`, in folder `folder_id`. Answers
 /// false, changing nothing, when the file already belongs to another row
 /// that carries work of its own (a rating, flag, keyword, collection,
-/// link group or edits): the paths column is unique, and one of the two
-/// would have to lose its work.
+/// link group or edits, or being hidden or in the trash): the paths
+/// column is unique, and one of the two would have to lose its work.
 ///
 /// A row with nothing on it is what a folder scan makes for a file it
 /// has not seen before, which is what happens when a photograph is moved
@@ -14005,7 +14005,7 @@ pub fn relink_in(
     if !point_at(catalog, image_id, target, folder_id)? {
         let name = target.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         return Err(format!(
-            "{name} is already in the catalog as another photograph with its own ratings, flags, keywords or edits, so this one was left as it was. Remove the one you don't want from the catalog, then relink."
+            "{name} is already in the catalog as another photograph with work of its own (ratings, flags, keywords, collections, a link or edits, or it is hidden or in the trash), so this one was left as it was. Remove the one you don't want from the catalog, then relink."
         ));
     }
 
@@ -26147,6 +26147,23 @@ mod tests {
         assert!(c.image("ghost").unwrap().path.contains("gone"));
         assert_eq!(c.image("owned").unwrap().path, d.path().join("P1.RW2").to_string_lossy());
         assert!(paths.is_empty());
+    }
+
+    /// A hidden row is a choice of its own too: relinking onto a file the
+    /// user hid refuses, and the file stays hidden.
+    #[test]
+    fn relinking_onto_a_file_the_user_hid_says_why_and_changes_nothing() {
+        let d = tempfile::tempdir().unwrap();
+        let c = Catalog::open_in_memory().unwrap();
+        std::fs::write(d.path().join("P1.RW2"), b"x").unwrap();
+        c.add_image("ghost", &d.path().join("gone").join("P1.RW2"), None).unwrap();
+        c.add_image("hid", &d.path().join("P1.RW2"), None).unwrap();
+        c.set_hidden("hid", true).unwrap();
+        let mut paths = HashMap::new();
+        let err = relink_in(&c, &mut paths, "ghost", &d.path().join("P1.RW2")).unwrap_err();
+        assert!(err.contains("already in the catalog as another photograph"), "{err}");
+        assert!(c.image("ghost").unwrap().path.contains("gone"));
+        assert!(c.image_has_own_work("hid").unwrap(), "still hidden, still its own row");
     }
 
     /// A link group is work of its own too: the file's row being only

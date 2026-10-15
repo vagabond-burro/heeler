@@ -198,8 +198,8 @@ describe("finding a folder's trash", () => {
 describe("a relink's report of files that belong to another photograph", () => {
   it("says nothing when there are none, and counts them when there are", () => {
     expect(takenNote(0)).toBe("");
-    expect(takenNote(1)).toMatch(/^ 1 was left as it was: the file found for it is already in the catalog as another photograph, with its own ratings/);
-    expect(takenNote(3)).toMatch(/^ 3 were left as they were: the files found for them are already in the catalog as other photographs, with their own ratings/);
+    expect(takenNote(1)).toMatch(/^ 1 was left as it was: the file found for it is already in the catalog as another photograph with work of its own \(.*hidden or in the trash\)\.$/);
+    expect(takenNote(3)).toMatch(/^ 3 were left as they were: the files found for them are already in the catalog as other photographs with work of their own \(.*hidden or in the trash\)\.$/);
   });
 });
 

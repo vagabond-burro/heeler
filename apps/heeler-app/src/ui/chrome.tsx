@@ -606,8 +606,8 @@ export function flagSelection(state: State, dispatch: D, flag: ImageEntry["flag"
 export function takenNote(taken: number): string {
   if (!taken) return "";
   return taken === 1
-    ? " 1 was left as it was: the file found for it is already in the catalog as another photograph, with its own ratings, flags, keywords or edits."
-    : ` ${taken} were left as they were: the files found for them are already in the catalog as other photographs, with their own ratings, flags, keywords or edits.`;
+    ? " 1 was left as it was: the file found for it is already in the catalog as another photograph with work of its own (ratings, flags, keywords, collections, a link or edits, or it is hidden or in the trash)."
+    : ` ${taken} were left as they were: the files found for them are already in the catalog as other photographs with work of their own (ratings, flags, keywords, collections, a link or edits, or they are hidden or in the trash).`;
 }
 
 /** What a folder relink says about names it found more than once under
