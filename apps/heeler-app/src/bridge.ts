@@ -3350,6 +3350,7 @@ export async function listSubfolders(path: string): Promise<SubfolderEntry[]> {
   }
   if (mockSubfolderHold) await mockSubfolderHold;
   if (mockGone.has(path)) throw new Error(`${path} is not there`);
+  if (mockUnlistable.has(path)) throw new Error(`${path} cannot be read`);
   return MOCK_LISTINGS[path]?.subfolders ?? [];
 }
 
@@ -3358,6 +3359,17 @@ export async function listSubfolders(path: string): Promise<SubfolderEntry[]> {
 let mockSubfolderHold: Promise<void> | null = null;
 export function mockSetSubfolderHold(next: Promise<void> | null): void {
   mockSubfolderHold = next;
+}
+
+/** Folders whose subfolders the mock will not list, though the folder
+ * itself still opens (mockFailListing): one entry it cannot read, a
+ * permission on the folder's listing alone. */
+const mockUnlistable = new Set<string>();
+export function mockFailListing(path: string): () => void {
+  mockUnlistable.add(path);
+  return () => {
+    mockUnlistable.delete(path);
+  };
 }
 
 /** Folders taken off the mock disk (mockRemoveFolder): listing or opening

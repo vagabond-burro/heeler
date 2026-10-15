@@ -9,12 +9,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../app";
-import { loadSession, mockAddSubfolder, mockSetRelink, mockRemoveFolder, mockResetSessions, mockSetFolderSession, mockSetSubfolderHold } from "../bridge";
+import { loadSession, mockAddSubfolder, mockFailListing, mockSetRelink, mockRemoveFolder, mockResetSessions, mockSetFolderSession, mockSetSubfolderHold } from "../bridge";
 import { initialState } from "../data";
 import { catalogSaves } from "../savebarrier";
 import { rememberExpanded, rememberedExpanded } from "../uiprefs";
 import { reduce, type Command, type State, type TreeNode } from "../state";
-import { EXPAND_ALL_CAP, expandAllChildren, expandedPaths, openFolderPlain, openFolderRemembering, relinkFrom, stopExpanding } from "../ui/chrome";
+import { EXPAND_ALL_CAP, expandAllChildren, expandedPaths, newFolderIn, openFolderPlain, openFolderRemembering, relinkFrom, stopExpanding } from "../ui/chrome";
 import { _clearFlashForTests, currentFlash } from "../ui/hints";
 
 type User = ReturnType<typeof userEvent.setup>;
@@ -22,6 +22,9 @@ let undo: (() => void)[] = [];
 
 beforeEach(() => {
   _clearFlashForTests();
+  // A remembered way down in one test would take the next one's open of
+  // the same folder somewhere else.
+  mockResetSessions();
   // The open folders are remembered between launches; between tests
   // they would leak one test's tree into the next.
   localStorage.removeItem("heeler.ui.treeExpanded");
@@ -402,5 +405,191 @@ describe("folder names", () => {
     await menuOn(user, "mock://trip", "new");
     await user.type(await screen.findByTestId("folder-name-input"), "a/b{Enter}");
     expect(await screen.findByTestId("folder-name-error")).toHaveTextContent('cannot contain "/"');
+  });
+});
+
+/** The harness, with every command it was given kept in order. */
+function recording() {
+  const h = harness();
+  const sent: Command[] = [];
+  return {
+    ...h,
+    sent,
+    dispatch: (c: Command) => {
+      sent.push(c);
+      h.dispatch(c);
+    },
+  };
+}
+
+// Each caller that lists a folder into the tree has its own rule for a
+// listing that fails or is overtaken by a newer click: these pin every
+// one, so the tree never takes an error for an empty folder.
+describe("listing into the tree, each caller's own rule", () => {
+  it("a folder deep in an unloaded branch stops at a branch it cannot list", async () => {
+    mockAddSubfolder("mock://trip/day2", "Evening");
+    mockAddSubfolder("mock://trip/day2/evening", "Late");
+    const h = harness();
+    await openFolderPlain("mock://trip", null, h.dispatch);
+    undo.push(mockFailListing("mock://trip/day2"));
+    await openFolderPlain("mock://trip/day2/evening/late", h.get().folderTree, h.dispatch);
+    expect(h.get().folderTree?.path).toBe("mock://trip");
+    expect(find(h.get().folderTree, "mock://trip/day2")?.children).toBeNull();
+    expect(find(h.get().folderTree, "mock://trip/day2/evening")).toBeNull();
+    expect(h.get().activeFolderPath).toBe("mock://trip/day2/evening/late");
+  });
+
+  it("a folder deep in an unloaded branch gives way to a newer click while it lists", async () => {
+    mockAddSubfolder("mock://trip/day2", "Evening");
+    const h = recording();
+    await openFolderPlain("mock://trip", null, h.dispatch);
+    let release!: () => void;
+    mockSetSubfolderHold(new Promise<void>((r) => { release = r; }));
+    const slow = openFolderPlain("mock://trip/day2/evening", h.get().folderTree, h.dispatch);
+    await new Promise((r) => setTimeout(r, 0));
+    await openFolderPlain("mock://trip/day1", h.get().folderTree, h.dispatch);
+    const before = h.sent.length;
+    mockSetSubfolderHold(null);
+    release();
+    await slow;
+    expect(h.sent.slice(before).filter((c) => c.type === "set_tree_node" || c.type === "set_folder_tree" || c.type === "set_library")).toEqual([]);
+    expect(h.get().activeFolderPath).toBe("mock://trip/day1");
+  });
+
+  it("the old tree goes back under a new root two levels up, and not when the way down cannot be listed", async () => {
+    mockAddSubfolder("mock://trip/day1", "Noon");
+    mockAddSubfolder("mock://trip/day1/noon", "Shade");
+    const ok = harness();
+    await openFolderPlain("mock://trip/day1/noon", null, ok.dispatch);
+    await openFolderPlain("mock://trip", ok.get().folderTree, ok.dispatch);
+    await waitFor(() => expect(find(ok.get().folderTree, "mock://trip/day1/noon")?.expanded).toBe(true));
+    expect(find(ok.get().folderTree, "mock://trip/day1/noon/shade")).not.toBeNull();
+
+    const blocked = harness();
+    await openFolderPlain("mock://trip/day1/noon", null, blocked.dispatch);
+    undo.push(mockFailListing("mock://trip/day1"));
+    await openFolderPlain("mock://trip", blocked.get().folderTree, blocked.dispatch);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(find(blocked.get().folderTree, "mock://trip/day1")?.expanded).toBe(false);
+    expect(find(blocked.get().folderTree, "mock://trip/day1/noon")).toBeNull();
+  });
+
+  it("the old tree is not put back once a newer click has come", async () => {
+    mockAddSubfolder("mock://trip/day1", "Noon");
+    const h = recording();
+    await openFolderPlain("mock://trip/day1/noon", null, h.dispatch);
+    let release!: () => void;
+    mockSetSubfolderHold(new Promise<void>((r) => { release = r; }));
+    await openFolderPlain("mock://trip", h.get().folderTree, h.dispatch);
+    await openFolderPlain("mock://wedding", h.get().folderTree, h.dispatch);
+    const before = h.sent.length;
+    mockSetSubfolderHold(null);
+    release();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(h.sent.slice(before).filter((c) => c.type === "graft_tree_node" || c.type === "set_tree_node")).toEqual([]);
+  });
+
+  it("a remembered folder that cannot be listed is skipped and the rest still open", async () => {
+    rememberExpanded("mock://trip", ["mock://trip/day1", "mock://trip/day2"]);
+    undo.push(mockFailListing("mock://trip/day1"));
+    const h = harness();
+    await openFolderPlain("mock://trip", null, h.dispatch);
+    await waitFor(() => expect(find(h.get().folderTree, "mock://trip/day2")?.expanded).toBe(true));
+    expect(find(h.get().folderTree, "mock://trip/day1")?.expanded).toBe(false);
+  });
+
+  it("remembered folders stop opening once a newer click has come", async () => {
+    rememberExpanded("mock://trip", ["mock://trip/day1", "mock://trip/day2"]);
+    const h = recording();
+    let release!: () => void;
+    mockSetSubfolderHold(new Promise<void>((r) => { release = r; }));
+    await openFolderPlain("mock://trip", null, h.dispatch);
+    await openFolderPlain("mock://wedding", h.get().folderTree, h.dispatch);
+    const before = h.sent.length;
+    mockSetSubfolderHold(null);
+    release();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(h.sent.slice(before).filter((c) => c.type === "set_tree_node")).toEqual([]);
+  });
+
+  it("a remembered way down still opens past a branch it cannot list", async () => {
+    mockAddSubfolder("mock://trip/day1", "Dawn");
+    mockSetFolderSession("mock://trip", { activeFolder: "mock://trip/day1/dawn" });
+    undo.push(mockFailListing("mock://trip/day1"));
+    const h = harness();
+    await openFolderRemembering("mock://trip", null, h.dispatch);
+    expect(h.get().activeFolderPath).toBe("mock://trip/day1/dawn");
+    expect(find(h.get().folderTree, "mock://trip/day1")?.expanded).toBe(true);
+    expect(find(h.get().folderTree, "mock://trip/day1")?.children).toBeNull();
+  });
+
+  it("a remembered way down gives way to a newer click", async () => {
+    mockAddSubfolder("mock://trip/day1", "Dawn");
+    mockSetFolderSession("mock://trip", { activeFolder: "mock://trip/day1/dawn" });
+    const h = harness();
+    let release!: () => void;
+    mockSetSubfolderHold(new Promise<void>((r) => { release = r; }));
+    const slow = openFolderRemembering("mock://trip", null, h.dispatch);
+    await new Promise((r) => setTimeout(r, 0));
+    await openFolderPlain("mock://wedding", h.get().folderTree, h.dispatch);
+    mockSetSubfolderHold(null);
+    release();
+    await slow;
+    expect(h.get().activeFolderPath).toBe("mock://wedding");
+  });
+
+  it("Expand all children goes on past a folder it cannot list", async () => {
+    mockAddSubfolder("mock://trip/day2", "Dusk");
+    const h = harness();
+    await openFolderPlain("mock://trip", null, h.dispatch);
+    undo.push(mockFailListing("mock://trip/day1"));
+    await expandAllChildren("mock://trip", h.dispatch);
+    expect(find(h.get().folderTree, "mock://trip/day1")?.expanded).toBe(false);
+    expect(find(h.get().folderTree, "mock://trip/day2")?.expanded).toBe(true);
+  });
+
+  it("opening a branch again keeps what it showed when it cannot be listed this time", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    mockAddSubfolder("mock://trip/day1", "Glow");
+    await openTrip(user);
+    await user.click(screen.getByTestId("tree-toggle-mock://trip/day1"));
+    await screen.findByTestId("tree-row-mock://trip/day1/glow");
+    await user.click(screen.getByTestId("tree-toggle-mock://trip/day1"));
+    await waitFor(() => expect(screen.queryByTestId("tree-row-mock://trip/day1/glow")).toBeNull());
+    undo.push(mockFailListing("mock://trip/day1"));
+    await user.click(screen.getByTestId("tree-toggle-mock://trip/day1"));
+    expect(await screen.findByTestId("tree-row-mock://trip/day1/glow")).toBeInTheDocument();
+  });
+
+  it("Refresh on a folder that is gone says so", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openTrip(user);
+    undo.push(mockRemoveFolder("mock://trip/day2"));
+    await menuOn(user, "mock://trip/day2", "refresh");
+    await waitFor(() => expect(currentFlash()).toMatch(/Could not open day2: mock:\/\/trip\/day2 is not there/));
+  });
+
+  it("a gone folder's row stays when its parent cannot be listed either", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openTrip(user);
+    undo.push(mockRemoveFolder("mock://trip/day2"));
+    undo.push(mockFailListing("mock://trip"));
+    await user.click(screen.getByTestId("tree-open-mock://trip/day2"));
+    await waitFor(() => expect(currentFlash()).toMatch(/Could not open day2/));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByTestId("tree-row-mock://trip/day2")).toBeInTheDocument();
+    expect(screen.getByTestId("library-label")).toHaveTextContent("Trip");
+  });
+
+  it("a new folder is made even when the folder it is in cannot be listed after", async () => {
+    const h = harness();
+    await openFolderPlain("mock://trip", null, h.dispatch);
+    undo.push(mockFailListing("mock://trip"));
+    expect(await newFolderIn("mock://trip", "Late", h.dispatch)).toBeNull();
+    expect(currentFlash()).toMatch(/Made Late/);
+    expect(find(h.get().folderTree, "mock://trip/Late")).toBeNull();
   });
 });
