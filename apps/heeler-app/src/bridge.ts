@@ -627,7 +627,7 @@ export interface FolderSubtreeCounts {
 }
 
 export let mockSubtreeCounts: FolderSubtreeCounts = { folders: 1, images: 0 };
-export let mockFolderCommands: { command: "hide" | "flush"; path: string }[] = [];
+export let mockFolderCommands: { command: "hide" | "flush" | "flush_only"; path: string }[] = [];
 
 export function mockSetSubtreeCounts(next: FolderSubtreeCounts): void {
   mockSubtreeCounts = next;
@@ -642,12 +642,24 @@ export function mockSetSubtreeCountsHold(next: Promise<void> | null): void {
   mockSubtreeCountsHold = next;
 }
 
-export async function folderSubtreeCounts(path: string): Promise<FolderSubtreeCounts> {
+export async function folderSubtreeCounts(path: string, only = false): Promise<FolderSubtreeCounts> {
   if (!isTauri()) {
     if (mockSubtreeCountsHold) await mockSubtreeCountsHold;
     return mockSubtreeCounts;
   }
-  return (await call("folder_subtree_counts", { path })) as FolderSubtreeCounts;
+  return (await call("folder_subtree_counts", { path, only })) as FolderSubtreeCounts;
+}
+
+/** Which of these folders hold photographs whose file is gone, by id. */
+export async function foldersMissing(paths: string[]): Promise<{ path: string; missing: string[] }[]> {
+  if (!isTauri()) return mockFoldersMissing.filter((f) => paths.includes(f.path));
+  return (await call("folders_missing", { paths })) as { path: string; missing: string[] }[];
+}
+
+/** Test hook: the folders the mock says hold missing photographs. */
+let mockFoldersMissing: { path: string; missing: string[] }[] = [];
+export function mockSetFoldersMissing(next: { path: string; missing: string[] }[]): void {
+  mockFoldersMissing = next;
 }
 
 /** Hides a folder and its subfolders from the library; every record
@@ -665,15 +677,15 @@ export async function hideFolder(path: string): Promise<number> {
 
 /** Forgets a folder and its subfolders: the catalog's records go. No
  * file is touched, and the edits live outside the catalog. */
-export async function flushFolder(path: string): Promise<FolderSubtreeCounts> {
+export async function flushFolder(path: string, only = false): Promise<FolderSubtreeCounts> {
   if (!isTauri()) {
-    mockFolderCommands.push({ command: "flush", path });
+    mockFolderCommands.push({ command: only ? "flush_only" : "flush", path });
     // As the catalog does: the folder's photographs leave every collection.
     const gone = new Set((MOCK_LISTINGS[path]?.images ?? []).map((i) => i.id));
     for (const members of mockLibrary.members.values()) for (const id of gone) members.delete(id);
     return mockSubtreeCounts;
   }
-  return (await call("flush_folder", { path })) as FolderSubtreeCounts;
+  return (await call("flush_folder", { path, only })) as FolderSubtreeCounts;
 }
 
 export interface RecentCatalog {

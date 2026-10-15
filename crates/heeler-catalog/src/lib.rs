@@ -1211,12 +1211,26 @@ impl Catalog {
         Ok(out)
     }
 
+    /// The folder rows a folder command reaches: `path` and every folder
+    /// beneath it, or with `only`, the one folder at `path` alone.
+    pub fn folder_scope(&self, path: &Path, only: bool) -> Result<Vec<(i64, String)>, CatalogError> {
+        if only {
+            return Ok(self.folder_id(path)?.map(|id| vec![(id, path.to_string_lossy().into_owned())]).unwrap_or_default());
+        }
+        self.folder_subtree(path)
+    }
+
     /// Every photograph row (id, path) in the folders at `path` and
     /// beneath it, trashed and hidden ones included.
     pub fn subtree_images(&self, path: &Path) -> Result<Vec<(String, String)>, CatalogError> {
+        self.scoped_images(path, false)
+    }
+
+    /// subtree_images, or with `only` the one folder's.
+    pub fn scoped_images(&self, path: &Path, only: bool) -> Result<Vec<(String, String)>, CatalogError> {
         let mut out = Vec::new();
         let mut stmt = self.conn.prepare("SELECT id, path FROM images WHERE folder_id = ?1")?;
-        for (folder, _) in self.folder_subtree(path)? {
+        for (folder, _) in self.folder_scope(path, only)? {
             let rows = stmt.query_map(params![folder], |r| Ok((r.get(0)?, r.get(1)?)))?;
             for row in rows {
                 out.push(row?);
@@ -1228,7 +1242,12 @@ impl Catalog {
     /// How many folder rows and photographs a folder command at `path`
     /// would reach, subfolders included, so the prompt can say a number.
     pub fn subtree_counts(&self, path: &Path) -> Result<(usize, i64), CatalogError> {
-        let folders = self.folder_subtree(path)?;
+        self.scoped_counts(path, false)
+    }
+
+    /// subtree_counts, or with `only` the one folder's.
+    pub fn scoped_counts(&self, path: &Path, only: bool) -> Result<(usize, i64), CatalogError> {
+        let folders = self.folder_scope(path, only)?;
         let mut images = 0;
         for (id, _) in &folders {
             images += self.conn.query_row(
@@ -1243,8 +1262,13 @@ impl Catalog {
     /// How many trashed photographs the folders at `path` and beneath it
     /// hold: a flush forgets these too, and its prompt says so.
     pub fn subtree_trashed_count(&self, path: &Path) -> Result<i64, CatalogError> {
+        self.scoped_trashed_count(path, false)
+    }
+
+    /// subtree_trashed_count, or with `only` the one folder's.
+    pub fn scoped_trashed_count(&self, path: &Path, only: bool) -> Result<i64, CatalogError> {
         let mut n = 0;
-        for (id, _) in self.folder_subtree(path)? {
+        for (id, _) in self.folder_scope(path, only)? {
             n += self.conn.query_row(
                 "SELECT COUNT(*) FROM images WHERE folder_id = ?1 AND trashed = 1",
                 params![id],
@@ -1316,7 +1340,13 @@ impl Catalog {
     /// all, so a folder added again gets them back. Returns (folders,
     /// photographs) removed.
     pub fn flush_folder(&self, path: &Path) -> Result<(usize, i64), CatalogError> {
-        let folders = self.folder_subtree(path)?;
+        self.flush_folder_scoped(path, false)
+    }
+
+    /// flush_folder, or with `only` the one folder at `path`, its
+    /// subfolders' records left as they are.
+    pub fn flush_folder_scoped(&self, path: &Path, only: bool) -> Result<(usize, i64), CatalogError> {
+        let folders = self.folder_scope(path, only)?;
         self.batch(|c| {
             let mut images = 0;
             for (id, _) in &folders {

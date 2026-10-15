@@ -41,7 +41,7 @@ import {
   type FolderImage, type FolderListing, type ServeStatus,
 } from "../bridge";
 import { UPDATE_DOWNLOAD_WORDS, checkForUpdates } from "../updates";
-import { allKeywords, buildInfo, clearRecentCatalogs, createFolder, folderSubtreeCounts, foldersWithHidden, foldersWithTrash, hiddenFolderPaths, renameFolder, forgetRecentCatalog, missingTrashedPhotos, recentCatalogs, revealTrash, hiddenInFolder, type RecentCatalog, imageKeywords, imagesWithKeyword, pickRelinkFolder, pickRelinkTarget, relinkFolder, relinkImage, setImageKeywords } from "../bridge";
+import { allKeywords, buildInfo, clearRecentCatalogs, createFolder, folderSubtreeCounts, foldersMissing, foldersWithHidden, foldersWithTrash, hiddenFolderPaths, renameFolder, forgetRecentCatalog, missingTrashedPhotos, recentCatalogs, revealTrash, hiddenInFolder, type RecentCatalog, imageKeywords, imagesWithKeyword, pickRelinkFolder, pickRelinkTarget, relinkFolder, relinkImage, setImageKeywords } from "../bridge";
 import { logMsg } from "../log";
 import { beginThumbSession, thumbnailGraph } from "../thumbs";
 import { ThumbBox } from "./thumbbox";
@@ -183,6 +183,41 @@ function TrashBadge({ path }: { path: string }) {
       <path d="M4 6h16M9 6V4h6v2M6 6l1 14h10l1-14" />
     </svg>
   );
+}
+
+/** Small mark for folders holding photographs whose file is gone, so a
+ * ghost like a photograph moved outside Heeler is found by looking at
+ * the tree, the way the trash badge finds a full `.trash`. */
+function MissingBadge({ path, count }: { path: string; count: number }) {
+  return (
+    <svg
+      width="9"
+      height="9"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      data-testid={`folder-missing-${path}`}
+      aria-label={`${count} missing`}
+      style={{ flex: "none" }}
+    >
+      <title>{`${count} photograph${count === 1 ? "" : "s"} missing from this folder`}</title>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v6M12 16.5v.5" />
+    </svg>
+  );
+}
+
+/** The folders on screen in the panel: the shortlist's and the tree's
+ * open branches, the ones worth asking the disk about. */
+export function visibleFolderPaths(tree: TreeNode | null, shortlist: { path: string }[]): string[] {
+  const out = new Set(shortlist.map((f) => f.path));
+  const walk = (n: TreeNode) => {
+    out.add(n.path);
+    if (n.expanded) for (const c of n.children ?? []) walk(c);
+  };
+  if (tree) walk(tree);
+  return [...out].sort();
 }
 
 function treeContains(node: TreeNode | null, path: string): boolean {
@@ -3467,8 +3502,10 @@ function TabRailImpl({ state, dispatch }: { state: State; dispatch: D }) {
  * opens (scans that folder). Parents and siblings stay visible while
  * descending, so deep archives navigate like a RAW editor's folder panel. */
 function TreeRows({
-  node, depth, activePath, tabStop, dispatch, onOpen, onMenu, editedPaths, trashPaths, hiddenPaths,
+  node, depth, activePath, tabStop, dispatch, onOpen, onMenu, editedPaths, trashPaths, hiddenPaths, missing,
 }: {
+  /** folder path to the ids of its photographs whose file is gone */
+  missing: Record<string, string[]>;
   node: TreeNode; depth: number; activePath: string | null; dispatch: D;
   /** The one row Tab lands on: the open folder, or the root. */
   tabStop: string;
@@ -3573,12 +3610,13 @@ function TreeRows({
           <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{node.name}</span>
           {folderHasEdits(editedPaths, node.path) && <EditedBadge path={node.path} />}
           {trashPaths.includes(node.path) && <TrashBadge path={node.path} />}
+          {missing[node.path]?.length ? <MissingBadge path={node.path} count={missing[node.path].length} /> : null}
         </button>
       </div>
       {node.expanded && (children ?? []).length > 0 && (
         <div role="group">
           {(children ?? []).map((c) => (
-            <TreeRows key={c.path} node={c} depth={depth + 1} activePath={activePath} tabStop={tabStop} dispatch={dispatch} onOpen={onOpen} onMenu={onMenu} editedPaths={editedPaths} trashPaths={trashPaths} hiddenPaths={hiddenPaths} />
+            <TreeRows key={c.path} node={c} depth={depth + 1} activePath={activePath} tabStop={tabStop} dispatch={dispatch} onOpen={onOpen} onMenu={onMenu} editedPaths={editedPaths} trashPaths={trashPaths} hiddenPaths={hiddenPaths} missing={missing} />
           ))}
         </div>
       )}
@@ -3927,6 +3965,24 @@ function BrowserPanelImpl({ state, dispatch }: { state: State; dispatch: D }) {
   // somewhere the box does not show, after a restore or a descent deep
   // into a tall tree.
   const treeBoxRef = useRef<HTMLDivElement | null>(null);
+  // Which folders on screen hold photographs whose file is gone, asked
+  // again whenever the folders on screen or the library's lists change.
+  const missingKey = visibleFolderPaths(state.folderTree, state.folders).join("\n");
+  useEffect(() => {
+    let live = true;
+    const paths = missingKey ? missingKey.split("\n") : [];
+    const t = setTimeout(() => {
+      void foldersMissing(paths)
+        .then((found) => {
+          if (live) dispatch({ type: "set_folders_missing", folders: Object.fromEntries(found.map((f) => [f.path, f.missing])) });
+        })
+        .catch(() => {});
+    }, 250);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [missingKey, state.folders, state.images.length, dispatch]);
   // Which folders are open, remembered per root for the next launch.
   useEffect(() => {
     if (state.folderTree) rememberExpanded(state.folderTree.path, expandedPaths(state.folderTree));
@@ -3941,8 +3997,9 @@ function BrowserPanelImpl({ state, dispatch }: { state: State; dispatch: D }) {
   // back to it would add it to the catalog again.
   useEffect(
     () =>
-      onFolderLeft((path) => {
-        if (lastFolderRef.current && isWithin(lastFolderRef.current, path)) lastFolderRef.current = null;
+      onFolderLeft((path, only) => {
+        const back = lastFolderRef.current;
+        if (back && isWithin(back, path) && (!only || isWithin(path, back))) lastFolderRef.current = null;
       }),
     [],
   );
@@ -4166,6 +4223,36 @@ file.*/}
             >
               Flush folder…
             </button>
+            <button
+              data-testid="folder-menu-flush-only"
+              data-hint="Forget the catalog's records for this folder's own photographs, and leave the folders inside it as they are"
+              onClick={() => {
+                const path = folderMenu.path;
+                setFolderMenu(null);
+                void folderSubtreeCounts(path, true).then((c) => {
+                  if (c.folders === 0) {
+                    flashStatus("Nothing to flush: the catalog has no records for this folder yet.");
+                    return;
+                  }
+                  dispatch({ type: "ask_confirm", action: { kind: "flush_folder", path, folders: c.folders, images: c.images, trashed: c.trashed ?? 0, only: true } });
+                }).catch((e) => logMsg("error", `Could not read the folder: ${String(e)}`));
+              }}
+            >
+              Flush This Folder Only…
+            </button>
+            {(state.foldersMissing[folderMenu.path]?.length ?? 0) > 0 && (
+              <button
+                data-testid="folder-menu-forget-missing"
+                data-hint="Forget the photographs in this folder whose file is gone. Nothing on disk is touched"
+                onClick={() => {
+                  const path = folderMenu.path;
+                  setFolderMenu(null);
+                  dispatch({ type: "ask_confirm", action: { kind: "forget_missing_folder", path, ids: state.foldersMissing[path] } });
+                }}
+              >
+                Forget Missing Photos…
+              </button>
+            )}
             {/* "if a folder has a .trash in it then in the context menu
 for folders have an option to open the trash folder in the system
 browser." Better than a Trash view inside the app, and consistent with
@@ -4269,8 +4356,13 @@ the file browser's job too, and the next scan notices.*/}
               <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</span>
               {folderHasEdits(editedPaths, f.path) && <EditedBadge path={f.path} />}
               {state.foldersWithTrash.includes(f.path) && <TrashBadge path={f.path} />}
+              {state.foldersMissing[f.path]?.length ? <MissingBadge path={f.path} count={state.foldersMissing[f.path].length} /> : null}
             </div>
-            <div className="tnum" style={{ fontSize: 10, color: "var(--text-ghost)" }}>{f.count}</div>
+            {/* The photographs that are there: a missing one is a record,
+                not a photograph in the folder. */}
+            <div className="tnum" data-testid={`folder-count-${f.id}`} style={{ fontSize: 10, color: "var(--text-ghost)" }}>
+              {Math.max(0, f.count - (state.foldersMissing[f.path]?.length ?? 0))}
+            </div>
           </button>
         ))}
         </div>
@@ -4312,6 +4404,7 @@ see fit."
                 editedPaths={editedPaths}
                 trashPaths={state.foldersWithTrash}
                 hiddenPaths={state.hiddenFolders}
+                missing={state.foldersMissing}
               />
             </div>
           </>

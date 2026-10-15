@@ -13417,10 +13417,11 @@ pub struct FolderSubtreeCounts {
 }
 
 #[tauri::command]
-async fn folder_subtree_counts(app: tauri::AppHandle, path: String) -> Result<FolderSubtreeCounts, String> {
+async fn folder_subtree_counts(app: tauri::AppHandle, path: String, only: Option<bool>) -> Result<FolderSubtreeCounts, String> {
+    let only = only.unwrap_or(false);
     catalog_command(app, move |c| {
-        let (folders, images) = c.subtree_counts(Path::new(&path)).map_err(|e| e.to_string())?;
-        let trashed = c.subtree_trashed_count(Path::new(&path)).map_err(|e| e.to_string())?;
+        let (folders, images) = c.scoped_counts(Path::new(&path), only).map_err(|e| e.to_string())?;
+        let trashed = c.scoped_trashed_count(Path::new(&path), only).map_err(|e| e.to_string())?;
         Ok(FolderSubtreeCounts { folders, images, trashed })
     })
     .await
@@ -13450,10 +13451,17 @@ pub fn hide_folder_payload(c: &Catalog, path: &Path) -> Result<usize, String> {
 /// the folder, and the library's restore would open it again, adding it
 /// back without its records. Returns (folders, photographs) forgotten.
 pub fn flush_folder_payload(c: &Catalog, path: &Path) -> Result<(usize, i64), String> {
+    flush_folder_scoped_payload(c, path, false)
+}
+
+/// flush_folder_payload, or with `only` the one folder at `path`, its
+/// subfolders' records left as they are: a single ghost in a tree's root
+/// could be cleared only by flushing the whole tree.
+pub fn flush_folder_scoped_payload(c: &Catalog, path: &Path, only: bool) -> Result<(usize, i64), String> {
     c.batch_with(|c| {
-        remember_flushed_ids(c, path)?;
-        let counts = c.flush_folder(path)?;
-        sessions_leave_folder(c, path, true)?;
+        remember_flushed_ids_scoped(c, path, only)?;
+        let counts = c.flush_folder_scoped(path, only)?;
+        sessions_leave_folder_scoped(c, path, true, only)?;
         Ok::<_, SessionLeave>(counts)
     })
     .map_err(|e| e.0)
@@ -13482,10 +13490,10 @@ fn write_flushed_ids(c: &Catalog, map: &std::collections::BTreeMap<String, Strin
 
 /// Writes down the ids a flush of `path` is about to forget that a later
 /// scan could not work out from the path alone.
-fn remember_flushed_ids(c: &Catalog, path: &Path) -> Result<(), heeler_catalog::CatalogError> {
+fn remember_flushed_ids_scoped(c: &Catalog, path: &Path, only: bool) -> Result<(), heeler_catalog::CatalogError> {
     let mut map = read_flushed_ids(c)?;
     let mut changed = false;
-    for (id, file) in c.subtree_images(path)? {
+    for (id, file) in c.scoped_images(path, only)? {
         if id != image_id_for(Path::new(&file)) {
             map.insert(file, id);
             changed = true;
@@ -13527,7 +13535,12 @@ impl From<heeler_catalog::CatalogError> for SessionLeave {
 ///   folder, whose records are gone. A hidden root keeps its own, so
 ///   opening it again lands where work in it stopped.
 pub fn sessions_leave_folder(c: &Catalog, path: &Path, flushed: bool) -> Result<(), SessionLeave> {
-    let inside = |p: &str| Path::new(p).starts_with(path);
+    sessions_leave_folder_scoped(c, path, flushed, false)
+}
+
+/// sessions_leave_folder, or with `only` for the one folder at `path`.
+pub fn sessions_leave_folder_scoped(c: &Catalog, path: &Path, flushed: bool, only: bool) -> Result<(), SessionLeave> {
+    let inside = |p: &str| if only { Path::new(p) == path } else { Path::new(p).starts_with(path) };
     let err = SessionLeave::from;
     let root = c.meta("tree_root").map_err(err)?;
     let active = c.meta("active_folder").map_err(err)?;
@@ -13737,10 +13750,11 @@ async fn rename_folder(app: tauri::AppHandle, path: String, name: String) -> Res
 /// photographs go. No file is touched, and the per-image edits are not
 /// in the catalog, so a folder added again gets them back.
 #[tauri::command]
-async fn flush_folder(app: tauri::AppHandle, path: String) -> Result<FolderSubtreeCounts, String> {
+async fn flush_folder(app: tauri::AppHandle, path: String, only: Option<bool>) -> Result<FolderSubtreeCounts, String> {
+    let only = only.unwrap_or(false);
     catalog_command(app, move |c| {
-        let trashed = c.subtree_trashed_count(Path::new(&path)).map_err(|e| e.to_string())?;
-        let (folders, images) = flush_folder_payload(c, Path::new(&path))?;
+        let trashed = c.scoped_trashed_count(Path::new(&path), only).map_err(|e| e.to_string())?;
+        let (folders, images) = flush_folder_scoped_payload(c, Path::new(&path), only)?;
         Ok(FolderSubtreeCounts { folders, images, trashed })
     })
     .await
@@ -14211,6 +14225,73 @@ pub fn forget_missing_in(catalog: &Catalog, ids: &[String]) -> Result<Vec<String
 #[tauri::command]
 async fn forget_missing_photos(app: tauri::AppHandle, image_ids: Vec<String>) -> Result<Vec<String>, String> {
     catalog_command(app, move |c| forget_missing_in(c, &image_ids)).await
+}
+
+/// How many of a folder's photographs are missing from the disk.
+#[derive(serde::Serialize, Debug, PartialEq)]
+pub struct FolderMissing {
+    pub path: String,
+    pub missing: Vec<String>,
+}
+
+/// The photographs among each folder's records whose file is not there,
+/// one folder listing each rather than a question per photograph, and
+/// none for a folder on a drive that is not plugged in or that is gone
+/// itself (a folder gone from the disk is the tree's to say). `rows` are
+/// (folder path, its records as (id, path)).
+pub fn missing_by_folder(rows: Vec<(String, Vec<(String, String)>)>) -> Vec<FolderMissing> {
+    let mut check = trash::VolumeCheck::default();
+    let mut out = Vec::new();
+    for (folder, records) in rows {
+        let dir = Path::new(&folder);
+        if records.is_empty() || check.unmounted(dir).is_some() {
+            continue;
+        }
+        let Ok(entries) = std::fs::read_dir(dir) else { continue };
+        let names: std::collections::HashSet<std::ffi::OsString> = entries.flatten().map(|e| e.file_name()).collect();
+        let missing: Vec<String> = records
+            .into_iter()
+            .filter(|(_, path)| {
+                let p = Path::new(path);
+                match (p.parent(), p.file_name()) {
+                    (Some(parent), Some(name)) if parent == dir => !names.contains(name),
+                    _ => !p.exists(),
+                }
+            })
+            .map(|(id, _)| id)
+            .collect();
+        if !missing.is_empty() {
+            out.push(FolderMissing { path: folder, missing });
+        }
+    }
+    out
+}
+
+/// Which of these folders hold photographs whose file is gone, and which.
+/// For the tree's mark and its Forget Missing Photos item; the records
+/// are read under the catalog and the folders after it is let go.
+#[tauri::command]
+async fn folders_missing(app: tauri::AppHandle, paths: Vec<String>) -> Result<Vec<FolderMissing>, String> {
+    let issued = catalog_generation(&app)?;
+    tauri::async_runtime::spawn_blocking(move || -> Result<Vec<FolderMissing>, String> {
+        let rows = with_catalog_at(&app, issued, |c| {
+            let mut rows = Vec::new();
+            for path in paths {
+                let Some(id) = c.folder_id(Path::new(&path)).map_err(|e| e.to_string())? else { continue };
+                let records = c
+                    .list_images(&heeler_catalog::Filter { folder_id: Some(id), ..heeler_catalog::Filter::default() })
+                    .map_err(|e| e.to_string())?
+                    .into_iter()
+                    .map(|r| (r.id, r.path))
+                    .collect();
+                rows.push((path, records));
+            }
+            Ok(rows)
+        })?;
+        Ok(missing_by_folder(rows))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // Move to Trash ------------------------------------------------------------
@@ -21223,6 +21304,7 @@ pub fn run() {
             forget_missing_photos,
             create_folder,
             rename_folder,
+            folders_missing,
             folders_with_trash,
             reveal_trash,
             brush_tip_preview,
@@ -21691,6 +21773,7 @@ mod tests {
             "forget_missing_photos",
             "create_folder",
             "rename_folder",
+            "folders_missing",
             "folders_with_trash",
             "list_collections",
             "create_collection",
@@ -25498,6 +25581,39 @@ mod tests {
         let c = Catalog::open_in_memory().unwrap();
         assert!(rename_folder_in(&c, &d.path().join("a"), "b").unwrap_err().contains("already there"));
         assert!(d.path().join("a").is_dir());
+    }
+
+    #[test]
+    fn missing_photographs_are_found_folder_by_folder_from_one_listing_each() {
+        let d = tempfile::tempdir().unwrap();
+        let a = d.path().join("a");
+        let b = d.path().join("b");
+        std::fs::create_dir(&a).unwrap();
+        std::fs::create_dir(&b).unwrap();
+        std::fs::write(a.join("here.png"), b"x").unwrap();
+        std::fs::write(b.join("here.png"), b"x").unwrap();
+        let s = |p: &Path| p.to_string_lossy().into_owned();
+        let rows = vec![
+            (s(&a), vec![("ah".to_string(), s(&a.join("here.png"))), ("ag".to_string(), s(&a.join("gone.png")))]),
+            (s(&b), vec![("bh".to_string(), s(&b.join("here.png")))]),
+            (s(&d.path().join("gone")), vec![("x".to_string(), s(&d.path().join("gone").join("x.png")))]),
+        ];
+        assert_eq!(missing_by_folder(rows), vec![FolderMissing { path: s(&a), missing: vec!["ag".into()] }]);
+    }
+
+    #[test]
+    fn flushing_one_folder_leaves_its_subfolders_records() {
+        let c = Catalog::open_in_memory().unwrap();
+        let top = c.add_folder(Path::new("/shoot")).unwrap();
+        let sub = c.add_folder(Path::new("/shoot/day2")).unwrap();
+        c.add_image("ghost", Path::new("/shoot/ghost.dng"), Some(top)).unwrap();
+        c.add_image("b", Path::new("/shoot/day2/b.dng"), Some(sub)).unwrap();
+        c.set_rating("b", 5).unwrap();
+        assert_eq!(c.scoped_counts(Path::new("/shoot"), true).unwrap(), (1, 1));
+        assert_eq!(flush_folder_scoped_payload(&c, Path::new("/shoot"), true).unwrap(), (1, 1));
+        assert!(c.image("ghost").is_err());
+        assert_eq!(c.image("b").unwrap().rating, 5, "the subfolder's records stay");
+        assert_eq!(c.folder_id(Path::new("/shoot/day2")).unwrap(), Some(sub));
     }
 
     /// A whole unplugged drive was listed as missing photographs.
@@ -31112,7 +31228,8 @@ mod tests {
             let start = src.find(&format!("async fn {name}(")).unwrap();
             let body = &src[start..src[start..].find("\n}\n").unwrap() + start];
             assert!(
-                body.contains(&format!("{name}_payload(c, Path::new(&path))")),
+                body.contains(&format!("{name}_payload(c, Path::new(&path))"))
+                    || body.contains(&format!("{name}_scoped_payload(c, Path::new(&path), only)")),
                 "{name} must take the remembered sessions out of the folder, in one transaction"
             );
         }

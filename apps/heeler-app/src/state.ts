@@ -4050,6 +4050,8 @@ export interface State {
   foldersWithHidden: string[];
   /** Folders hidden from the library; the tree leaves them out. */
   hiddenFolders: string[];
+  /** Folders holding photographs whose file is gone: path to their ids. */
+  foldersMissing: Record<string, string[]>;
   /** Folders with a `.trash` beside them. The tree badges these and
    * the folder menu offers to open the trash in the system browser;
    * both read one list so they cannot disagree. */
@@ -4781,6 +4783,7 @@ export type Command =
   | { type: "set_edited_folders"; paths: string[] }
   | { type: "set_folders_with_hidden"; paths: string[] }
   | { type: "set_hidden_folders"; paths: string[] }
+  | { type: "set_folders_missing"; folders: Record<string, string[]> }
   | { type: "set_folders_with_trash"; paths: string[] }
   | { type: "set_missing_trashed"; count: number; skipped: number }
   | {
@@ -8961,7 +8964,10 @@ export type ConfirmAction =
   // flags, keywords, collection membership. No file is touched and the
   // edits live outside the catalog, but the records have no undo, so
   // this is the one gesture that asks twice.
-  | { kind: "flush_folder"; path: string; folders: number; images: number; trashed?: number }
+  | { kind: "flush_folder"; path: string; folders: number; images: number; trashed?: number; only?: boolean }
+  // The photographs in one folder whose file is gone, forgotten by the
+  // catalog: the folder's own counterpart of Forget Missing Trashed Photos.
+  | { kind: "forget_missing_folder"; path: string; ids: string[] }
   // Deleting a take destroys the edits in it and nothing else. Worth one
   // prompt: history is per-take and switching between them clears it, so
   // there is no undo behind this one.
@@ -19404,6 +19410,8 @@ function reduceInner(s: State, cmd: Command): State {
       return { ...s, foldersWithHidden: cmd.paths };
     case "set_hidden_folders":
       return { ...s, hiddenFolders: cmd.paths };
+    case "set_folders_missing":
+      return { ...s, foldersMissing: cmd.folders };
     case "set_folders_with_trash":
       return { ...s, foldersWithTrash: cmd.paths };
     case "set_missing_trashed":

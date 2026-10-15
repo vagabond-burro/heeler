@@ -994,6 +994,7 @@ export function initialState(): State {
     editedFolders: [],
     foldersWithHidden: [],
     hiddenFolders: [],
+    foldersMissing: {},
     foldersWithTrash: [],
     missingTrashed: { count: 0, skipped: 0 },
     thumbProgress: null,

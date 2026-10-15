@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { App } from "../app";
-import { mockFolderCommands, mockSetRecentCatalogs, mockSetSubtreeCounts, mockSetSubtreeCountsHold } from "../bridge";
+import { mockFolderCommands, mockRemovalCalls, mockResetRemovalCalls, mockSetFoldersMissing, mockSetRecentCatalogs, mockSetSubtreeCounts, mockSetSubtreeCountsHold } from "../bridge";
 import { initialState } from "../data";
 import { promptsFor, reduce, type State } from "../state";
 import { confirmCopy, isWithin } from "../ui/catalogui";
@@ -200,5 +200,53 @@ describe("the reducer", () => {
     expect(s.confirm?.step).toBe(1);
     s = reduce(s, { type: "advance_confirm" });
     expect(s.confirm?.step).toBe(2);
+  });
+});
+
+// Nothing marked a folder holding photographs whose file is gone, and
+// the only way to clear one was flushing the folder with everything
+// under it.
+describe("missing photographs, folder by folder", () => {
+  afterEach(() => {
+    mockSetFoldersMissing([]);
+    mockResetRemovalCalls();
+  });
+
+  it("marks the folder, counts only the photographs that are there, and offers to forget the rest", async () => {
+    mockSetFoldersMissing([{ path: "mock://wedding", missing: ["mock_1"] }]);
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByTestId("folder-missing-mock://wedding")).toBeInTheDocument();
+    expect(screen.getByTestId("folder-count-1")).toHaveTextContent("2");
+    expect(screen.queryByTestId("folder-missing-mock://landscapes")).toBeNull();
+    fireEvent.contextMenu(screen.getByTestId("folder-row-1"));
+    await user.click(await screen.findByTestId("folder-menu-forget-missing"));
+    const body = await screen.findByTestId("confirm-body");
+    expect(body).toHaveTextContent(/1 photograph in wedding is not where the catalog says/);
+    expect(body).toHaveTextContent(/If it moved, Relink finds it instead/);
+    expect(body).toHaveTextContent(/the edits are kept, and nothing on disk is touched/);
+    await user.click(screen.getByTestId("confirm-ok"));
+    await waitFor(() => expect(mockRemovalCalls).toEqual([{ command: "forget_missing", ids: ["mock_1"] }]));
+  });
+
+  it("does not offer to forget where nothing is missing", async () => {
+    render(<App />);
+    fireEvent.contextMenu(await screen.findByTestId("folder-row-2"));
+    await screen.findByTestId("folder-menu");
+    expect(screen.queryByTestId("folder-menu-forget-missing")).toBeNull();
+  });
+});
+
+describe("Flush This Folder Only", () => {
+  it("asks twice, says the folders inside keep their records, and flushes the one folder", async () => {
+    mockSetSubtreeCounts({ folders: 1, images: 4 });
+    const user = userEvent.setup();
+    render(<App />);
+    await openFolderMenu(user);
+    await user.click(screen.getByTestId("folder-menu-flush-only"));
+    expect(await screen.findByTestId("confirm-body")).toHaveTextContent(/its own photographs only; the folders inside it keep their records/);
+    await user.click(screen.getByTestId("confirm-ok"));
+    await user.click(await screen.findByTestId("confirm-ok"));
+    await waitFor(() => expect(mockFolderCommands).toEqual([{ command: "flush_only", path: expect.any(String) }]));
   });
 });

@@ -144,7 +144,10 @@ export function confirmCopy(confirm: Confirm): {
   }
   if (a.kind === "flush_folder") {
     const name = a.path.split(/[\\/]/).filter(Boolean).pop() ?? a.path;
-    const inside = a.folders > 1 ? ` and the ${a.folders - 1} folder${a.folders === 2 ? "" : "s"} inside it` : "";
+    // This folder alone leaves its subfolders' records as they are.
+    const inside = a.only
+      ? " (its own photographs only; the folders inside it keep their records)"
+      : a.folders > 1 ? ` and the ${a.folders - 1} folder${a.folders === 2 ? "" : "s"} inside it` : "";
     const photos = `${a.images.toLocaleString()} photograph${a.images === 1 ? "" : "s"}`;
     // The trashed ones go from the catalog too, which the count used to
     // leave out. Their files stay in .trash,
@@ -169,6 +172,17 @@ export function confirmCopy(confirm: Confirm): {
           ok: `Flush ${photos}`,
           danger: true,
         };
+  }
+  if (a.kind === "forget_missing_folder") {
+    const name = a.path.split(/[\\/]/).filter(Boolean).pop() ?? a.path;
+    const n = a.ids.length;
+    const photos = `${n.toLocaleString()} photograph${n === 1 ? "" : "s"}`;
+    return {
+      title: "Forget missing photos",
+      body: `${photos} in ${name} ${n === 1 ? "is" : "are"} not where the catalog says. ${n === 1 ? "Its record is" : "Their records are"} removed: ratings, flags, keywords and collections are forgotten, the edits are kept, and nothing on disk is touched. The rest of the folder is left as it is. If ${n === 1 ? "it" : "they"} moved, Relink finds ${n === 1 ? "it" : "them"} instead.`,
+      ok: `Forget ${photos}`,
+      danger: true,
+    };
   }
   if (a.kind === "forget_missing_trashed") {
     const n = a.ids.length;
@@ -283,6 +297,16 @@ async function perform(confirm: Confirm, state: State, dispatch: D): Promise<voi
     // permission) stays in the library it is still sitting in.
     const gone = [...report.moved_ids, ...forgotten];
     if (gone.length) dispatch({ type: "remove_images", ids: gone });
+  } else if (a.kind === "forget_missing_folder") {
+    try {
+      // Asked of the disk again: one whose file came back meanwhile stays.
+      const gone = await forgetMissingPhotos(a.ids);
+      logMsg("info", `The catalog forgot ${gone.length.toLocaleString()} missing photograph${gone.length === 1 ? "" : "s"} in ${a.path}. No file was touched.`);
+      if (gone.length) dispatch({ type: "remove_images", ids: gone });
+    } catch (e) {
+      logMsg("error", `Could not forget the missing photographs: ${String(e)}`);
+      flashStatus(`Could not forget the missing photographs: ${String(e)}`);
+    }
   } else if (a.kind === "forget_missing_trashed") {
     try {
       // The backend asks the disk again: one put back, or whose drive
@@ -294,7 +318,7 @@ async function perform(confirm: Confirm, state: State, dispatch: D): Promise<voi
       logMsg("error", `Could not forget the missing trashed photographs: ${String(e)}`);
     }
   } else if (a.kind === "hide_folder" || a.kind === "flush_folder") {
-    await leaveFolder(a.kind === "hide_folder" ? "hide" : "flush", a.path, dispatch);
+    await leaveFolder(a.kind === "hide_folder" ? "hide" : "flush", a.path, dispatch, a.kind === "flush_folder" && a.only === true);
     return;
   } else {
     await recoverHidden(a.path);
@@ -306,10 +330,10 @@ async function perform(confirm: Confirm, state: State, dispatch: D): Promise<voi
  * the list is rebuilt, and if the folder on screen was the one that
  * left, the session is restored from whatever the catalog now holds
  * rather than left showing a folder the list no longer has. */
-export async function leaveFolder(command: "hide" | "flush", path: string, dispatch: D): Promise<void> {
+export async function leaveFolder(command: "hide" | "flush", path: string, dispatch: D, only = false): Promise<void> {
   const viewing = currentActiveFolder;
   const collection = currentCollection;
-  const affected = viewing !== null && isWithin(viewing, path);
+  const affected = viewing !== null && (only ? isWithin(viewing, path) && isWithin(path, viewing) : isWithin(viewing, path));
   // Noted before the wait: a folder clicked while the command runs is
   // newer than the collection reload below, which must give way to it.
   const nav = currentNavigation();
@@ -322,14 +346,14 @@ export async function leaveFolder(command: "hide" | "flush", path: string, dispa
       await hideFolder(path);
       logMsg("info", `Hid ${path} from the library. Nothing was deleted; open the folder again to bring it back.`);
     } else {
-      const r = await flushFolder(path);
+      const r = await flushFolder(path, only);
       logMsg("info", `Flushed ${path}: the catalog forgot ${r.images.toLocaleString()} photograph${r.images === 1 ? "" : "s"} in ${r.folders} folder${r.folders === 1 ? "" : "s"}. No file was touched.`);
     }
   } finally {
     // Whatever still remembers this folder as the way back out of a
     // collection lets go of it: stepping off the collection would open
     // it again, and opening it adds it back.
-    folderLeft(path);
+    folderLeft(path, only);
     if (affected) {
       try { await restoreCatalogSession(dispatch); }
       catch (e) { logMsg("error", `Could not restore the catalog session: ${String(e)}`); }

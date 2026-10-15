@@ -84,13 +84,14 @@ export function isWithin(candidate: string, root: string): boolean {
 
 /** Told the path of every folder a hide or flush takes off the list, so
  * a remembered way back out of a collection can let go of it. */
-const folderLeftListeners = new Set<(path: string) => void>();
-export function onFolderLeft(listener: (path: string) => void): () => void {
+const folderLeftListeners = new Set<(path: string, only: boolean) => void>();
+export function onFolderLeft(listener: (path: string, only: boolean) => void): () => void {
   folderLeftListeners.add(listener);
   return () => {
     folderLeftListeners.delete(listener);
   };
 }
-export function folderLeft(path: string): void {
-  for (const listener of folderLeftListeners) listener(path);
+/** `only`: the one folder at `path` left, its subfolders did not. */
+export function folderLeft(path: string, only = false): void {
+  for (const listener of folderLeftListeners) listener(path, only);
 }
