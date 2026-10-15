@@ -741,11 +741,13 @@ pub fn scan_folder_records(
                         existing
                     }
                     None => {
-                        let name = name_key(file.file_name().unwrap_or_default(), true);
+                        // Loose on purpose: one_file_on_disk is the disk's
+                        // own word that the two names are one file.
+                        let name = name_key(file.file_name().unwrap_or_default(), true, true);
                         let fits: Vec<usize> = renamed
                             .iter()
                             .enumerate()
-                            .filter(|(_, r)| name_key(std::ffi::OsStr::new(&r.file_name), true) == name && one_file_on_disk(Path::new(&r.path), file))
+                            .filter(|(_, r)| name_key(std::ffi::OsStr::new(&r.file_name), true, true) == name && one_file_on_disk(Path::new(&r.path), file))
                             .map(|(i, _)| i)
                             .collect();
                         if let [only] = fits[..] {
@@ -14388,12 +14390,13 @@ fn nfc(name: &std::ffi::OsStr) -> String {
 }
 
 /// A file name as the folder's listing and a catalog row are matched by:
-/// NFC, and without regard to case where the disk folds case (`folded`).
-/// The one rule for missing_by_folder and for the scan's healing of a
-/// record whose name the disk now lists differently.
-fn name_key(name: &std::ffi::OsStr, folded: bool) -> String {
-    let k = nfc(name);
-    if folded { k.to_lowercase() } else { k }
+/// in NFC where the disk calls the two Unicode forms one file
+/// (`form_folded`), and without regard to case where it folds case
+/// (`case_folded`). The one rule for missing_by_folder and for the scan's
+/// healing of a record whose name the disk now lists differently.
+fn name_key(name: &std::ffi::OsStr, case_folded: bool, form_folded: bool) -> String {
+    let k = if form_folded { nfc(name) } else { name.to_string_lossy().into_owned() };
+    if case_folded { k.to_lowercase() } else { k }
 }
 
 /// Whether two existing paths answer as one file on this disk: the same
@@ -14415,45 +14418,91 @@ fn one_file_on_disk(a: &Path, b: &Path) -> bool {
     }
 }
 
+/// What a folder's disk says about another spelling of the names in it,
+/// decided from the listing alone and what the disk answers, so every
+/// branch can be tested on any platform. For the first entry `respell`
+/// gives another spelling of: the listing holding that spelling as an
+/// entry of its own means the disk keeps the two apart (Some(false));
+/// otherwise `answers` asks the disk for it, a spelling that still
+/// answers being the same file (Some(true)) and one that names nothing
+/// meaning the two are apart (Some(false)). An answer that cannot say
+/// (None) moves on to the next entry; None in the end means nothing in
+/// the folder could be asked about.
+fn probe_spelling(
+    entries: &[std::ffi::OsString],
+    respell: impl Fn(&str) -> Option<String>,
+    answers: impl Fn(&str) -> Option<bool>,
+) -> Option<bool> {
+    entries.iter().find_map(|entry| {
+        let name = entry.to_string_lossy();
+        let other = respell(&name).filter(|o| *o != *name)?;
+        if entries.iter().any(|e| e.as_os_str() == std::ffi::OsStr::new(&other)) {
+            return Some(false);
+        }
+        answers(&other)
+    })
+}
+
+/// A name with the case of every letter turned over, or None when it has
+/// no letter with a case.
+fn flip_case(name: &str) -> Option<String> {
+    if !name.chars().any(|c| c.is_alphabetic()) {
+        return None;
+    }
+    Some(
+        name.chars()
+            .flat_map(|c| if c.is_lowercase() { c.to_uppercase().collect::<Vec<char>>() } else { c.to_lowercase().collect() })
+            .collect(),
+    )
+}
+
+/// A name in the other Unicode form (NFD for a name in NFC, NFC for one
+/// in NFD), or None when both forms spell it the same.
+fn other_form(name: &str) -> Option<String> {
+    let nfd = icu_normalizer::DecomposingNormalizerBorrowed::new_nfd().normalize(name).into_owned();
+    if nfd != name {
+        return Some(nfd);
+    }
+    let composed = icu_normalizer::ComposingNormalizerBorrowed::new_nfc().normalize(name).into_owned();
+    (composed != name).then_some(composed)
+}
+
+/// Asks the disk for `name` in `dir`: Some(true) when it answers, Some(false)
+/// when it names nothing, None when the disk could not say.
+fn disk_answers(dir: &Path, name: &str) -> Option<bool> {
+    match std::fs::metadata(dir.join(name)) {
+        Ok(_) => Some(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(false),
+        Err(_) => None,
+    }
+}
+
 /// Whether the volume holding `dir` calls names that differ only in
 /// case the same file, asked once per volume (per folder on the system
 /// drive, which has no volume_root) and cached. The probe writes
-/// nothing: flip the case of an entry's name and ask the disk for it. A
-/// spelling the listing does not hold that still answers is the same
-/// file, so case does not matter here; one that names nothing, or that
-/// the listing holds as a file of its own, means it does. A folder with
-/// nothing cased to probe gets the platform's usual answer: a Mac's and
-/// Windows' volumes ignore case out of the box, Linux's do not.
+/// nothing (probe_spelling, with every letter's case turned over). A
+/// folder with nothing cased to ask about gets the platform's usual
+/// answer: a Mac's and Windows' volumes ignore case out of the box,
+/// Linux's do not.
 fn case_blind(dir: &Path, entries: &[std::ffi::OsString], cache: &mut std::collections::HashMap<PathBuf, bool>) -> bool {
     let key = trash::volume_root(dir).unwrap_or(dir).to_path_buf();
-    *cache
-        .entry(key)
-        .or_insert_with(|| {
-            let probe = |name: &std::ffi::OsStr| -> Option<bool> {
-                let s = name.to_string_lossy();
-                if !s.chars().any(|c| c.is_alphabetic()) {
-                    return None;
-                }
-                let flipped: String = s
-                    .chars()
-                    .flat_map(|c| {
-                        if c.is_lowercase() { c.to_uppercase().collect::<Vec<char>>() } else { c.to_lowercase().collect() }
-                    })
-                    .collect();
-                if flipped == s {
-                    return None;
-                }
-                if entries.iter().any(|e| e.as_os_str() == std::ffi::OsStr::new(&flipped)) {
-                    return Some(false);
-                }
-                match std::fs::metadata(dir.join(&flipped)) {
-                    Ok(_) => Some(true),
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(false),
-                    Err(_) => None,
-                }
-            };
-            entries.iter().find_map(|name| probe(name)).unwrap_or(cfg!(any(target_os = "macos", target_os = "windows")))
-        })
+    *cache.entry(key).or_insert_with(|| {
+        probe_spelling(entries, flip_case, |n| disk_answers(dir, n)).unwrap_or(cfg!(any(target_os = "macos", target_os = "windows")))
+    })
+}
+
+/// Whether the volume holding `dir` calls a name in NFC and in NFD the
+/// same file, asked and cached the same way as case_blind. Matching names
+/// by NFC where the disk keeps the forms apart would call a missing
+/// photograph present when another file has the other form of its name.
+/// A folder with nothing to ask about gets the platform's usual answer: a
+/// Mac's volumes treat the forms as one, Windows' and Linux's keep them
+/// apart.
+fn form_blind(dir: &Path, entries: &[std::ffi::OsString], cache: &mut std::collections::HashMap<PathBuf, bool>) -> bool {
+    let key = trash::volume_root(dir).unwrap_or(dir).to_path_buf();
+    *cache.entry(key).or_insert_with(|| {
+        probe_spelling(entries, other_form, |n| disk_answers(dir, n)).unwrap_or(cfg!(target_os = "macos"))
+    })
 }
 
 /// The photographs among each folder's records whose file is not there,
@@ -14465,6 +14514,7 @@ fn case_blind(dir: &Path, entries: &[std::ffi::OsString], cache: &mut std::colle
 pub fn missing_by_folder(rows: Vec<(String, Vec<(String, String)>)>) -> Vec<FolderMissing> {
     let mut check = trash::VolumeCheck::default();
     let mut blind = std::collections::HashMap::new();
+    let mut forms = std::collections::HashMap::new();
     let mut out = Vec::new();
     for (folder, records) in rows {
         let dir = Path::new(&folder);
@@ -14474,7 +14524,8 @@ pub fn missing_by_folder(rows: Vec<(String, Vec<(String, String)>)>) -> Vec<Fold
         let Ok(entries) = std::fs::read_dir(dir) else { continue };
         let entries: Vec<std::ffi::OsString> = entries.flatten().map(|e| e.file_name()).collect();
         let folded = case_blind(dir, &entries, &mut blind);
-        let key = |name: &std::ffi::OsStr| name_key(name, folded);
+        let one_form = form_blind(dir, &entries, &mut forms);
+        let key = |name: &std::ffi::OsStr| name_key(name, folded, one_form);
         let names: std::collections::HashSet<String> = entries.iter().map(|e| key(e)).collect();
         let missing: Vec<String> = records
             .into_iter()
@@ -25847,6 +25898,76 @@ mod tests {
         let s = |p: &Path| p.to_string_lossy().into_owned();
         let rows = vec![(s(d.path()), vec![("r".to_string(), s(&in_the_row))])];
         assert!(missing_by_folder(rows).is_empty(), "present on disk, in the other Unicode form");
+    }
+
+    /// The probe behind case_blind and form_blind decides from the listing
+    /// and the disk's answer alone, so each branch is tried here with the
+    /// answers given, on any platform: the self-skipping tests below can
+    /// only reach the branch their own disk takes.
+    #[test]
+    fn the_spelling_probe_takes_each_answer_the_disk_can_give() {
+        let names = |v: &[&str]| v.iter().map(std::ffi::OsString::from).collect::<Vec<_>>();
+        // The listing holds the other spelling as an entry of its own: apart.
+        assert_eq!(probe_spelling(&names(&["A.png", "a.PNG"]), flip_case, |_| panic!("not asked")), Some(false));
+        // It answers: one file. It names nothing: apart.
+        assert_eq!(probe_spelling(&names(&["A.png"]), flip_case, |_| Some(true)), Some(true));
+        assert_eq!(probe_spelling(&names(&["A.png"]), flip_case, |_| Some(false)), Some(false));
+        // The disk cannot say for the first: the next entry decides.
+        let asked = std::cell::RefCell::new(Vec::new());
+        let answer = probe_spelling(&names(&["A.png", "B.png"]), flip_case, |n| {
+            asked.borrow_mut().push(n.to_string());
+            if n == "a.PNG" { None } else { Some(true) }
+        });
+        assert_eq!((answer, asked.into_inner()), (Some(true), vec!["a.PNG".to_string(), "b.PNG".to_string()]));
+        // Nothing to ask about: no answer, for the caller's fallback.
+        assert_eq!(probe_spelling(&names(&["123.456"]), flip_case, |_| panic!("not asked")), None);
+        assert_eq!(probe_spelling(&names(&["plain.png"]), other_form, |_| panic!("not asked")), None);
+        assert_eq!(other_form("\u{E9}.png").as_deref(), Some("e\u{301}.png"));
+        assert_eq!(other_form("e\u{301}.png").as_deref(), Some("\u{E9}.png"));
+        assert_eq!(flip_case("Img_1.PNG").as_deref(), Some("iMG_1.png"));
+    }
+
+    /// With nothing in a folder to ask about, each check takes the
+    /// platform's usual answer, and an answer is kept for the volume (per
+    /// folder where there is no volume root) once given.
+    #[test]
+    fn the_disk_checks_fall_back_to_the_platform_and_remember_their_answer() {
+        let d = tempfile::tempdir().unwrap();
+        let none = vec![std::ffi::OsString::from("123.456")];
+        let mut cases = HashMap::new();
+        let mut forms = HashMap::new();
+        assert_eq!(case_blind(d.path(), &none, &mut cases), cfg!(any(target_os = "macos", target_os = "windows")));
+        assert_eq!(form_blind(d.path(), &none, &mut forms), cfg!(target_os = "macos"));
+        // Asked again with something that would answer otherwise, the
+        // cached answer stands.
+        std::fs::write(d.path().join("Q.png"), b"x").unwrap();
+        let cased = vec![std::ffi::OsString::from("Q.png"), std::ffi::OsString::from("q.PNG")];
+        assert_eq!(case_blind(d.path(), &cased, &mut cases), cfg!(any(target_os = "macos", target_os = "windows")));
+        assert_eq!(case_blind(d.path(), &cased, &mut HashMap::new()), false, "a fresh cache asks, and the listing holding both says apart");
+    }
+
+    /// Names are matched in NFC only where the disk calls the two forms one
+    /// file: where it keeps them apart, a row in one form and a file in the
+    /// other are different names, and the row's photograph is missing.
+    #[test]
+    fn names_match_across_unicode_forms_only_where_the_disk_does() {
+        let nfc_name = std::ffi::OsStr::new("\u{E9}.png");
+        let nfd_name = std::ffi::OsStr::new("e\u{301}.png");
+        assert_eq!(name_key(nfc_name, false, true), name_key(nfd_name, false, true));
+        assert_ne!(name_key(nfc_name, false, false), name_key(nfd_name, false, false));
+        assert_eq!(name_key(std::ffi::OsStr::new("IMG.png"), true, false), "img.png");
+        assert_eq!(name_key(std::ffi::OsStr::new("IMG.png"), false, false), "IMG.png");
+        // On a disk that keeps the forms apart (a Linux test run), the
+        // whole check: the NFD file is present, the NFC row's is not.
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join(nfd_name), b"x").unwrap();
+        if d.path().join(nfc_name).exists() {
+            eprintln!("this disk calls the two forms one file; the rest applies elsewhere");
+            return;
+        }
+        let s = |p: &Path| p.to_string_lossy().into_owned();
+        let rows = vec![(s(d.path()), vec![("row".to_string(), s(&d.path().join(nfc_name)))])];
+        assert_eq!(missing_by_folder(rows), vec![FolderMissing { path: s(d.path()), missing: vec!["row".into()] }]);
     }
 
     /// The same name under other capitals: on a disk that ignores case,
