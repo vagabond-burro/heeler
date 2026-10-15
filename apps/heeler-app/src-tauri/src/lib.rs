@@ -566,7 +566,25 @@ pub fn scan_folder(
             let flushed_before = flushed.len();
 
             for file in &files {
-                let id = match catalog.image_id_by_path(file)? {
+                let found = match catalog.image_id_by_path(file)? {
+                    // A trashed photograph whose file is still in the trash:
+                    // the file at its old path is a different one that took
+                    // its name, a card re-imported from IMG_0001, say. It
+                    // used to be taken for the photograph come home: it
+                    // wore the trashed one's rating and edits, and the
+                    // trash lost track of the original (vagabond-burro/heeler#41).
+                    // The trashed record steps aside to where its file
+                    // really is, and the newcomer gets a record of its own.
+                    Some(existing) if trashed.contains(&existing) => match trash::still_in_trash(file, &existing) {
+                        Some(in_trash) => {
+                            catalog.set_image_path(&existing, &in_trash, None)?;
+                            None
+                        }
+                        None => Some(existing),
+                    },
+                    other => other,
+                };
+                let id = match found {
                     Some(existing) => {
                         // Heal stale ownership: the old recursive scan
                         // registered deep files under the root folder.
@@ -13859,8 +13877,16 @@ async fn restore_images_from_trash(
                     continue;
                 }
             };
-            trash::record_outcome(&mut report, id, trash::restore_recorded(&path, id), || {
-                with_catalog_at(&app, issued, |c| c.set_trashed(id, false).map_err(|e| e.to_string()))
+            // A record that stepped aside into `.trash` (scan_folder, #41)
+            // goes home to the place the trash's index names.
+            let home = trash::put_back_target(&path, id);
+            trash::record_outcome(&mut report, id, trash::restore_recorded(&home, id), || {
+                with_catalog_at(&app, issued, |c| {
+                    if home != path {
+                        c.set_image_path(id, &home, None).map_err(|e| e.to_string())?;
+                    }
+                    c.set_trashed(id, false).map_err(|e| e.to_string())
+                })
             });
         }
         Ok(report)
@@ -13876,8 +13902,11 @@ async fn trashed_images(app: tauri::AppHandle) -> Result<Vec<SessionImage>, Stri
     catalog_command(app, |c| {
         Ok(c.list_trashed(None)
             .map_err(|e| e.to_string())?
-            .iter()
-            .map(record_to_session)
+            .into_iter()
+            .map(|mut r| {
+                r.path = trash::put_back_target(Path::new(&r.path), &r.id).to_string_lossy().into_owned();
+                record_to_session(&r)
+            })
             .collect())
     })
     .await
@@ -30210,6 +30239,57 @@ mod tests {
         catalog.add_image(&second, Path::new("/elsewhere/a.png"), None).unwrap();
         let third = fresh_image_id(&catalog, path).unwrap();
         assert!(third != second && third != image_id_for(path), "every taken id is stepped past");
+    }
+
+    /// A new file under a trashed photograph's name used to be taken for
+    /// that photograph come home: it wore the old rating and edits, and
+    /// the original in `.trash` was lost track of (vagabond-burro/heeler#41).
+    #[test]
+    fn a_new_file_under_a_trashed_photographs_name_is_a_photograph_of_its_own() {
+        let dir = tempfile::tempdir().unwrap();
+        let png = |v: f32| heeler_io::encode_png(&ImageBuf::filled(8, 8, [v, v, v, 1.0])).unwrap();
+        let file = dir.path().join("IMG_0001.png");
+        std::fs::write(&file, png(0.2)).unwrap();
+        let catalog = Catalog::open_in_memory().unwrap();
+        let mut paths = HashMap::new();
+        let old = scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap()[0].id.clone();
+        catalog.set_rating(&old, 5).unwrap();
+        let in_trash = trash::move_to_trash(&file, &old).unwrap();
+        catalog.set_trashed(&old, true).unwrap();
+
+        // The card is re-imported: a different IMG_0001 at the same path.
+        std::fs::write(&file, png(0.8)).unwrap();
+        let listed = scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_ne!(listed[0].id, old, "the newcomer is not the trashed photograph");
+        assert_eq!(listed[0].stars, 0, "and does not wear its rating");
+        let kept = catalog.list_trashed(None).unwrap();
+        assert_eq!(kept.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), vec![old.as_str()], "the original is still trashed");
+        assert_eq!(kept[0].path, in_trash.to_string_lossy(), "its record says where its file is");
+        assert_eq!(catalog.folders_with_trash().unwrap(), vec![dir.path().to_string_lossy().to_string()], "the folder keeps its trash badge");
+        assert_eq!(trash::put_back_target(&in_trash, &old), file, "Put Back still knows the way home");
+        // Rescanning changes nothing.
+        let again = scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
+        assert_eq!(again[0].id, listed[0].id);
+        assert_eq!(catalog.list_trashed(None).unwrap().len(), 1);
+    }
+
+    /// The other half of the rule, unchanged: the photograph itself
+    /// dragged out of `.trash` in the file browser comes back on the scan.
+    #[test]
+    fn a_trashed_photograph_dragged_back_out_of_the_trash_comes_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("IMG_0001.png");
+        std::fs::write(&file, heeler_io::encode_png(&ImageBuf::filled(8, 8, [0.5, 0.5, 0.5, 1.0])).unwrap()).unwrap();
+        let catalog = Catalog::open_in_memory().unwrap();
+        let mut paths = HashMap::new();
+        let old = scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap()[0].id.clone();
+        let in_trash = trash::move_to_trash(&file, &old).unwrap();
+        catalog.set_trashed(&old, true).unwrap();
+        std::fs::rename(&in_trash, &file).unwrap();
+        let listed = scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
+        assert_eq!(listed[0].id, old);
+        assert!(catalog.list_trashed(None).unwrap().is_empty());
     }
 
     /// Hiding must survive reopening the folder: the scan walks the disk,

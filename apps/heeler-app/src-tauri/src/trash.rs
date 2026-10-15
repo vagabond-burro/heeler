@@ -300,6 +300,46 @@ fn settle_pending(trash: &Path, m: &mut Manifest, image_id: &str) -> Vec<String>
 /// `original` is the catalog's own record of the path, which is what the
 /// row still says: trashing does not rewrite it, precisely so this can
 /// be a rename with no guessing in it.
+/// Whether a path sits directly inside a `.trash` folder.
+pub fn in_trash_dir(path: &Path) -> bool {
+    path.parent().and_then(|d| d.file_name()) == Some(std::ffi::OsStr::new(TRASH_DIR))
+}
+
+/// Where the trash beside `original` still holds photograph `id`, by
+/// its index: the newest entry for the id whose file is there. None when
+/// the trash has no such file, which is how a file found back at
+/// `original` is known to be this photograph come home rather than a
+/// different one that took its name.
+pub fn still_in_trash(original: &Path, image_id: &str) -> Option<PathBuf> {
+    let trash = trash_dir_for(original)?;
+    let m = read_manifest(&trash);
+    m.items
+        .iter()
+        .filter(|i| i.image_id == image_id && Path::new(&i.file).file_name() == Some(std::ffi::OsStr::new(&i.file)))
+        .max_by_key(|i| i.trashed_at)
+        .map(|i| trash.join(&i.file))
+        .filter(|p| p.is_file())
+}
+
+/// Where Put Back returns a trashed photograph to. Normally the path its
+/// record holds; a record that had to step aside into `.trash`, because
+/// a different file took its name (vagabond-burro/heeler#41), names the
+/// way home in the trash's index instead.
+pub fn put_back_target(recorded: &Path, image_id: &str) -> PathBuf {
+    if !in_trash_dir(recorded) {
+        return recorded.to_path_buf();
+    }
+    let Some(trash) = recorded.parent() else { return recorded.to_path_buf() };
+    let file = recorded.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    read_manifest(trash)
+        .items
+        .into_iter()
+        .filter(|i| i.image_id == image_id && i.file == file)
+        .max_by_key(|i| i.trashed_at)
+        .map(|i| PathBuf::from(i.original))
+        .unwrap_or_else(|| trash.parent().unwrap_or(trash).join(&file))
+}
+
 pub fn restore_from_trash(original: &Path, image_id: &str) -> Result<(), String> {
     restore_recorded(original, image_id).map(|_| ())
 }
@@ -373,6 +413,11 @@ fn restore_with(original: &Path, image_id: &str, writer: impl FnOnce(&Path, &Man
 /// do. A damaged index answers as an empty one, and the original name is
 /// looked for instead.
 pub fn locate_trashed(recorded: &Path, image_id: &str) -> Result<PathBuf, PathBuf> {
+    // A record already pointing inside `.trash` (in_trash_dir) says where
+    // the file is; there is no index beside it to ask.
+    if in_trash_dir(recorded) {
+        return if recorded.is_file() { Ok(recorded.to_path_buf()) } else { Err(recorded.to_path_buf()) };
+    }
     let Some(trash) = trash_dir_for(recorded) else {
         return Ok(recorded.to_path_buf());
     };
