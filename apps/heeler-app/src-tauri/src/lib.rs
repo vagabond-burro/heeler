@@ -604,7 +604,11 @@ pub fn scan_folder_records(
                 for entry in trash::read_manifest(&trash_dir).items {
                     let in_trash = trash_dir.join(&entry.file);
                     let named_plainly = Path::new(&entry.file).file_name() == Some(std::ffi::OsStr::new(&entry.file));
-                    if entry.pending || !named_plainly || !in_trash.is_file() || catalog.image_id_taken(&entry.image_id)? {
+                    // The manifest is the trash's index, never a
+                    // photograph in it; an entry naming it would
+                    // register the index itself as a trashed image.
+                    let is_the_index = in_trash == trash::manifest_path(&trash_dir);
+                    if entry.pending || !named_plainly || is_the_index || !in_trash.is_file() || catalog.image_id_taken(&entry.image_id)? {
                         continue;
                     }
                     let original = PathBuf::from(&entry.original);
@@ -31089,6 +31093,50 @@ mod tests {
         // Once is enough.
         scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
         assert_eq!(catalog.list_trashed(None).unwrap().len(), 1);
+    }
+
+    /// A hostile or broken `.trash` manifest must not register anything
+    /// it should not: a path separator in `file`, an original outside
+    /// the folder, a pending entry, an id another row already has, the
+    /// manifest naming itself, and the same id twice. Only the one clean
+    /// entry registers, once, and the manifest itself stays put.
+    #[test]
+    fn a_hostile_trash_manifest_registers_nothing_but_the_one_clean_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        let png = heeler_io::encode_png(&ImageBuf::filled(8, 8, [0.5, 0.5, 0.5, 1.0])).unwrap();
+        std::fs::write(dir.path().join("a.png"), &png).unwrap();
+        let trash = dir.path().join(trash::TRASH_DIR);
+        std::fs::create_dir(&trash).unwrap();
+        std::fs::write(trash.join("held.png"), &png).unwrap();
+
+        let catalog = Catalog::open_in_memory().unwrap();
+        let mut paths = HashMap::new();
+        let first = scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
+        let known_id = first[0].id.clone();
+
+        let folder = dir.path().to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"");
+        let manifest = format!(
+            r#"{{"note":"","items":[
+              {{"file":"../escape.png","original":"{folder}/escape.png","image_id":"evil1","trashed_at":1,"pending":false}},
+              {{"file":"held.png","original":"/etc/outside.png","image_id":"evil2","trashed_at":1,"pending":false}},
+              {{"file":"held.png","original":"{folder}/held.png","image_id":"evil3","trashed_at":1,"pending":true}},
+              {{"file":"held.png","original":"{folder}/held.png","image_id":"{known_id}","trashed_at":1,"pending":false}},
+              {{"file":"manifest.json","original":"{folder}/manifest.json","image_id":"evil5","trashed_at":1,"pending":false}},
+              {{"file":"held.png","original":"{folder}/held.png","image_id":"evil6","trashed_at":1,"pending":false}},
+              {{"file":"held.png","original":"{folder}/held.png","image_id":"evil6","trashed_at":2,"pending":false}}
+            ]}}"#
+        );
+        std::fs::write(trash.join("manifest.json"), manifest).unwrap();
+
+        let ids = |c: &Catalog| -> Vec<String> {
+            c.list_images(&heeler_catalog::Filter::default()).unwrap().iter().map(|r| r.id.clone()).collect()
+        };
+        let before = ids(&catalog);
+        scan_folder(dir.path(), &catalog, &mut paths, &mut ScanStats::default()).unwrap();
+        assert_eq!(before, ids(&catalog), "no live row added from a hostile manifest");
+        let trashed = catalog.list_trashed(None).unwrap();
+        assert_eq!(trashed.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), vec!["evil6"], "only the one clean entry, once");
+        assert!(trash.join("manifest.json").is_file(), "the manifest itself is never moved or registered");
     }
 
     /// A folder deleted or moved on disk could not be opened at all, so
