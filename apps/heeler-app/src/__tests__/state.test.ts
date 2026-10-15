@@ -1971,6 +1971,17 @@ describe("graph state semantics", () => {
     expect(folderHasEdits(edited, "mock://trip/day2")).toBe(false);
   });
 
+  // A drive root already ends in its separator, and the badge never
+  // matched under it (vagabond-burro/heeler#45).
+  it("folderHasEdits marks a drive root above edited folders", async () => {
+    const { folderHasEdits } = await import("../state");
+    expect(folderHasEdits(["E:\\DCIM\\100MSDCF"], "E:\\")).toBe(true);
+    expect(folderHasEdits(["/Volumes/Card/DCIM"], "/")).toBe(true);
+    expect(folderHasEdits(["/Volumes/Card/DCIM"], "/Volumes/Card/")).toBe(true);
+    expect(folderHasEdits(["F:\\DCIM"], "E:\\")).toBe(false);
+    expect(folderHasEdits([], "/")).toBe(false);
+  });
+
   it("thumbnail progress ticks up and auto-clears when done", () => {
     let s = initialState();
     expect(s.thumbProgress).toBe(null);

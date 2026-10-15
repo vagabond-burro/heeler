@@ -8021,9 +8021,13 @@ export function ancestorsBetween(root: string, path: string): string[] {
  * badges mark the whole trail down to where the edits actually live.
  * Separator-aware, so "F:\A" never matches "F:\AB". */
 export function folderHasEdits(editedPaths: string[], folder: string): boolean {
+  // A drive root ("/", "E:\\") already ends in its separator, and adding
+  // another never matched, so a card opened at its root never showed the
+  // badge (vagabond-burro/heeler#45).
+  const root = folder.replace(/[\\/]+$/, "");
   return editedPaths.some(
     (p) =>
-      p === folder || p.startsWith(folder + "\\") || p.startsWith(folder + "/"),
+      p === folder || p === root || p.startsWith(root + "\\") || p.startsWith(root + "/"),
   );
 }
 

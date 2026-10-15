@@ -3916,9 +3916,10 @@ the file browser's job too, and the next scan notices.*/}
               // The folder you are in, named in the color the app uses
               // for "this one is live", the same as the collection
               // below it. White lettering said "selected" in a language
-              // nothing else in this panel speaks.
-              color: state.libraryLabel === f.name && state.activeCollection === null ? "var(--accent)" : "var(--text-hi)",
-              background: state.libraryLabel === f.name && state.activeCollection === null ? "#202326" : "transparent",
+              // nothing else in this panel speaks. By path, not name: two
+              // folders called DCIM lit up together (vagabond-burro/heeler#45).
+              color: state.activeFolderPath === f.path && state.activeCollection === null ? "var(--accent)" : "var(--text-hi)",
+              background: state.activeFolderPath === f.path && state.activeCollection === null ? "#202326" : "transparent",
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 7, overflow: "hidden" }}>

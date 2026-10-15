@@ -23,6 +23,7 @@ import { describe, expect, it } from "vitest";
 import { App } from "../app";
 import { initialState } from "../data";
 import { reduce, type Command, type State } from "../state";
+import { BrowserPanel } from "../ui/chrome";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
 const size = (n: number): Command => ({ type: "set_panel_size", panel: "libraryTree", size: n });
@@ -207,5 +208,25 @@ describe("the height the seam is allowed to reach", () => {
     expect(after.libraryTree).toBe(400);
     expect(after.library).toBe(s.panelSizes.library);
     expect(after.right).toBe(s.panelSizes.right);
+  });
+});
+
+// Two picked folders with the same name both lit up, because the test
+// was the name, not the path (vagabond-burro/heeler#45).
+describe("the shortlist lights the folder you are in by its path", () => {
+  it("leaves another folder with the same name alone", () => {
+    const s: State = {
+      ...initialState(),
+      folders: [
+        { id: 1, name: "DCIM", path: "/Volumes/A/DCIM", count: 3, lastOpened: 0 },
+        { id: 2, name: "DCIM", path: "/Volumes/B/DCIM", count: 3, lastOpened: 0 },
+      ],
+      libraryLabel: "DCIM",
+      activeFolderPath: "/Volumes/B/DCIM",
+      activeCollection: null,
+    };
+    render(<BrowserPanel state={s} dispatch={() => {}} />);
+    expect(screen.getByTestId("folder-row-2").style.color).toBe("var(--accent)");
+    expect(screen.getByTestId("folder-row-1").style.color).toBe("var(--text-hi)");
   });
 });
