@@ -3178,7 +3178,7 @@ mod tests {
         let placed = crate::ops::layer_on_frame(&params, &padded, 160, 120);
         // Compared premultiplied: where the picture covers the pixel the
         // two agree exactly, and along the outline the bare placement
-        // drops the outermost sliver of antialiasing (place_image cuts
+        // drops the outermost sliver of antialiasing (place_image_rows cuts
         // at a hundredth past the edge) that the margin's transparent
         // pixels now carry, under a quarter of one pixel's coverage.
         let mut interior = 0.0f32;

@@ -39,6 +39,10 @@ enum Mode {
     /// correction): handed its whole input, resident, it makes the
     /// band's rows.
     Gather,
+    /// A blend placing its layer on the frame: its base's rows, and its
+    /// layer, clip and mask resident and whole, of which it places the
+    /// band's rows (band::BandFrame's `layers_whole`).
+    Layer,
 }
 
 /// What a banded render did, for the caller's log and the tests.
@@ -505,6 +509,27 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
     }
 }
 
+/// Whether a blend can place a band's rows of its layer, clip and mask
+/// from their whole frames (ops.rs layer_on_frame_rows): all but a
+/// picture of another size than the frame, fitted to it and then warped,
+/// which is fitted whole first, and a picture mask of another size under
+/// a warp, likewise.
+fn blend_layers_band(node: &Node, wired: &[(String, String)], dims: &HashMap<String, (usize, usize, usize)>, w: usize, h: usize) -> bool {
+    let placement = ops::placement_on_frame(&node.params, w, h);
+    let warped = crate::ops_geometry::Quad::from_params(&placement).is_some();
+    let content_placed = node.params.get("content_placed").is_some_and(|v| matches!(v, heeler_graph::ParamValue::Bool(true)));
+    wired.iter().all(|(port, from)| {
+        let (iw, ih, ic) = dims[from];
+        match port.as_str() {
+            "base" => (iw, ih) == (w, h),
+            "blend" => content_placed || !ops::layer_rows_whole_fit(&node.params, iw, ih, w, h),
+            "clip" => ic != 4 || ops::clip_frame_params(node).is_none_or(|p| !ops::layer_rows_whole_fit(&p, iw, ih, w, h)),
+            "mask" => ic != 4 || !warped || (iw, ih) == (w, h),
+            _ => false,
+        }
+    })
+}
+
 /// Operators that, handed their whole input, make a band's rows of their
 /// output (band::BandFrame's `rows` from its `y0`), each pixel mapped from
 /// its place in the frame as the whole frame maps it.
@@ -608,7 +633,17 @@ fn plan(
             && wired[0].0 == "in"
             && mode.get(&wired[0].1) == Some(&Mode::Resident)
             && node.params.get(crate::executor::MASK_WEIGHT_PARAM).and_then(|v| v.as_f64()).is_none_or(|w| w >= 1.0);
-        let m = if !follows {
+        // A blend placing, warping or fitting its layer, or clipped to a
+        // placed one: its base in bands, the rest whole.
+        let layered = node.enabled
+            && !planted
+            && node.node_type == "heeler.blend"
+            && wired.iter().any(|(port, _)| port == "base")
+            && (!same_size || margin(node, bw, bh).is_none())
+            && blend_layers_band(node, &wired, &dims, bw, bh);
+        let m = if layered {
+            Mode::Layer
+        } else if !follows {
             Mode::Resident
         } else if gathers {
             Mode::Gather
@@ -637,6 +672,17 @@ fn plan(
         if mode[id] == Mode::Crop {
             if let Some((_, from)) = inputs[id].first() {
                 if crops[id].input_rows(0, 1).is_none() && mode[from] != Mode::Resident {
+                    mode.insert(from.clone(), Mode::Resident);
+                }
+            }
+        }
+    }
+    // A blend placing its layer reads all of the layer, its clip and its
+    // mask: those it takes whole.
+    for id in &order {
+        if mode[id] == Mode::Layer {
+            for (port, from) in &inputs[id] {
+                if port != "base" {
                     mode.insert(from.clone(), Mode::Resident);
                 }
             }
@@ -1003,7 +1049,10 @@ pub fn estimate_banded(
             let (fw, _, fc) = plan.dims[id];
             let mut inputs = 0usize;
             if plan.mode[id] != Mode::Gather {
-                for (_, from) in &plan.inputs[id] {
+                for (port, from) in &plan.inputs[id] {
+                    if plan.mode[id] == Mode::Layer && port != "base" {
+                        continue;
+                    }
                     let (iw, _, ic) = plan.dims[from];
                     inputs = sum([inputs, rows_bytes(iw, rhi - rlo, ic)?])?;
                 }
@@ -1015,6 +1064,14 @@ pub fn estimate_banded(
                     let made = rows_bytes(fw, rhi - rlo, fc)?;
                     let scratch = if !node.enabled {
                         0
+                    } else if plan.mode[id] == Mode::Layer {
+                        // The band's rows of the layer, its clip and mask,
+                        // and a placed picture's halving (a quarter of it).
+                        let halved = plan.inputs[id].iter().filter(|(port, _)| port == "blend").map(|(_, from)| {
+                            let (iw, ih, _) = plan.dims[from];
+                            crate::memory::bytes(iw, ih, 4, 4).map(|b| b / 4)
+                        });
+                        sum([crate::memory::bytes(fw, rhi - rlo, 4 * 3, 4)?, halved.sum::<Result<usize, _>>()?])?
                     } else if let Some(b) = crate::executor::padded_scratch(node, fw, rhi - rlo) {
                         b?
                     } else {
@@ -1215,6 +1272,15 @@ fn band_needs(plan: &Plan, terminals: &[&str], a: usize, b: usize, started: &mut
                 reads.insert(id.clone(), (lo, hi));
                 continue;
             }
+            // Its base's same rows; the layer's inputs are resident.
+            Mode::Layer => {
+                reads.insert(id.clone(), (lo, hi));
+                for (_, from) in plan.inputs[id].iter().filter(|(port, _)| port == "base") {
+                    let h = hull(need.get(from).copied(), (lo, hi));
+                    need.insert(from.clone(), h);
+                }
+                continue;
+            }
         };
         if plan.carried.contains(id) && started.insert(id.clone()) {
             r.0 = 0;
@@ -1284,7 +1350,7 @@ fn render_band(
             Mode::Rows { .. } => {
                 let inputs: Vec<(String, Value)> =
                     plan.inputs[id].iter().map(|(port, from)| (port.clone(), rows_from(&slabs, from, rlo, rhi))).collect();
-                let frame = BandFrame { full_w: fw, full_h: fh, y0: rlo, rows: rhi - rlo };
+                let frame = BandFrame { full_w: fw, full_h: fh, y0: rlo, rows: rhi - rlo, layers_whole: false };
                 let made = if plan.carried.contains(id) {
                     let mut carry = carries.remove(id).unwrap_or_default();
                     carry.next_b0 = later.iter().find_map(|l| l.reads.get(id).map(|r| r.0));
@@ -1322,10 +1388,26 @@ fn render_band(
                 let px = |x: usize, y: usize| img.pixel(x, y - rlo);
                 Value::Image(Arc::new(g.render(lo, hi, &px)))
             }
+            Mode::Layer => {
+                let inputs: Vec<(String, Value)> = plan.inputs[id]
+                    .iter()
+                    .map(|(port, from)| (port.clone(), if port == "base" { rows_from(&slabs, from, lo, hi) } else { resident[from].clone() }))
+                    .collect();
+                let frame = BandFrame { full_w: fw, full_h: fh, y0: lo, rows: hi - lo, layers_whole: true };
+                let made = with_frame(frame, || apply_node(id, node, inputs, false, sources))?;
+                let (mw, mh) = match &made {
+                    Value::Image(i) => (i.width, i.height),
+                    Value::Mask(m) => (m.width, m.height),
+                };
+                if (mw, mh) != (fw, hi - lo) {
+                    return Err(EngineError::Band(format!("'{id}' laid {mw} by {mh} for a {fw} wide band of {} rows", hi - lo)));
+                }
+                made
+            }
             Mode::Gather => {
                 let inputs: Vec<(String, Value)> =
                     plan.inputs[id].iter().map(|(port, from)| (port.clone(), resident[from].clone())).collect();
-                let frame = BandFrame { full_w: fw, full_h: fh, y0: lo, rows: hi - lo };
+                let frame = BandFrame { full_w: fw, full_h: fh, y0: lo, rows: hi - lo, layers_whole: false };
                 let made = with_frame(frame, || apply_node(id, node, inputs, false, sources))?;
                 let (mw, mh) = match &made {
                     Value::Image(i) => (i.width, i.height),

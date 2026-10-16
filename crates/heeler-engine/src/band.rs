@@ -148,6 +148,9 @@ pub(crate) struct BandFrame {
     /// (an operator handed its whole input, banded.rs Mode::Gather) the
     /// band's.
     pub(crate) rows: usize,
+    /// A blend's layer, clip and mask come whole and its base a band
+    /// (banded.rs Mode::Layer): the blend places the band's rows of them.
+    pub(crate) layers_whole: bool,
 }
 
 thread_local! {

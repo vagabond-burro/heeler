@@ -231,10 +231,25 @@ pub(crate) fn image_input<'a>(
 /// Two-input nodes resize the secondary input to the base instead of
 /// erroring: a cropped branch merged with an uncropped look is routine.
 pub(crate) fn conform(input: &Arc<ImageBuf>, base: &ImageBuf) -> Arc<ImageBuf> {
-    if input.width == base.width && input.height == base.height {
-        input.clone()
+    conform_rows(input, base.width, base.height, 0, base.height)
+}
+
+/// conform's rows `y0..y0 + rows` of a `w` by `h` frame alone.
+pub(crate) fn conform_rows(input: &Arc<ImageBuf>, w: usize, h: usize, y0: usize, rows: usize) -> Arc<ImageBuf> {
+    if input.width == w && input.height == h {
+        rows_of(input, y0, rows)
     } else {
-        Arc::new(crate::ops_geometry::resize(input, base.width, base.height))
+        Arc::new(crate::ops_geometry::resize_rows(input, w, h, y0, rows))
+    }
+}
+
+/// Rows `y0..y0 + rows` of a picture: the picture itself when that is
+/// all of it.
+pub(crate) fn rows_of(img: &Arc<ImageBuf>, y0: usize, rows: usize) -> Arc<ImageBuf> {
+    if y0 == 0 && rows == img.height {
+        img.clone()
+    } else {
+        Arc::new(crate::ops_geometry::image_rows(img, y0, rows))
     }
 }
 
@@ -247,12 +262,16 @@ pub(crate) fn conform(input: &Arc<ImageBuf>, base: &ImageBuf) -> Arc<ImageBuf> {
 /// centered, no scaling. Same size in, same buffer out, whatever the
 /// mode.
 pub(crate) fn conform_fit(input: &Arc<ImageBuf>, base: &ImageBuf, fit: &str) -> Arc<ImageBuf> {
-    let (bw, bh) = (base.width, base.height);
+    conform_fit_rows(input, base.width, base.height, fit, 0, base.height)
+}
+
+/// conform_fit's rows `y0..y0 + rows` of a `bw` by `bh` frame alone.
+pub(crate) fn conform_fit_rows(input: &Arc<ImageBuf>, bw: usize, bh: usize, fit: &str, y0: usize, rows: usize) -> Arc<ImageBuf> {
     if input.width == bw && input.height == bh {
-        return input.clone();
+        return rows_of(input, y0, rows);
     }
     if fit == "stretch" {
-        return conform(input, base);
+        return conform_rows(input, bw, bh, y0, rows);
     }
     let (iw, ih) = (input.width as f32, input.height as f32);
     let scale = match fit {
@@ -271,9 +290,9 @@ pub(crate) fn conform_fit(input: &Arc<ImageBuf>, base: &ImageBuf, fit: &str) -> 
     // picture does not cover is transparent.
     let ox = (bw as i64 - sw as i64) / 2;
     let oy = (bh as i64 - sh as i64) / 2;
-    let mut out = ImageBuf::filled(bw, bh, [0.0, 0.0, 0.0, 0.0]);
-    for y in 0..bh {
-        let sy = y as i64 - oy;
+    let mut out = ImageBuf::filled(bw, rows, [0.0, 0.0, 0.0, 0.0]);
+    for (y, fy) in (y0..y0 + rows).enumerate() {
+        let sy = fy as i64 - oy;
         if sy < 0 || sy >= sh as i64 {
             continue;
         }
@@ -2839,9 +2858,23 @@ pub fn layer_on_frame(
     w: usize,
     h: usize,
 ) -> Arc<ImageBuf> {
+    layer_on_frame_rows(params, top, w, h, 0, h)
+}
+
+/// layer_on_frame's rows `y0..y0 + rows` of the `w` by `h` frame alone,
+/// each pixel placed as the whole frame places it. A fitted picture of
+/// another size than the frame, then warped, is fitted whole first
+/// (layer_rows_whole_fit says when).
+pub(crate) fn layer_on_frame_rows(
+    params: &std::collections::BTreeMap<String, ParamValue>,
+    top: &Arc<ImageBuf>,
+    w: usize,
+    h: usize,
+    y0: usize,
+    rows: usize,
+) -> Arc<ImageBuf> {
     let params = &*placement_on_frame(params, w, h);
     let fit = params.get("fit").and_then(|v| v.as_str()).unwrap_or("stretch");
-    let frame = ImageBuf { width: w, height: h, data: Vec::new() };
     if fit == "place" {
         return match crate::ops_geometry::Quad::placed_from_params(params) {
             Some(q) => {
@@ -2851,16 +2884,26 @@ pub fn layer_on_frame(
                 // lands where it always did and a pull that carried it
                 // past its rectangle shows past the corners.
                 let q = placed_margin(params, top).and_then(|(mx, my)| q.padded(mx, my)).unwrap_or(q);
-                Arc::new(crate::ops_geometry::place_image(top, w, h, &q))
+                Arc::new(crate::ops_geometry::place_image_rows(top, w, h, &q, y0, rows))
             }
-            None => conform(top, &frame),
+            None => conform_rows(top, w, h, y0, rows),
         };
     }
-    let fitted = conform_fit(top, &frame, fit);
     match crate::ops_geometry::Quad::from_params(params) {
-        Some(q) => Arc::new(crate::ops_geometry::warp_image(&fitted, &q)),
-        None => fitted,
+        Some(q) => {
+            let fitted = conform_fit_rows(top, w, h, fit, 0, h);
+            Arc::new(crate::ops_geometry::warp_image_rows(&fitted, &q, y0, rows))
+        }
+        None => conform_fit_rows(top, w, h, fit, y0, rows),
     }
+}
+
+/// Whether layer_on_frame_rows fits a `tw` by `th` picture to the whole
+/// `w` by `h` frame before it can warp a band of it.
+pub(crate) fn layer_rows_whole_fit(params: &std::collections::BTreeMap<String, ParamValue>, tw: usize, th: usize, w: usize, h: usize) -> bool {
+    let params = &*placement_on_frame(params, w, h);
+    let fit = params.get("fit").and_then(|v| v.as_str()).unwrap_or("stretch");
+    fit != "place" && (tw, th) != (w, h) && crate::ops_geometry::Quad::from_params(params).is_some()
 }
 
 /// The margin a placed picture arrives with, as fractions of its own
@@ -3015,6 +3058,14 @@ fn blend(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError> 
         return Ok(Value::Image(base.clone()));
     };
     let top_raw = top_in.1.as_image().ok_or_else(|| EngineError::TypeMismatch { node: node.id.clone(), port: "blend".into() })?;
+    // The frame the layer is placed on, and the rows of it the base is:
+    // the base itself, but in a banded render that hands the layer, clip
+    // and mask whole (banded.rs Mode::Layer) the frame's rows from y0.
+    let (fw, fh, y0) = match crate::band::frame() {
+        Some(f) if f.layers_whole => (f.full_w, f.full_h, f.y0),
+        _ => (base.width, base.height, 0),
+    };
+    let rows = base.height;
     // The layer transform: Move/Scale/Rotate and Warp both land here, as
     // four corners this layer's content has been dragged to. It applies
     // to the top and to the mask and to nothing else, because the base
@@ -3023,9 +3074,9 @@ fn blend(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError> 
     // returns None and every buffer below is the one that arrived.
     // Through the frame-shape rule first, so the picture and its mask
     // are carried onto this frame's shape by the same numbers.
-    let placement = placement_on_frame(&node.params, base.width, base.height);
+    let placement = placement_on_frame(&node.params, fw, fh);
     let quad = crate::ops_geometry::Quad::from_params(&placement);
-    let top = if p_bool(&node.params, "content_placed", false) { conform(top_raw, base) } else { layer_on_frame(&placement, top_raw, base.width, base.height) };
+    let top = if p_bool(&node.params, "content_placed", false) { conform_rows(top_raw, fw, fh, y0, rows) } else { layer_on_frame_rows(&placement, top_raw, fw, fh, y0, rows) };
     let top: &ImageBuf = &top;
     // Percent values include fractions of a percent and exactly one percent.
     let opacity = fraction(p(&node.params, "opacity", 100.0));
@@ -3051,8 +3102,8 @@ fn blend(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError> 
         .find(|(port, _)| port == "clip")
         .and_then(|(_, v)| match v {
             Value::Image(m) => Some(match clip_frame_params(node) {
-                Some(p) => layer_on_frame(&p, m, base.width, base.height),
-                None => conform(m, base),
+                Some(p) => layer_on_frame_rows(&p, m, fw, fh, y0, rows),
+                None => conform_rows(m, fw, fh, y0, rows),
             }),
             _ => None,
         });
@@ -3063,15 +3114,14 @@ fn blend(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError> 
         .iter()
         .find(|(port, _)| port == "mask")
         .and_then(|(_, v)| match v {
-            Value::Image(m) => Some(conform(m, base)),
+            // Through the same quad as the picture. A mask left behind
+            // would be a window the content slides past rather than a
+            // shape that travels with it.
+            Value::Image(m) => Some(match quad {
+                Some(q) => Arc::new(crate::ops_geometry::warp_image_rows(&conform_rows(m, fw, fh, 0, fh), &q, y0, rows)),
+                None => conform_rows(m, fw, fh, y0, rows),
+            }),
             _ => None,
-        })
-        // Through the same quad as the picture. A mask left behind would
-        // be a window the content slides past rather than a shape that
-        // travels with it.
-        .map(|m| match quad {
-            Some(q) => Arc::new(crate::ops_geometry::warp_image(&m, &q)),
-            None => m,
         });
     // A real mask buffer (what the mask nodes emit) is honored too; it
     // only ever arrived as an image before, so a brush mask wired to a
@@ -3084,9 +3134,13 @@ fn blend(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError> 
         .iter()
         .find(|(port, _)| port == "mask")
         .and_then(|(_, v)| v.as_mask())
-        .map(|m| mask_on_frame(&node.id, m, base.width, base.height));
-    let warped_mask = quad.and_then(|q| mask_buf.as_ref().map(|m| crate::ops_geometry::warp_mask(m, &q)));
-    let mask_buf: Option<&MaskBuf> = match warped_mask.as_ref() {
+        .map(|m| mask_on_frame(&node.id, m, fw, fh));
+    let placed_mask = mask_buf.as_ref().and_then(|m| match quad {
+        Some(q) => Some(crate::ops_geometry::warp_mask_rows(m, &q, y0, rows)),
+        None if rows != m.height => Some(MaskBuf { width: m.width, height: rows, data: m.data[y0 * m.width..(y0 + rows) * m.width].to_vec() }),
+        None => None,
+    });
+    let mask_buf: Option<&MaskBuf> = match placed_mask.as_ref() {
         Some(w) => Some(w),
         None => mask_buf.as_deref(),
     };

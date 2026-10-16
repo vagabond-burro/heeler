@@ -42,9 +42,15 @@ fn bilinear(src: &ImageBuf, fx: f32, fy: f32) -> [f32; 4] {
 
 /// Bilinear resize, used by merge/blend to reconcile mismatched inputs.
 pub(crate) fn resize(src: &ImageBuf, w: usize, h: usize) -> ImageBuf {
+    resize_rows(src, w, h, 0, h)
+}
+
+/// resize's rows `y0..y0 + rows` of the `w` by `h` result alone.
+pub(crate) fn resize_rows(src: &ImageBuf, w: usize, h: usize, y0: usize, rows: usize) -> ImageBuf {
     use rayon::prelude::*;
-    let mut out = ImageBuf::new(w, h);
+    let mut out = ImageBuf::new(w, rows);
     out.data.par_chunks_mut(w * 4).enumerate().for_each(|(y, row)| {
+        let y = y + y0;
         for x in 0..w {
             let fx = (x as f32 + 0.5) * src.width as f32 / w as f32;
             let fy = (y as f32 + 0.5) * src.height as f32 / h as f32;
@@ -287,6 +293,12 @@ pub(crate) fn warp_image(src: &ImageBuf, q: &Quad) -> ImageBuf {
     warp_image_rows(src, q, 0, src.height)
 }
 
+/// Rows `y0..y0 + rows` of a picture, copied.
+pub(crate) fn image_rows(src: &ImageBuf, y0: usize, rows: usize) -> ImageBuf {
+    let w = src.width;
+    ImageBuf { width: w, height: rows, data: src.data[y0 * w * 4..(y0 + rows) * w * 4].to_vec() }
+}
+
 /// warp_image's rows `y0..y0 + rows` alone, each pixel mapped from its
 /// place in the frame as the whole warp maps it: a band of the warp, for
 /// a banded render's gather. An identity quad hands the whole input back.
@@ -295,7 +307,7 @@ pub(crate) fn warp_image_rows(src: &ImageBuf, q: &Quad, y0: usize, rows: usize) 
     let (w, h) = (src.width, src.height);
     let mut out = ImageBuf::new(w, rows);
     let Some(hm) = inverse_map(q, w, h) else {
-        return src.clone();
+        return image_rows(src, y0, rows);
     };
     out.data.par_chunks_mut(w * 4).enumerate().for_each(|(y, row)| {
         let y = y + y0;
@@ -315,15 +327,22 @@ pub(crate) fn warp_image_rows(src: &ImageBuf, q: &Quad, y0: usize, rows: usize) 
 /// the window across a stationary photograph. Neither is a transform,
 /// and both are what you get by forgetting one line.
 pub(crate) fn warp_mask(src: &MaskBuf, q: &Quad) -> MaskBuf {
+    warp_mask_rows(src, q, 0, src.height)
+}
+
+/// warp_mask's rows `y0..y0 + rows` alone.
+pub(crate) fn warp_mask_rows(src: &MaskBuf, q: &Quad, y0: usize, rows: usize) -> MaskBuf {
     use rayon::prelude::*;
     let (w, h) = (src.width, src.height);
-    let mut out = MaskBuf::new(w, h);
+    let mut out = MaskBuf::new(w, rows);
     let Some(hm) = inverse_map(q, w, h) else {
         // Same rule as the picture: an unsolvable quad shows the mask
         // unwarped, never a hole where the layer was.
-        return src.clone();
+        out.data.copy_from_slice(&src.data[y0 * w..(y0 + rows) * w]);
+        return out;
     };
     out.data.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+        let y = y + y0;
         for (x, o) in row.iter_mut().enumerate() {
             let (sx, sy) = project(&hm, x as f32 + 0.5, y as f32 + 0.5);
             *o = sample_mask(src, sx, sy);
@@ -347,9 +366,12 @@ pub(crate) fn warp_mask(src: &MaskBuf, q: &Quad) -> MaskBuf {
 /// past the edge, so a turned edge is antialiased over a pixel instead
 /// of stair-stepped, and a picture's own alpha (a PNG, a TIFF, an EXR)
 /// comes through.
-pub(crate) fn place_image(src: &ImageBuf, w: usize, h: usize, q: &Quad) -> ImageBuf {
+///
+/// Rows `y0..y0 + rows` of the frame alone, each placed as the whole
+/// frame places it: all of them, or a band.
+pub(crate) fn place_image_rows(src: &ImageBuf, w: usize, h: usize, q: &Quad, y0: usize, rows: usize) -> ImageBuf {
     use rayon::prelude::*;
-    let mut out = ImageBuf::new(w, h);
+    let mut out = ImageBuf::new(w, rows);
     if w == 0 || h == 0 || src.width == 0 || src.height == 0 {
         return out;
     }
@@ -379,6 +401,7 @@ pub(crate) fn place_image(src: &ImageBuf, w: usize, h: usize, q: &Quad) -> Image
     let (iw, ih) = (pic.width as f32, pic.height as f32);
     let [bx, by, bw, bh] = q.src;
     out.data.par_chunks_mut(w * 4).enumerate().for_each(|(y, row)| {
+        let y = y + y0;
         for x in 0..w {
             let (fx, fy) = project(&hm, x as f32 + 0.5, y as f32 + 0.5);
             let u = (fx / w as f32 - bx) / bw;

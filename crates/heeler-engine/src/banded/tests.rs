@@ -501,6 +501,92 @@ fn paint_and_clone_band() {
     }
 }
 
+/// A blend placing, warping or fitting its layer composites a band at a
+/// time over its base's rows, its layer, clip and mask taken whole: a
+/// placed picture on turned corners (and through the frame-shape rule,
+/// and with a painted mask), a warped layer of the frame's size with a
+/// mask, a picture fitted inside the frame, an adjustment clipped to a
+/// placed picture. A picture fitted and then warped is fitted whole,
+/// and keeps its blend whole.
+#[test]
+fn placed_and_warped_layers_band() {
+    let registry = Registry::builtin();
+    let (w, h) = (157, 131);
+    let mut pic = ImageBuf::new(61, 47);
+    for (i, px) in pic.data.chunks_exact_mut(4).enumerate() {
+        let (x, y) = ((i % 61) as f32 / 61.0, (i / 61) as f32 / 47.0);
+        px.copy_from_slice(&[0.9 * x, 0.3 + 0.5 * y, 0.6, if (x - 0.5).abs() < 0.4 { 1.0 } else { 0.3 }]);
+    }
+    let n = |v: f64| ParamValue::Number(v);
+    let t = |v: &str| ParamValue::Text(v.into());
+    let quad = |turned: bool| {
+        let mut q = vec![("warp_bx", n(0.2)), ("warp_by", n(0.25)), ("warp_bw", n(0.45)), ("warp_bh", n(0.4))];
+        if turned {
+            q.extend([("warp_x0", n(0.25)), ("warp_y0", n(0.15)), ("warp_x1", n(0.75)), ("warp_y1", n(0.3)), ("warp_x2", n(0.6)), ("warp_y2", n(0.8)), ("warp_x3", n(0.1)), ("warp_y3", n(0.6))]);
+        }
+        q
+    };
+    let strokes = r#"[{"points":[[0.1,0.1],[0.5,0.6],[0.9,0.3]],"radius":0.08,"hardness":0.5}]"#;
+    // (what, layer from "pic" or "inv", params, brush mask, clip from pic, banded)
+    let mut cases: Vec<(&str, &str, Vec<(&str, ParamValue)>, bool, bool, bool)> = Vec::new();
+    let mut placed = quad(true);
+    placed.extend([("fit", t("place")), ("opacity", n(80.0)), ("mode", t("multiply"))]);
+    cases.push(("placed, turned", "pic", placed.clone(), false, false, true));
+    let mut shaped = placed.clone();
+    shaped.push(("warp_aspect", n(1.0)));
+    cases.push(("placed, frame shape, masked", "pic", shaped, true, false, true));
+    let mut box_only = quad(false);
+    box_only.push(("fit", t("place")));
+    cases.push(("placed on its box", "pic", box_only, false, false, true));
+    let mut warped = quad(true);
+    warped.push(("fit", t("stretch")));
+    cases.push(("warped, frame size, masked", "inv", warped, true, false, true));
+    cases.push(("fitted inside", "pic", vec![("fit", t("fit")), ("mode", t("screen"))], false, false, true));
+    cases.push(("stretched", "pic", vec![("fit", t("stretch"))], true, false, true));
+    cases.push((
+        "clipped to a placed picture",
+        "inv",
+        vec![("adjustment", ParamValue::Bool(true)), ("clip_place", t("place;0.2,0.25,0.45,0.4,0.25,0.15,0.75,0.3,0.6,0.8,0.1,0.6"))],
+        true,
+        true,
+        true,
+    ));
+    let mut fit_warp = quad(true);
+    fit_warp.push(("fit", t("fit")));
+    cases.push(("fitted and warped", "pic", fit_warp, false, false, false));
+    for (what, layer, params, masked, clipped, bands) in cases {
+        let mut g = Graph::new("layer");
+        g.add_node(registry.instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+        g.add_node(registry.instantiate("heeler.image_source", "pic", Section::Creative).unwrap()).unwrap();
+        g.add_node(registry.instantiate("heeler.exposure", "exp", Section::Creative).unwrap()).unwrap();
+        g.add_node(registry.instantiate("heeler.invert", "inv", Section::Creative).unwrap()).unwrap();
+        let mut b = registry.instantiate("heeler.blend", "b", Section::Creative).unwrap();
+        for (k, v) in &params {
+            b.params.insert(k.to_string(), v.clone());
+        }
+        g.add_node(b).unwrap();
+        g.set_param("exp", "exposure", n(0.7)).unwrap();
+        g.connect("src", "out", "exp", "in").unwrap();
+        g.connect("src", "out", "inv", "in").unwrap();
+        g.connect("exp", "out", "b", "base").unwrap();
+        g.connect(layer, "out", "b", "blend").unwrap();
+        if masked {
+            g.add_node(registry.instantiate("heeler.brush_mask", "m", Section::Creative).unwrap()).unwrap();
+            g.set_param("m", "strokes", t(strokes)).unwrap();
+            g.connect("src", "out", "m", "in").unwrap();
+            g.connect("m", "out", "b", "mask").unwrap();
+        }
+        if clipped {
+            g.connect("pic", "out", "b", "clip").unwrap();
+        }
+        let mut sources = sources_with(frame(w, h));
+        sources.insert("pic".into(), SourceImage { image: Arc::new(pic.clone()), version: 1, measured: false });
+        let report = assert_same(&g, &["b"], &sources, BAND, what);
+        assert_eq!(report.banded.iter().any(|n| n == "b"), bands, "{what}: {report:?}");
+        assert!(report.banded.iter().any(|n| n == "exp"), "{what}: {report:?}");
+    }
+}
+
 /// Transform and Perspective gather each band from the whole photograph,
 /// as the lens does: under their defaults, their sweeps, and a move,
 /// turn and scale together, and a strong keystone with a zoom.
