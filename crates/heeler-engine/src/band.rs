@@ -254,6 +254,80 @@ pub(crate) fn carry_slot<T>(f: impl FnOnce(&mut CarrySlot, Option<usize>) -> Res
     })
 }
 
+/// A reduced wide blur's frame in a banded render (gaussian_blur_wide
+/// past WIDE_BLUR_SIGMA): the whole frame's small image of block means,
+/// filled a block row at a time by a prepass, and once every row is in,
+/// that small image blurred, which every band then draws up from. Each
+/// band's rows are then the whole frame's without reading past the band.
+#[derive(Debug, Default)]
+pub(crate) struct WideSlot {
+    pub(crate) factor: usize,
+    pub(crate) small: Option<crate::buffers::ImageBuf>,
+    pub(crate) have: Vec<bool>,
+    pub(crate) blurred: Option<std::sync::Arc<crate::buffers::ImageBuf>>,
+}
+
+/// One node's reduced wide blurs, in the order its operator makes them.
+/// In a prepass round, a blur whose earlier blurs were all finished when
+/// the round began fills its small image (its input may be made from
+/// theirs, so it is exact only then); the others hand back nothing. In
+/// the main pass every blur is finished and draws up.
+#[derive(Debug, Default)]
+pub(crate) struct Wide {
+    pub(crate) slots: Vec<WideSlot>,
+    pub(crate) at: usize,
+    /// Some(n): a prepass round, with the first n blurs finished at its start.
+    pub(crate) prepass: Option<usize>,
+}
+
+impl Wide {
+    /// How many blurs, from the first, are finished.
+    pub(crate) fn finished(&self) -> usize {
+        self.slots.iter().take_while(|s| s.blurred.is_some()).count()
+    }
+}
+
+thread_local! {
+    static WIDE: std::cell::RefCell<Option<Wide>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f` with `wide` as the node's reduced blurs, handing it back.
+pub(crate) fn with_wide<T>(mut wide: Wide, f: impl FnOnce() -> T) -> (T, Wide) {
+    wide.at = 0;
+    struct Reset(Option<Wide>);
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            WIDE.with(|w| *w.borrow_mut() = self.0.take());
+        }
+    }
+    let reset = Reset(WIDE.with(|w| w.borrow_mut().replace(wide)));
+    let out = f();
+    let wide = WIDE.with(|w| w.borrow_mut().take()).unwrap_or_default();
+    drop(reset);
+    (out, wide)
+}
+
+/// The next reduced blur's slot, whether this pass may fill it, for
+/// gaussian_blur_wide in a banded render; None outside one.
+pub(crate) fn wide_slot<T>(f: impl FnOnce(&mut WideSlot, Option<bool>) -> T) -> Option<T> {
+    WIDE.with(|w| {
+        let mut w = w.borrow_mut();
+        let wide = w.as_mut()?;
+        let at = wide.at;
+        wide.at += 1;
+        if wide.slots.len() <= at {
+            wide.slots.resize_with(at + 1, WideSlot::default);
+        }
+        // Some(may_fill) in a prepass round, None in the main pass. Only
+        // the first blur not finished when the round began may fill: every
+        // blur before it was finished then, so its input is exact all
+        // round. One finished during the round hands back nothing for the
+        // rest of it, which a later blur must not read.
+        let fill = wide.prepass.map(|ready| at == ready);
+        Some(f(&mut wide.slots[at], fill))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

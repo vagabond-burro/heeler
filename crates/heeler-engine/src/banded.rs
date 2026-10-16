@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use heeler_graph::{Graph, Node, PortKind};
 
-use crate::band::{class_of, with_carry, with_frame, BandClass, BandFrame, Carry};
+use crate::band::{class_of, with_carry, with_frame, with_wide, BandClass, BandFrame, Carry, Wide};
 use crate::buffers::{ImageBuf, MaskBuf, Value};
 use crate::executor::{apply_node, is_source, normal_slot, passthrough_port, planted_id, raster_fed, slot, EngineError, Executor, SourceImage};
 use crate::ops;
@@ -307,6 +307,8 @@ struct Plan {
     crops: HashMap<String, CropGeom>,
     /// Nodes made band by band whose running sums carry from band to band.
     carried: HashSet<String>,
+    /// Nodes made band by band whose reduced wide blurs take a prepass.
+    wide: HashSet<String>,
 }
 
 /// The margin a node's rows grow by, above and below, for a frame `w`
@@ -323,8 +325,8 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
     }
     let p = |k: &str, d: f64| ops::p(&node.params, k, d);
     let both = |r: usize| Some((r, r));
-    // A gaussian_blur_wide of sigma `s` on this frame.
-    let wide = |s: f32| crate::ops_detail::wide_blur_reach(s, w, h);
+    // A gaussian_blur_wide of sigma `s` on this frame, with its prepass.
+    let wide = |s: f32| crate::ops_detail::wide_blur_band_reach(s, w, h);
     match class_of(node)? {
         BandClass::Pointwise => Some((0, 0)),
         BandClass::Neighborhood => match node.node_type.as_str() {
@@ -581,7 +583,13 @@ fn plan(
         .filter(|id| graph.node(id).is_some_and(|n| n.enabled && class_of(n) == Some(BandClass::Carried)))
         .cloned()
         .collect();
-    Ok(Plan { order, dims, mode, inputs, crops, carried })
+    let wide = order
+        .iter()
+        .filter(|id| matches!(mode[*id], Mode::Rows { .. }))
+        .filter(|id| graph.node(id).is_some_and(|n| n.enabled && wide_slots(n) > 0))
+        .cloned()
+        .collect();
+    Ok(Plan { order, dims, mode, inputs, crops, carried, wide })
 }
 
 /// Renders `terminals` band by band, `band_rows` output rows at a time,
@@ -646,7 +654,6 @@ pub fn render_banded(
     if height.len() != 1 {
         return Err(EngineError::Band("terminals of different heights".into()));
     }
-    let frame_h = *height.iter().next().unwrap();
 
     let mut report = BandedReport {
         whole,
@@ -654,16 +661,57 @@ pub fn render_banded(
         bands: 0,
     };
     let band_rows = band_rows.max(1);
-    // Every band's rows, before the first is made: a carried node needs
-    // to know where its next band's buffer starts, starts at the frame's
-    // first row (its column sums run from there), and must move down the
-    // frame band by band, never back.
+    // The reduced wide blurs' prepass, node by node in the graph's order
+    // (an upstream node's blurs finish first): rounds of the node's own
+    // subgraph, band by band, each filling the small image of the first
+    // blur not finished when it began, until every blur is.
+    let mut wides: HashMap<String, Wide> = HashMap::new();
+    for id in plan.order.iter().filter(|id| plan.wide.contains(*id)) {
+        let mut first = true;
+        loop {
+            let mut wide = wides.remove(id).unwrap_or_default();
+            let ready = wide.finished();
+            if !first && ready == wide.slots.len() {
+                wide.prepass = None;
+                wides.insert(id.clone(), wide);
+                break;
+            }
+            wide.prepass = Some(ready);
+            wides.insert(id.clone(), wide);
+            run_pass(graph, &plan, &resident, sources, &[id.as_str()], band_rows, &mut wides, &mut |_, _, _| Ok(()))?;
+            if !first && wides[id].finished() == ready {
+                return Err(EngineError::Band(format!("'{id}': a wide blur's prepass made no progress")));
+            }
+            first = false;
+        }
+    }
+    report.bands = run_pass(graph, &plan, &resident, sources, terminals, band_rows, &mut wides, sink)?;
+    Ok(report)
+}
+
+/// One pass of bands over `terminals`, top to bottom, handing their rows
+/// to `sink`; the number of bands. Every band's rows are planned before
+/// the first is made: a carried node needs to know where its next band's
+/// buffer starts, starts at the frame's first row (its column sums run
+/// from there), and must move down the frame band by band, never back.
+#[allow(clippy::too_many_arguments)]
+fn run_pass(
+    graph: &Graph,
+    plan: &Plan,
+    resident: &HashMap<String, Value>,
+    sources: &HashMap<String, SourceImage>,
+    terminals: &[&str],
+    band_rows: usize,
+    wides: &mut HashMap<String, Wide>,
+    sink: &mut dyn FnMut(usize, usize, Value) -> Result<(), EngineError>,
+) -> Result<usize, EngineError> {
+    let frame_h = terminals.iter().map(|t| plan.dims[*t].1).max().unwrap_or(0);
     let mut schedule = Vec::new();
     let mut started = HashSet::new();
     let mut y = 0;
     while y < frame_h {
         let b = (y + band_rows).min(frame_h);
-        schedule.push(band_needs(&plan, terminals, y, b, &mut started));
+        schedule.push(band_needs(plan, terminals, y, b, &mut started));
         y = b;
     }
     for id in &plan.carried {
@@ -679,10 +727,9 @@ pub fn render_banded(
     }
     let mut carries: HashMap<String, Carry> = HashMap::new();
     for k in 0..schedule.len() {
-        render_band(graph, &plan, &resident, sources, terminals, &schedule[k], &schedule[k + 1..], &mut carries, sink)?;
-        report.bands += 1;
+        render_band(graph, plan, resident, sources, terminals, &schedule[k], &schedule[k + 1..], &mut carries, wides, sink)?;
     }
-    Ok(report)
+    Ok(schedule.len())
 }
 
 /// How many running-sum passes a carried node's operator makes, each
@@ -707,6 +754,49 @@ fn carry_slots(node: &Node) -> usize {
         "heeler.measure" => 1,
         _ => 0,
     }
+}
+
+/// How many gaussian_blur_wide calls a node's operator makes: the most
+/// reduced blurs it can take a prepass for. Counted from the operators'
+/// code; the banded render checks in debug builds that no node makes more.
+fn wide_slots(node: &Node) -> usize {
+    match node.node_type.as_str() {
+        // The background gate, the halo, its ring and the bloom.
+        "heeler.halation" => 4,
+        "heeler.high_pass" => 1,
+        // A high pass, or a blur of color and alpha.
+        "heeler.sharpening" => 2,
+        // A high pass, then a blur of color and alpha.
+        "heeler.skin_soften" => 3,
+        // A gaussian Blur of color and alpha.
+        "heeler.blur" => 2,
+        _ => 0,
+    }
+}
+
+/// The reduced blurs' small images a node keeps for a frame `w` by `h`
+/// while a banded render runs: at most two each (the small image and, as
+/// it is blurred, its blur), at the smallest block any of its blurs takes.
+fn wide_bytes(node: &Node, w: usize, h: usize) -> Result<usize, EngineError> {
+    let p = |k: &str, d: f64| ops::p(&node.params, k, d);
+    let scale = ops::px_scale(&node.params);
+    let sigmas: Vec<f32> = match node.node_type.as_str() {
+        "heeler.halation" => {
+            let short = w.min(h) as f32;
+            let k = crate::ops_halation::halation_format_scale(node);
+            let r = (p("radius", 4.0) / 100.0 * short * k).max(0.5);
+            vec![r, r * 0.45, (p("bloom_radius", 20.0) / 100.0 * short * k).max(0.5)]
+        }
+        "heeler.high_pass" | "heeler.sharpening" => vec![p("radius", 3.0).max(0.0) * scale],
+        "heeler.skin_soften" => vec![p("softening", 8.0).max(0.0), p("detail_back", 4.0).max(0.0)],
+        "heeler.blur" => vec![p("radius", 0.0).max(0.0) * scale],
+        _ => Vec::new(),
+    };
+    let factor = sigmas.iter().filter_map(|s| crate::ops_detail::wide_blur_factor(*s, w, h)).min();
+    Ok(match factor {
+        Some(f) => crate::memory::bytes(w.div_ceil(f), h.div_ceil(f), 4 * 2 * wide_slots(node), 4)?,
+        None => 0,
+    })
 }
 
 /// The bytes a buffer of `rows` rows of a `w` wide frame of `channels`
@@ -834,6 +924,10 @@ pub fn estimate_banded(
         y = b;
     }
     let mut carries = 0usize;
+    for id in &plan.wide {
+        let (w, h, _) = plan.dims[id];
+        carries = sum([carries, wide_bytes(graph.node(id).unwrap(), w, h)?])?;
+    }
     for (id, rows) in &carried_rows {
         let (w, _, _) = plan.dims[*id];
         let node = graph.node(id).unwrap();
@@ -993,6 +1087,7 @@ fn render_band(
     band: &BandNeeds,
     later: &[BandNeeds],
     carries: &mut HashMap<String, Carry>,
+    wides: &mut HashMap<String, Wide>,
     sink: &mut dyn FnMut(usize, usize, Value) -> Result<(), EngineError>,
 ) -> Result<(), EngineError> {
     let (a, b) = (band.a, band.b);
@@ -1033,6 +1128,11 @@ fn render_band(
                     }
                     debug_assert!(carry.slots.len() <= carry_slots(node), "'{id}' carries {} passes, charged {}", carry.slots.len(), carry_slots(node));
                     carries.insert(id.clone(), carry);
+                    made?
+                } else if let Some(wide) = wides.remove(id) {
+                    let (made, wide) = with_wide(wide, || with_frame(frame, || apply_node(id, node, inputs, false, sources)));
+                    debug_assert!(wide.slots.len() <= wide_slots(node), "'{id}' makes {} reduced blurs, charged {}", wide.slots.len(), wide_slots(node));
+                    wides.insert(id.clone(), wide);
                     made?
                 } else {
                     with_frame(frame, || apply_node(id, node, inputs, false, sources))?

@@ -280,3 +280,36 @@ fn carried_sums_chain_band_by_band() {
         assert!(report.whole.is_empty(), "{report:?}");
     }
 }
+
+/// The reduced wide blurs through their prepass: Halation with a wide
+/// Bloom (its background gate, halo, ring and bloom, the last three
+/// reading the first's result), Skin Soften and a wide High Pass,
+/// chained down a tall frame, every blur on the reduced path, at 17 rows
+/// a band and at 5, nothing rendered whole.
+#[test]
+fn wide_blurs_take_a_prepass_band_by_band() {
+    let registry = Registry::builtin();
+    let mut g = Graph::new("wide");
+    for (ty, id) in [
+        ("heeler.image_source", "src"),
+        ("heeler.halation", "hal"),
+        ("heeler.skin_soften", "skin"),
+        ("heeler.high_pass", "hp"),
+    ] {
+        g.add_node(registry.instantiate(ty, id, Section::Creative).unwrap()).unwrap();
+    }
+    for (k, v) in [("threshold", 10.0), ("bloom", 40.0), ("radius", 12.0), ("bloom_radius", 30.0), ("background", 60.0)] {
+        g.set_param("hal", k, ParamValue::Number(v)).unwrap();
+    }
+    g.set_param("skin", "softening", ParamValue::Number(40.0)).unwrap();
+    g.set_param("skin", "detail_back", ParamValue::Number(14.0)).unwrap();
+    g.set_param("hp", "radius", ParamValue::Number(55.0)).unwrap();
+    g.connect("src", "out", "hal", "in").unwrap();
+    g.connect("hal", "out", "skin", "in").unwrap();
+    g.connect("skin", "out", "hp", "in").unwrap();
+    let sources = sources_with(frame(150, 320));
+    for rows in [BAND, 5] {
+        let report = assert_same(&g, &["hp"], &sources, rows, &format!("{rows} rows"));
+        assert!(report.whole.is_empty(), "{report:?}");
+    }
+}

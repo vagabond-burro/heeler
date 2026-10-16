@@ -221,7 +221,9 @@ pub(crate) fn halation_reach(node: &Node, w: usize, h: usize) -> Option<usize> {
     let scale = format_scale(node.params.get("format").and_then(|v| v.as_str()).unwrap_or("35mm"));
     let radius = (p(&node.params, "radius", 4.0) / 100.0 * short * scale).max(0.5);
     let bloom_radius = (p(&node.params, "bloom_radius", 20.0) / 100.0 * short * scale).max(0.5);
-    let reach = |s: f32| crate::ops_detail::wide_blur_reach(s, w, h);
+    // With the banded render's prepass, a reduced blur reads a block past
+    // a band (ops_detail wide_blur_band_reach).
+    let reach = |s: f32| crate::ops_detail::wide_blur_band_reach(s, w, h);
     let gate = if p(&node.params, "background", 50.0) > 0.0 { reach(radius) } else { 0 };
     let mut glow = 0;
     if amount > 0.0 {
@@ -231,6 +233,11 @@ pub(crate) fn halation_reach(node: &Node, w: usize, h: usize) -> Option<usize> {
         glow = glow.max(reach(bloom_radius));
     }
     Some(gate + glow)
+}
+
+/// The film format's scale on Halation's radii.
+pub(crate) fn halation_format_scale(node: &Node) -> f32 {
+    format_scale(node.params.get("format").and_then(|v| v.as_str()).unwrap_or("35mm"))
 }
 
 pub fn halation_wants_depth(params: &std::collections::HashMap<String, serde_json::Value>) -> bool {
