@@ -411,11 +411,8 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
             // Two passes side by side: the smoothing at a share of the
             // short side, and the around field at Around Radius of it.
             "heeler.recolor" => {
-                let short = crate::ops::frame_short_of(&node.params, w, h).round();
-                let smoothing = p("smoothing", 50.0).clamp(0.0, 100.0) / 100.0;
-                let r = (short * 0.02 * smoothing) as usize;
-                let around = ((short * (p("around_radius", 15.0).clamp(2.0, 50.0) / 100.0)) as usize).max(1);
-                both(r.max(around) + 2)
+                let r = crate::ops_recolor::recolor_reach(node, w, h);
+                both(if r > 0 { r + 2 } else { 0 })
             }
             // Texture, Clarity and Local Contrast: a guided filter per
             // scale that is on, each over planes made from the input.
@@ -602,6 +599,9 @@ pub fn render_banded(
     // (a whole node's own upstream renders inside its render). A whole
     // render whose size is not the one its inputs said re-plans with the
     // size it has, until the plan and the renders agree.
+    // Admitted as a whole before anything renders, as Executor::render is:
+    // the caller's sink comes on top, in the caller's own job.
+    let _job = crate::memory::Job::admit(estimate_banded(graph, terminals, sources, band_rows)?, "banded render")?;
     let mut resident: HashMap<String, Value> = HashMap::new();
     for (id, src) in sources {
         if graph.node(id).is_some_and(|n| is_source(&n.node_type)) {
@@ -685,6 +685,248 @@ pub fn render_banded(
     Ok(report)
 }
 
+/// How many running-sum passes a carried node's operator makes, each
+/// with its own carry: what the estimate charges for the rows they carry
+/// from band to band. Counted from the operators' code; the banded render
+/// checks in debug builds that no node makes more.
+fn carry_slots(node: &Node) -> usize {
+    match node.node_type.as_str() {
+        // Two radii (the blend toward the next), each the guide's three
+        // means and six moments, then per target plane its mean, its
+        // three moments with the guide, three coefficient means and one.
+        "heeler.guided_filter" => 2 * (3 + 6 + 3 * 8),
+        "heeler.guided_filter_mask" => 2 * (3 + 6 + 8),
+        // The Lab guided blur over two planes.
+        "heeler.black_white" => 3 + 6 + 2 * 8,
+        // guided_base per channel: two guided_self of four passes each.
+        "heeler.sharpen" => 3 * 2 * 4,
+        // A guided_self of four passes per scale.
+        "heeler.detail" | "heeler.standard_color" | "heeler.clarity" => 3 * 4,
+        "heeler.tone_eq" | "heeler.recolor" => 4,
+        "heeler.color_console" => 2,
+        "heeler.measure" => 1,
+        _ => 0,
+    }
+}
+
+/// The bytes a buffer of `rows` rows of a `w` wide frame of `channels`
+/// f32 channels holds.
+fn rows_bytes(w: usize, rows: usize, channels: usize) -> Result<usize, EngineError> {
+    Ok(crate::memory::bytes(w, rows, channels, 4)?)
+}
+
+/// What a banded render of `terminals`, `band_rows` output rows at a
+/// time, holds at its worst, for admission and for a caller choosing a
+/// band height or an export size. On top of the sources (counted by
+/// their size, so a caller can ask about a size it has not decoded):
+/// while the nodes the bands do not follow render whole, the outputs of
+/// those already rendered and the next one's own admission
+/// (Executor::estimate); then those outputs, every carried node's carried
+/// rows, and the worst moment of any band, where a node holds the slabs
+/// still to be read, its inputs' rows copied out, its buffer made, its
+/// operator's scratch on that buffer and the rows it keeps. The sink is
+/// the caller's: what it holds of the frame comes on top.
+pub fn estimate_banded(
+    graph: &Graph,
+    terminals: &[&str],
+    sources: &HashMap<String, SourceImage>,
+    band_rows: usize,
+) -> Result<usize, EngineError> {
+    use crate::memory::sum;
+    let plan = plan(graph, terminals, sources, &HashMap::new())?;
+    let heights: HashSet<usize> = terminals.iter().map(|t| plan.dims[*t].1).collect();
+    if heights.len() != 1 {
+        return Err(EngineError::Band("terminals of different heights".into()));
+    }
+    let frame_h = *heights.iter().next().unwrap();
+    let mut seen = HashSet::new();
+    let (mut source_bytes, mut source_capacity) = (0usize, 0usize);
+    for s in sources.values() {
+        if seen.insert(Arc::as_ptr(&s.image) as usize) {
+            source_bytes = sum([source_bytes, crate::memory::bytes(s.image.width, s.image.height, 4, 4)?])?;
+            source_capacity = sum([source_capacity, s.image.data.capacity().saturating_mul(4)])?;
+        }
+    }
+    // The whole renders, one after another.
+    let (mut whole_outs, mut whole_peak) = (0usize, 0usize);
+    for id in &plan.order {
+        let node = graph.node(id).unwrap();
+        if plan.mode[id] != Mode::Resident || is_source(&node.node_type) {
+            continue;
+        }
+        let read = terminals.contains(&id.as_str())
+            || plan.order.iter().any(|c| plan.mode[c] != Mode::Resident && plan.inputs[c].iter().any(|(_, f)| f == id));
+        if !read {
+            continue;
+        }
+        let mut exec = Executor::new();
+        exec.trim_bytes(1);
+        // Executor::estimate counts the sources it finds by their buffers;
+        // they are counted here once, by their size.
+        let est = exec.estimate(graph, id, sources)?.saturating_sub(source_capacity);
+        whole_peak = whole_peak.max(sum([whole_outs, est])?);
+        let (w, h, c) = plan.dims[id];
+        whole_outs = sum([whole_outs, rows_bytes(w, h, c)?])?;
+    }
+    // The bands.
+    let band_rows = band_rows.max(1);
+    let mut started = HashSet::new();
+    let mut carried_rows: HashMap<&str, usize> = HashMap::new();
+    let mut band_peak = 0usize;
+    let mut y = 0;
+    while y < frame_h {
+        let b = (y + band_rows).min(frame_h);
+        let band = band_needs(&plan, terminals, y, b, &mut started);
+        let mut readers = band_readers(&plan, &band);
+        let mut kept: HashMap<&str, usize> = HashMap::new();
+        let mut live = 0usize;
+        for id in &plan.order {
+            let Some(&(lo, hi)) = band.need.get(id) else { continue };
+            if plan.mode[id] == Mode::Resident {
+                continue;
+            }
+            let node = graph.node(id).unwrap();
+            let (rlo, rhi) = band.reads[id];
+            let (fw, _, fc) = plan.dims[id];
+            let mut inputs = 0usize;
+            for (_, from) in &plan.inputs[id] {
+                let (iw, _, ic) = plan.dims[from];
+                inputs = sum([inputs, rows_bytes(iw, rhi - rlo, ic)?])?;
+            }
+            let keep = rows_bytes(fw, hi - lo, fc)?;
+            let (made, scratch) = match plan.mode[id] {
+                Mode::Crop => (0, 0),
+                _ => {
+                    let made = rows_bytes(fw, rhi - rlo, fc)?;
+                    let scratch = if !node.enabled {
+                        0
+                    } else if let Some(b) = crate::executor::padded_scratch(node, fw, rhi - rlo) {
+                        b?
+                    } else {
+                        crate::memory::bytes(fw, rhi - rlo, 16, crate::executor::workspace(node))?
+                    };
+                    (made, scratch)
+                }
+            };
+            band_peak = band_peak.max(sum([live, inputs, made, scratch, keep])?);
+            live = sum([live, keep])?;
+            kept.insert(id, keep);
+            if plan.carried.contains(id) {
+                let r = carried_rows.entry(id).or_insert(0);
+                *r = (*r).max(rhi - rlo);
+            }
+            for (_, from) in &plan.inputs[id] {
+                if let Some(n) = readers.get_mut(from.as_str()) {
+                    *n -= 1;
+                    if *n == 0 && !terminals.contains(&from.as_str()) {
+                        live = live.saturating_sub(kept.get(from.as_str()).copied().unwrap_or(0));
+                    }
+                }
+            }
+        }
+        // The terminals' rows handed to the sink, beside what is live.
+        let mut handed = 0usize;
+        for t in terminals {
+            let (w, _, c) = plan.dims[*t];
+            handed = sum([handed, rows_bytes(w, b - y, c)?])?;
+        }
+        band_peak = band_peak.max(sum([live, handed])?);
+        y = b;
+    }
+    let mut carries = 0usize;
+    for (id, rows) in &carried_rows {
+        let (w, _, _) = plan.dims[*id];
+        let node = graph.node(id).unwrap();
+        carries = sum([carries, crate::memory::bytes(w, *rows, carry_slots(node), 4)?])?;
+    }
+    Ok(sum([source_bytes, whole_peak.max(sum([whole_outs, carries, band_peak])?)])?)
+}
+
+/// The tallest band, up to the frame's height, whose banded render of
+/// `terminals` fits `ceiling` bytes (estimate_banded, plus `sink` bytes
+/// for what the caller keeps of the frame); None when not even a band of
+/// one row fits, as when a node the bands do not follow must render
+/// whole and its own render is too large.
+pub fn band_rows_for(
+    graph: &Graph,
+    terminals: &[&str],
+    sources: &HashMap<String, SourceImage>,
+    ceiling: usize,
+    sink: usize,
+) -> Result<Option<usize>, EngineError> {
+    let fits = |rows: usize| -> Result<bool, EngineError> {
+        Ok(crate::memory::sum([estimate_banded(graph, terminals, sources, rows)?, sink])? <= ceiling)
+    };
+    let plan = plan(graph, terminals, sources, &HashMap::new())?;
+    let frame_h = terminals.iter().map(|t| plan.dims[*t].1).max().unwrap_or(1).max(1);
+    if !fits(1)? {
+        return Ok(None);
+    }
+    let (mut lo, mut hi) = (1usize, frame_h);
+    while lo < hi {
+        let mid = lo + (hi - lo).div_ceil(2);
+        if fits(mid)? {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    Ok(Some(lo))
+}
+
+/// The longest edge, up to the photograph's own, at which an export of
+/// `terminals` fits `ceiling` bytes in bands of at least `min_rows` rows,
+/// with `sink_per_pixel` bytes a pixel of the output kept by the caller
+/// (8 for a 16-bit RGBA frame, 0 for an encoder fed band by band). The
+/// photograph's sources (every image_source) are asked about at the
+/// smaller size, by their size alone, so nothing is decoded; planted
+/// rasters and Files keep theirs. None when no size fits.
+pub fn largest_export_edge(
+    graph: &Graph,
+    terminals: &[&str],
+    sources: &HashMap<String, SourceImage>,
+    ceiling: usize,
+    min_rows: usize,
+    sink_per_pixel: usize,
+) -> Result<Option<usize>, EngineError> {
+    let photo: Vec<&String> = sources
+        .keys()
+        .filter(|id| graph.node(id).is_some_and(|n| matches!(n.node_type.as_str(), "heeler.image_source" | "heeler.group")))
+        .collect();
+    let long = photo.iter().map(|id| sources[*id].image.width.max(sources[*id].image.height)).max().unwrap_or(0);
+    if long == 0 {
+        return Ok(None);
+    }
+    let fits = |edge: usize| -> Result<bool, EngineError> {
+        let mut sized = sources.clone();
+        for id in &photo {
+            let img = &sources[*id].image;
+            let k = edge as f64 / img.width.max(img.height) as f64;
+            let (w, h) = (((img.width as f64 * k).round() as usize).max(1), ((img.height as f64 * k).round() as usize).max(1));
+            let s = sized.get_mut(*id).unwrap();
+            s.image = Arc::new(ImageBuf { width: w, height: h, data: Vec::new() });
+        }
+        let plan = plan(graph, terminals, &sized, &HashMap::new())?;
+        let (ow, oh) = terminals.iter().map(|t| (plan.dims[*t].0, plan.dims[*t].1)).next().unwrap_or((0, 0));
+        let sink = crate::memory::bytes(ow, oh, 1, sink_per_pixel)?;
+        let rows = min_rows.min(oh.max(1));
+        Ok(crate::memory::sum([estimate_banded(graph, terminals, &sized, rows)?, sink])? <= ceiling)
+    };
+    if !fits(1)? {
+        return Ok(None);
+    }
+    let (mut lo, mut hi) = (1usize, long);
+    while lo < hi {
+        let mid = lo + (hi - lo).div_ceil(2);
+        if fits(mid)? {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    Ok(Some(lo))
+}
+
 /// One band's rows: the output rows `a..b`, the rows each node makes for
 /// it, and the rows each node reads of its inputs.
 struct BandNeeds {
@@ -726,6 +968,21 @@ fn band_needs(plan: &Plan, terminals: &[&str], a: usize, b: usize, started: &mut
     BandNeeds { a, b, need, reads }
 }
 
+/// For one band: how many nodes made in it read each node's rows, a
+/// wire each.
+fn band_readers<'p>(plan: &'p Plan, band: &BandNeeds) -> HashMap<&'p str, usize> {
+    let mut readers: HashMap<&str, usize> = HashMap::new();
+    for id in &plan.order {
+        if plan.mode[id] == Mode::Resident || !band.need.contains_key(id) {
+            continue;
+        }
+        for (_, from) in &plan.inputs[id] {
+            *readers.entry(from.as_str()).or_insert(0) += 1;
+        }
+    }
+    readers
+}
+
 #[allow(clippy::too_many_arguments)]
 fn render_band(
     graph: &Graph,
@@ -749,6 +1006,10 @@ fn render_band(
             }
         }
     };
+    // How many nodes made in this band still read each node's rows; a
+    // slab goes once the last has, so a band holds what its graph's
+    // width needs, not one slab per node.
+    let mut readers = band_readers(plan, band);
     for id in &plan.order {
         let Some(&(lo, hi)) = band.need.get(id) else { continue };
         let mode = plan.mode[id];
@@ -770,6 +1031,7 @@ fn render_band(
                     if let Some(e) = &carry.error {
                         return Err(EngineError::Band(format!("'{id}': {e}")));
                     }
+                    debug_assert!(carry.slots.len() <= carry_slots(node), "'{id}' carries {} passes, charged {}", carry.slots.len(), carry_slots(node));
                     carries.insert(id.clone(), carry);
                     made?
                 } else {
@@ -797,6 +1059,14 @@ fn render_band(
             Mode::Resident => unreachable!(),
         };
         slabs.insert(id, Slab { y0: lo, value });
+        for (_, from) in &plan.inputs[id] {
+            if let Some(n) = readers.get_mut(from.as_str()) {
+                *n -= 1;
+                if *n == 0 && !terminals.contains(&from.as_str()) {
+                    slabs.remove(from.as_str());
+                }
+            }
+        }
     }
     for (i, t) in terminals.iter().enumerate() {
         let v = match resident.get(*t) {

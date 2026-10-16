@@ -630,3 +630,121 @@ fn decode_and_encode_admissions_cover_what_they_allocate() {
         assert!(reserved >= used, "{name} encode: reserved {reserved}, allocated {used}");
     }
 }
+
+/// A banded render of `graph`'s "out", `rows` rows a band, its bands
+/// dropped as they arrive (an encoder fed band by band keeps nothing).
+fn render_in_bands(graph: &Graph, sources: &HashMap<String, SourceImage>, rows: usize) {
+    heeler_engine::banded::render_banded(graph, &["out"], sources, rows, &mut |_, _, v| {
+        drop(v);
+        Ok(())
+    })
+    .unwrap();
+}
+
+/// Admission never asks a banded render for less than it allocates: for
+/// every edit in the owner's table, at three band heights, the banded
+/// estimate covers the live heap's high-water mark, the source included.
+#[test]
+fn the_banded_estimate_covers_what_each_edit_allocates() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let (w, h) = (640, 480);
+    for edit in edits() {
+        let graph = (edit.graph)();
+        for rows in [17, 64, 480] {
+            let (peak, est) = peak_of(|| {
+                let mut sources = HashMap::new();
+                sources.insert("src".to_string(), SourceImage { image: photo(w, h), version: 1, measured: false });
+                let est = heeler_engine::banded::estimate_banded(&graph, &["out"], &sources, rows).unwrap();
+                render_in_bands(&graph, &sources, rows);
+                est
+            });
+            assert!(est >= peak, "{} in bands of {rows}: estimate {est} under the measured peak {peak}", edit.name);
+        }
+    }
+}
+
+/// The owner's table, banded: for each edit at 24 and 48 MP, the band
+/// height that fits 2.5 GiB, what the banded estimate asks at it, and the
+/// heap's real high-water mark rendering it.
+#[test]
+#[ignore = "renders full-size frames; run by hand in release"]
+fn measure_banded_export_peaks() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    const CEILING: usize = 5 << 29; // 2.5 GiB
+    println!();
+    println!("{:>4} {:<17} {:>8} {:>10} {:>10} {:>8}", "MP", "edit", "rows", "est MiB", "peak MiB", "secs");
+    for (label, w, h) in sizes() {
+        for edit in edits() {
+            let graph = (edit.graph)();
+            let started = Instant::now();
+            let (peak, fitted) = peak_of(|| {
+                let mut sources = HashMap::new();
+                sources.insert("src".to_string(), SourceImage { image: photo(w, h), version: 1, measured: false });
+                let rows = heeler_engine::banded::band_rows_for(&graph, &["out"], &sources, CEILING, 0).unwrap()?;
+                let est = heeler_engine::banded::estimate_banded(&graph, &["out"], &sources, rows).unwrap();
+                render_in_bands(&graph, &sources, rows);
+                Some((rows, est))
+            });
+            match fitted {
+                Some((rows, est)) => println!("{:>4} {:<17} {:>8} {:>10} {:>10} {:>8.1}", label, edit.name, rows, mib(est), mib(peak), started.elapsed().as_secs_f64()),
+                None => {
+                    let mut sources = HashMap::new();
+                    sources.insert("src".to_string(), SourceImage { image: Arc::new(ImageBuf { width: w, height: h, data: Vec::new() }), version: 1, measured: false });
+                    let one = heeler_engine::banded::estimate_banded(&graph, &["out"], &sources, 1).unwrap() + w * h * 16;
+                    println!("{:>4} {:<17} {:>8} {:>10} {:>10} {:>8}", label, edit.name, "none", mib(one), "-", "-");
+                }
+            }
+        }
+    }
+}
+
+/// The owner's table through admission, at 48 MP (frames given by their
+/// size alone, so nothing is allocated): under a 2.5 GiB allowance every
+/// edit's export is refused whole, as the phone refused it, and admitted
+/// in bands at the tallest band that fits. Halation's wide blurs still
+/// read too far for any band (halation_is_refused_in_bands_and_offered_smaller).
+#[test]
+fn a_48_mp_export_of_each_edit_fits_2_5_gib_in_bands_and_not_whole() {
+    use heeler_engine::memory;
+    const CEILING: usize = 5 << 29;
+    let (w, h) = (8064, 6048);
+    let table: Vec<(&str, Graph)> = edits().into_iter().filter(|e| e.name != "halation").map(|e| (e.name, (e.graph)())).collect();
+    for (name, graph) in table {
+        let mut sources = HashMap::new();
+        sources.insert("src".to_string(), SourceImage { image: Arc::new(ImageBuf { width: w, height: h, data: Vec::new() }), version: 1, measured: false });
+        let source = w * h * 16;
+        memory::with_budget(CEILING, || {
+            let mut exec = Executor::new();
+            exec.trim_bytes(1);
+            let whole = exec.estimate(&graph, "out", &sources).unwrap() + source;
+            assert!(memory::Job::admit(whole, "whole-frame export").is_err(), "{name}: whole asks {} MiB", whole >> 20);
+            // The banded estimate counts the sources by their size itself.
+            let rows = heeler_engine::banded::band_rows_for(&graph, &["out"], &sources, CEILING, 0)
+                .unwrap()
+                .unwrap_or_else(|| panic!("{name}: no band fits"));
+            let banded = heeler_engine::banded::estimate_banded(&graph, &["out"], &sources, rows).unwrap();
+            assert!(memory::Job::admit(banded, "banded export").is_ok(), "{name}: bands of {rows} ask {} MiB", banded >> 20);
+            println!("{name}: whole {} MiB, banded {} MiB in bands of {rows}", whole >> 20, banded >> 20);
+        });
+    }
+}
+
+/// Halation, at its defaults, at 48 MP: its reduced blurs read about 2.5
+/// sigma of rows each way, two of them in a row, so no band fits 2.5 GiB
+/// and admission refuses the full size, banded or whole. What the client
+/// can offer instead is the largest export that does fit.
+#[test]
+fn halation_is_refused_in_bands_and_offered_smaller() {
+    const CEILING: usize = 5 << 29;
+    let (w, h) = (8064, 6048);
+    let graph = graph_with(|b, at| {
+        b.node("heeler.halation", "hal", &[]);
+        b.wire(at, "hal", "in");
+        "hal".into()
+    });
+    let mut sources = HashMap::new();
+    sources.insert("src".to_string(), SourceImage { image: Arc::new(ImageBuf { width: w, height: h, data: Vec::new() }), version: 1, measured: false });
+    assert_eq!(heeler_engine::banded::band_rows_for(&graph, &["out"], &sources, CEILING, 0).unwrap(), None);
+    let edge = heeler_engine::banded::largest_export_edge(&graph, &["out"], &sources, CEILING, 16, 0).unwrap().expect("a smaller export fits");
+    assert!(edge > 2000 && edge < w, "{edge}");
+}

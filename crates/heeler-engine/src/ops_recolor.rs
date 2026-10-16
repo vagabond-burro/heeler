@@ -565,6 +565,28 @@ pub fn recolor_around_lookup(
     around_field(params, ua, ub, w, h, short)
 }
 
+/// How many frame rows Recolor's running sums read past a row, for a
+/// frame `w` by `h`: its smoothing pass, and the around field's when an
+/// around curve is on (the only time it is made). Zero when nothing is
+/// active, which renders the input untouched.
+pub(crate) fn recolor_reach(node: &Node, w: usize, h: usize) -> usize {
+    let curves = Curves::parse(node.params.get("curves").and_then(|v| v.as_str()).unwrap_or(""));
+    let surfaces = Surfaces::parse(node.params.get("surfaces").and_then(|v| v.as_str()).unwrap_or(""));
+    if !curves.any_active() && !surfaces.any() {
+        return 0;
+    }
+    let short = crate::ops::frame_short_of(&node.params, w, h).round();
+    let smoothing = p(&node.params, "smoothing", 50.0).clamp(0.0, 100.0) / 100.0;
+    let r = (short * 0.02 * smoothing) as usize;
+    let around = if curves.around_active() {
+        let reach = p(&node.params, "around_radius", 15.0).clamp(2.0, 50.0) / 100.0;
+        ((short * reach) as usize).max(1)
+    } else {
+        0
+    };
+    r.max(around)
+}
+
 pub(crate) fn recolor(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError> {
     let src = image_input(inputs, "in", &node.id)?;
     let json = node.params.get("curves").and_then(|v| v.as_str()).unwrap_or("");

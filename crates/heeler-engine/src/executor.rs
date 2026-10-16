@@ -238,7 +238,7 @@ fn consumers(graph: &Graph, terminal: &str) -> HashMap<String, usize> {
 /// padded RGBA planes and a frame: Phase 0's sweep measured 2.02 to 2.06
 /// frames at 24 MP, where the padding is a few percent, and about two
 /// padded planes on a 640 by 480 frame. None for every other operator.
-fn padded_scratch(node: &Node, w: usize, h: usize) -> Option<Result<usize, crate::memory::MemoryError>> {
+pub(crate) fn padded_scratch(node: &Node, w: usize, h: usize) -> Option<Result<usize, crate::memory::MemoryError>> {
     use crate::memory;
     let bevel = node.node_type == "heeler.fx_bevel";
     if !bevel && !matches!(node.node_type.as_str(), "heeler.fx_shadow" | "heeler.fx_glow") {
@@ -262,7 +262,7 @@ fn padded_scratch(node: &Node, w: usize, h: usize) -> Option<Result<usize, crate
 /// radii at their largest) and reports the worst, and each figure here is
 /// that worst rounded up, plus one frame of slack for the paths no sweep
 /// reached. An operator not measured yet keeps the factor it had.
-fn workspace(node: &Node) -> usize {
+pub(crate) fn workspace(node: &Node) -> usize {
     match node.node_type.as_str() {
         // Detail holds its incoming and dehazed frames alongside the
         // guided filter's planes and weighted output: 5.5 measured.
