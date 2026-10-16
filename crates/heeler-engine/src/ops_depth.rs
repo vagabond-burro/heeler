@@ -98,20 +98,45 @@ fn plane_in_window(
     // parallelizes over them; each output pixel still lerps the same
     // four taps in the same order (x then y), so bits are unchanged.
     out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-        let sy = ((y as f32 - wy as f32 + 0.5) * rh as f32 / wh - 0.5).clamp(0.0, (rh - 1) as f32);
-        let (y0, fy) = (sy.floor() as usize, sy.fract());
-        let y1 = (y0 + 1).min(rh - 1);
-        for x in 0..w {
-            let sx = ((x as f32 - wx as f32 + 0.5) * rw as f32 / ww - 0.5).clamp(0.0, (rw - 1) as f32);
-            let (x0, fx) = (sx.floor() as usize, sx.fract());
-            let x1 = (x0 + 1).min(rw - 1);
-            let at = |px: usize, py: usize| sample(py * rw + px);
-            let top = at(x0, y0) + (at(x1, y0) - at(x0, y0)) * fx;
-            let bot = at(x0, y1) + (at(x1, y1) - at(x0, y1)) * fx;
-            row[x] = (top + (bot - top) * fy).clamp(0.0, 1.0);
+        for (x, o) in row.iter_mut().enumerate() {
+            *o = plane_tap(&*sample, rw, rh, (wx, wy, ww, wh), x, y);
         }
     });
     Some(out)
+}
+
+/// One pixel of plane_in_window's resample: buffer pixel (x, y) of a
+/// buffer the plane covers `window` of (its offset, and its size as
+/// floats), from the `rw` by `rh` plane's `sample`.
+fn plane_tap(sample: &(dyn Fn(usize) -> f32 + Sync), rw: usize, rh: usize, window: (isize, isize, f32, f32), x: usize, y: usize) -> f32 {
+    let (wx, wy, ww, wh) = window;
+    let sy = ((y as f32 - wy as f32 + 0.5) * rh as f32 / wh - 0.5).clamp(0.0, (rh - 1) as f32);
+    let (y0, fy) = (sy.floor() as usize, sy.fract());
+    let y1 = (y0 + 1).min(rh - 1);
+    let sx = ((x as f32 - wx as f32 + 0.5) * rw as f32 / ww - 0.5).clamp(0.0, (rw - 1) as f32);
+    let (x0, fx) = (sx.floor() as usize, sx.fract());
+    let x1 = (x0 + 1).min(rw - 1);
+    let at = |px: usize, py: usize| sample(py * rw + px);
+    let top = at(x0, y0) + (at(x1, y0) - at(x0, y0)) * fx;
+    let bot = at(x0, y1) + (at(x1, y1) - at(x0, y1)) * fx;
+    (top + (bot - top) * fy).clamp(0.0, 1.0)
+}
+
+/// The depth plane (depth_plane's) at pixel (x, y) of a `w` by `h`
+/// frame, as the whole frame's resample has it: for a reader that looks
+/// at one point of the frame a band may not hold (a flare's light).
+pub(crate) fn depth_plane_at(inputs: &[(String, Value)], w: usize, h: usize, x: usize, y: usize) -> Option<f32> {
+    ["depth", "raster"].iter().find_map(|port_name| {
+        let (_, v) = inputs.iter().find(|(port, _)| port == port_name)?;
+        let (rw, rh, sample): (usize, usize, Box<dyn Fn(usize) -> f32 + Sync>) = match v {
+            Value::Image(r) => (r.width, r.height, Box::new(move |i: usize| r.data[i * 4])),
+            Value::Mask(m) => (m.width, m.height, Box::new(move |i: usize| m.data[i])),
+        };
+        if rw == 0 || rh == 0 {
+            return None;
+        }
+        Some(plane_tap(&*sample, rw, rh, (0, 0, w.max(1) as f32, h.max(1) as f32), x, y))
+    })
 }
 
 /// The plane a depth consumer drinks (26.3 Phase 10.3): the wired
@@ -781,7 +806,7 @@ pub(crate) fn key_light(
                         // lamp did NOT reach count as below baseline, so +strength darkened
                         // the frame and negative brightened it ("-200 gets
                         // brighter and 200 is darker").
-                        let (dx, dy, dz) = (pos[0] - x as f32, pos[1] - y as f32, pos[2] - z);
+                        let (dx, dy, dz) = (pos[0] - x as f32, pos[1] - (y + frame.y0) as f32, pos[2] - z);
                         let d2 = dx * dx + dy * dy + dz * dz;
                         let dlen = d2.sqrt().max(1e-3);
                         let (lx, ly, lz) = (dx / dlen, dy / dlen, dz / dlen);
@@ -877,7 +902,8 @@ pub(crate) fn key_light(
     // Cells belong to the frame. Starting them again at a slice's
     // origin moved the smoothed slopes by up to a whole cell on zoom.
     let ox = (frame.roi[0] * frame.w).round().max(0.0) as usize % scale;
-    let oy = (frame.roi[1] * frame.h).round().max(0.0) as usize % scale;
+    // In a band, the frame's grid: its cells start at the frame's top.
+    let oy = ((frame.roi[1] * frame.h).round().max(0.0) as usize + frame.y0) % scale;
     let (lw, lh) = ((w + ox).div_ceil(scale), (h + oy).div_ceil(scale));
     let cell_x = |cx: usize| (cx * scale).saturating_sub(ox).min(w);
     let cell_y = |cy: usize| (cy * scale).saturating_sub(oy).min(h);
@@ -1593,6 +1619,8 @@ const DOF_SLICES: usize = 16;
 /// expression for expression rather than shared, so the gather path's
 /// bytes stay under glass until the cutover ruling.
 fn dof_planes(far: &[f32], w: usize, h: usize, focus: f32, field_curve: f32, roi: [f32; 4]) -> (Vec<f32>, Vec<f32>) {
+    // A band's rows sit at their place in the frame.
+    let (_, fh, y0) = crate::band::placed(w, h);
     let mut signed = vec![0.0f32; w * h];
     let mut coc = vec![0.0f32; w * h];
     use rayon::prelude::*;
@@ -1610,7 +1638,7 @@ fn dof_planes(far: &[f32], w: usize, h: usize, focus: f32, field_curve: f32, roi
                 // at the default (the whole frame) fx/fy reduce to
                 // x/w and y/h bit for bit.
                 let fx = roi[0] + (x as f32 / w as f32) * roi[2];
-                let fy = roi[1] + (y as f32 / h as f32) * roi[3];
+                let fy = roi[1] + ((y + y0) as f32 / fh as f32) * roi[3];
                 let r2 = ((fx - 0.5).powi(2) + (fy - 0.5).powi(2)) * 2.0;
                 let focal = (focus + field_curve * 0.6 * r2).clamp(0.0, 1.0);
                 let s = far[i] - focal;
@@ -1736,6 +1764,7 @@ fn dof_slice_blur(
     shape: DiscShape,
     region: (usize, usize, usize, usize),
     roi: [f32; 4],
+    band: (usize, usize),
 ) -> ImageBuf {
     // The swirl makes the kernel depend on where the pixel sits about
     // the frame center: its variants are built up front, one per
@@ -1783,7 +1812,10 @@ fn dof_slice_blur(
     // default (the whole frame) every term reduces to fw/2, fh/2 and
     // the old half diagonal, bit for bit.
     let fw_px = snap_frame(fw as f32 / roi[2]);
-    let fh_px = snap_frame(fh as f32 / roi[3]);
+    // `band` is the frame's height and the buffer's first row in it
+    // (crate::band::placed, read on the caller's thread).
+    let (full_h, band_y0) = band;
+    let fh_px = snap_frame(full_h as f32 / roi[3]);
     let (cx, cy) = ((0.5 - roi[0]) * fw_px, (0.5 - roi[1]) * fh_px);
     let half_diag = ((fw_px * 0.5) * (fw_px * 0.5) + (fh_px * 0.5) * (fh_px * 0.5))
         .sqrt()
@@ -1793,7 +1825,7 @@ fn dof_slice_blur(
             return 0;
         }
         let dx = gx as f32 + 0.5 - cx;
-        let dy = gy as f32 + 0.5 - cy;
+        let dy = (gy + band_y0) as f32 + 0.5 - cy;
         let r_norm = ((dx * dx + dy * dy).sqrt() / half_diag).min(0.999);
         let ring = (r_norm * SWIRL_RINGS as f32) as usize;
         let ang = dy.atan2(dx).rem_euclid(std::f32::consts::TAU);
@@ -1916,7 +1948,9 @@ fn dof_layered(
     // size, so the f32 wobble moved nothing visible here, but one
     // reconstruction rule for the file is one fewer thing to reason
     // about (the fourth pre-merge review's R5).
-    let short = snap_frame(w as f32 / roi[2]).min(snap_frame(h as f32 / roi[3]));
+    // A band's frame (crate::band::placed): its short side, and its rows'.
+    let (_, fh, band_y0) = crate::band::placed(w, h);
+    let short = snap_frame(w as f32 / roi[2]).min(snap_frame(fh as f32 / roi[3]));
     let max_r = aperture * short * DISC_MAX;
     use rayon::prelude::*;
     let (signed, coc_plane) = dof_planes(far, w, h, focus, field_curve, roi);
@@ -1980,7 +2014,7 @@ fn dof_layered(
                 (x1 + pad).min(w),
                 (y1 + pad).min(h),
             );
-            let buf = dof_slice_blur(&premult, x0, y0, w, h, radii, blades, blade_curve, shape, region, roi);
+            let buf = dof_slice_blur(&premult, x0, y0, w, h, radii, blades, blade_curve, shape, region, roi, (fh, band_y0));
             Some(DofSlice {
                 x0: region.0,
                 y0: region.1,

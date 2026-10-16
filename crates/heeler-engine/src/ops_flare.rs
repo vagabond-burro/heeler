@@ -35,7 +35,7 @@ use heeler_graph::Node;
 use crate::buffers::{ImageBuf, Value};
 use crate::executor::EngineError;
 use crate::ops::{image_input, p, to_scene};
-use crate::ops_depth::depth_plane;
+use crate::ops_depth::{depth_plane, depth_plane_at};
 use crate::ops_retouch::{ParsedStops, Stop};
 
 /// One light of the rig, as the flare reads it. The key light's own
@@ -215,8 +215,11 @@ pub(crate) fn flare(node: &Node, inputs: &[(String, Value)]) -> Result<Value, En
     let ry = p(&node.params, "roi_y", 0.0);
     let rw = p(&node.params, "roi_w", 1.0).max(1e-4);
     let rh = p(&node.params, "roi_h", 1.0).max(1e-4);
-    let full_w = w as f32 / rw;
-    let full_h = h as f32 / rh;
+    // In a banded render the buffer is the frame's rows from y0, and
+    // every position below stays in the frame's pixels.
+    let (fw, fh, y0) = crate::band::placed(w, h);
+    let full_w = fw as f32 / rw;
+    let full_h = fh as f32 / rh;
     let short = full_w.min(full_h);
     let aspect = full_w / full_h;
     // Full-frame normalized point to this buffer's pixel space.
@@ -285,10 +288,11 @@ pub(crate) fn flare(node: &Node, inputs: &[(String, Value)]) -> Result<Value, En
                     }
                     let x = pos[0] + ox * size_px;
                     let y = pos[1] + oy * size_px;
-                    if x < 0.0 || y < 0.0 || x >= w as f32 || y >= h as f32 {
+                    if x < 0.0 || y < 0.0 || x >= fw as f32 || y >= fh as f32 {
                         continue;
                     }
-                    let far = pl[y as usize * w + x as usize];
+                    // A band may not hold the light: read the frame's plane there.
+                    let far = if fh == h { pl[y as usize * w + x as usize] } else { depth_plane_at(inputs, fw, fh, x as usize, y as usize).unwrap_or(0.0) };
                     // Farther than the light (or as far) is see-through.
                     seen += smoothstep((far - depth + occlusion_soft) / (2.0 * occlusion_soft).max(1e-4));
                     n += 1.0;
@@ -323,7 +327,7 @@ pub(crate) fn flare(node: &Node, inputs: &[(String, Value)]) -> Result<Value, En
         .zip(src.data.par_chunks(w * 4))
         .enumerate()
         .for_each(|(y, (orow, srow))| {
-            let fy = y as f32 + 0.5;
+            let fy = (y + y0) as f32 + 0.5;
             for x in 0..w {
                 let fx = x as f32 + 0.5;
                 let i = x * 4;

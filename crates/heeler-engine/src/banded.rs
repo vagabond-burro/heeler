@@ -397,6 +397,12 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
             }
             "heeler.halation" => crate::ops_halation::halation_reach(node, w, h).map(|r| (r, r)),
             "heeler.paint" | "heeler.clone" => crate::ops_masks::paint_band_reach(node, w, h).and_then(both),
+            // Its estimate's cells, bilateral passes, medians and footing,
+            // the reach a 1:1 slice of it is rendered with.
+            "heeler.key_light" if !has_roi(node) => {
+                let short = w.min(h) as f32;
+                both((crate::ops_depth::key_light_reach(short) * short).ceil() as usize + 2)
+            }
             // Shadow, Glow and Bevel spread the alpha over a padded plane
             // and blur it: the blur's reach on that plane and the offset.
             "heeler.fx_shadow" | "heeler.fx_glow" | "heeler.fx_bevel" => both(crate::ops_fx::fx_reach(node, w, h)),
@@ -454,6 +460,23 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
         // gathered once by its statistics pass (ops_stylize field_stats);
         // a band then needs the field's blur reach.
         BandClass::Statistics => match node.node_type.as_str() {
+            // Each pixel from the lights' places in the frame; the light's
+            // own occlusion reads the planted plane at the light.
+            "heeler.flare" if !has_roi(node) => both(0),
+            // Each slice blurred within its kernel's reach, then the halo.
+            "heeler.dof" if !has_roi(node) => {
+                let aperture = p("aperture", 0.0) / 100.0;
+                if aperture <= 0.0 {
+                    return both(0);
+                }
+                let short = w.min(h) as f32;
+                let max_r = aperture * short * crate::ops_depth::DISC_MAX;
+                let fringe = (p("fringe", 0.0) / 100.0).abs();
+                let swirl = (p("swirl", 0.0) / 100.0).max(0.0);
+                let taps = (max_r * (1.0 + fringe * crate::ops_depth::FRINGE_STRETCH)).max(0.6) * 1.8 * (1.0 + swirl * crate::ops_depth::SWIRL_STRETCH) + 1.0;
+                let halo = if p("glow", 0.0) > 0.0 { crate::ops_detail::wide_blur_band_reach((short * crate::ops_depth::HALO_SIGMA).max(2.0), w, h) } else { 0 };
+                both(taps.ceil() as usize + 2 + halo)
+            }
             "heeler.grain" | "heeler.noise" => {
                 if node.node_type == "heeler.grain" && p("intensity", 0.0) == 0.0 {
                     return both(0);
@@ -540,6 +563,13 @@ fn gathers_whole_input(ty: &str) -> bool {
     matches!(ty, "heeler.lens_correct" | "heeler.transform" | "heeler.perspective" | "heeler.grid_warp" | "heeler.shape_warp")
 }
 
+/// Whether a node renders a 1:1 slice of the frame (its roi params
+/// other than the whole frame).
+fn has_roi(node: &Node) -> bool {
+    let p = |k: &str, d: f64| ops::p(&node.params, k, d);
+    (p("roi_x", 0.0), p("roi_y", 0.0), p("roi_w", 1.0), p("roi_h", 1.0)) != (0.0, 0.0, 1.0, 1.0)
+}
+
 /// Nodes whose operator reads a planted depth plane per pixel, or within
 /// its own margin, resampled through the band's frame (ops_depth.rs
 /// plane_in_window), outside a 1:1 slice's depth window.
@@ -548,6 +578,7 @@ fn plane_in_bands(node: &Node) -> bool {
         node.node_type.as_str(),
         "heeler.fog" | "heeler.halation" | "heeler.recolor" | "heeler.range_mask" | "heeler.hue_range_mask" | "heeler.radial_mask"
             | "heeler.linear_mask" | "heeler.selection_mask" | "heeler.brush_mask" | "heeler.smart_mask" | "heeler.matte_mask"
+            | "heeler.key_light" | "heeler.dof" | "heeler.flare"
     ) && !node.params.contains_key("depth_roi_w")
 }
 
@@ -660,9 +691,12 @@ fn plan(
             && wired.iter().any(|(port, _)| port == "base")
             && (!same_size || margin(node, bw, bh).is_none())
             && blend_layers_band(node, &wired, &dims, bw, bh);
+        // A flare reads its depth at the light, which only a planted plane
+        // handed whole holds; a plane wired from a node is the band's rows.
+        let flare_reads_rows = node.node_type == "heeler.flare" && wired.iter().any(|(port, _)| port == "depth");
         let m = if layered {
             Mode::Layer
-        } else if !follows {
+        } else if !follows || flare_reads_rows {
             Mode::Resident
         } else if gathers {
             Mode::Gather
@@ -977,6 +1011,8 @@ fn wide_slots(node: &Node) -> usize {
         "heeler.blur" => 2,
         // The spread alpha's blur.
         "heeler.fx_shadow" | "heeler.fx_glow" | "heeler.fx_bevel" => 1,
+        // Depth of Field's halo, when it glows.
+        "heeler.dof" if ops::p(&node.params, "glow", 0.0) > 0.0 => 1,
         _ => 0,
     }
 }
@@ -997,6 +1033,7 @@ fn wide_bytes(node: &Node, w: usize, h: usize) -> Result<usize, EngineError> {
         "heeler.high_pass" | "heeler.sharpening" => vec![p("radius", 3.0).max(0.0) * scale],
         "heeler.skin_soften" => vec![p("softening", 8.0).max(0.0), p("detail_back", 4.0).max(0.0)],
         "heeler.blur" => vec![p("radius", 0.0).max(0.0) * scale],
+        "heeler.dof" => vec![(w.min(h) as f32 * crate::ops_depth::HALO_SIGMA).max(2.0)],
         // On a plane padded past the frame; its block factor is the same.
         "heeler.fx_shadow" | "heeler.fx_glow" => vec![(p("size", 12.0).max(0.0) * scale / 2.0).max(0.3)],
         "heeler.fx_bevel" => vec![(p("size", 6.0).max(1.0) * scale / 2.0).max(0.3)],

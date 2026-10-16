@@ -659,6 +659,57 @@ fn planted_depth_planes_read_in_bands() {
     }
 }
 
+/// Key Light, Depth of Field and Flare render a band at a time over a
+/// planted plane: lights of both kinds and a point light's falloff,
+/// measured and estimated; discs with fringe, swirl, bubble and squeeze,
+/// and a halo wide enough for the reduced blur; a flare's rays, ghosts
+/// and streak occluded by the plane at a light the band may not hold.
+#[test]
+fn key_light_dof_and_flare_band_over_a_planted_plane() {
+    let registry = Registry::builtin();
+    let n = |v: f64| ParamValue::Number(v);
+    let t = |v: &str| ParamValue::Text(v.into());
+    let lights = r##"[{"kind":"directional","azimuth":30,"elevation":40,"strength":80,"on":true},{"kind":"point","px":0.3,"py":0.6,"depth":40,"range":60,"strength":120,"on":true,"color":"#ffd0a0"}]"##;
+    let flares = r##"[{"kind":"point","px":0.4,"py":0.15,"depth":60,"on":true,"flare":true,"flare_strength":90},{"kind":"point","px":0.8,"py":0.85,"depth":20,"on":true,"flare":true,"flare_strength":70,"color":"#a0c0ff"}]"##;
+    let cases: Vec<(&str, &str, (usize, usize), Vec<(&str, ParamValue)>)> = vec![
+        ("key light", "heeler.key_light", (157, 131), vec![("lights", t(lights)), ("relief", n(60.0)), ("ambient", n(30.0))]),
+        ("key light, inverted", "heeler.key_light", (157, 131), vec![("lights", t(lights)), ("invert", ParamValue::Bool(true))]),
+        ("key light, large", "heeler.key_light", (420, 260), vec![("lights", t(lights)), ("relief", n(45.0))]),
+        ("dof", "heeler.dof", (157, 131), vec![("aperture", n(80.0)), ("focus", n(40.0)), ("fringe", n(60.0)), ("swirl", n(50.0)), ("bubble", n(40.0)), ("squeeze", n(-30.0)), ("field_curve", n(30.0))]),
+        ("dof, glow", "heeler.dof", (157, 131), vec![("aperture", n(60.0)), ("focus", n(20.0)), ("glow", n(70.0))]),
+        ("dof, wide halo", "heeler.dof", (900, 820), vec![("aperture", n(20.0)), ("focus", n(30.0)), ("glow", n(60.0))]),
+        ("flare", "heeler.flare", (157, 131), vec![("lights", t(flares)), ("rays", n(6.0)), ("ghosts", n(3.0)), ("anamorphic", n(50.0)), ("streak_noise", n(40.0)), ("veil_depth", n(30.0))]),
+    ];
+    for (what, ty, (w, h), params) in cases {
+        let mut plane = ImageBuf::new(41, 29);
+        for (i, px) in plane.data.chunks_exact_mut(4).enumerate() {
+            let (x, y) = ((i % 41) as f32 / 41.0, (i / 41) as f32 / 29.0);
+            let v = if (x - 0.45).powi(2) + (y - 0.4).powi(2) < 0.05 { 0.2 } else { (0.5 + 0.4 * y + 0.1 * (5.0 * x).sin()).clamp(0.0, 1.0) };
+            px.copy_from_slice(&[v, v, v, 1.0]);
+        }
+        for measured in [false, true] {
+            let mut g = Graph::new("depth");
+            g.add_node(registry.instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+            g.add_node(registry.instantiate("heeler.depth_map", "dm", Section::Creative).unwrap()).unwrap();
+            let mut node = registry.instantiate(ty, "n", Section::Creative).unwrap();
+            for (k, v) in &params {
+                node.params.insert(k.to_string(), v.clone());
+            }
+            g.add_node(node).unwrap();
+            g.connect("src", "out", "dm", "in").unwrap();
+            g.connect("src", "out", "n", "in").unwrap();
+            g.connect("dm", "depth", "n", "depth").unwrap();
+            let mut sources = sources_with(frame(w, h));
+            sources.insert("dm@depth".into(), SourceImage { image: Arc::new(plane.clone()), version: 1, measured });
+            let what = format!("{what}{}", if measured { ", measured" } else { "" });
+            let whole = Executor::new().render(&g, "n", &sources).unwrap();
+            assert_ne!(bits(&whole), bits(&Value::Image(sources["src"].image.clone())), "{what} did nothing");
+            let report = assert_same(&g, &["n"], &sources, BAND, &what);
+            assert!(report.banded.iter().any(|n| n == "n") && report.whole.is_empty(), "{what}: {report:?}");
+        }
+    }
+}
+
 /// Transform and Perspective gather each band from the whole photograph,
 /// as the lens does: under their defaults, their sweeps, and a move,
 /// turn and scale together, and a strong keystone with a zoom.
