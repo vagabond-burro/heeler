@@ -244,9 +244,14 @@ pub(crate) fn lens_correct(node: &Node, inputs: &[(String, Value)]) -> Result<Va
     // r = 1 at half the shorter side (see profile_factor).
     let norm_short = cx.min(cy).max(1e-6);
 
-    let mut out = ImageBuf::new(w, h);
+    // In a banded render the lens is handed its whole input and makes
+    // the band's rows, `rows` from frame row `y0`, each pixel computed
+    // from its place in the frame as the whole frame computes it.
+    let (y0, rows) = crate::band::frame().map_or((0, h), |f| (f.y0, f.rows));
+    let mut out = ImageBuf::new(w, rows);
     use rayon::prelude::*;
     out.data.par_chunks_mut(4).enumerate().for_each(|(px, o)| {
+        let px = px + y0 * w;
         let x = (px % w) as f32;
         let y = (px / w) as f32;
         let dx = x - cx;

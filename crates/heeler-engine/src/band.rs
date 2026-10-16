@@ -140,6 +140,10 @@ pub(crate) struct BandFrame {
     pub(crate) full_w: usize,
     pub(crate) full_h: usize,
     pub(crate) y0: usize,
+    /// How many rows the operator makes: its buffer's, or for a gather
+    /// (an operator handed its whole input, banded.rs Mode::Gather) the
+    /// band's.
+    pub(crate) rows: usize,
 }
 
 thread_local! {

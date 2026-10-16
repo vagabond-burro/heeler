@@ -35,6 +35,10 @@ enum Mode {
     Rows { top: usize, bottom: usize },
     /// The crop: gathered through its flips, turn and rectangle.
     Crop,
+    /// An operator that gathers from anywhere in its input (the lens
+    /// correction): handed its whole input, resident, it makes the
+    /// band's rows.
+    Gather,
 }
 
 /// What a banded render did, for the caller's log and the tests.
@@ -545,8 +549,20 @@ fn plan(
             && ((raster_fed(&node.node_type) && sources.contains_key(planted_id(node)))
                 || (normal_slot(&node.node_type) && sources.contains_key(&slot(id, "normal"))));
         let follows = !planted && !fed && same_size;
+        // A gather reads its input anywhere, so only a resident input
+        // (the photograph, or a node rendered whole), wired alone and
+        // with no mask or layer opacity to blend through, which would
+        // meet the whole input against the band.
+        let gathers = node.enabled
+            && node.node_type == "heeler.lens_correct"
+            && wired.len() == 1
+            && wired[0].0 == "in"
+            && mode.get(&wired[0].1) == Some(&Mode::Resident)
+            && node.params.get(crate::executor::MASK_WEIGHT_PARAM).and_then(|v| v.as_f64()).is_none_or(|w| w >= 1.0);
         let m = if !follows {
             Mode::Resident
+        } else if gathers {
+            Mode::Gather
         } else if is_crop {
             if bc == 4 { Mode::Crop } else { Mode::Resident }
         } else {
@@ -879,9 +895,11 @@ pub fn estimate_banded(
             let (rlo, rhi) = band.reads[id];
             let (fw, _, fc) = plan.dims[id];
             let mut inputs = 0usize;
-            for (_, from) in &plan.inputs[id] {
-                let (iw, _, ic) = plan.dims[from];
-                inputs = sum([inputs, rows_bytes(iw, rhi - rlo, ic)?])?;
+            if plan.mode[id] != Mode::Gather {
+                for (_, from) in &plan.inputs[id] {
+                    let (iw, _, ic) = plan.dims[from];
+                    inputs = sum([inputs, rows_bytes(iw, rhi - rlo, ic)?])?;
+                }
             }
             let keep = rows_bytes(fw, hi - lo, fc)?;
             let (made, scratch) = match plan.mode[id] {
@@ -1049,6 +1067,11 @@ fn band_needs(plan: &Plan, terminals: &[&str], a: usize, b: usize, started: &mut
                 let g = &plan.crops[id];
                 g.input_rows(lo, hi).unwrap_or((0, g.in_h))
             }
+            // Its input is resident and read whole; it makes its own rows.
+            Mode::Gather => {
+                reads.insert(id.clone(), (lo, hi));
+                continue;
+            }
         };
         if plan.carried.contains(id) && started.insert(id.clone()) {
             r.0 = 0;
@@ -1118,7 +1141,7 @@ fn render_band(
             Mode::Rows { .. } => {
                 let inputs: Vec<(String, Value)> =
                     plan.inputs[id].iter().map(|(port, from)| (port.clone(), rows_from(&slabs, from, rlo, rhi))).collect();
-                let frame = BandFrame { full_w: fw, full_h: fh, y0: rlo };
+                let frame = BandFrame { full_w: fw, full_h: fh, y0: rlo, rows: rhi - rlo };
                 let made = if plan.carried.contains(id) {
                     let mut carry = carries.remove(id).unwrap_or_default();
                     carry.next_b0 = later.iter().find_map(|l| l.reads.get(id).map(|r| r.0));
@@ -1155,6 +1178,25 @@ fn render_band(
                 };
                 let px = |x: usize, y: usize| img.pixel(x, y - rlo);
                 Value::Image(Arc::new(g.render(lo, hi, &px)))
+            }
+            Mode::Gather => {
+                let inputs: Vec<(String, Value)> =
+                    plan.inputs[id].iter().map(|(port, from)| (port.clone(), resident[from].clone())).collect();
+                let frame = BandFrame { full_w: fw, full_h: fh, y0: lo, rows: hi - lo };
+                let made = with_frame(frame, || apply_node(id, node, inputs, false, sources))?;
+                let (mw, mh) = match &made {
+                    Value::Image(i) => (i.width, i.height),
+                    Value::Mask(m) => (m.width, m.height),
+                };
+                if (mw, mh) == (fw, fh) {
+                    // Handed back whole: its input untouched (nothing on),
+                    // whose band is the band's rows.
+                    slice_rows(&made, 0, lo, hi)
+                } else if (mw, mh) == (fw, hi - lo) {
+                    made
+                } else {
+                    return Err(EngineError::Band(format!("'{id}' gathered {mw} by {mh} for a {fw} wide band of {} rows", hi - lo)));
+                }
             }
             Mode::Resident => unreachable!(),
         };

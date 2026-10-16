@@ -313,3 +313,33 @@ fn wide_blurs_take_a_prepass_band_by_band() {
         assert!(report.whole.is_empty(), "{report:?}");
     }
 }
+
+/// The lens correction gathers from the whole photograph and makes each
+/// band's rows: under its defaults and the sweeps of its params
+/// (distortion, fringing, the profiled models and their vignette), read
+/// on by a pointwise node, bit for bit the whole frame, made band by band.
+#[test]
+fn the_lens_gathers_each_band_from_the_whole_photograph() {
+    let registry = Registry::builtin();
+    let sources = sources_with(frame(157, 131));
+    let mut sets = param_sets(&registry, "heeler.lens_correct");
+    sets.push(vec![("distortion".into(), ParamValue::Number(-35.0)), ("ca_red".into(), ParamValue::Number(40.0)), ("ca_blue".into(), ParamValue::Number(-30.0))]);
+    sets.push(vec![("dist_model".into(), ParamValue::Text("poly5".into())), ("dist_a".into(), ParamValue::Number(0.02)), ("dist_b".into(), ParamValue::Number(-0.05)), ("vig_k1".into(), ParamValue::Number(-0.4))]);
+    for (i, params) in sets.iter().enumerate() {
+        let mut g = Graph::new("lens");
+        g.add_node(registry.instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+        g.add_node(registry.instantiate("heeler.lens_correct", "lens", Section::Creative).unwrap()).unwrap();
+        g.add_node(registry.instantiate("heeler.exposure", "exp", Section::Creative).unwrap()).unwrap();
+        for (k, v) in params {
+            g.set_param("lens", k, v.clone()).unwrap();
+        }
+        g.set_param("exp", "exposure", ParamValue::Number(0.3)).unwrap();
+        g.connect("src", "out", "lens", "in").unwrap();
+        g.connect("lens", "out", "exp", "in").unwrap();
+        if Executor::new().render(&g, "exp", &sources).is_err() {
+            continue;
+        }
+        let report = assert_same(&g, &["exp"], &sources, BAND, &format!("lens set {}", i + 1));
+        assert!(report.banded.iter().any(|n| n == "lens") && report.whole.is_empty(), "set {}: {report:?}", i + 1);
+    }
+}
