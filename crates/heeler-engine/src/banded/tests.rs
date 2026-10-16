@@ -4,6 +4,7 @@
 //! band edge falls somewhere awkward.
 
 use super::*;
+use crate::executor::Executor;
 use heeler_graph::{ParamValue, Registry, Section};
 
 const BAND: usize = 17;

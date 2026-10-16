@@ -160,7 +160,7 @@ pub(crate) fn normal_slot(ty: &str) -> bool {
 /// raster the Depth blocks read; a File node's page alpha or named
 /// channel at `@mask` (Phase 6). Nothing planted is an empty mask, the
 /// passthrough rule every field reader follows.
-fn planted_port_value(node_id: &str, port: &str, sources: &HashMap<String, SourceImage>) -> Value {
+pub(crate) fn planted_port_value(node_id: &str, port: &str, sources: &HashMap<String, SourceImage>) -> Value {
     let Some(src) = sources.get(&slot(node_id, port)) else {
         return Value::Mask(Arc::new(crate::buffers::MaskBuf::new(0, 0)));
     };

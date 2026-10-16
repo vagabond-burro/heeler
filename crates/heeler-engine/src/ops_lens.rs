@@ -177,6 +177,62 @@ impl DngWarp {
     }
 }
 
+/// Whether the lens correction hands its input back untouched: no
+/// distortion, fringing, profile, warp or vignette. The operator's own
+/// test, so the banded render can follow an untouched lens as a
+/// passthrough.
+pub(crate) fn lens_untouched(node: &Node) -> Result<bool, EngineError> {
+    // Scaled down hard: the parameter is a friendly -100..100 and the
+    // polynomial coefficient that produces a useful range of correction is
+    // small. A tenth means the ends of the slider are a heavy correction
+    // rather than a funhouse mirror.
+    let k = p(&node.params, "distortion", 0.0).clamp(-100.0, 100.0) / 1000.0;
+    // Lateral chromatic aberration: red and blue land at very slightly
+    // different sizes than green, so each is scaled back on its own. The
+    // numbers are tiny by nature, hence the far smaller divisor.
+    let ca_r = p(&node.params, "ca_red", 0.0).clamp(-100.0, 100.0) / 20000.0;
+    let ca_b = p(&node.params, "ca_blue", 0.0).clamp(-100.0, 100.0) / 20000.0;
+    let vig = p(&node.params, "vignette", 0.0).clamp(-100.0, 100.0) / 100.0;
+
+    // The profile face: raw lensfun coefficients the panel's Apply
+    // wrote. dist_scale converts the camera's normalized radius into
+    // the calibration sensor's when their crop factors differ; the
+    // factor itself is scale-invariant, so only the polynomial's
+    // argument is scaled.
+    let model = crate::ops::choice(node, "dist_model")?;
+    let da = p(&node.params, "dist_a", 0.0);
+    let db = p(&node.params, "dist_b", 0.0);
+    let dc = p(&node.params, "dist_c", 0.0);
+    let profiled = profile_factor(&model, da, db, dc, 0.5).is_some()
+        && (da.abs() > 1e-9 || db.abs() > 1e-9 || dc.abs() > 1e-9);
+
+    // Profile TCA: red and blue each get their own poly3 factor.
+    let t_vr = p(&node.params, "tca_vr", 1.0);
+    let t_cr = p(&node.params, "tca_cr", 0.0);
+    let t_br = p(&node.params, "tca_br", 0.0);
+    let t_vb = p(&node.params, "tca_vb", 1.0);
+    let t_cb = p(&node.params, "tca_cb", 0.0);
+    let t_bb = p(&node.params, "tca_bb", 0.0);
+    let tca_on = (t_vr - 1.0).abs() > 1e-9
+        || t_cr.abs() > 1e-9
+        || t_br.abs() > 1e-9
+        || (t_vb - 1.0).abs() > 1e-9
+        || t_cb.abs() > 1e-9
+        || t_bb.abs() > 1e-9;
+
+    // Profile vignetting: the falloff polynomial's coefficients.
+    let vk1 = p(&node.params, "vig_k1", 0.0);
+    let vk2 = p(&node.params, "vig_k2", 0.0);
+    let vk3 = p(&node.params, "vig_k3", 0.0);
+    let vig_profiled = vk1.abs() > 1e-9 || vk2.abs() > 1e-9 || vk3.abs() > 1e-9;
+
+    // The file's own correction, under everything else.
+    let warp = node.params.get("dng_warp").and_then(|v| v.as_str()).and_then(DngWarp::parse);
+
+    let geometric = k.abs() > 1e-9 || ca_r.abs() > 1e-9 || ca_b.abs() > 1e-9 || profiled || tca_on || warp.is_some();
+    Ok(!geometric && vig.abs() < 1e-4 && !vig_profiled)
+}
+
 pub(crate) fn lens_correct(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError> {
     let src = image_input(inputs, "in", &node.id)?;
     // Scaled down hard: the parameter is a friendly -100..100 and the
@@ -229,7 +285,7 @@ pub(crate) fn lens_correct(node: &Node, inputs: &[(String, Value)]) -> Result<Va
     let warp = node.params.get("dng_warp").and_then(|v| v.as_str()).and_then(DngWarp::parse);
 
     let geometric = k.abs() > 1e-9 || ca_r.abs() > 1e-9 || ca_b.abs() > 1e-9 || profiled || tca_on || warp.is_some();
-    if !geometric && vig.abs() < 1e-4 && !vig_profiled {
+    if lens_untouched(node)? {
         return Ok(Value::Image(src.clone()));
     }
 

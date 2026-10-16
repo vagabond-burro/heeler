@@ -22,7 +22,7 @@ use heeler_graph::{Graph, Node, PortKind};
 
 use crate::band::{class_of, with_carry, with_frame, with_wide, BandClass, BandFrame, Carry, Wide};
 use crate::buffers::{ImageBuf, MaskBuf, Value};
-use crate::executor::{apply_node, is_source, normal_slot, passthrough_port, planted_id, raster_fed, slot, EngineError, Executor, SourceImage};
+use crate::executor::{apply_node, is_source, normal_slot, passthrough_port, planted_id, raster_fed, slot, EngineError, SourceImage};
 use crate::ops;
 
 /// How the banded render makes a node's rows.
@@ -455,6 +455,10 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
             }
             _ => None,
         },
+        // An untouched lens hands its input on.
+        BandClass::Geometric if node.node_type == "heeler.lens_correct" => {
+            if crate::ops_lens::lens_untouched(node).unwrap_or(false) { both(0) } else { None }
+        }
         // A layer on a frame its own size, neither placed nor warped, is
         // composited pixel by pixel: every fit and conform of it is the
         // layer itself. The plan has already sent layers of other sizes
@@ -527,7 +531,10 @@ fn plan(
             inputs.insert(id.clone(), wired);
             continue;
         };
-        let channels = if !node.enabled { bc } else if node.outputs.iter().any(|p| p.kind == PortKind::Image) { 4 } else { 1 };
+        // The Output node and an Export Layer hand their input on, whatever
+        // it is, though neither declares an image output.
+        let hands_on = matches!(node.node_type.as_str(), "heeler.output" | "heeler.export_layer");
+        let channels = if !node.enabled || hands_on { bc } else if node.outputs.iter().any(|p| p.kind == PortKind::Image) { 4 } else { 1 };
         let is_crop = node.enabled && node.node_type == "heeler.crop_rotate";
         let (w, h) = if is_crop {
             let g = CropGeom::of(node, bw, bh);
@@ -619,90 +626,162 @@ pub fn render_banded(
     band_rows: usize,
     sink: &mut dyn FnMut(usize, usize, Value) -> Result<(), EngineError>,
 ) -> Result<BandedReport, EngineError> {
-    // Nodes rendered whole are those a banded node or a terminal reads
-    // (a whole node's own upstream renders inside its render). A whole
-    // render whose size is not the one its inputs said re-plans with the
-    // size it has, until the plan and the renders agree.
     // Admitted as a whole before anything renders, as Executor::render is:
     // the caller's sink comes on top, in the caller's own job.
     let _job = crate::memory::Job::admit(estimate_banded(graph, terminals, sources, band_rows)?, "banded render")?;
+    let band_rows = band_rows.max(1);
     let mut resident: HashMap<String, Value> = HashMap::new();
     for (id, src) in sources {
         if graph.node(id).is_some_and(|n| is_source(&n.node_type)) {
             resident.insert(id.clone(), Value::Image(src.image.clone()));
         }
     }
+    // In the graph's order: a node the bands do not follow is made whole
+    // from its inputs' whole frames (resident, or put together from a
+    // banded pass) by its own operator, once; a node with reduced wide
+    // blurs takes its prepass. A node made whole at another size than its
+    // inputs said (a layer effect pads its frame) re-plans with the size
+    // it has.
     let mut rendered: HashMap<String, (usize, usize, usize)> = HashMap::new();
     let mut whole: Vec<String> = Vec::new();
-    let mut exec = Executor::new();
-    exec.trim_bytes(1);
-    let plan = loop {
+    let mut wides: HashMap<String, Wide> = HashMap::new();
+    let plan = 'plan: loop {
         let plan = plan(graph, terminals, sources, &rendered)?;
-        let mut replan = false;
         for id in &plan.order {
             let node = graph.node(id).unwrap();
+            if plan.wide.contains(id) && !wides.contains_key(id) {
+                prepass(graph, &plan, &resident, sources, id, band_rows, &mut wides)?;
+            }
             if plan.mode[id] != Mode::Resident || is_source(&node.node_type) || resident.contains_key(id) {
                 continue;
             }
-            let read = terminals.contains(&id.as_str())
-                || plan.order.iter().any(|c| plan.mode[c] != Mode::Resident && plan.inputs[c].iter().any(|(_, f)| f == id));
-            if !read {
-                continue;
-            }
-            let v = exec.render(graph, id, sources)?;
+            let v = make_whole(graph, &plan, &resident, sources, id, band_rows, &mut wides)?;
             let d = match &v {
                 Value::Image(i) => (i.width, i.height, 4),
                 Value::Mask(m) => (m.width, m.height, 1),
             };
-            if d != plan.dims[id] {
-                rendered.insert(id.clone(), d);
-                replan = true;
-            }
             resident.insert(id.clone(), v);
             whole.push(id.clone());
+            if d != plan.dims[id] {
+                rendered.insert(id.clone(), d);
+                // What follows was planned on the size it said; plan again,
+                // and the prepasses with it.
+                wides.clear();
+                continue 'plan;
+            }
         }
-        if !replan {
-            break plan;
-        }
+        break plan;
     };
-    drop(exec);
     let height = terminals.iter().map(|t| plan.dims[*t].1).collect::<HashSet<_>>();
     if height.len() != 1 {
         return Err(EngineError::Band("terminals of different heights".into()));
     }
-
     let mut report = BandedReport {
         whole,
         banded: plan.order.iter().filter(|id| plan.mode[*id] != Mode::Resident).cloned().collect(),
         bands: 0,
     };
-    let band_rows = band_rows.max(1);
-    // The reduced wide blurs' prepass, node by node in the graph's order
-    // (an upstream node's blurs finish first): rounds of the node's own
-    // subgraph, band by band, each filling the small image of the first
-    // blur not finished when it began, until every blur is.
-    let mut wides: HashMap<String, Wide> = HashMap::new();
-    for id in plan.order.iter().filter(|id| plan.wide.contains(*id)) {
-        let mut first = true;
-        loop {
-            let mut wide = wides.remove(id).unwrap_or_default();
-            let ready = wide.finished();
-            if !first && ready == wide.slots.len() {
-                wide.prepass = None;
-                wides.insert(id.clone(), wide);
-                break;
-            }
-            wide.prepass = Some(ready);
-            wides.insert(id.clone(), wide);
-            run_pass(graph, &plan, &resident, sources, &[id.as_str()], band_rows, &mut wides, &mut |_, _, _| Ok(()))?;
-            if !first && wides[id].finished() == ready {
-                return Err(EngineError::Band(format!("'{id}': a wide blur's prepass made no progress")));
-            }
-            first = false;
-        }
-    }
     report.bands = run_pass(graph, &plan, &resident, sources, terminals, band_rows, &mut wides, sink)?;
     Ok(report)
+}
+
+/// A node's reduced wide blurs' prepass: rounds of its own subgraph,
+/// band by band, each filling the small image of the first blur not
+/// finished when it began, until every blur is.
+fn prepass(
+    graph: &Graph,
+    plan: &Plan,
+    resident: &HashMap<String, Value>,
+    sources: &HashMap<String, SourceImage>,
+    id: &str,
+    band_rows: usize,
+    wides: &mut HashMap<String, Wide>,
+) -> Result<(), EngineError> {
+    let mut first = true;
+    loop {
+        let mut wide = wides.remove(id).unwrap_or_default();
+        let ready = wide.finished();
+        if !first && ready == wide.slots.len() {
+            wide.prepass = None;
+            wides.insert(id.to_string(), wide);
+            return Ok(());
+        }
+        wide.prepass = Some(ready);
+        wides.insert(id.to_string(), wide);
+        run_pass(graph, plan, resident, sources, &[id], band_rows, wides, &mut |_, _, _| Ok(()))?;
+        if !first && wides[id].finished() == ready {
+            return Err(EngineError::Band(format!("'{id}': a wide blur's prepass made no progress")));
+        }
+        first = false;
+    }
+}
+
+/// A node the bands do not follow, made whole: each input as the whole
+/// render would hand it (a resident frame, a frame put together from a
+/// banded pass of the input, a planted plane read as the executor reads
+/// it, the measured mark included), then its operator, once, through
+/// apply_node.
+fn make_whole(
+    graph: &Graph,
+    plan: &Plan,
+    resident: &HashMap<String, Value>,
+    sources: &HashMap<String, SourceImage>,
+    id: &str,
+    band_rows: usize,
+    wides: &mut HashMap<String, Wide>,
+) -> Result<Value, EngineError> {
+    let node = graph.node(id).ok_or_else(|| EngineError::NodeNotFound(id.into()))?;
+    let mut inputs: Vec<(String, Value)> = Vec::new();
+    let mut depth_measured = false;
+    for port in &node.inputs {
+        match graph.incoming(id, &port.name) {
+            Some(c) if c.from.1 != "out" && !passthrough_port(graph, &c.from.0, &c.from.1) => {
+                if port.name == "depth" && c.from.1 == "depth" {
+                    depth_measured = sources.get(&slot(&c.from.0, &c.from.1)).is_some_and(|s| s.measured);
+                }
+                inputs.push((port.name.clone(), crate::executor::planted_port_value(&c.from.0, &c.from.1, sources)));
+            }
+            Some(c) => {
+                let from = c.from.0.as_str();
+                let v = match resident.get(from) {
+                    Some(v) => v.clone(),
+                    None => assemble(graph, plan, resident, sources, from, band_rows, wides)?,
+                };
+                inputs.push((port.name.clone(), v));
+            }
+            None if port.optional => {}
+            None => return Err(EngineError::MissingInput { node: id.into(), port: port.name.clone() }),
+        }
+    }
+    apply_node(id, node, inputs, depth_measured, sources)
+}
+
+/// A band-made node's whole frame, put together from a banded pass.
+fn assemble(
+    graph: &Graph,
+    plan: &Plan,
+    resident: &HashMap<String, Value>,
+    sources: &HashMap<String, SourceImage>,
+    id: &str,
+    band_rows: usize,
+    wides: &mut HashMap<String, Wide>,
+) -> Result<Value, EngineError> {
+    let (w, h, c) = plan.dims[id];
+    let mut image = (c == 4).then(|| ImageBuf::try_new(w, h)).transpose()?;
+    let mut mask = (c != 4).then(|| MaskBuf::try_new(w, h)).transpose()?;
+    run_pass(graph, plan, resident, sources, &[id], band_rows, wides, &mut |_, y0, v| {
+        match (&v, image.as_mut(), mask.as_mut()) {
+            (Value::Image(b), Some(img), _) => img.data[y0 * w * 4..(y0 + b.height) * w * 4].copy_from_slice(&b.data),
+            (Value::Mask(b), _, Some(m)) => m.data[y0 * w..(y0 + b.height) * w].copy_from_slice(&b.data),
+            _ => return Err(EngineError::Band(format!("'{id}' made bands of another kind than its frame"))),
+        }
+        Ok(())
+    })?;
+    Ok(match (image, mask) {
+        (Some(i), _) => Value::Image(Arc::new(i)),
+        (_, Some(m)) => Value::Mask(Arc::new(m)),
+        _ => unreachable!(),
+    })
 }
 
 /// One pass of bands over `terminals`, top to bottom, handing their rows
@@ -846,33 +925,11 @@ pub fn estimate_banded(
     }
     let frame_h = *heights.iter().next().unwrap();
     let mut seen = HashSet::new();
-    let (mut source_bytes, mut source_capacity) = (0usize, 0usize);
+    let mut source_bytes = 0usize;
     for s in sources.values() {
         if seen.insert(Arc::as_ptr(&s.image) as usize) {
             source_bytes = sum([source_bytes, crate::memory::bytes(s.image.width, s.image.height, 4, 4)?])?;
-            source_capacity = sum([source_capacity, s.image.data.capacity().saturating_mul(4)])?;
         }
-    }
-    // The whole renders, one after another.
-    let (mut whole_outs, mut whole_peak) = (0usize, 0usize);
-    for id in &plan.order {
-        let node = graph.node(id).unwrap();
-        if plan.mode[id] != Mode::Resident || is_source(&node.node_type) {
-            continue;
-        }
-        let read = terminals.contains(&id.as_str())
-            || plan.order.iter().any(|c| plan.mode[c] != Mode::Resident && plan.inputs[c].iter().any(|(_, f)| f == id));
-        if !read {
-            continue;
-        }
-        let mut exec = Executor::new();
-        exec.trim_bytes(1);
-        // Executor::estimate counts the sources it finds by their buffers;
-        // they are counted here once, by their size.
-        let est = exec.estimate(graph, id, sources)?.saturating_sub(source_capacity);
-        whole_peak = whole_peak.max(sum([whole_outs, est])?);
-        let (w, h, c) = plan.dims[id];
-        whole_outs = sum([whole_outs, rows_bytes(w, h, c)?])?;
     }
     // The bands.
     let band_rows = band_rows.max(1);
@@ -951,7 +1008,43 @@ pub fn estimate_banded(
         let node = graph.node(id).unwrap();
         carries = sum([carries, crate::memory::bytes(w, *rows, carry_slots(node), 4)?])?;
     }
+    // The nodes made whole, in the graph's order: the whole frames made
+    // so far, this one's inputs put together (a banded pass's working set
+    // while they are), then its operator's scratch and output on the
+    // whole frame.
+    let (mut whole_outs, mut whole_peak) = (0usize, 0usize);
+    let assembling = sum([carries, band_peak])?;
+    for id in &plan.order {
+        let node = graph.node(id).unwrap();
+        if plan.mode[id] != Mode::Resident || is_source(&node.node_type) {
+            continue;
+        }
+        let (w, h, c) = plan.dims[id];
+        let mut inputs = 0usize;
+        for (_, from) in &plan.inputs[id] {
+            if plan.mode[from] != Mode::Resident {
+                let (iw, ih, ic) = plan.dims[from];
+                inputs = sum([inputs, rows_bytes(iw, ih, ic)?])?;
+            }
+        }
+        let out = rows_bytes(w, h, c)?;
+        let scratch = if !node.enabled {
+            0
+        } else if let Some(b) = crate::executor::padded_scratch(node, w, h) {
+            b?
+        } else {
+            crate::memory::bytes(w, h, 16, crate::executor::workspace(node))?
+        };
+        whole_peak = whole_peak.max(sum([whole_outs, inputs, assembling.max(sum([scratch, out])?)])?);
+        whole_outs = sum([whole_outs, out])?;
+    }
     Ok(sum([source_bytes, whole_peak.max(sum([whole_outs, carries, band_peak])?)])?)
+}
+
+/// A terminal's whole-frame size and channels (4 for an image, 1 for a
+/// mask), as the banded render plans it, without rendering anything.
+pub fn output_size(graph: &Graph, terminal: &str, sources: &HashMap<String, SourceImage>) -> Result<(usize, usize, usize), EngineError> {
+    Ok(plan(graph, &[terminal], sources, &HashMap::new())?.dims[terminal])
 }
 
 /// The tallest band, up to the frame's height, whose banded render of
