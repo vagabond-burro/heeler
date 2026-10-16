@@ -104,6 +104,10 @@ fn admission_counts_a_planted_plane() {
     let planted = Executor::new().estimate(&g, "inv", &sources(false, Some(false), false)).unwrap();
     let absent = Executor::new().estimate(&g, "inv", &sources(false, None, false)).unwrap();
     // With the plane planted, the render reads it into a mask and inverts
-    // that; without it, the empty mask a missing plane answers.
-    assert_eq!([planted, absent], [4800, 836]);
+    // that; without it, the empty mask a missing plane answers. Planted:
+    // the photograph and the plane resident (768 bytes each), and the
+    // Invert's worst moment, the plane read in (192), its mask out (192)
+    // and two frames of scratch (1536). Absent: the photograph, and a one
+    // pixel mask's 4 bytes out and 32 of scratch.
+    assert_eq!([planted, absent], [3456, 804]);
 }

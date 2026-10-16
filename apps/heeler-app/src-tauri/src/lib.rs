@@ -11544,9 +11544,23 @@ fn export_render_setup(
 fn render_export_admitted(ui: &UiGraph, source: Arc<ImageBuf>, extra: &HashMap<String, SourceImage>) -> Result<ImageBuf, String> {
     let _job = Job::admit(memory::bytes(source.width, source.height, 1, 48).map_err(|e| e.to_string())?, "export working images").map_err(|e| e.to_string())?;
     let (g, sources, terminal) = export_render_setup(ui, source, extra)?;
+    // Nothing else reads this executor's cache (the alpha and the export
+    // layers render through their own, render_export_layers_for), so it
+    // keeps no output past its last taker: a chain holds a frame or two
+    // rather than one per node. The picture is the same; only what stays
+    // cached between nodes changes.
     let mut exec = Executor::new();
+    exec.trim_bytes(1);
     let value = exec.render(&g, &terminal, &sources).map_err(|e| e.to_string())?;
-    Ok((**value.as_image().ok_or("terminal node is not an image")?).clone())
+    drop(exec);
+    drop(sources);
+    // The frame itself, not a copy of it, once the cache and the sources
+    // have let go; a graph that hands the photograph back unchanged still
+    // shares it with the caller, and that one is copied.
+    match value {
+        Value::Image(image) => Ok(Arc::try_unwrap(image).unwrap_or_else(|shared| (*shared).clone())),
+        Value::Mask(_) => Err("terminal node is not an image".into()),
+    }
 }
 
 /// What a Finish-sourced Export Layer node says about its layer (26.3

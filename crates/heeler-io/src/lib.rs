@@ -221,10 +221,20 @@ pub fn srgb_u8(v: f32) -> u8 {
 /// Decodes JPEG/PNG/TIFF bytes into a linear working-space buffer.
 /// Handles 8- and 16-bit sources via the f32 conversion path.
 pub fn decode_bytes(bytes: &[u8]) -> Result<ImageBuf, IoError> {
-    decode_samples(bytes, true)
+    decode_samples(bytes, true, 1)
 }
 
-fn decode_samples(bytes: &[u8], linearize: bool) -> Result<ImageBuf, IoError> {
+/// decode_bytes turned by an EXIF orientation (1..8) as it converts:
+/// each sample goes straight to the place apply_orientation would move
+/// it to, so the frame is never held twice. The same pixels as
+/// apply_orientation(decode_bytes(bytes), orientation), since everything
+/// the conversion does after placing a sample works on that pixel alone;
+/// a 48 MP portrait frame turned afterwards held a second 744 MiB frame.
+pub fn decode_bytes_oriented(bytes: &[u8], orientation: u16) -> Result<ImageBuf, IoError> {
+    decode_samples(bytes, true, orientation)
+}
+
+fn decode_samples(bytes: &[u8], linearize: bool, orientation: u16) -> Result<ImageBuf, IoError> {
     // An EXR is scene-linear already and its color may sit under a layer
     // name the image crate cannot see; both reasons for its own reader.
     if exr_passes::is_exr(bytes) {
@@ -240,14 +250,24 @@ fn decode_samples(bytes: &[u8], linearize: bool) -> Result<ImageBuf, IoError> {
         other => IoError::Image(other),
     })?;
     let (w, h) = decoder.dimensions();
-    let needed = memory::sum([memory::bytes(w as usize, h as usize, 1, 48)?, bytes.len()])?;
-    let _job = Job::admit(needed, "image decode, conversion and orientation")?;
-    limits.max_alloc = Some(needed as u64);
-    decoder.set_limits(limits)?;
     let color = decoder.color_type();
     let channels = color.channel_count() as usize;
     let sample_bytes = color.bytes_per_pixel() as usize / channels;
     let count = memory::bytes(w as usize, h as usize, channels, sample_bytes)?;
+    // What a decode holds at once: the file, the decoder's samples, the
+    // f32 frame they convert into (turned as it converts, so never held
+    // twice), and room for the decoder's own buffers: a progressive
+    // JPEG's coefficients (6 bytes a pixel at 4:4:4) or an interlaced
+    // PNG's pass, as large as the samples. Measured at 19 bytes a pixel
+    // beside the file for a JPEG, 20 for an 8-bit PNG, 22 for a 16-bit
+    // TIFF and 24 for a 16-bit PNG (tests/export_peak.rs in heeler-engine);
+    // 48 was asked of every format, which at 48 MP was 2234 MiB for a
+    // decode that holds about 900.
+    let room = count.max(memory::bytes(w as usize, h as usize, 1, 8)?);
+    let needed = memory::sum([bytes.len(), count, memory::bytes(w as usize, h as usize, 4, 4)?, room])?;
+    let _job = Job::admit(needed, "image decode, conversion and orientation")?;
+    limits.max_alloc = Some(needed as u64);
+    decoder.set_limits(limits)?;
     if decoder.total_bytes() != count as u64 { return Err(IoError::UnsupportedFormat); }
     let mut decoded = memory::vector(count, 0u8, "decoded samples")?;
     let profile = if !linearize { Ok(None) }
@@ -260,8 +280,12 @@ fn decode_samples(bytes: &[u8], linearize: bool) -> Result<ImageBuf, IoError> {
             } else { extracted }
         };
     decoder.read_image(&mut decoded)?;
-    let mut out = ImageBuf::try_new(w as usize, h as usize)?;
-    for (dest, pixel) in out.data.chunks_exact_mut(4).zip(decoded.chunks_exact(channels * sample_bytes)) {
+    let (w, h) = (w as usize, h as usize);
+    // apply_orientation's turn: 5 to 8 swap the sides.
+    let orientation = if (1..=8).contains(&orientation) { orientation } else { 1 };
+    let swaps = matches!(orientation, 5 | 6 | 7 | 8);
+    let mut out = if swaps { ImageBuf::try_new(h, w)? } else { ImageBuf::try_new(w, h)? };
+    let convert = |dest: &mut [f32], pixel: &[u8]| {
         let sample = |c: usize| -> f32 {
             let at = c * sample_bytes;
             match sample_bytes {
@@ -274,7 +298,21 @@ fn decode_samples(bytes: &[u8], linearize: bool) -> Result<ImageBuf, IoError> {
         if channels < 3 { dest[..3].fill(sample(0)); }
         else { for c in 0..3 { dest[c] = sample(c); } }
         dest[3] = if channels == 2 || channels == 4 { sample(channels - 1) } else { 1.0 };
+    };
+    if orientation == 1 {
+        for (dest, pixel) in out.data.chunks_exact_mut(4).zip(decoded.chunks_exact(channels * sample_bytes)) {
+            convert(dest, pixel);
+        }
+    } else {
+        let ow = out.width;
+        for (i, pixel) in decoded.chunks_exact(channels * sample_bytes).enumerate() {
+            let (x, y) = (i % w, i / w);
+            let (nx, ny) = oriented(orientation, x, y, w, h);
+            let at = (ny * ow + nx) * 4;
+            convert(&mut out.data[at..at + 4], pixel);
+        }
     }
+    drop(decoded);
     // Float samples are scene-linear by convention in every tool that
     // writes them, Heeler's own 32-bit TIFF included; sending them
     // through the sRGB decode turned 0.5 into 0.21 and 2.0 into 4.95 on
@@ -735,10 +773,11 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
     }
     #[cfg(not(feature = "libraw"))]
     let _ = raw_file;
-    let out = match decode_bytes(&bytes) {
-        // Phone JPEGs store pixels unrotated and describe the device's
-        // attitude in EXIF; without this an inverted-landscape iPhone
-        // shot developed upside down.
+    // Phone JPEGs store pixels unrotated and describe the device's
+    // attitude in EXIF; without this an inverted-landscape iPhone shot
+    // developed upside down. The frame is turned as it converts.
+    let orientation = media_orientation(&bytes);
+    let out = match decode_bytes_oriented(&bytes, orientation) {
         Ok(img) => match (raw_file, reduced_copy_of(&img, &bytes)) {
             // The image crate reads a TIFF's first IFD, which in a DNG is
             // the thumbnail too. The largest embedded JPEG preview stands
@@ -752,23 +791,27 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
                     )));
                 }
                 let preview = extract_raw_preview(&bytes)
-                    .and_then(|p| decode_bytes(p).ok())
+                    .and_then(|p| decode_bytes_oriented(p, raw_orientation(&bytes)).ok())
                     .filter(|p| reduced_copy_of(p, &bytes).is_none());
                 match preview {
-                    Some(p) => Ok(apply_orientation(p, raw_orientation(&bytes))),
-                    None => Err(IoError::Unsupported(format!(
-                        "the photograph in this file is {} x {} but only its {} x {} thumbnail could be read; its main image uses an encoding this build cannot decode",
-                        full.0, full.1, img.width, img.height
-                    ))),
+                    Some(p) => Ok(p),
+                    // The thumbnail's size as stored, before the turn.
+                    None => {
+                        let (tw, th) = if matches!(orientation, 5..=8) { (img.height, img.width) } else { (img.width, img.height) };
+                        Err(IoError::Unsupported(format!(
+                            "the photograph in this file is {} x {} but only its {} x {} thumbnail could be read; its main image uses an encoding this build cannot decode",
+                            full.0, full.1, tw, th
+                        )))
+                    }
                 }
             }
-            _ => Ok(apply_orientation(img, media_orientation(&bytes))),
+            _ => Ok(img),
         },
         Err(original) if memory::is_refusal(&original.to_string()) => Err(original),
         Err(original) if pixels == Pixels::SceneLinear && raw_file => Err(original),
         Err(original) => match extract_raw_preview(&bytes) {
             Some(preview) => {
-                decode_bytes(preview).map(|img| apply_orientation(img, raw_orientation(&bytes)))
+                decode_bytes_oriented(preview, raw_orientation(&bytes))
             }
             None => Err(original),
         },
@@ -843,19 +886,25 @@ pub fn apply_orientation(img: ImageBuf, orientation: u16) -> ImageBuf {
     let mut out = ImageBuf::new(ow, oh);
     for y in 0..h {
         for x in 0..w {
-            let (nx, ny) = match orientation {
-                2 => (w - 1 - x, y),             // mirror horizontal
-                3 => (w - 1 - x, h - 1 - y),     // rotate 180
-                4 => (x, h - 1 - y),             // mirror vertical
-                5 => (y, x),                     // transpose
-                6 => (h - 1 - y, x),             // rotate 90 CW
-                7 => (h - 1 - y, w - 1 - x),     // transverse
-                _ => (y, w - 1 - x),             // 8: rotate 90 CCW
-            };
+            let (nx, ny) = oriented(orientation, x, y, w, h);
             out.set_pixel(nx, ny, img.pixel(x, y));
         }
     }
     out
+}
+
+/// Where an EXIF orientation (2..8) moves the pixel at (x, y) of a w by h
+/// frame: one table for apply_orientation and the turning decode.
+fn oriented(orientation: u16, x: usize, y: usize, w: usize, h: usize) -> (usize, usize) {
+    match orientation {
+        2 => (w - 1 - x, y),             // mirror horizontal
+        3 => (w - 1 - x, h - 1 - y),     // rotate 180
+        4 => (x, h - 1 - y),             // mirror vertical
+        5 => (y, x),                     // transpose
+        6 => (h - 1 - y, x),             // rotate 90 CW
+        7 => (h - 1 - y, w - 1 - x),     // transverse
+        _ => (y, w - 1 - x),             // 8: rotate 90 CCW
+    }
 }
 
 /// Sanity check on a develop result: real photographs have strongly
@@ -1085,8 +1134,8 @@ fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, p
     }
     if raw_file && pixels == Pixels::AsTheFileRenders {
         if let Some(preview) = extract_raw_preview(&bytes) {
-            if let Ok(img) = decode_bytes(preview) {
-                return Ok(apply_orientation(img, raw_orientation(&bytes)));
+            if let Ok(img) = decode_bytes_oriented(preview, raw_orientation(&bytes)) {
+                return Ok(img);
             }
         }
     }
@@ -1097,11 +1146,11 @@ fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, p
             return Ok(unbake(apply_orientation(img, media_orientation(&bytes)), &bytes));
         }
     }
-    decode_bytes(&bytes).and_then(|img| {
+    decode_bytes_oriented(&bytes, media_orientation(&bytes)).and_then(|img| {
         if pixels == Pixels::SceneLinear && raw_file && reduced_copy_of(&img, &bytes).is_some() {
             return Err(IoError::Unsupported("scene-linear stack member needs a sensor develop, not a thumbnail".into()));
         }
-        Ok(unbake(apply_orientation(img, media_orientation(&bytes)), &bytes))
+        Ok(unbake(img, &bytes))
     })
 }
 
@@ -1209,16 +1258,16 @@ fn decode_thumbnail_inner(path: &Path) -> Result<ImageBuf, IoError> {
             }
         }
         if let Some(preview) = extract_raw_preview(&bytes) {
-            if let Ok(img) = decode_bytes(preview) {
-                return Ok(apply_orientation(img, raw_orientation(&bytes)));
+            if let Ok(img) = decode_bytes_oriented(preview, raw_orientation(&bytes)) {
+                return Ok(img);
             }
         }
         if is_jxl_dng(&bytes) {
             return decode_jxl_dng(&bytes).map(|img| unbake(as_the_file_renders(img, &bytes), &bytes));
         }
     }
-    match decode_bytes(&bytes) {
-        Ok(img) => Ok(unbake(apply_orientation(img, media_orientation(&bytes)), &bytes)),
+    match decode_bytes_oriented(&bytes, media_orientation(&bytes)) {
+        Ok(img) => Ok(unbake(img, &bytes)),
         Err(original) => {
             #[cfg(feature = "libraw")]
             if raw_file {
@@ -1240,6 +1289,18 @@ impl std::io::Write for Encoded {
         Ok(bytes.len())
     }
     fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+}
+
+/// An encoder's admission: what it allocates beside the frame it is
+/// handed, `per_pixel` bytes a pixel, plus 64 KiB of headers and tables.
+/// The figures are the encoder's worst measured on a frame of noise,
+/// where nothing compresses (measure_encode_peaks in heeler-engine's
+/// tests/export_peak.rs), with a quarter on top: its samples, and the
+/// output growing by doubling until it holds a file larger than they
+/// are. Each asked 48 before, which at 48 MP was 2232 MiB for a JPEG
+/// that holds about 470.
+fn encode_admission(buf: &ImageBuf, per_pixel: usize) -> Result<usize, MemoryError> {
+    memory::sum([memory::bytes(buf.width, buf.height, 1, per_pixel)?, 64 * 1024])
 }
 
 fn encode_capacity(buf: &ImageBuf, bytes_per_pixel: usize) -> Result<Vec<u8>, IoError> {
@@ -1279,7 +1340,8 @@ fn to_srgb_u8(buf: &ImageBuf, include_alpha: bool) -> Result<Vec<u8>, IoError> {
 /// assumes sRGB" stops being true exactly where it matters, in print
 /// pipelines and on wide-gamut displays.
 pub fn encode_png(buf: &ImageBuf) -> Result<Vec<u8>, IoError> {
-    let _job = Job::admit(memory::sum([memory::bytes(buf.width, buf.height, 1, 48)?, 64 * 1024])?, "image encoding, metadata and output")?;
+    // 17.4 bytes a pixel measured on noise.
+    let _job = Job::admit(encode_admission(buf, 22)?, "image encoding, metadata and output")?;
     let data = to_srgb_u8(buf, true)?;
     let mut bytes = Encoded::default();
     let mut enc = PngEncoder::new(&mut bytes);
@@ -1321,7 +1383,7 @@ pub fn encode_png_raw(buf: &ImageBuf) -> Result<Vec<u8>, IoError> {
 /// Bit-depth aware: a 16-bit source keeps its precision - a depth
 /// plane read back at 8 bits banded every derivative taken of it.
 pub fn decode_png_raw(bytes: &[u8]) -> Result<ImageBuf, IoError> {
-    decode_samples(bytes, false)
+    decode_samples(bytes, false, 1)
 }
 
 /// One 8-bit plane as a grayscale PNG, bytes as they are. The
@@ -1398,7 +1460,8 @@ pub fn encode_png16(buf: &ImageBuf) -> Result<Vec<u8>, IoError> {
 /// tag: libwebp's simple API has nowhere to put one, and untagged sRGB
 /// is what every browser assumes of a WebP anyway.
 pub fn encode_webp(buf: &ImageBuf, quality: u8) -> Result<Vec<u8>, IoError> {
-    let _job = Job::admit(memory::sum([memory::bytes(buf.width, buf.height, 1, 48)?, 64 * 1024])?, "image encoding, metadata and output")?;
+    // 6.1 bytes a pixel measured on noise.
+    let _job = Job::admit(encode_admission(buf, 8)?, "image encoding, metadata and output")?;
     if buf.width == 0 || buf.height == 0 {
         return Err(IoError::UnsupportedFormat);
     }
@@ -1420,7 +1483,8 @@ pub fn encode_webp(buf: &ImageBuf, quality: u8) -> Result<Vec<u8>, IoError> {
 /// Encodes to 8-bit sRGB JPEG (no alpha), quality 1 to 100, with the
 /// sRGB profile embedded (ICC APP2 segment).
 pub fn encode_jpeg(buf: &ImageBuf, quality: u8) -> Result<Vec<u8>, IoError> {
-    let _job = Job::admit(memory::sum([memory::bytes(buf.width, buf.height, 1, 48)?, 64 * 1024])?, "image encoding, metadata and output")?;
+    // 10.0 bytes a pixel measured on noise.
+    let _job = Job::admit(encode_admission(buf, 13)?, "image encoding, metadata and output")?;
     let data = to_srgb_u8(buf, false)?;
     let mut bytes = Encoded::default();
     let mut enc = JpegEncoder::new_with_quality(&mut bytes, quality.clamp(1, 100));
@@ -2382,6 +2446,27 @@ mod tests {
             }
         }
         buf
+    }
+
+    /// The turning decode is decode-then-turn without the second frame:
+    /// the same pixels for every orientation, on a frame that is not
+    /// square, through an 8-bit JPEG (untagged sRGB ingest) and a 16-bit
+    /// PNG with alpha (tagged, so the ICC path runs too).
+    #[test]
+    fn a_decode_turned_as_it_converts_is_the_decode_turned_after() {
+        let mut img = ImageBuf::new(7, 5);
+        for (i, px) in img.data.chunks_exact_mut(4).enumerate() {
+            let (x, y) = ((i % 7) as f32, (i / 7) as f32);
+            px.copy_from_slice(&[x / 7.0, y / 5.0, (x + y) / 12.0, 0.25 + x / 14.0]);
+        }
+        for bytes in [encode_jpeg(&img, 95).unwrap(), encode_png16(&img).unwrap()] {
+            for orientation in 0..=9u16 {
+                let turned = decode_bytes_oriented(&bytes, orientation).unwrap();
+                let after = apply_orientation(decode_bytes(&bytes).unwrap(), orientation);
+                assert_eq!((turned.width, turned.height), (after.width, after.height), "orientation {orientation}");
+                assert_eq!(turned.data, after.data, "orientation {orientation}");
+            }
+        }
     }
 
     #[test]

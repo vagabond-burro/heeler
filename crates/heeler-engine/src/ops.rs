@@ -776,7 +776,7 @@ fn detail(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError>
     Ok(Value::Image(Arc::new(detail_pass(&node.params, (**src).clone()))))
 }
 
-fn detail_is_identity(params: &std::collections::BTreeMap<String, ParamValue>) -> bool {
+pub(crate) fn detail_is_identity(params: &std::collections::BTreeMap<String, ParamValue>) -> bool {
     p(params, "texture", 0.0) == 0.0
         && p(params, "clarity", 0.0) == 0.0
         && p(params, "dehaze", 0.0) == 0.0

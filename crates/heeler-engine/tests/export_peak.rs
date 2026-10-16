@@ -77,6 +77,10 @@ unsafe impl GlobalAlloc for Counting {
 #[global_allocator]
 static ALLOC: Counting = Counting;
 
+/// One measurement at a time: the counter is the whole process's, and
+/// the test harness runs tests on several threads.
+static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// The highest the live heap stood while `f` ran, above where it stood
 /// when `f` began, and what `f` returned.
 fn peak_of<T>(f: impl FnOnce() -> T) -> (usize, T) {
@@ -253,11 +257,12 @@ fn terminal_image(v: Value) -> Arc<ImageBuf> {
 #[test]
 #[ignore = "renders full-size frames; run by hand in release"]
 fn measure_export_peaks() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let only: Option<Vec<String>> = std::env::var("HEELER_PEAK_EDITS").ok().map(|v| v.split(',').map(|s| s.trim().to_string()).collect());
     println!();
     println!("All figures MiB. est: Executor::estimate. peak: the live heap's high-water mark above the start, source included.");
     println!("render: Executor::render plus the clone render_export returns. encode: encode_jpeg(90) of that frame, the frame held.");
-    println!("trim: the same on an executor after trim_bytes(1).");
+    println!("trim: on an executor after trim_bytes(1), its frame taken without a copy, as render_export renders now.");
     println!();
     println!("{:>4} {:<17} {:>9} {:>11} {:>9} {:>11} {:>11} {:>8}", "MP", "edit", "est", "peak", "est trim", "peak trim", "encode", "secs");
     for (label, w, h) in sizes() {
@@ -286,9 +291,13 @@ fn measure_export_peaks() {
                 let mut exec = Executor::new();
                 exec.trim_bytes(1);
                 let est = exec.estimate(&graph, "out", &sources).unwrap();
+                // As render_export takes it now: the frame itself once the
+                // cache and the sources let go, no copy.
                 let img = terminal_image(exec.render(&graph, "out", &sources).unwrap());
-                let copy: ImageBuf = (*img).clone();
-                drop(copy);
+                drop(exec);
+                drop(sources);
+                let frame = Arc::try_unwrap(img).unwrap_or_else(|shared| (*shared).clone());
+                drop(frame);
                 est
             });
             println!(
@@ -306,80 +315,313 @@ fn measure_export_peaks() {
     }
 }
 
-/// The decode stage: a full-size JPEG read from memory, as decode_bytes
+/// Every pixel's samples drawn at random: nothing for an encoder to
+/// squeeze, so its output is as large as it gets.
+fn noise(w: usize, h: usize) -> Arc<ImageBuf> {
+    let mut img = ImageBuf::new(w, h);
+    let mut s: u64 = 0x9E37_79B9_7F4A_7C15;
+    for v in img.data.iter_mut() {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        *v = (s >> 40) as f32 / (1u64 << 24) as f32;
+    }
+    Arc::new(img)
+}
+
+/// The decode stage: a full-size file read from memory, as decode_bytes
 /// reads it, then turned upright as a phone's portrait frame is (EXIF
-/// orientation 6).
+/// orientation 6) the old way, after the decode, and the new way, as it
+/// converts. Per format, in bytes a pixel, beside what admission asks.
 #[test]
 #[ignore = "decodes full-size frames; run by hand in release"]
 fn measure_decode_peaks() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     println!();
-    println!("{:>4} {:>11} {:>13} {:>14} {:>14}", "MP", "file MiB", "decode peak", "orient peak", "admission");
+    println!("{:>4} {:<7} {:>9} {:>12} {:>13} {:>13} {:>10}", "MP", "format", "file MiB", "decode B/px", "+turn after", "turned B/px", "asked B/px");
     for (label, w, h) in sizes() {
-        let bytes = {
-            let img = photo(w, h);
-            heeler_io::encode_jpeg(&img, 90).unwrap()
-        };
-        let (decode, img) = peak_of(|| heeler_io::decode_bytes(&bytes).unwrap());
-        let (orient, upright) = peak_of(|| heeler_io::apply_orientation(img, 6));
-        drop(upright);
-        // decode_samples admits 48 bytes a pixel plus the file.
-        let admission = w * h * 48 + bytes.len();
-        println!("{:>4} {:>11} {:>13} {:>14} {:>14}", label, mib(bytes.len()), mib(decode), mib(orient), mib(admission));
+        let px = (w * h) as f64;
+        let img = photo(w, h);
+        let files: Vec<(&str, Vec<u8>)> = vec![
+            ("jpeg", heeler_io::encode_jpeg(&img, 90).unwrap()),
+            ("png8", heeler_io::encode_png(&img).unwrap()),
+            ("png16", heeler_io::encode_png16(&img).unwrap()),
+            ("tiff16", heeler_io::encode_tiff16_export(&img, Default::default()).unwrap()),
+        ];
+        drop(img);
+        for (format, bytes) in files {
+            let (decode, img) = peak_of(|| heeler_io::decode_bytes(&bytes).unwrap());
+            let frame = img.data.capacity() * 4;
+            let (turn, upright) = peak_of(|| heeler_io::apply_orientation(img, 6));
+            drop(upright);
+            let (turned, upright) = peak_of(|| heeler_io::decode_bytes_oriented(&bytes, 6).unwrap());
+            drop(upright);
+            // decode_samples admits 48 bytes a pixel plus the file.
+            println!(
+                "{:>4} {:<7} {:>9} {:>12.1} {:>13.1} {:>13.1} {:>10.1}",
+                label,
+                format,
+                mib(bytes.len()),
+                decode as f64 / px,
+                decode.max(frame + turn) as f64 / px,
+                turned as f64 / px,
+                48.0 + bytes.len() as f64 / px
+            );
+        }
     }
+}
+
+/// Each encoder on a frame of noise, its worst case: the high-water mark
+/// above the frame it is handed, in bytes a pixel, beside the 48 bytes a
+/// pixel (plus 64 KiB) each asks today.
+#[test]
+#[ignore = "encodes full-size frames; run by hand in release"]
+fn measure_encode_peaks() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    println!();
+    println!("{:>4} {:<8} {:>10} {:>11} {:>8}", "MP", "encoder", "out MiB", "peak B/px", "secs");
+    for (label, w, h) in sizes() {
+        let px = (w * h) as f64;
+        let img = noise(w, h);
+        let encoders: Vec<(&str, Box<dyn Fn(&ImageBuf) -> Vec<u8>>)> = vec![
+            ("jpeg", Box::new(|i| heeler_io::encode_jpeg(i, 100).unwrap())),
+            ("webp", Box::new(|i| heeler_io::encode_webp(i, 100).unwrap())),
+            ("png8", Box::new(|i| heeler_io::encode_png(i).unwrap())),
+            ("png16", Box::new(|i| heeler_io::encode_png16(i).unwrap())),
+            ("tiff16", Box::new(|i| heeler_io::encode_tiff16_export(i, Default::default()).unwrap())),
+            ("tiff32", Box::new(|i| heeler_io::encode_tiff32f(i, heeler_io::FloatTiffOptions { include_alpha: true, dpi: None }).unwrap())),
+            ("dng", Box::new(|i| heeler_io::encode_dng_with_xmp(i, None, None).unwrap())),
+        ];
+        for (name, encode) in encoders {
+            let started = Instant::now();
+            let (peak, out) = peak_of(|| encode(&img));
+            println!("{:>4} {:<8} {:>10} {:>11.1} {:>8.1}", label, name, mib(out.len()), peak as f64 / px, started.elapsed().as_secs_f64());
+        }
+    }
+}
+
+type Set = Vec<(&'static str, ParamValue)>;
+
+/// The operators in the estimate's workspace table, each with the factor
+/// it was charged before Phase 0 measured it, and the param sets it is
+/// measured under: each costly knob alone, all at once, radii at their
+/// largest.
+fn operator_sets() -> Vec<(&'static str, usize, Vec<Set>)> {
+    let flare_light = text(r##"[{"kind":"point","px":0.5,"py":0.4,"on":true,"color":"#ffffff","flare":true,"flare_strength":100}]"##);
+    vec![
+        ("heeler.detail", 8, vec![
+            vec![("texture", num(30.0))],
+            vec![("clarity", num(30.0))],
+            vec![("dehaze", num(30.0))],
+            vec![("texture", num(100.0)), ("clarity", num(100.0)), ("dehaze", num(100.0))],
+            vec![("texture", num(-60.0)), ("clarity", num(-60.0)), ("dehaze", num(-60.0)), ("texture_red", num(150.0)), ("clarity_shadows", num(40.0))],
+        ]),
+        ("heeler.dof", 8, vec![
+            vec![("aperture", num(60.0)), ("focus", num(40.0))],
+            vec![("aperture", num(100.0)), ("focus", num(20.0)), ("fringe", num(60.0)), ("glow", num(50.0)), ("bubble", num(50.0)), ("swirl", num(40.0)), ("squeeze", num(30.0))],
+        ]),
+        ("heeler.halation", 8, vec![
+            vec![],
+            vec![("bloom", num(40.0))],
+            vec![("radius", num(30.0)), ("bloom", num(100.0)), ("bloom_radius", num(60.0)), ("blue_comp", num(50.0))],
+        ]),
+        ("heeler.flare", 8, vec![
+            vec![("lights", flare_light.clone())],
+            vec![("lights", flare_light.clone()), ("rays", num(16.0)), ("ghosts", num(8.0)), ("anamorphic", num(60.0)), ("veil", num(80.0)), ("veil_radius", num(100.0)), ("streak_noise", num(50.0))],
+        ]),
+        ("heeler.guided_filter", 8, vec![vec![("radius", num(8.0))], vec![("radius", num(100.0)), ("epsilon", num(0.001))]]),
+        ("heeler.denoise", 4, vec![vec![("strength", num(20.0))], vec![("strength", num(100.0))]]),
+        ("heeler.nlm_denoise", 4, vec![vec![("strength", num(40.0))], vec![("strength", num(100.0)), ("mode", text("nlm"))]]),
+        ("heeler.model_denoise", 4, vec![vec![]]),
+        ("heeler.sharpen", 4, vec![vec![("amount", num(120.0)), ("radius", num(2.0))], vec![("amount", num(300.0)), ("radius", num(5.0)), ("threshold", num(20.0))]]),
+        ("heeler.sharpening", 4, vec![vec![("radius", num(6.0))], vec![("radius", num(200.0)), ("keep_color", num(0.0))], vec![("radius", num(20.0)), ("mode", text("hipass"))]]),
+        ("heeler.clarity", 4, vec![
+            vec![("texture", num(30.0))],
+            vec![("clarity", num(30.0))],
+            vec![("local_contrast", num(30.0))],
+            vec![("texture", num(100.0)), ("clarity", num(100.0)), ("local_contrast", num(100.0))],
+        ]),
+        ("heeler.tone_eq", 4, vec![vec![("ev_m2", num(0.6)), ("ev_p2", num(-0.4))], vec![("ev_m4", num(2.0)), ("ev_p4", num(-2.0)), ("smoothing", num(100.0))]]),
+        ("heeler.skin_soften", 4, vec![vec![], vec![("softening", num(200.0)), ("detail_back", num(200.0)), ("strength", num(100.0))]]),
+        ("heeler.blur", 4, vec![
+            vec![("radius", num(12.0))],
+            vec![("radius", num(200.0))],
+            vec![("radius", num(60.0)), ("kind", text("box"))],
+            vec![("radius", num(60.0)), ("kind", text("motion")), ("angle", num(30.0))],
+        ]),
+        ("heeler.high_pass", 4, vec![vec![("radius", num(6.0))], vec![("radius", num(200.0))]]),
+        ("heeler.standard_color", 2, vec![
+            vec![("temperature", num(5800.0)), ("saturation", num(10.0)), ("vibrance", num(20.0)), ("contrast", num(20.0))],
+            vec![("clarity", num(20.0))],
+            vec![("texture", num(100.0)), ("clarity", num(100.0)), ("dehaze", num(100.0))],
+        ]),
+        ("heeler.exposure", 2, vec![vec![("exposure", num(0.3)), ("highlights", num(-20.0))], vec![("exposure", num(-1.0)), ("contrast", num(60.0)), ("color_contrast", num(40.0)), ("highlights", num(-100.0)), ("shadows", num(100.0)), ("whites", num(50.0)), ("blacks", num(-50.0))]]),
+        ("heeler.recolor", 2, vec![
+            vec![("curves", text(r#"{"hue_sat":[{"x":0,"y":30},{"x":180,"y":-20}]}"#))],
+            vec![("curves", text(r#"{"hue_sat":[{"x":0,"y":30},{"x":180,"y":-20}],"sat_pastel":[{"x":0,"y":50},{"x":100,"y":50}],"lum_temp":[{"x":-6,"y":100},{"x":3,"y":100}]}"#)), ("around_radius", num(50.0))],
+        ]),
+        ("heeler.luma_chroma_split", 2, vec![vec![("part", text("luma"))], vec![("part", text("color"))]]),
+        ("heeler.grain", 2, vec![vec![("intensity", num(40.0))], vec![("intensity", num(100.0)), ("size", num(100.0)), ("pattern", text("coarse"))], vec![("intensity", num(100.0)), ("pattern", text("cinema"))]]),
+        ("heeler.vignette", 2, vec![vec![("vignette", num(-40.0))]]),
+        ("heeler.lens_correct", 2, vec![vec![("distortion", num(20.0))], vec![("distortion", num(-40.0)), ("ca_red", num(50.0)), ("ca_blue", num(-50.0)), ("vignette", num(40.0))]]),
+    ]
 }
 
 /// What each operator in Executor::estimate's workspace table really
 /// allocates beside its output, in whole f32 RGBA frames of its input,
 /// next to the factor the estimate charges (scratch is w * h * 16 *
-/// factor bytes, so a factor of 2 is two frames).
+/// factor bytes, so a factor of 2 is two frames). Each operator runs
+/// under several param sets, each of its costly knobs alone, all of them
+/// at once and its radii at their largest, and the worst is reported
+/// with the set that made it.
 #[test]
-#[ignore = "renders a full-size frame per operator; run by hand in release"]
+#[ignore = "renders a full-size frame per operator and param set; run by hand in release"]
 fn measure_operator_workspace() {
-    let ops: Vec<(&str, usize, Vec<(&str, ParamValue)>)> = vec![
-        ("heeler.detail", 8, vec![("texture", num(30.0)), ("clarity", num(25.0)), ("dehaze", num(15.0))]),
-        ("heeler.dof", 8, vec![("aperture", num(60.0)), ("focus", num(40.0))]),
-        ("heeler.halation", 8, vec![("bloom", num(40.0))]),
-        ("heeler.flare", 8, vec![("rays", num(8.0)), ("ghosts", num(4.0))]),
-        ("heeler.guided_filter", 8, vec![("radius", num(16.0))]),
-        ("heeler.denoise", 4, vec![("strength", num(60.0))]),
-        ("heeler.nlm_denoise", 4, vec![("strength", num(40.0))]),
-        ("heeler.sharpen", 4, vec![("amount", num(120.0)), ("radius", num(2.0))]),
-        ("heeler.sharpening", 4, vec![("radius", num(6.0))]),
-        ("heeler.clarity", 4, vec![("texture", num(30.0)), ("clarity", num(30.0)), ("local_contrast", num(20.0))]),
-        ("heeler.tone_eq", 4, vec![("ev_m2", num(0.6)), ("ev_p2", num(-0.4))]),
-        ("heeler.skin_soften", 4, vec![]),
-        ("heeler.blur", 4, vec![("radius", num(12.0))]),
-        ("heeler.high_pass", 4, vec![("radius", num(6.0))]),
-        ("heeler.standard_color", 2, vec![("temperature", num(5800.0)), ("saturation", num(10.0)), ("clarity", num(20.0))]),
-        ("heeler.exposure", 2, vec![("exposure", num(0.3)), ("highlights", num(-20.0))]),
-        ("heeler.recolor", 2, vec![("curves", text(r#"{"hue_sat":[{"x":0,"y":30},{"x":180,"y":-20}]}"#))]),
-        ("heeler.luma_chroma_split", 2, vec![("part", text("color"))]),
-        ("heeler.grain", 2, vec![("intensity", num(40.0))]),
-        ("heeler.vignette", 2, vec![("vignette", num(-40.0))]),
-        ("heeler.lens_correct", 2, vec![("distortion", num(20.0))]),
-    ];
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let ops = operator_sets();
     let registry = Registry::builtin();
     println!();
-    println!("{:>4} {:<24} {:>8} {:>10} {:>12} {:>8}", "MP", "operator", "charged", "measured", "peak MiB", "secs");
+    println!("{:>4} {:<24} {:>8} {:>10} {:>12} {:>8}  worst set", "MP", "operator", "charged", "measured", "peak MiB", "secs");
     for (label, w, h) in sizes() {
         let frame = (w * h * 16) as f64;
         let input = photo(w, h);
-        for (ty, charged, params) in &ops {
-            let mut node = registry.instantiate(ty, "op", Section::Creative).unwrap();
-            for (k, v) in params {
-                node.params.insert(k.to_string(), v.clone());
+        // A farness plane for the depth readers: near at the bottom, far at the top.
+        let depth = Value::Mask(Arc::new(heeler_engine::MaskBuf {
+            width: w,
+            height: h,
+            data: (0..w * h).map(|i| 1.0 - (i / w) as f32 / h as f32).collect(),
+        }));
+        for (ty, charged, sets) in &ops {
+            let mut worst = (0.0f64, 0usize, 0usize, 0.0f64);
+            for (n, set) in sets.iter().enumerate() {
+                let mut node = registry.instantiate(ty, "op", Section::Creative).unwrap();
+                for (k, v) in set {
+                    node.params.insert(k.to_string(), v.clone());
+                }
+                let mut inputs = vec![("in".to_string(), Value::Image(input.clone()))];
+                if node.input("depth").is_some() {
+                    inputs.push(("depth".to_string(), depth.clone()));
+                }
+                let started = Instant::now();
+                let (peak, out) = peak_of(|| heeler_engine::ops::execute(&node, &inputs).unwrap());
+                let out_bytes = match &out {
+                    Value::Image(i) if Arc::ptr_eq(i, &input) => 0,
+                    Value::Image(i) => i.data.capacity() * 4,
+                    Value::Mask(m) => m.data.capacity() * 4,
+                };
+                drop(out);
+                let measured = peak.saturating_sub(out_bytes) as f64 / frame;
+                if measured >= worst.0 {
+                    worst = (measured, peak, n, started.elapsed().as_secs_f64());
+                }
             }
-            let inputs = vec![("in".to_string(), Value::Image(input.clone()))];
-            let started = Instant::now();
-            let (peak, out) = peak_of(|| heeler_engine::ops::execute(&node, &inputs).unwrap());
-            let out_bytes = match &out {
-                Value::Image(i) if Arc::ptr_eq(i, &input) => 0,
-                Value::Image(i) => i.data.capacity() * 4,
-                Value::Mask(m) => m.data.capacity() * 4,
-            };
-            drop(out);
-            let measured = peak.saturating_sub(out_bytes) as f64 / frame;
-            println!("{:>4} {:<24} {:>8} {:>10.2} {:>12} {:>8.1}", label, ty, charged, measured, mib(peak), started.elapsed().as_secs_f64());
+            println!("{:>4} {:<24} {:>8} {:>10.2} {:>12} {:>8.1}  {}/{}", label, ty, charged, worst.0, mib(worst.1), worst.3, worst.2 + 1, sets.len());
         }
+    }
+}
+
+/// Admission never asks for less than a render allocates: for every edit
+/// in the owner's table, on an executor without a budget (the desktop's
+/// export) and on one trimmed to a byte (the preview's, and now the
+/// export's), Executor::estimate covers the live heap's high-water
+/// mark while the render runs, the source included. Small frames, so the
+/// suite runs it; every term of the estimate scales with the frame.
+#[test]
+fn the_estimate_covers_what_each_edit_allocates() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let (w, h) = (640, 480);
+    for edit in edits() {
+        let graph = (edit.graph)();
+        for budget in [None, Some(1)] {
+            let (peak, est) = peak_of(|| {
+                let mut sources = HashMap::new();
+                sources.insert("src".to_string(), SourceImage { image: photo(w, h), version: 1, measured: false });
+                let mut exec = Executor::new();
+                if let Some(b) = budget {
+                    exec.trim_bytes(b);
+                }
+                let est = exec.estimate(&graph, "out", &sources).unwrap();
+                exec.render(&graph, "out", &sources).unwrap();
+                est
+            });
+            assert!(est >= peak, "{} (budget {budget:?}): estimate {est} under the measured peak {peak}", edit.name);
+        }
+    }
+}
+
+/// The same for each operator in the workspace table on its own, under
+/// every param set the sweep measures it with: a factor set below what
+/// the operator allocates fails here.
+#[test]
+fn the_estimate_covers_what_each_operator_allocates() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let (w, h) = (640, 480);
+    let registry = Registry::builtin();
+    for (ty, _, sets) in operator_sets() {
+        for set in sets {
+            let mut graph = Graph::new("op");
+            graph.add_node(registry.instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+            graph.add_node(registry.instantiate(ty, "op", Section::Creative).unwrap()).unwrap();
+            for (k, v) in &set {
+                graph.set_param("op", k, v.clone()).unwrap();
+            }
+            graph.connect("src", "out", "op", "in").unwrap();
+            for budget in [None, Some(1)] {
+                let (peak, est) = peak_of(|| {
+                    let mut sources = HashMap::new();
+                    sources.insert("src".to_string(), SourceImage { image: photo(w, h), version: 1, measured: false });
+                    let mut exec = Executor::new();
+                    if let Some(b) = budget {
+                        exec.trim_bytes(b);
+                    }
+                    let est = exec.estimate(&graph, "op", &sources).unwrap();
+                    exec.render(&graph, "op", &sources).unwrap();
+                    est
+                });
+                assert!(est >= peak, "{ty} {set:?} (budget {budget:?}): estimate {est} under the measured peak {peak}");
+            }
+        }
+    }
+}
+
+/// What heeler-io reserves for a decode and for each encoder covers what
+/// it allocates: the budget's own high-water mark of reservations against
+/// the heap's, the decode turned as a portrait frame is and every encoder
+/// on noise, its worst case.
+#[test]
+fn decode_and_encode_admissions_cover_what_they_allocate() {
+    use heeler_engine::memory;
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let (w, h) = (640, 480);
+    let reserved_and_used = |f: &dyn Fn()| {
+        memory::with_budget(1 << 40, || {
+            let (used, ()) = peak_of(f);
+            (memory::budget().snapshot().peak, used)
+        })
+    };
+    let photo = photo(w, h);
+    let files: Vec<(&str, Vec<u8>)> = vec![
+        ("jpeg", heeler_io::encode_jpeg(&photo, 90).unwrap()),
+        ("png8", heeler_io::encode_png(&photo).unwrap()),
+        ("png16", heeler_io::encode_png16(&photo).unwrap()),
+        ("tiff16", heeler_io::encode_tiff16_export(&photo, Default::default()).unwrap()),
+    ];
+    for (format, bytes) in &files {
+        let (reserved, used) = reserved_and_used(&|| drop(heeler_io::decode_bytes_oriented(bytes, 6).unwrap()));
+        assert!(reserved >= used, "{format} decode: reserved {reserved}, allocated {used}");
+    }
+    let img = noise(w, h);
+    let encoders: Vec<(&str, Box<dyn Fn(&ImageBuf) -> Vec<u8>>)> = vec![
+        ("jpeg", Box::new(|i| heeler_io::encode_jpeg(i, 100).unwrap())),
+        ("webp", Box::new(|i| heeler_io::encode_webp(i, 100).unwrap())),
+        ("png8", Box::new(|i| heeler_io::encode_png(i).unwrap())),
+        ("png16", Box::new(|i| heeler_io::encode_png16(i).unwrap())),
+        ("tiff16", Box::new(|i| heeler_io::encode_tiff16_export(i, Default::default()).unwrap())),
+        ("tiff32", Box::new(|i| heeler_io::encode_tiff32f(i, heeler_io::FloatTiffOptions { include_alpha: true, dpi: None }).unwrap())),
+        ("dng", Box::new(|i| heeler_io::encode_dng_with_xmp(i, None, None).unwrap())),
+    ];
+    for (name, encode) in encoders {
+        let (reserved, used) = reserved_and_used(&|| drop(encode(&img)));
+        assert!(reserved >= used, "{name} encode: reserved {reserved}, allocated {used}");
     }
 }

@@ -226,6 +226,45 @@ fn consumers(graph: &Graph, terminal: &str) -> HashMap<String, usize> {
     count
 }
 
+/// An operator's scratch while it runs, in whole f32 RGBA frames of its
+/// output (w * h * 16 bytes each), beside the output itself. Measured,
+/// not guessed: tests/export_peak.rs runs each operator below under
+/// several param sets (each costly knob alone, all of them at once, the
+/// radii at their largest) and reports the worst, and each figure here is
+/// that worst rounded up, plus one frame of slack for the paths no sweep
+/// reached. An operator not measured yet keeps the factor it had.
+fn workspace(node: &Node) -> usize {
+    match node.node_type.as_str() {
+        // Detail holds its incoming and dehazed frames alongside the
+        // guided filter's planes and weighted output: 5.5 measured.
+        "heeler.detail" => 7,
+        // Standard Color carries Detail's pass for older graphs (4.5 with
+        // all three on); without it the color pass is its output alone.
+        "heeler.standard_color" if !ops::detail_is_identity(&node.params) => 6,
+        "heeler.standard_color" => 1,
+        // 6.0 measured.
+        "heeler.skin_soften" => 7,
+        // DoF 4.9; the guided filter holds its guide, the guide's moments,
+        // the coefficients and the blend's second radius (5.0); Sharpening
+        // 5.0 in either mode.
+        "heeler.dof" | "heeler.guided_filter" | "heeler.sharpening" => 6,
+        "heeler.guided_filter_mask" => 8,
+        "heeler.halation" => 5,
+        // Sharpen 2.75, Clarity 2.5, Blur 3.0 (Gaussian at its largest
+        // radius), Grain 3.0. The model's denoise is not measured yet: it
+        // reads a planted answer.
+        "heeler.sharpen" | "heeler.clarity" | "heeler.blur" | "heeler.grain" | "heeler.model_denoise" => 4,
+        // NLM 1.75, Tone EQ 1.5, Recolor 1.25.
+        "heeler.nlm_denoise" | "heeler.tone_eq" | "heeler.recolor" => 3,
+        // Flare 0.25, Denoise 1.0, High Pass 1.0.
+        "heeler.flare" | "heeler.denoise" | "heeler.high_pass" => 2,
+        // Pointwise: nothing beside the output.
+        "heeler.exposure" | "heeler.luma_chroma_split" | "heeler.vignette" => 1,
+        "heeler.crop_rotate" | "heeler.output" | "heeler.export_layer" => 0,
+        _ => 2,
+    }
+}
+
 impl Executor {
     pub fn new() -> Self {
         Executor::default()
@@ -354,8 +393,18 @@ impl Executor {
         }
     }
 
-    /// Retained outputs for reachable cache misses, plus the largest operator
-    /// workspace. Disconnected nodes and cache hits do not reserve new images.
+    /// What a render of `terminal` holds at its worst moment, replayed in
+    /// the order the render runs. On top of the sources and cache entries
+    /// already resident: while a node makes its output it holds its inputs
+    /// and its operator's scratch, and the cache keeps what it keeps (every
+    /// output so far without a budget; under one, the outputs a later node
+    /// has yet to take plus what the budget has room for). After the last
+    /// node, the outputs kept and the returned frame's format conversion.
+    /// The worst of those moments is the answer, not their sum: the largest
+    /// scratch, the largest set of held inputs and every output never peak
+    /// together, and adding them asked a 48 MP export for 1.6 to 2.4 times
+    /// what it allocated (tests/export_peak.rs measures both). Disconnected
+    /// nodes and cache hits do not reserve new images.
     pub fn estimate(&self, graph: &Graph, terminal: &str, sources: &HashMap<String, SourceImage>) -> Result<usize, EngineError> {
         use crate::memory;
         fn shape(v: &Value) -> (usize, usize, usize) {
@@ -363,12 +412,24 @@ impl Executor {
         }
         struct Walk<'a> {
             exec: &'a Executor, graph: &'a Graph, sources: &'a HashMap<String, SourceImage>,
-            shapes: HashMap<String, (usize, usize, usize)>, keys: HashMap<String, u64>, outputs: usize, scratch: usize,
-            // The render's order replayed: bytes the nodes in progress hold
-            // as inputs, the most held at once while a node makes its
-            // output, each newly computed output's bytes (a cache hit or a
-            // source is already resident), and how many wires take each.
-            held: usize, live_peak: usize, fresh: HashMap<String, usize>, wires: HashMap<String, usize>,
+            shapes: HashMap<String, (usize, usize, usize)>, keys: HashMap<String, u64>,
+            // Inputs the nodes in progress hold: outputs this render made,
+            // and planted planes read into new masks.
+            held_fresh: usize, held_planted: usize,
+            // Every output this render has made so far, which is what a
+            // cache without a budget keeps.
+            made: usize,
+            // Outputs made that a later node has yet to take, which a
+            // budgeted cache may not evict (evict_within_render), and how
+            // many takers each node's output still has.
+            pinned: usize, remaining: HashMap<String, usize>,
+            // Each newly computed output's bytes (a cache hit or a source is
+            // already resident, and makes none).
+            fresh: HashMap<String, usize>,
+            // Under a budget, the room it leaves for outputs the cache may
+            // evict but has not yet; None without one.
+            room: Option<usize>,
+            peak: usize,
         }
         impl Walk<'_> {
             fn visit(&mut self, id: &str) -> Result<(usize, usize, usize), EngineError> {
@@ -382,7 +443,7 @@ impl Executor {
                     (src.image.width, src.image.height, 4)
                 } else {
                     let mut base = None;
-                    let held_before = self.held;
+                    let held_before = (self.held_fresh, self.held_planted);
                     for port in &node.inputs {
                         if let Some(c) = self.graph.incoming(id, &port.name) {
                             // A wire off a planted port carries the
@@ -396,15 +457,21 @@ impl Executor {
                                 match self.sources.get(&slot(&c.from.0, &c.from.1)) {
                                     // The planted plane is read into a new mask.
                                     Some(src) => {
-                                        self.held = memory::sum([self.held, memory::bytes(src.image.width, src.image.height, 1, 4)?])?;
+                                        self.held_planted = memory::sum([self.held_planted, memory::bytes(src.image.width, src.image.height, 1, 4)?])?;
                                         (src.image.width, src.image.height, 1)
                                     }
                                     None => continue,
                                 }
                             } else {
                                 let d = self.visit(&c.from.0)?;
-                                *self.wires.entry(c.from.0.clone()).or_insert(0) += 1;
-                                self.held = memory::sum([self.held, self.fresh.get(&c.from.0).copied().unwrap_or(0)])?;
+                                let taken = self.fresh.get(&c.from.0).copied().unwrap_or(0);
+                                self.held_fresh = memory::sum([self.held_fresh, taken])?;
+                                if let Some(n) = self.remaining.get_mut(&c.from.0) {
+                                    *n = n.saturating_sub(1);
+                                    if *n == 0 {
+                                        self.pinned = self.pinned.saturating_sub(taken);
+                                    }
+                                }
                                 d
                             };
                             if base.is_none() || port.name == "in" || port.name == "base" { base = Some(d); }
@@ -424,27 +491,25 @@ impl Executor {
                     }
                     let channels = if !node.enabled { incoming_channels }
                         else if node.outputs.iter().any(|p| p.kind == PortKind::Image) { 4 } else { 1 };
-                    // The output is made while the inputs are held; then
-                    // the inputs go and the output is the consumer's to hold.
-                    let made = memory::bytes(w, h, channels, 4)?;
-                    self.live_peak = self.live_peak.max(memory::sum([self.held, made])?);
-                    self.held = held_before;
-                    self.fresh.insert(id.into(), made);
-                    if node.enabled {
-                        self.outputs = memory::sum([self.outputs, memory::bytes(w, h, channels, 4)?])?;
-                        let workspace = match node.node_type.as_str() {
-                            // Detail retains its incoming and dehazed frames alongside
-                            // the guided filter's planes and weighted output.
-                            "heeler.detail" | "heeler.dof" | "heeler.halation" | "heeler.flare" => 8,
-                            // The guided filter holds its guide, the guide's
-                            // moments, the coefficients and the blend's second
-                            // radius: some thirty planes at once.
-                            "heeler.guided_filter" | "heeler.guided_filter_mask" => 8,
-                            "heeler.denoise" | "heeler.nlm_denoise" | "heeler.model_denoise" | "heeler.sharpen" | "heeler.sharpening" | "heeler.clarity" | "heeler.tone_eq" | "heeler.skin_soften" | "heeler.blur" | "heeler.high_pass" => 4,
-                            "heeler.crop_rotate" => 0,
-                            _ => 2,
-                        };
-                        self.scratch = self.scratch.max(memory::bytes(w, h, 16, workspace)?);
+                    // The Output node and an Export Layer hand their input
+                    // on as it is (ops::passthrough, ops::export_layer): a
+                    // reference to pixels already counted, none new.
+                    let out = if matches!(node.node_type.as_str(), "heeler.output" | "heeler.export_layer") { 0 } else { memory::bytes(w, h, channels, 4)? };
+                    let scratch = if node.enabled { memory::bytes(w, h, 16, workspace(node))? } else { 0 };
+                    // This node's worst moment: its inputs held, its
+                    // scratch and its output allocated, and what the cache
+                    // keeps beside them. Without a budget the cache holds
+                    // every output so far, the inputs among them.
+                    let moment = match self.room {
+                        None => memory::sum([self.made, self.held_planted, out, scratch])?,
+                        Some(room) => memory::sum([self.pinned, room.min(self.made), self.held_fresh, self.held_planted, out, scratch])?,
+                    };
+                    self.peak = self.peak.max(moment);
+                    (self.held_fresh, self.held_planted) = held_before;
+                    self.fresh.insert(id.into(), out);
+                    self.made = memory::sum([self.made, out])?;
+                    if self.remaining.get(id).is_some_and(|n| *n > 0) {
+                        self.pinned = memory::sum([self.pinned, out])?;
                     }
                     (w, h, channels)
                 };
@@ -452,9 +517,11 @@ impl Executor {
                 Ok(dims)
             }
         }
+        let cached: usize = self.cache.values().map(value_bytes).sum();
         let mut walk = Walk {
-            exec: self, graph, sources, shapes: HashMap::new(), keys: HashMap::new(), outputs: 0, scratch: 0,
-            held: 0, live_peak: 0, fresh: HashMap::new(), wires: HashMap::new(),
+            exec: self, graph, sources, shapes: HashMap::new(), keys: HashMap::new(),
+            held_fresh: 0, held_planted: 0, made: 0, pinned: 0, remaining: consumers(graph, terminal),
+            fresh: HashMap::new(), room: self.cache_budget.map(|cap| cap.saturating_sub(cached)), peak: 0,
         };
         let (w, h, _) = walk.visit(terminal)?;
         let budget = memory::budget();
@@ -466,25 +533,17 @@ impl Executor {
         for m in self.cache.values().filter_map(|v| v.as_mask()) {
             if seen.insert(Arc::as_ptr(m) as usize) && !budget.mask_is_resident(m) { held.push(m.data.capacity().saturating_mul(4)); }
         }
-        // What the render's new outputs hold at most. Without a budget the
-        // cache keeps every one of them until the render ends. With one,
-        // evict_within_render holds the cache to the budget as it goes,
-        // over it only by what it may not evict: the output just made, and
-        // outputs another node in this render has yet to take. On top of
-        // the cache, the nodes in progress hold their inputs while making
-        // their outputs, whether or not the cache still has them.
-        let outputs = match self.cache_budget {
-            None => walk.outputs,
-            Some(cap) => {
-                let cached: usize = self.cache.values().map(value_bytes).sum();
-                let pinned = memory::sum(walk.fresh.iter().filter(|(id, _)| walk.wires.get(*id).is_some_and(|n| *n > 1)).map(|(_, b)| *b))?;
-                let newest = walk.fresh.values().copied().max().unwrap_or(0);
-                let kept = memory::sum([cap.max(cached) - cached, pinned, newest])?;
-                memory::sum([walk.outputs.min(kept), walk.live_peak])?
-            }
+        // After the last node: the outputs the cache keeps (under a budget,
+        // the pinned ones, the room and the terminal's own, which is the
+        // newest and never evicted), with the returned frame's format
+        // conversion beside them: 16-bit RGBA, 8 bytes a pixel, the most
+        // any encoder takes. It was charged as 32, four channels of 8.
+        let kept = match walk.room {
+            None => walk.made,
+            Some(room) => memory::sum([walk.pinned, room.min(walk.made), walk.fresh.get(terminal).copied().unwrap_or(0)])?,
         };
-        // The returned clone and format conversion coexist with cached outputs.
-        Ok(memory::sum([memory::sum(held)?, outputs, walk.scratch, memory::bytes(w, h, 4, 8)?])?)
+        let end = memory::sum([kept, memory::bytes(w, h, 1, 8)?])?;
+        Ok(memory::sum([memory::sum(held)?, walk.peak.max(end)])?)
     }
 
     /// The cache key a node WOULD render under, without executing anything:
@@ -1248,7 +1307,9 @@ mod tests {
             });
             Executor::new().estimate(&rig.graph, "effect", &rig.sources).unwrap()
         };
-        assert!(estimate("heeler.detail") >= estimate("heeler.clarity") + 6000 * 4000 * 64);
+        // Detail allocates 5.5 frames beside its output at its worst,
+        // Clarity 2.5 (tests/export_peak.rs): three frames apart.
+        assert!(estimate("heeler.detail") >= estimate("heeler.clarity") + 6000 * 4000 * 16 * 3);
     }
 
     /// A stop flag that trips after the first poll stops the walk with
@@ -2016,13 +2077,13 @@ mod tests {
         bounded.trim_bytes(frame);
         let under = bounded.estimate(&rig.graph, &last, &rig.sources).unwrap();
         let unbounded = Executor::new().estimate(&rig.graph, &last, &rig.sources).unwrap();
-        // Both carry the same fixed part: the operator's scratch, the
-        // returned copy, the source. On top of it the unbounded render
-        // keeps all 20 outputs; the bounded one keeps the budget and the
-        // newest output, and holds one node's input and output while it
-        // works: four frames.
+        // Both carry the source. The unbounded render is at its worst on
+        // the last node: the 19 outputs before it kept, its own being
+        // made and its frame of scratch, 21 frames. The bounded one, on
+        // any node: the budget's frame, the input it holds, its output
+        // and its scratch, four.
         assert!(unbounded >= 20 * frame, "without a budget every output: {unbounded}");
-        assert_eq!(unbounded - under, 16 * frame, "under {under}, unbounded {unbounded}");
+        assert_eq!(unbounded - under, 17 * frame, "under {under}, unbounded {unbounded}");
     }
 
     #[test]
