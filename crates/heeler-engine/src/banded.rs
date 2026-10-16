@@ -494,6 +494,13 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
     }
 }
 
+/// Operators that, handed their whole input, make a band's rows of their
+/// output (band::BandFrame's `rows` from its `y0`), each pixel mapped from
+/// its place in the frame as the whole frame maps it.
+fn gathers_whole_input(ty: &str) -> bool {
+    matches!(ty, "heeler.lens_correct" | "heeler.transform" | "heeler.perspective" | "heeler.grid_warp" | "heeler.shape_warp")
+}
+
 /// Raster-fed nodes whose operator reads its planted raster a band at a
 /// time, resampling it through the frame's size and row.
 fn reads_raster_in_bands(ty: &str) -> bool {
@@ -584,7 +591,8 @@ fn plan(
         // with no mask or layer opacity to blend through, which would
         // meet the whole input against the band.
         let gathers = node.enabled
-            && node.node_type == "heeler.lens_correct"
+            && (gathers_whole_input(&node.node_type)
+                || (node.node_type == "heeler.layer_warp" && crate::ops_warp::layer_warp_gathers(node)))
             && wired.len() == 1
             && wired[0].0 == "in"
             && mode.get(&wired[0].1) == Some(&Mode::Resident)

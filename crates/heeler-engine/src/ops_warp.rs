@@ -1248,17 +1248,25 @@ pub fn warp_buf<F: WarpField + ?Sized>(src: &Arc<ImageBuf>, field: &F, clamp_edg
 /// hard, transparent outline shows the bilinear lattice's wobble where
 /// the pull eases off, which a photograph's soft detail hides.
 fn warp_buf_every<F: WarpField + ?Sized>(src: &Arc<ImageBuf>, field: &F, clamp_edges: bool, step: usize) -> Arc<ImageBuf> {
+    warp_buf_rows(src, field, clamp_edges, step, 0, src.height)
+}
+
+/// warp_buf's rows `y0..y0 + rows` alone; an identity field hands the
+/// whole input back.
+fn warp_buf_rows<F: WarpField + ?Sized>(src: &Arc<ImageBuf>, field: &F, clamp_edges: bool, step: usize, y0: usize, rows: usize) -> Arc<ImageBuf> {
     if field.is_identity() || src.width == 0 || src.height == 0 {
         return src.clone();
     }
     let (w, h) = (src.width, src.height);
-    let mut out = ImageBuf::new(w, h);
-    resample::<_, 4>(
+    let mut out = ImageBuf::new(w, rows);
+    resample_rows::<_, 4>(
         field,
         w,
         h,
         step,
         &mut out.data,
+        y0,
+        rows,
         |sx, sy, share, acc| {
             let q = tap_sharp(src, sx, sy, clamp_edges, share);
             for c in 0..4 {
@@ -1662,14 +1670,33 @@ fn resample<F: WarpField + ?Sized, const A: usize>(
     read: impl Fn(f32, f32, f32, &mut [f32; A]) + Sync,
     finish: impl Fn(&[f32; A], f32, &mut [f32]) + Sync,
 ) {
+    resample_rows(field, w, h, step, out, 0, h, read, finish)
+}
+
+/// resample for rows `y_start..y_start + rows` of a `w` by `h` frame
+/// alone, into `out`, which holds those rows: every pixel's source is
+/// found from its place in the frame, as the whole frame finds it, so a
+/// band of the warp is the frame's rows (a banded render's gather).
+#[allow(clippy::too_many_arguments)]
+fn resample_rows<F: WarpField + ?Sized, const A: usize>(
+    field: &F,
+    w: usize,
+    h: usize,
+    step: usize,
+    out: &mut [f32],
+    y_start: usize,
+    rows: usize,
+    read: impl Fn(f32, f32, f32, &mut [f32; A]) + Sync,
+    finish: impl Fn(&[f32; A], f32, &mut [f32]) + Sync,
+) {
     use rayon::prelude::*;
-    let ch = out.len() / (w * h).max(1);
+    let ch = out.len() / (w * rows).max(1);
     let fine = Fine::of(field, w, h);
     let lat = lattice_every(field, w, h, step, &fine.folds);
     let seam = seam_sub(w, h);
     let (fw, fh) = (w as f32, h as f32);
     out.par_chunks_mut(w * ch * BAND).enumerate().for_each(|(band, chunk)| {
-        let y0 = band * BAND;
+        let y0 = y_start + band * BAND;
         let y1 = y0 + chunk.len() / (w * ch);
         let (r0, r1) = (y0.saturating_sub(2), (y1 + 2).min(h));
         let mut pos = Vec::with_capacity((r1 - r0) * w);
@@ -1891,7 +1918,10 @@ pub(crate) fn grid_warp(node: &Node, inputs: &[(String, Value)]) -> Result<Value
     let src = image_input(inputs, "in", &node.id)?;
     let mesh = GridMesh::from_node(node);
     let clamp = choice(node, "edges")? != "transparent";
-    Ok(Value::Image(warp_buf(src, &mesh, clamp)))
+    // In a banded render the warp is handed its whole input and makes the
+    // band's rows.
+    let (y0, rows) = crate::band::frame().map_or((0, src.height), |f| (f.y0, f.rows));
+    Ok(Value::Image(warp_buf_rows(src, &mesh, clamp, LATTICE, y0, rows)))
 }
 
 // Shape Warp -----------------------------------------------------------
@@ -2271,7 +2301,8 @@ pub(crate) fn shape_warp(node: &Node, inputs: &[(String, Value)]) -> Result<Valu
     let src = image_input(inputs, "in", &node.id)?;
     let shapes = ShapeWarp::from_node(node);
     let clamp = choice(node, "edges")? != "transparent";
-    Ok(Value::Image(warp_buf(src, &shapes, clamp)))
+    let (y0, rows) = crate::band::frame().map_or((0, src.height), |f| (f.y0, f.rows));
+    Ok(Value::Image(warp_buf_rows(src, &shapes, clamp, LATTICE, y0, rows)))
 }
 
 // Finish warps ---------------------------------------------------------
@@ -2490,6 +2521,16 @@ fn layer_warp_of(node: &Node) -> Result<(GridMesh, ShapeWarp, bool, bool), Engin
     Ok((mesh, shapes, clamp, choice(node, "space")? == "picture"))
 }
 
+/// Whether a Warp layer can make a band's rows from its whole input: one
+/// field moves (its grid or its shapes, the other at rest), not the
+/// picture mode. Two fields in a row read the first's whole result.
+pub(crate) fn layer_warp_gathers(node: &Node) -> bool {
+    match layer_warp_of(node) {
+        Ok((mesh, shapes, _, picture)) => !picture && (mesh.is_identity() || shapes.is_identity()),
+        Err(_) => false,
+    }
+}
+
 pub(crate) fn layer_warp(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError> {
     let src = image_input(inputs, "in", &node.id)?;
     let (mesh, shapes, clamp, picture) = layer_warp_of(node)?;
@@ -2507,6 +2548,12 @@ pub(crate) fn layer_warp(node: &Node, inputs: &[(String, Value)]) -> Result<Valu
         .and_then(|(_, v)| v.as_mask())
         .filter(|m| m.width == src.width && m.height == src.height && layer_warp_moves(&mesh, &shapes) && (mesh.is_identity() || shapes.is_identity()));
     let Some(m) = weight else {
+        // In a banded render a warp of one field (layer_warp_gathers) is
+        // handed its whole input and makes the band's rows.
+        if let Some(f) = crate::band::frame() {
+            let field: &dyn WarpField = if mesh.is_identity() { &shapes } else { &mesh };
+            return Ok(Value::Image(warp_buf_rows(src, field, clamp, LATTICE, f.y0, f.rows)));
+        }
         let bent = warp_buf(src, &mesh, clamp);
         return Ok(Value::Image(warp_buf(&bent, &shapes, clamp)));
     };

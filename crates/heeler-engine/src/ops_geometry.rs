@@ -284,13 +284,21 @@ fn project(hm: &[f32; 8], x: f32, y: f32) -> (f32, f32) {
 /// gesture itself never lands here (the overlay stops the drag before
 /// the quad inverts), but a stale or hand-written graph can.
 pub(crate) fn warp_image(src: &ImageBuf, q: &Quad) -> ImageBuf {
+    warp_image_rows(src, q, 0, src.height)
+}
+
+/// warp_image's rows `y0..y0 + rows` alone, each pixel mapped from its
+/// place in the frame as the whole warp maps it: a band of the warp, for
+/// a banded render's gather. An identity quad hands the whole input back.
+pub(crate) fn warp_image_rows(src: &ImageBuf, q: &Quad, y0: usize, rows: usize) -> ImageBuf {
     use rayon::prelude::*;
     let (w, h) = (src.width, src.height);
-    let mut out = ImageBuf::new(w, h);
+    let mut out = ImageBuf::new(w, rows);
     let Some(hm) = inverse_map(q, w, h) else {
         return src.clone();
     };
     out.data.par_chunks_mut(w * 4).enumerate().for_each(|(y, row)| {
+        let y = y + y0;
         for x in 0..w {
             let (sx, sy) = project(&hm, x as f32 + 0.5, y as f32 + 0.5);
             row[x * 4..x * 4 + 4].copy_from_slice(&bilinear(src, sx, sy));
@@ -1144,8 +1152,11 @@ pub(crate) fn perspective(
             z(-bottom, h + left),
         ],
     };
+    // In a banded render the warp is handed its whole input and makes
+    // the band's rows.
+    let (y0, rows) = crate::band::frame().map_or((0, src.height), |f| (f.y0, f.rows));
     Ok(crate::buffers::Value::Image(std::sync::Arc::new(
-        warp_image(src, &quad),
+        warp_image_rows(src, &quad, y0, rows),
     )))
 }
 
@@ -1215,13 +1226,16 @@ pub(crate) fn transform(node: &Node, inputs: &[(String, Value)]) -> Result<Value
     let s = size / 100.0;
     let (px, py) = (pivot_x / 100.0 * fw, pivot_y / 100.0 * fh);
     let (sin, cos) = rotate.to_radians().sin_cos();
-    let mut out = ImageBuf::new(w, h);
+    // In a banded render the transform is handed its whole input and
+    // makes the band's rows, `rows` from frame row `y0`.
+    let (y0, rows) = crate::band::frame().map_or((0, h), |f| (f.y0, f.rows));
+    let mut out = ImageBuf::new(w, rows);
     use rayon::prelude::*;
     out.data
         .par_chunks_mut(w * 4)
         .enumerate()
         .for_each(|(y, row)| {
-            let oy = y as f32 + 0.5;
+            let oy = (y + y0) as f32 + 0.5;
             for x in 0..w {
                 let ox = x as f32 + 0.5;
                 // Undo the move, then rotate back about the pivot, then

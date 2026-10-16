@@ -399,3 +399,71 @@ fn the_smart_and_object_masks_band_with_their_rasters() {
     let report = assert_same(&g, &["m"], &sources_with(frame(w, h)), BAND, "key");
     assert_eq!(report.whole, vec!["m".to_string()]);
 }
+
+/// Transform and Perspective gather each band from the whole photograph,
+/// as the lens does: under their defaults, their sweeps, and a move,
+/// turn and scale together, and a strong keystone with a zoom.
+#[test]
+fn the_transform_and_perspective_gather_each_band() {
+    let registry = Registry::builtin();
+    let sources = sources_with(frame(157, 131));
+    let n = |v: f64| ParamValue::Number(v);
+    for (ty, extra) in [
+        ("heeler.transform", vec![("move_x", n(12.0)), ("move_y", n(-7.5)), ("rotate", n(17.0)), ("size", n(83.0)), ("pivot_x", n(30.0))]),
+        ("heeler.perspective", vec![("vertical", n(-45.0)), ("horizontal", n(30.0)), ("zoom", n(25.0))]),
+    ] {
+        let mut sets = param_sets(&registry, ty);
+        sets.push(extra.into_iter().map(|(k, v)| (k.to_string(), v)).collect());
+        for (i, params) in sets.iter().enumerate() {
+            let mut g = Graph::new("gather");
+            g.add_node(registry.instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+            g.add_node(registry.instantiate(ty, "geo", Section::Creative).unwrap()).unwrap();
+            g.add_node(registry.instantiate("heeler.exposure", "exp", Section::Creative).unwrap()).unwrap();
+            for (k, v) in params {
+                g.set_param("geo", k, v.clone()).unwrap();
+            }
+            g.set_param("exp", "exposure", ParamValue::Number(0.3)).unwrap();
+            g.connect("src", "out", "geo", "in").unwrap();
+            g.connect("geo", "out", "exp", "in").unwrap();
+            if Executor::new().render(&g, "exp", &sources).is_err() {
+                continue;
+            }
+            let report = assert_same(&g, &["exp"], &sources, BAND, &format!("{ty} set {}", i + 1));
+            assert!(report.banded.iter().any(|n| n == "geo") && report.whole.is_empty(), "{ty} set {}: {report:?}", i + 1);
+        }
+    }
+}
+
+/// Grid and Shape Warp gather each band from the whole photograph: a
+/// gentle mesh, a strong one with transparent edges, one shape, and
+/// shapes that pinch and fold, each read on by an Exposure.
+#[test]
+fn the_grid_and_shape_warps_gather_each_band() {
+    let registry = Registry::builtin();
+    let sources = sources_with(frame(157, 131));
+    let t = |v: &str| ParamValue::Text(v.into());
+    let n = |v: f64| ParamValue::Number(v);
+    let cases: Vec<(&str, Vec<(&str, ParamValue)>)> = vec![
+        ("heeler.grid_warp", vec![("cols", n(3.0)), ("rows", n(3.0)), ("mesh", t("[0,0,0.05,0,0,0,0,0.02,0.04,-0.03,0,0,0,0,0,0]"))]),
+        ("heeler.grid_warp", vec![("cols", n(1.0)), ("rows", n(1.0)), ("mesh", t("[0.2,0,0.2,0,0.2,0,0.2,0]")), ("edges", t("transparent"))]),
+        ("heeler.shape_warp", vec![("shapes", t(r#"[{"cx":0.4,"cy":0.6,"radius":0.2,"dx":0.05,"scale":1.3}]"#))]),
+        ("heeler.shape_warp", vec![("shapes", t(r#"[{"cx":0.85,"cy":0.5,"radius":0.45,"feather":0.3,"scale":1.8},{"cx":0.3,"cy":0.25,"radius":0.15,"dy":0.08}]"#))]),
+        // A Warp layer applies its chosen field; the other rests.
+        ("heeler.layer_warp", vec![("kind", t("grid")), ("cols", n(3.0)), ("rows", n(3.0)), ("mesh", t("[0,0,0.05,0,0,0,0,0.02,0.04,-0.03,0,0,0,0,0,0]")), ("shapes", t(r#"[{"cx":0.4,"cy":0.6,"radius":0.2,"dx":0.05}]"#))]),
+        ("heeler.layer_warp", vec![("kind", t("shapes")), ("shapes", t(r#"[{"cx":0.4,"cy":0.6,"radius":0.2,"dx":0.05,"scale":1.3}]"#))]),
+    ];
+    for (i, (ty, params)) in cases.iter().enumerate() {
+        let mut g = Graph::new("warp");
+        g.add_node(registry.instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+        g.add_node(registry.instantiate(ty, "warp", Section::Creative).unwrap()).unwrap();
+        g.add_node(registry.instantiate("heeler.exposure", "exp", Section::Creative).unwrap()).unwrap();
+        for (k, v) in params {
+            g.set_param("warp", k, v.clone()).unwrap();
+        }
+        g.set_param("exp", "exposure", ParamValue::Number(0.3)).unwrap();
+        g.connect("src", "out", "warp", "in").unwrap();
+        g.connect("warp", "out", "exp", "in").unwrap();
+        let report = assert_same(&g, &["exp"], &sources, BAND, &format!("{ty} case {}", i + 1));
+        assert!(report.banded.iter().any(|n| n == "warp") && report.whole.is_empty(), "{ty} case {}: {report:?}", i + 1);
+    }
+}
