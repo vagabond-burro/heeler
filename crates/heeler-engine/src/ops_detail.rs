@@ -860,11 +860,17 @@ pub(crate) fn model_denoise(node: &Node, inputs: &[(String, Value)]) -> Result<V
         return Ok(Value::Image(src.clone()));
     }
     let (w, h) = (src.width, src.height);
+    // The model's answer is the frame's; a band reads the frame's rows of
+    // it, resampled through the frame's size.
+    let (_, fh, band_y0) = crate::band::placed(w, h);
     let fitted;
-    let den: &ImageBuf = if raster.width == w && raster.height == h {
+    let den: &ImageBuf = if raster.width == w && raster.height == fh && fh == h {
         raster
+    } else if raster.width == w && raster.height == fh {
+        fitted = ImageBuf { width: w, height: h, data: raster.data[band_y0 * w * 4..(band_y0 + h) * w * 4].to_vec() };
+        &fitted
     } else {
-        fitted = resample_bilinear(raster, w, h);
+        fitted = resample_bilinear_rows(raster, w, fh, band_y0, h);
         &fitted
     };
     // The model's luma plane, for the edge weight the Detail dial reads.
@@ -933,11 +939,19 @@ pub(crate) fn model_denoise(node: &Node, inputs: &[(String, Value)]) -> Result<V
 
 /// A plain bilinear resample of an RGBA buffer to (w, h), for a
 /// planted raster computed at another tier's size.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn resample_bilinear(src: &ImageBuf, w: usize, h: usize) -> ImageBuf {
-    let mut out = ImageBuf::new(w, h);
+    resample_bilinear_rows(src, w, h, 0, h)
+}
+
+/// A bilinear resample of `src` to a `w` by `h` frame, rows `y0..y0 +
+/// rows` of it: the whole frame from row 0, or a band of it.
+pub(crate) fn resample_bilinear_rows(src: &ImageBuf, w: usize, h: usize, y0: usize, rows: usize) -> ImageBuf {
+    let mut out = ImageBuf::new(w, rows);
     let (sw, sh) = (src.width, src.height);
     use rayon::prelude::*;
     out.data.par_chunks_mut(4 * w).enumerate().for_each(|(y, row)| {
+        let y = y + y0;
         let sy = ((y as f32 + 0.5) * sh as f32 / h as f32 - 0.5).clamp(0.0, (sh - 1) as f32);
         let (y0, fy) = (sy.floor() as usize, sy.fract());
         let y1 = (y0 + 1).min(sh - 1);

@@ -467,3 +467,38 @@ fn the_grid_and_shape_warps_gather_each_band() {
         assert!(report.banded.iter().any(|n| n == "warp") && report.whole.is_empty(), "{ty} case {}: {report:?}", i + 1);
     }
 }
+
+/// Inpaint and the model's denoise read their planted rasters through
+/// the frame: a raster the frame's size gives the band its own rows, one
+/// of another size is resampled through the frame's size and row.
+#[test]
+fn inpaint_and_the_model_denoise_band_with_their_rasters() {
+    let registry = Registry::builtin();
+    let (w, h) = (157, 131);
+    let other = frame(61, 47);
+    let same = frame(w, h);
+    for (ty, raster, params) in [
+        ("heeler.inpaint", other.clone(), vec![("hole", ParamValue::Text("layer".into()))]),
+        ("heeler.inpaint", same.clone(), vec![("hole", ParamValue::Text("layer".into()))]),
+        ("heeler.model_denoise", other.clone(), vec![("luminance", ParamValue::Number(70.0)), ("chroma", ParamValue::Number(40.0)), ("detail", ParamValue::Number(60.0))]),
+        ("heeler.model_denoise", same.clone(), vec![("luminance", ParamValue::Number(50.0))]),
+    ] {
+        let mut g = Graph::new("raster");
+        g.add_node(registry.instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+        g.add_node(registry.instantiate(ty, "n", Section::Creative).unwrap()).unwrap();
+        for (k, v) in &params {
+            g.set_param("n", k, v.clone()).unwrap();
+        }
+        g.connect("src", "out", "n", "in").unwrap();
+        let mut sources = sources_with(frame(w, h));
+        // A raster that is not the photograph, so a band reading the wrong rows shows.
+        let mut planted = (*raster).clone();
+        for v in planted.data.iter_mut() {
+            *v = 1.0 - *v * 0.5;
+        }
+        sources.insert("n".into(), SourceImage { image: Arc::new(planted), version: 1, measured: false });
+        let what = format!("{ty}, raster {}x{}", raster.width, raster.height);
+        let report = assert_same(&g, &["n"], &sources, BAND, &what);
+        assert!(report.banded.iter().any(|n| n == "n") && report.whole.is_empty(), "{what}: {report:?}");
+    }
+}

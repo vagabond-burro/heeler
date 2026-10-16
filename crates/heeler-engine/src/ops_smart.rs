@@ -215,12 +215,18 @@ pub(crate) fn inpaint(node: &Node, inputs: &[(String, Value)]) -> Result<Value, 
     let Some(raster) = raster.filter(|_| has_hole) else {
         return Ok(Value::Image(src.clone()));
     };
-    let (w, h) = (src.width, src.height);
+    // A band's rows are the frame's: the fill is measured on the frame.
+    let (w, bh) = (src.width, src.height);
+    let (_, h, band_y0) = crate::band::placed(w, bh);
     if (raster.width, raster.height) == (w, h) {
-        return Ok(Value::Image(raster.clone()));
+        if bh == h {
+            return Ok(Value::Image(raster.clone()));
+        }
+        let rows = raster.data[band_y0 * w * 4..(band_y0 + bh) * w * 4].to_vec();
+        return Ok(Value::Image(std::sync::Arc::new(crate::buffers::ImageBuf { width: w, height: bh, data: rows })));
     }
     let (rw, rh) = (raster.width, raster.height);
-    let mut out = crate::buffers::ImageBuf::new(w, h);
+    let mut out = crate::buffers::ImageBuf::new(w, bh);
     // PERF: the resample ran serially; each output pixel reads the same
     // four texels per channel and lerps in the same order, alpha
     // included, so the parallel rows are bit for bit.
@@ -229,6 +235,7 @@ pub(crate) fn inpaint(node: &Node, inputs: &[(String, Value)]) -> Result<Value, 
         .par_chunks_mut(w * 4)
         .enumerate()
         .for_each(|(y, out_row)| {
+            let y = y + band_y0;
             let sy = ((y as f32 + 0.5) * rh as f32 / h as f32 - 0.5).clamp(0.0, (rh - 1) as f32);
             let y0 = sy.floor() as usize;
             let y1 = (y0 + 1).min(rh - 1);

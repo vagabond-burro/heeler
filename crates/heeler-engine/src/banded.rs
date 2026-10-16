@@ -474,6 +474,11 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
                 let lag = r1 + 3 * r2;
                 both(if lag > 0 { lag + 2 } else { 0 })
             }
+            // The fill, per pixel, from the frame's raster.
+            "heeler.inpaint" => both(0),
+            // The model's answer per pixel, with its four neighbors' for
+            // the edge it keeps.
+            "heeler.model_denoise" => both(1),
             _ => None,
         },
         // A layer on a frame its own size, neither placed nor warped, is
@@ -504,7 +509,7 @@ fn gathers_whole_input(ty: &str) -> bool {
 /// Raster-fed nodes whose operator reads its planted raster a band at a
 /// time, resampling it through the frame's size and row.
 fn reads_raster_in_bands(ty: &str) -> bool {
-    matches!(ty, "heeler.smart_mask" | "heeler.matte_mask")
+    matches!(ty, "heeler.smart_mask" | "heeler.matte_mask" | "heeler.inpaint" | "heeler.model_denoise")
 }
 
 /// What the banded render knows before its first band. `rendered`
