@@ -11541,9 +11541,94 @@ fn export_render_setup(
     Ok((g, sources, terminal))
 }
 
+thread_local! {
+    /// The band height an export renders in when a test sets it (0, the
+    /// rule: memory chooses; usize::MAX: the whole frame, the reference
+    /// the tests compare the bands against). Nothing else sets it.
+    static EXPORT_BAND_ROWS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// How many bands the last export on this thread was made in (0:
+    /// rendered whole), for the tests to see the bands were used.
+    static EXPORT_BANDS_MADE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// The working memory an export's bands are sized to, beside the frame
+/// they are gathered into: tall enough bands that the margins they grow
+/// by cost little, and far under what a whole-frame render of a heavy
+/// 48 MP edit held (around 11 GB, which made a 16 GB Mac page).
+const EXPORT_BAND_TARGET: usize = 3 << 30;
+
+/// The band height an export falls back to when nodes made whole keep it
+/// past EXPORT_BAND_TARGET: tall enough that margins cost little, short
+/// enough that the bands add little to what the whole nodes hold.
+const EXPORT_BAND_FLOOR: usize = 256;
+
+/// The export's frame rendered band by band (heeler_engine::banded), the
+/// same picture to the bit as the whole-frame render, gathered into the
+/// f32 frame finish_export works on. Bands as tall as fit the smaller of
+/// EXPORT_BAND_TARGET and what memory allows. None when the bands cannot
+/// follow the graph or no band fits, and the caller renders whole as it
+/// always did (and is admitted or refused as it always was).
+fn render_export_banded(g: &Graph, terminal: &str, sources: &HashMap<String, SourceImage>) -> Result<Option<ImageBuf>, String> {
+    use heeler_engine::banded;
+    EXPORT_BANDS_MADE.with(|b| b.set(0));
+    let forced = EXPORT_BAND_ROWS.with(|r| r.get());
+    if forced == usize::MAX {
+        return Ok(None);
+    }
+    let Ok((w, h, channels)) = banded::output_size(g, terminal, sources) else { return Ok(None) };
+    if channels != 4 {
+        return Ok(None);
+    }
+    let frame_bytes = memory::bytes(w, h, 4, 4).map_err(|e| e.to_string())?;
+    // Bands as tall as fit the target. When nodes the bands do not follow
+    // must be made whole and that alone is past it, bands as tall as
+    // memory allows would only fill the room up again (measured: a 48 MP
+    // export of the dumped Finish graph held 10.2 GB in one band against
+    // 6.9 whole), so modest bands, EXPORT_BAND_FLOOR rows, if those still
+    // ask less than the whole render; else the whole render.
+    let ceiling = memory::available_to_job().min(EXPORT_BAND_TARGET.saturating_add(frame_bytes));
+    let rows = match banded::band_rows_for(g, &[terminal], sources, ceiling, frame_bytes) {
+        Ok(Some(_)) if forced > 0 => forced,
+        Ok(Some(rows)) => rows,
+        Ok(None) => {
+            let mut exec = Executor::new();
+            exec.trim_bytes(1);
+            let whole = exec.estimate(g, terminal, sources).map_err(|e| e.to_string())?;
+            let floor = EXPORT_BAND_FLOOR.min(h);
+            match banded::estimate_banded(g, &[terminal], sources, floor) {
+                Ok(est) if memory::sum([est, frame_bytes]).map_err(|e| e.to_string())? < whole => if forced > 0 { forced } else { floor },
+                Ok(_) | Err(heeler_engine::EngineError::Band(_)) => return Ok(None),
+                Err(e) => return Err(e.to_string()),
+            }
+        }
+        Err(heeler_engine::EngineError::Band(_)) => return Ok(None),
+        Err(e) => return Err(e.to_string()),
+    };
+    let _frame_job = Job::admit(frame_bytes, "export frame").map_err(|e| e.to_string())?;
+    let mut frame = ImageBuf::try_new(w, h).map_err(|e| e.to_string())?;
+    let rendered = banded::render_banded(g, &[terminal], sources, rows, &mut |_, y0, v| {
+        let Value::Image(band) = v else {
+            return Err(heeler_engine::EngineError::TypeMismatch { node: terminal.to_string(), port: "out".into() });
+        };
+        frame.data[y0 * w * 4..(y0 + band.height) * w * 4].copy_from_slice(&band.data);
+        Ok(())
+    });
+    match rendered {
+        Ok(report) => {
+            EXPORT_BANDS_MADE.with(|b| b.set(report.bands));
+            Ok(Some(frame))
+        }
+        Err(heeler_engine::EngineError::Band(_)) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 fn render_export_admitted(ui: &UiGraph, source: Arc<ImageBuf>, extra: &HashMap<String, SourceImage>) -> Result<ImageBuf, String> {
     let _job = Job::admit(memory::bytes(source.width, source.height, 1, 48).map_err(|e| e.to_string())?, "export working images").map_err(|e| e.to_string())?;
     let (g, sources, terminal) = export_render_setup(ui, source, extra)?;
+    if let Some(image) = render_export_banded(&g, &terminal, &sources)? {
+        return Ok(image);
+    }
     // Nothing else reads this executor's cache (the alpha and the export
     // layers render through their own, render_export_layers_for), so it
     // keeps no output past its last taker: a chain holds a frame or two
@@ -36006,3 +36091,6 @@ mod finish_fx_review;
 
 #[cfg(test)]
 mod dpi_review;
+
+#[cfg(test)]
+mod banded_export;
