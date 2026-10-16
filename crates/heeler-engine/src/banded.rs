@@ -436,6 +436,36 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
             "heeler.black_white" => both(2 * crate::ops::black_white_hue_radius(w, h) + 2),
             _ => None,
         },
+        // The grain field's mean and variance are the whole frame's,
+        // gathered once by its statistics pass (ops_stylize field_stats);
+        // a band then needs the field's blur reach.
+        BandClass::Statistics => match node.node_type.as_str() {
+            "heeler.grain" | "heeler.noise" => {
+                if node.node_type == "heeler.grain" && p("intensity", 0.0) == 0.0 {
+                    return both(0);
+                }
+                let pattern = node.params.get("pattern").and_then(|v| v.as_str()).unwrap_or("standard");
+                let by_frame = node.params.get("by_frame").is_some_and(|v| matches!(v, heeler_graph::ParamValue::Bool(true)) || v.as_f64().is_some_and(|x| x != 0.0));
+                let format = node.params.get("format").and_then(|v| v.as_str()).unwrap_or("35mm");
+                let short = (w.min(h)) as f32;
+                both(crate::ops_stylize::grain_reach(p("size", 25.0), pattern, by_frame, short, format) as usize + 1)
+            }
+            _ => None,
+        },
+        // A layer on a frame its own size, neither placed nor warped, is
+        // composited pixel by pixel: every fit and conform of it is the
+        // layer itself. The plan has already sent layers of other sizes
+        // whole.
+        BandClass::Geometric => match node.node_type.as_str() {
+            "heeler.merge" => both(0),
+            "heeler.blend" => {
+                let placement = ops::placement_on_frame(&node.params, w, h);
+                let placed = placement.get("fit").and_then(|v| v.as_str()) == Some("place");
+                let warped = crate::ops_geometry::Quad::from_params(&placement).is_some();
+                if placed || warped || ops::clip_frame_params(node).is_some() { None } else { both(0) }
+            }
+            _ => None,
+        },
         _ => None,
     }
 }

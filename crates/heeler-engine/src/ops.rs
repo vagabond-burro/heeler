@@ -2982,7 +2982,7 @@ fn quad_crossing(q: &[[f64; 2]; 4]) -> [f64; 2] {
 /// placed on, when the base carries one (the frame-shape rule,
 /// `placement_on_frame`). None when absent or unreadable (the clip is
 /// then stretched to the frame as it always was).
-fn clip_frame_params(node: &Node) -> Option<std::collections::BTreeMap<String, ParamValue>> {
+pub(crate) fn clip_frame_params(node: &Node) -> Option<std::collections::BTreeMap<String, ParamValue>> {
     let raw = node.params.get("clip_place")?.as_str()?.trim();
     let (fit, nums) = raw.split_once(';')?;
     let vals: Vec<f64> = nums.split(',').map(|v| v.trim().parse::<f64>()).collect::<Result<_, _>>().ok()?;

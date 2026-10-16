@@ -96,6 +96,27 @@ fn cached_noise_field(
 /// does not have, so the desktop's slice margin covers the kernel.
 fn noise_field(width: usize, height: usize, color: bool, sigma: f32, seed: u64, origin: (u64, u64)) -> ImageBuf {
     use rayon::prelude::*;
+    let mut noise = blurred_noise(width, height, color, sigma, seed, origin);
+    for c in 0..3 {
+        // PERF: the SUM stays a serial f64 accumulation (a parallel
+        // reduction adds in a different order and would change bits),
+        // but the subtract pass below it is an independent per-element
+        // update, so it parallelizes exactly. Alpha is never touched.
+        let mean: f64 = noise.data.chunks(4).map(|px| px[c] as f64).sum::<f64>()
+            / (width * height) as f64;
+        let mean = mean as f32;
+        noise.data.par_chunks_mut(4).for_each(|px| {
+            px[c] -= mean;
+        });
+    }
+    noise
+}
+
+/// The hashed noise, blurred, before its mean comes out: rows from
+/// frame row `origin.1`. A band's rows are the frame's rows wherever the
+/// blur's reach stays inside the buffer.
+fn blurred_noise(width: usize, height: usize, color: bool, sigma: f32, seed: u64, origin: (u64, u64)) -> ImageBuf {
+    use rayon::prelude::*;
     let mut noise = ImageBuf::new(width, height);
     noise.data.par_chunks_mut(width * 4).enumerate().for_each(|(y, row)| {
         let fy = y as u64 + origin.1;
@@ -115,20 +136,137 @@ fn noise_field(width: usize, height: usize, color: bool, sigma: f32, seed: u64, 
             row[i + 3] = 1.0;
         }
     });
-    let mut noise = crate::ops_detail::gaussian_blur_pub(&noise, sigma);
-    for c in 0..3 {
-        // PERF: the SUM stays a serial f64 accumulation (a parallel
-        // reduction adds in a different order and would change bits),
-        // but the subtract pass below it is an independent per-element
-        // update, so it parallelizes exactly. Alpha is never touched.
-        let mean: f64 = noise.data.chunks(4).map(|px| px[c] as f64).sum::<f64>()
-            / (width * height) as f64;
-        let mean = mean as f32;
-        noise.data.par_chunks_mut(4).for_each(|px| {
-            px[c] -= mean;
+    crate::ops_detail::gaussian_blur_pub(&noise, sigma)
+}
+
+/// What a grain field takes from the whole frame before any band of it
+/// can be made: each channel's mean, for the field and (cinema) its
+/// coarse second field, and the renormalization field_renorm finds.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub(crate) struct FieldStats {
+    pub(crate) mean: [f32; 3],
+    pub(crate) coarse_mean: [f32; 3],
+    pub(crate) renorm: f32,
+}
+
+type StatsKey = (usize, usize, bool, u32, u64, bool);
+static STATS_CACHE: std::sync::Mutex<Vec<(StatsKey, FieldStats)>> = std::sync::Mutex::new(Vec::new());
+
+/// The statistics pass for a `w` by `h` frame: the field made 64 rows at
+/// a time, each run of rows blurred on a buffer grown by the blur's reach,
+/// and added into the sums in the order the whole frame's loops add them
+/// (each channel's mean over the pixels in turn, then the
+/// renormalization over the pixels and their channels). The sums are the
+/// whole frame's to the bit, so banding never changes the statistics.
+pub(crate) fn field_stats(w: usize, h: usize, sigma: f32, cinema: bool, color: bool, seed: u64) -> FieldStats {
+    let key: StatsKey = (w, h, color, sigma.to_bits(), seed, cinema);
+    if let Ok(cache) = STATS_CACHE.lock() {
+        if let Some((_, s)) = cache.iter().find(|(k, _)| *k == key) {
+            return *s;
+        }
+    }
+    const ROWS: usize = 64;
+    let reach = |s: f32| if s > 0.0 { (2.5 * s).ceil() as usize } else { 0 };
+    // Rows y0..y1 of the blurred noise at sigma `s`, seed `k`.
+    let rows = |y0: usize, y1: usize, s: f32, k: u64| -> Vec<f32> {
+        let (lo, hi) = (y0.saturating_sub(reach(s)), (y1 + reach(s)).min(h));
+        let slab = blurred_noise(w, hi - lo, color, s, k, (0, lo as u64));
+        slab.data[(y0 - lo) * w * 4..(y1 - lo) * w * 4].to_vec()
+    };
+    let means = |s: f32, k: u64| -> [f32; 3] {
+        // From negative zero, where std's f64 sum starts, so the fold
+        // across runs of rows is the whole frame's sum step for step.
+        let mut sums = [-0.0f64; 3];
+        let mut y = 0;
+        while y < h {
+            let y1 = (y + ROWS).min(h);
+            let band = rows(y, y1, s, k);
+            for (c, sum) in sums.iter_mut().enumerate() {
+                *sum = band.chunks(4).fold(*sum, |a, px| a + px[c] as f64);
+            }
+            y = y1;
+        }
+        sums.map(|v| (v / (w * h) as f64) as f32)
+    };
+    let mean = means(sigma, seed);
+    let coarse_sigma = sigma * 2.6;
+    let coarse_mean = if cinema { means(coarse_sigma, seed.wrapping_add(7)) } else { [0.0; 3] };
+    let coarse_renorm = 1.0 + sigma * 2.6 * 1.6;
+    let (mut sum, mut sum_sq, mut n) = (0.0f64, 0.0f64, 0.0f64);
+    let mut y = 0;
+    while y < h {
+        let y1 = (y + ROWS).min(h);
+        let mut band = rows(y, y1, sigma, seed);
+        for px in band.chunks_exact_mut(4) {
+            for c in 0..3 {
+                px[c] -= mean[c];
+            }
+        }
+        if cinema {
+            let mut coarse = rows(y, y1, coarse_sigma, seed.wrapping_add(7));
+            for px in coarse.chunks_exact_mut(4) {
+                for c in 0..3 {
+                    px[c] -= coarse_mean[c];
+                }
+            }
+            for (v, c) in band.iter_mut().zip(coarse.iter()) {
+                *v += 0.55 * coarse_renorm * c;
+            }
+        }
+        for px in band.chunks_exact(4) {
+            for v in &px[..3] {
+                sum += *v as f64;
+                sum_sq += (*v as f64) * (*v as f64);
+                n += 1.0;
+            }
+        }
+        y = y1;
+    }
+    let n = n.max(1.0);
+    let variance = (sum_sq / n - (sum / n) * (sum / n)).max(0.0);
+    let renorm = if variance > 1e-9 { (1.0 / variance.sqrt()) as f32 } else { 1.0 };
+    let stats = FieldStats { mean, coarse_mean, renorm };
+    if let Ok(mut cache) = STATS_CACHE.lock() {
+        cache.retain(|(k, _)| *k != key);
+        cache.push((key, stats));
+        while cache.len() > 4 {
+            cache.remove(0);
+        }
+    }
+    stats
+}
+
+/// A band of the grain field: the band's rows of the blurred noise, less
+/// the whole frame's means, the coarse field mixed in as the whole frame
+/// mixes it, scaled by the whole frame's renormalization.
+fn banded_grain_field(width: usize, height: usize, sigma: f32, cinema: bool, color: bool, seed: u64, frame: crate::band::BandFrame) -> ImageBuf {
+    use rayon::prelude::*;
+    let stats = field_stats(frame.full_w, frame.full_h, sigma, cinema, color, seed);
+    let origin = (0, frame.y0 as u64);
+    let mut owned = blurred_noise(width, height, color, sigma, seed, origin);
+    owned.data.par_chunks_mut(4).for_each(|px| {
+        for c in 0..3 {
+            px[c] -= stats.mean[c];
+        }
+    });
+    if cinema {
+        let mut coarse = blurred_noise(width, height, color, sigma * 2.6, seed.wrapping_add(7), origin);
+        coarse.data.par_chunks_mut(4).for_each(|px| {
+            for c in 0..3 {
+                px[c] -= stats.coarse_mean[c];
+            }
+        });
+        let coarse_renorm = 1.0 + sigma * 2.6 * 1.6;
+        owned.data.par_iter_mut().zip(coarse.data.par_iter()).for_each(|(n, c)| {
+            *n += 0.55 * coarse_renorm * c;
         });
     }
-    noise
+    owned.data.par_chunks_exact_mut(4).for_each(|px| {
+        for v in &mut px[..3] {
+            *v *= 0.35 * stats.renorm;
+        }
+    });
+    owned
 }
 
 /// Grain: intensity scales amplitude; size sets the correlation radius of
@@ -262,6 +400,8 @@ pub(crate) fn grain_sigma(size: f32, pattern: &str, by_frame: bool, short: f32, 
 /// own, corrected by the patch it is (roi_w and roi_h, planted by the
 /// desktop for a zoomed preview), as Halation reads it.
 fn frame_short(node: &Node, w: usize, h: usize) -> f32 {
+    // The frame's, which a band of the frame shares.
+    let (w, h, _) = crate::band::placed(w, h);
     let rw = p(&node.params, "roi_w", 1.0).max(1e-4);
     let rh = p(&node.params, "roi_h", 1.0).max(1e-4);
     (w as f32 / rw).min(h as f32 / rh)
@@ -299,6 +439,9 @@ fn grain_field(
     origin: (u64, u64),
 ) -> std::sync::Arc<ImageBuf> {
     let cinema = pattern == "cinema";
+    if let Some(frame) = crate::band::frame() {
+        return std::sync::Arc::new(banded_grain_field(width, height, sigma, cinema, color, seed, frame));
+    }
     let key: FinishedKey = (width, height, color, sigma.to_bits(), seed, cinema, origin);
     if let Ok(cache) = FINISHED_CACHE.lock() {
         if let Some((_, field)) = cache.iter().find(|(k, _)| *k == key) {
@@ -435,6 +578,39 @@ pub(crate) fn grain(node: &Node, inputs: &[(String, Value)]) -> Result<Value, En
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The statistics pass gives the whole frame's statistics to the bit:
+    /// the means noise_field subtracts and the renormalization
+    /// field_renorm finds, for plain and cinema grain, gray and color, on
+    /// frames taller than one run of the pass's rows.
+    #[test]
+    fn the_statistics_pass_is_the_whole_frames() {
+        for (w, h) in [(37, 150), (64, 64), (23, 201)] {
+            for (sigma, cinema, color, seed) in [(1.3f32, false, false, 0u64), (2.2, true, false, 5), (0.8, true, true, 11)] {
+                let stats = field_stats(w, h, sigma, cinema, color, seed);
+                let whole_mean = |s: f32, k: u64| -> [f32; 3] {
+                    let noise = blurred_noise(w, h, color, s, k, (0, 0));
+                    std::array::from_fn(|c| (noise.data.chunks(4).map(|px| px[c] as f64).sum::<f64>() / (w * h) as f64) as f32)
+                };
+                assert_eq!(stats.mean.map(f32::to_bits), whole_mean(sigma, seed).map(f32::to_bits), "{w}x{h} {sigma} mean");
+                if cinema {
+                    assert_eq!(stats.coarse_mean.map(f32::to_bits), whole_mean(sigma * 2.6, seed.wrapping_add(7)).map(f32::to_bits), "{w}x{h} coarse mean");
+                }
+                // The whole frame's own field, before its scale: the
+                // renormalization it would be scaled by.
+                let base = noise_field(w, h, color, sigma, seed, (0, 0));
+                let mut owned = base.clone();
+                if cinema {
+                    let coarse = noise_field(w, h, color, sigma * 2.6, seed.wrapping_add(7), (0, 0));
+                    let coarse_renorm = 1.0 + sigma * 2.6 * 1.6;
+                    for (n, c) in owned.data.iter_mut().zip(coarse.data.iter()) {
+                        *n += 0.55 * coarse_renorm * c;
+                    }
+                }
+                assert_eq!(stats.renorm.to_bits(), field_renorm(&owned).to_bits(), "{w}x{h} {sigma} renorm");
+            }
+        }
+    }
 
     /// "Size -50? What is that?"
     ///
