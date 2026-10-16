@@ -71,6 +71,7 @@ fn an_export_checkbox_writes_the_plain_name_into_exr_and_tiff_for_new_and_old_ca
                 keywords: &[],
                 alpha,
                 layers,
+                beauty: None,
             },
             &out.join("shot.exr"),
             crate::ExportOptions {
@@ -107,6 +108,7 @@ fn an_export_checkbox_writes_the_plain_name_into_exr_and_tiff_for_new_and_old_ca
                 keywords: &[],
                 alpha,
                 layers,
+                beauty: None,
             },
             &out.join("shot.tif"),
             crate::ExportOptions {

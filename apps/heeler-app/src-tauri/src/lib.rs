@@ -39,7 +39,7 @@ pub use stack_render::{StackManifest, read_stack, write_stack, MemberDecode, Sta
 use stack_render::{stack_member_full, stack_member_preview, render_stack_at};
 #[allow(unused_imports)]
 use stack_render::{exif_exposure, relative_exposures};
-use export_layers::{render_export_layers_for, write_exr, write_tiff_siblings, ContainerHolds};
+use export_layers::{render_export_layers_and_beauty_for, write_exr, write_tiff_siblings, ContainerHolds};
 // The every-layer render, which the exports no longer call (they ask for
 // their container's with render_export_layers_for); the tests still do.
 #[allow(unused_imports)]
@@ -11569,17 +11569,42 @@ const EXPORT_BAND_FLOOR: usize = 256;
 /// follow the graph or no band fits, and the caller renders whole as it
 /// always did (and is admitted or refused as it always was).
 fn render_export_banded(g: &Graph, terminal: &str, sources: &HashMap<String, SourceImage>) -> Result<Option<ImageBuf>, String> {
-    use heeler_engine::banded;
-    EXPORT_BANDS_MADE.with(|b| b.set(0));
-    let forced = EXPORT_BAND_ROWS.with(|r| r.get());
-    if forced == usize::MAX {
-        return Ok(None);
-    }
-    let Ok((w, h, channels)) = banded::output_size(g, terminal, sources) else { return Ok(None) };
+    let Ok((_, _, channels)) = heeler_engine::banded::output_size(g, terminal, sources) else { return Ok(None) };
     if channels != 4 {
         return Ok(None);
     }
-    let frame_bytes = memory::bytes(w, h, 4, 4).map_err(|e| e.to_string())?;
+    Ok(render_frames_banded(g, &[terminal], sources)?.and_then(|mut frames| match frames.remove(terminal) {
+        Some(Value::Image(image)) => Some(Arc::try_unwrap(image).unwrap_or_else(|shared| (*shared).clone())),
+        _ => None,
+    }))
+}
+
+/// Several nodes' whole frames rendered together band by band, in the
+/// same passes, so the work above them is done once per band for all of
+/// them (the beauty, its alpha and the export layers): each the same to
+/// the bit as its whole-frame render. The nodes must share a height.
+/// None when they do not, when the bands cannot follow the graph, or when
+/// no band fits (see render_export_banded's rule), and the caller renders
+/// whole as it always did.
+pub(crate) fn render_frames_banded(g: &Graph, terminals: &[&str], sources: &HashMap<String, SourceImage>) -> Result<Option<HashMap<String, Value>>, String> {
+    use heeler_engine::banded;
+    EXPORT_BANDS_MADE.with(|b| b.set(0));
+    let forced = EXPORT_BAND_ROWS.with(|r| r.get());
+    if forced == usize::MAX || terminals.is_empty() {
+        return Ok(None);
+    }
+    let mut sizes = Vec::new();
+    for t in terminals {
+        match banded::output_size(g, t, sources) {
+            Ok(d) => sizes.push(d),
+            Err(_) => return Ok(None),
+        }
+    }
+    if sizes.iter().any(|d| d.1 != sizes[0].1) {
+        return Ok(None);
+    }
+    let h = sizes[0].1;
+    let frame_bytes = memory::sum(sizes.iter().map(|(w, h, c)| w * h * c * 4)).map_err(|e| e.to_string())?;
     // Bands as tall as fit the target. When nodes the bands do not follow
     // must be made whole and that alone is past it, bands as tall as
     // memory allows would only fill the room up again (measured: a 48 MP
@@ -11587,15 +11612,18 @@ fn render_export_banded(g: &Graph, terminal: &str, sources: &HashMap<String, Sou
     // 6.9 whole), so modest bands, EXPORT_BAND_FLOOR rows, if those still
     // ask less than the whole render; else the whole render.
     let ceiling = memory::available_to_job().min(EXPORT_BAND_TARGET.saturating_add(frame_bytes));
-    let rows = match banded::band_rows_for(g, &[terminal], sources, ceiling, frame_bytes) {
+    let rows = match banded::band_rows_for(g, terminals, sources, ceiling, frame_bytes) {
         Ok(Some(_)) if forced > 0 => forced,
         Ok(Some(rows)) => rows,
         Ok(None) => {
             let mut exec = Executor::new();
             exec.trim_bytes(1);
-            let whole = exec.estimate(g, terminal, sources).map_err(|e| e.to_string())?;
+            let mut whole = 0usize;
+            for t in terminals {
+                whole = whole.max(exec.estimate(g, t, sources).map_err(|e| e.to_string())?);
+            }
             let floor = EXPORT_BAND_FLOOR.min(h);
-            match banded::estimate_banded(g, &[terminal], sources, floor) {
+            match banded::estimate_banded(g, terminals, sources, floor) {
                 Ok(est) if memory::sum([est, frame_bytes]).map_err(|e| e.to_string())? < whole => if forced > 0 { forced } else { floor },
                 Ok(_) | Err(heeler_engine::EngineError::Band(_)) => return Ok(None),
                 Err(e) => return Err(e.to_string()),
@@ -11604,19 +11632,40 @@ fn render_export_banded(g: &Graph, terminal: &str, sources: &HashMap<String, Sou
         Err(heeler_engine::EngineError::Band(_)) => return Ok(None),
         Err(e) => return Err(e.to_string()),
     };
-    let _frame_job = Job::admit(frame_bytes, "export frame").map_err(|e| e.to_string())?;
-    let mut frame = ImageBuf::try_new(w, h).map_err(|e| e.to_string())?;
-    let rendered = banded::render_banded(g, &[terminal], sources, rows, &mut |_, y0, v| {
-        let Value::Image(band) = v else {
-            return Err(heeler_engine::EngineError::TypeMismatch { node: terminal.to_string(), port: "out".into() });
-        };
-        frame.data[y0 * w * 4..(y0 + band.height) * w * 4].copy_from_slice(&band.data);
+    let _frame_job = Job::admit(frame_bytes, "export frames").map_err(|e| e.to_string())?;
+    let mut images: Vec<Option<ImageBuf>> = Vec::new();
+    let mut masks: Vec<Option<MaskBuf>> = Vec::new();
+    for (w, h, c) in &sizes {
+        images.push(if *c == 4 { Some(ImageBuf::try_new(*w, *h).map_err(|e| e.to_string())?) } else { None });
+        masks.push(if *c == 4 { None } else { Some(MaskBuf::try_new(*w, *h).map_err(|e| e.to_string())?) });
+    }
+    let rendered = banded::render_banded(g, terminals, sources, rows, &mut |i, y0, v| {
+        match (v, images[i].as_mut(), masks[i].as_mut()) {
+            (Value::Image(band), Some(frame), _) => {
+                let w = frame.width;
+                frame.data[y0 * w * 4..(y0 + band.height) * w * 4].copy_from_slice(&band.data);
+            }
+            (Value::Mask(band), _, Some(frame)) => {
+                let w = frame.width;
+                frame.data[y0 * w..(y0 + band.height) * w].copy_from_slice(&band.data);
+            }
+            _ => return Err(heeler_engine::EngineError::TypeMismatch { node: terminals[i].to_string(), port: "out".into() }),
+        }
         Ok(())
     });
     match rendered {
         Ok(report) => {
             EXPORT_BANDS_MADE.with(|b| b.set(report.bands));
-            Ok(Some(frame))
+            let mut frames = HashMap::new();
+            for (i, t) in terminals.iter().enumerate() {
+                let v = match (images[i].take(), masks[i].take()) {
+                    (Some(img), _) => Value::Image(Arc::new(img)),
+                    (_, Some(m)) => Value::Mask(Arc::new(m)),
+                    _ => unreachable!(),
+                };
+                frames.insert(t.to_string(), v);
+            }
+            Ok(Some(frames))
         }
         Err(heeler_engine::EngineError::Band(_)) => Ok(None),
         Err(e) => Err(e.to_string()),
@@ -11752,7 +11801,7 @@ async fn export_image(
         // export_to keyed it on the destination's extension, and a name
         // typed into the dialog got bytes that disagreed with its own
         // extension).
-        let (alpha, layers) = render_export_layers_for(&graph, source.clone(), &smart, &dest, &format, |level, msg| {
+        let (alpha, layers, beauty) = render_export_layers_and_beauty_for(&graph, source.clone(), &smart, &dest, &format, |level, msg| {
             emit_log(&app, level, format!("{image_id}: {msg}"));
         })?;
         finish_export(
@@ -11764,6 +11813,7 @@ async fn export_image(
                 keywords: &keywords,
                 alpha,
                 layers,
+                beauty,
             },
             &dest,
             crate::ExportOptions {
@@ -18237,7 +18287,7 @@ async fn export_to(
         } else {
             Vec::new()
         };
-        let (alpha, layers) = render_export_layers_for(&graph, source.clone(), &smart, Path::new(&dest), &format, |level, msg| {
+        let (alpha, layers, beauty) = render_export_layers_and_beauty_for(&graph, source.clone(), &smart, Path::new(&dest), &format, |level, msg| {
             emit_log(&app, level, format!("{image_id}: {msg}"));
         })?;
         mark("export layers");
@@ -18250,6 +18300,7 @@ async fn export_to(
                 keywords: &keywords,
                 alpha,
                 layers,
+                beauty,
             },
             &dest,
             crate::ExportOptions {
@@ -18338,7 +18389,7 @@ fn finish_export_admitted(
     input: ExportInput<'_>, dest: &Path, options: ExportOptions<'_>,
     mut log: impl FnMut(&str, &str),
 ) -> Result<String, String> {
-    let ExportInput { graph, source_path, source, smart, keywords, alpha, layers } = input;
+    let ExportInput { graph, source_path, source, smart, keywords, alpha, layers, beauty } = input;
     let ExportOptions { format, quality, max_edge, keep_metadata, matte, scale_percent, allow_overwrite, dpi } = options;
     let _job = Job::admit(memory::bytes(source.width, source.height, 1, 64).map_err(|e| e.to_string())?, "export render, resize and encoding").map_err(|e| e.to_string())?;
     // NEVER over the photograph being exported. No flag reaches this,
@@ -18387,7 +18438,12 @@ fn finish_export_admitted(
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let mut image = render_export(graph, source, smart)?;
+    // The beauty rendered with the alpha and the layers, when it was;
+    // else rendered here.
+    let mut image = match beauty {
+        Some(image) => image,
+        None => render_export(graph, source, smart)?,
+    };
     // A mask the engine could not place closed its layer; the export
     // says which (mask_on_frame), the layer ticks and the alpha pipe
     // this thread rendered just ahead of it included.
@@ -22503,6 +22559,7 @@ mod tests {
                     keywords: &[],
                     alpha: None,
                     layers: Vec::new(),
+                    beauty: None,
                 },
                 &dest,
                 crate::ExportOptions {
@@ -32236,6 +32293,7 @@ mod tests {
                         keywords: &[],
                         alpha: None,
                         layers: Vec::new(),
+                        beauty: None,
                     },
                     &dest,
                     crate::ExportOptions {
@@ -32266,6 +32324,7 @@ mod tests {
                 keywords: &[],
                 alpha: None,
                 layers: Vec::new(),
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {
@@ -32318,6 +32377,7 @@ mod tests {
                 keywords: &[],
                 alpha: None,
                 layers: Vec::new(),
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {
@@ -32352,6 +32412,7 @@ mod tests {
                 keywords: &[],
                 alpha: None,
                 layers: Vec::new(),
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {
@@ -32442,6 +32503,7 @@ mod tests {
                     keywords: &[],
                     alpha: None,
                     layers: Vec::new(),
+                    beauty: None,
                 },
                 &source_file,
                 crate::ExportOptions {
@@ -32477,6 +32539,7 @@ mod tests {
                 keywords: &[],
                 alpha: None,
                 layers: Vec::new(),
+                beauty: None,
             },
             &beside,
             crate::ExportOptions {
@@ -32517,6 +32580,7 @@ mod tests {
                 keywords: &[],
                 alpha: None,
                 layers: Vec::new(),
+                beauty: None,
             },
             &round_about,
             crate::ExportOptions {
@@ -32573,6 +32637,7 @@ mod tests {
                     keywords: &[],
                     alpha: None,
                     layers: Vec::new(),
+                    beauty: None,
                 },
                 &dest,
                 crate::ExportOptions {
@@ -32641,6 +32706,7 @@ mod tests {
                 keywords: &["wedding".to_string()],
                 alpha: None,
                 layers: Vec::new(),
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {
@@ -35113,6 +35179,7 @@ mod file_depth_tests {
                 keywords: &[],
                 alpha,
                 layers,
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {

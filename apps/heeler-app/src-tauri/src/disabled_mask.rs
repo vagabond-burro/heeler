@@ -162,6 +162,7 @@ fn export_exr(ui: &UiGraph, photo: &Arc<ImageBuf>, extra: &HashMap<String, Sourc
             keywords: &[],
             alpha,
             layers,
+            beauty: None,
         },
         dest,
         crate::ExportOptions {

@@ -64,13 +64,14 @@ pub(crate) fn render_export_layers(
     extra: &HashMap<String, SourceImage>,
     log: impl FnMut(&str, &str),
 ) -> Result<(Option<Value>, Vec<ExportLayer>), String> {
-    render_export_layers_holding(ui, source, extra, ContainerHolds::ALL, log)
+    render_export_layers_holding(ui, source, extra, ContainerHolds::ALL, false, log).map(|(alpha, layers, _)| (alpha, layers))
 }
 
 /// The same, for an export to `dest`: what its container cannot hold
 /// is named in the log and never rendered. A JPEG of a photograph with
 /// layers enabled rendered every one of them, and the alpha, only for
 /// finish_export to drop them.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn render_export_layers_for(
     ui: &UiGraph,
     source: Arc<ImageBuf>,
@@ -79,7 +80,52 @@ pub(crate) fn render_export_layers_for(
     format: &str,
     log: impl FnMut(&str, &str),
 ) -> Result<(Option<Value>, Vec<ExportLayer>), String> {
-    render_export_layers_holding(ui, source, extra, ContainerHolds::of(&export_container(dest, format)), log)
+    render_export_layers_holding(ui, source, extra, ContainerHolds::of(&export_container(dest, format)), false, log).map(|(alpha, layers, _)| (alpha, layers))
+}
+
+/// render_export_layers_for, with the beauty rendered in the same banded
+/// passes as the alpha and the layers when there are any, so the work
+/// above them all is done once per band (the memory ceiling, Phase 4);
+/// None for the beauty when it was not, and finish_export renders it.
+pub(crate) fn render_export_layers_and_beauty_for(
+    ui: &UiGraph,
+    source: Arc<ImageBuf>,
+    extra: &HashMap<String, SourceImage>,
+    dest: &Path,
+    format: &str,
+    log: impl FnMut(&str, &str),
+) -> Result<(Option<Value>, Vec<ExportLayer>, Option<ImageBuf>), String> {
+    render_export_layers_holding(ui, source, extra, ContainerHolds::of(&export_container(dest, format)), true, log)
+}
+
+/// What the layers read, rendered ahead together (render_frames_banded),
+/// and the executor for anything that was not.
+struct LayerRenders<'a> {
+    g: &'a Graph,
+    sources: &'a HashMap<String, SourceImage>,
+    exec: Executor,
+    frames: HashMap<String, Value>,
+}
+
+impl LayerRenders<'_> {
+    /// What a wire into a layer carries: a node's output from the frames
+    /// rendered ahead, else as Executor::render_connection answers it.
+    fn connection(&mut self, conn: &heeler_graph::Connection) -> Result<Value, String> {
+        if renders_node(self.g, conn) {
+            if let Some(v) = self.frames.get(&conn.from.0) {
+                return Ok(v.clone());
+            }
+        }
+        self.exec.render_connection(self.g, conn, self.sources).map_err(|e| e.to_string())
+    }
+}
+
+/// Whether a wire carries its node's own render (render_connection's
+/// rule): an `out` port, or an Export Layer's pass-through image or mask.
+fn renders_node(g: &Graph, conn: &heeler_graph::Connection) -> bool {
+    conn.from.1 == "out"
+        || ((conn.from.1 == "image" || conn.from.1 == "mask")
+            && g.node(&conn.from.0).is_some_and(|n| n.node_type == "heeler.export_layer"))
 }
 
 fn render_export_layers_holding(
@@ -87,8 +133,9 @@ fn render_export_layers_holding(
     source: Arc<ImageBuf>,
     extra: &HashMap<String, SourceImage>,
     holds: ContainerHolds,
+    with_beauty: bool,
     mut log: impl FnMut(&str, &str),
-) -> Result<(Option<Value>, Vec<ExportLayer>), String> {
+) -> Result<(Option<Value>, Vec<ExportLayer>, Option<ImageBuf>), String> {
     let output = ui.nodes.iter().find(|n| n.node_type == "heeler.output");
     let alpha_wired = output.is_some_and(|o| ui.connections.iter().any(|c| c.to.0 == o.id && c.to.1 == "alpha"));
     let mut layer_nodes: Vec<&UiNode> = ui
@@ -127,7 +174,7 @@ fn render_export_layers_holding(
     }
     let alpha_wired = alpha_wired && holds.alpha;
     if !alpha_wired && layer_nodes.is_empty() {
-        return Ok((None, Vec::new()));
+        return Ok((None, Vec::new(), None));
     }
     let _job = Job::admit(
         // The beauty's own admission covers the graph; one layer
@@ -136,12 +183,79 @@ fn render_export_layers_holding(
         "export alpha and layers",
     )
     .map_err(|e| e.to_string())?;
-    let (g, sources, _terminal) = export_render_setup(ui, source, extra)?;
-    let mut exec = Executor::new();
+    let (g, sources, terminal) = export_render_setup(ui, source, extra)?;
+    // Every node's render the layers below read, and the beauty, rendered
+    // ahead in shared banded passes, one per height they come in.
+    let mut wanted: Vec<String> = Vec::new();
+    {
+        let mut want = |c: Option<&heeler_graph::Connection>| {
+            if let Some(c) = c.filter(|c| renders_node(&g, c)) {
+                if !wanted.contains(&c.from.0) {
+                    wanted.push(c.from.0.clone());
+                }
+            }
+        };
+        if let Some(o) = output.filter(|_| alpha_wired) {
+            want(g.incoming(&o.id, "alpha"));
+        }
+        for n in &layer_nodes {
+            let source = n.params.get("source").and_then(|v| v.as_str()).unwrap_or("");
+            if let Some(blend) = source.strip_prefix("finishmask:") {
+                for port in ["base", "blend", "clip", "mask"] {
+                    want(g.incoming(blend, port));
+                }
+            } else if let Some(layer) = source.strip_prefix("layermask:") {
+                for port in ["in", "mask"] {
+                    want(g.incoming(layer, port));
+                }
+            } else {
+                want(g.incoming(&n.id, "mask").or_else(|| g.incoming(&n.id, "image")));
+                want(g.incoming(&n.id, "alpha"));
+                if let Some(blend) = source.strip_prefix("finish:") {
+                    for port in ["base", "mask", "clip"] {
+                        want(g.incoming(blend, port));
+                    }
+                }
+            }
+        }
+    }
+    // The beauty, when the layers do not read it themselves, moves out of
+    // the frames afterwards rather than being copied.
+    let beauty_alone = with_beauty && !wanted.contains(&terminal);
+    if beauty_alone {
+        wanted.insert(0, terminal.clone());
+    }
+    let mut frames: HashMap<String, Value> = HashMap::new();
+    let mut heights: Vec<(usize, Vec<&str>)> = Vec::new();
+    for id in &wanted {
+        if let Ok((_, h, _)) = heeler_engine::banded::output_size(&g, id, &sources) {
+            match heights.iter_mut().find(|(hh, _)| *hh == h) {
+                Some((_, ids)) => ids.push(id),
+                None => heights.push((h, vec![id])),
+            }
+        }
+    }
+    for (_, ids) in &heights {
+        if let Some(made) = crate::render_frames_banded(&g, ids, &sources)? {
+            frames.extend(made);
+        }
+    }
+    let beauty = match (with_beauty, beauty_alone) {
+        (false, _) => None,
+        (true, true) => match frames.remove(&terminal) {
+            Some(Value::Image(image)) => Some(Arc::try_unwrap(image).unwrap_or_else(|shared| (*shared).clone())),
+            _ => None,
+        },
+        (true, false) => match frames.get(&terminal) {
+            Some(Value::Image(image)) => Some((**image).clone()),
+            _ => None,
+        },
+    };
+    let mut exec = LayerRenders { g: &g, sources: &sources, exec: Executor::new(), frames };
 
     let alpha = match output.filter(|_| alpha_wired) {
         Some(o) => match g.incoming(&o.id, "alpha") {
-            Some(conn) => Some(exec.render_connection(&g, conn, &sources).map_err(|e| e.to_string())?),
+            Some(conn) => Some(exec.connection(conn)?),
             None => None,
         },
         None => None,
@@ -161,7 +275,7 @@ fn render_export_layers_holding(
             let mut inputs: Vec<(String, Value)> = Vec::new();
             for port in ["base", "blend", "clip", "mask"] {
                 if let Some(c) = g.incoming(blend_id, port) {
-                    inputs.push((port.to_string(), exec.render_connection(&g, c, &sources).map_err(|e| e.to_string())?));
+                    inputs.push((port.to_string(), exec.connection(c)?));
                 }
             }
             let weight = heeler_engine::ops::blend_mask_weight(blend, &inputs).map_err(|e| e.to_string())?;
@@ -190,7 +304,7 @@ fn render_export_layers_holding(
             let mut inputs: Vec<(String, Value)> = Vec::new();
             for port in ["in", "mask"] {
                 if let Some(c) = g.incoming(layer_id, port) {
-                    inputs.push((port.to_string(), exec.render_connection(&g, c, &sources).map_err(|e| e.to_string())?));
+                    inputs.push((port.to_string(), exec.connection(c)?));
                 }
             }
             let Some(weight) = heeler_engine::applied_mask_weight(adj, &inputs) else { continue };
@@ -210,7 +324,7 @@ fn render_export_layers_holding(
         // when a saved graph carries both.
         let conn = g.incoming(&n.id, "mask").or_else(|| g.incoming(&n.id, "image"));
         let Some(conn) = conn else { continue };
-        let mut value = exec.render_connection(&g, conn, &sources).map_err(|e| e.to_string())?;
+        let mut value = exec.connection(conn)?;
         // A Finish-sourced node (26.3 Phase 8 milestone 3) taps the
         // layer's content, before its blend: the blend's opacity and
         // the layer's mask are folded into the written alpha here, so
@@ -248,7 +362,7 @@ fn render_export_layers_holding(
         });
         if let (Some((blend_id, params)), "image", Value::Image(img)) = (&placed_by, conn.to.1.as_str(), &value) {
             if let Some(bc) = g.incoming(blend_id, "base") {
-                let frame = exec.render_connection(&g, bc, &sources).map_err(|e| e.to_string())?;
+                let frame = exec.connection(bc)?;
                 if let Value::Image(f) = &frame {
                     value = Value::Image(heeler_engine::ops::layer_on_frame(params, img, f.width, f.height));
                 }
@@ -259,7 +373,7 @@ fn render_export_layers_holding(
                 if let Value::Image(img) = &value {
                     let mut a: Vec<f32> = img.data.chunks_exact(4).map(|px| px[3]).collect();
                     if let Some(mc) = g.incoming(blend_id, "mask").filter(|_| g.node(blend_id).and_then(|b| b.params.get("mask_baked")).and_then(|v| v.as_f64()).unwrap_or(0.0) == 0.0) {
-                        let mut mv = exec.render_connection(&g, mc, &sources).map_err(|e| e.to_string())?;
+                        let mut mv = exec.connection(mc)?;
                         // A mask buffer of another size closes the layer,
                         // the blend's own rule (mask_on_frame), so the
                         // written alpha is the composite's and not a
@@ -309,7 +423,7 @@ fn render_export_layers_holding(
                     // Its own mask has already shaped an FX input, so
                     // keep that baked shape while still folding clipping.
                     if let Some(cc) = g.incoming(blend_id, "clip") {
-                        let clipped = exec.render_connection(&g, cc, &sources).map_err(|e| e.to_string())?;
+                        let clipped = exec.connection(cc)?;
                         let base = Value::Image(Arc::new(ImageBuf::filled(img.width, img.height, [0.0, 0.0, 0.0, 1.0])));
                         let mut carrier = g.node(blend_id).unwrap().clone();
                         carrier.params.insert("opacity".into(), heeler_graph::ParamValue::Number(100.0));
@@ -332,7 +446,7 @@ fn render_export_layers_holding(
         // is the replacement rule ("a wired alpha replaces that too").
         if conn.to.1 == "image" {
             if let Some(ac) = g.incoming(&n.id, "alpha") {
-                alpha = Some(exec.render_connection(&g, ac, &sources).map_err(|e| e.to_string())?);
+                alpha = Some(exec.connection(ac)?);
             }
         }
         let named = export_layer_name(n);
@@ -351,7 +465,7 @@ fn render_export_layers_holding(
             finish: finish.map(|(_, m)| m),
         });
     }
-    Ok((alpha, layers))
+    Ok((alpha, layers, beauty))
 }
 
 /// An Export Layer node's written name. Empty names the card's label,
@@ -688,7 +802,7 @@ pub(crate) mod tests {
     /// Extract, two mask layers, one image layer and one depth-fed
     /// layer. `depth_plant` stands in for the desktop's planted
     /// `{dm}@depth` slot.
-    fn export_layer_graph() -> UiGraph {
+    pub(crate) fn export_layer_graph() -> UiGraph {
         let node = |id: &str, ty: &str, params: &[(&str, serde_json::Value)]| UiNode {
             id: id.into(),
             node_type: ty.into(),
@@ -730,7 +844,7 @@ pub(crate) mod tests {
         Arc::new(img)
     }
 
-    fn depth_plant() -> HashMap<String, SourceImage> {
+    pub(crate) fn depth_plant() -> HashMap<String, SourceImage> {
         let mut plane = ImageBuf::new(2, 1);
         plane.set_pixel(0, 0, [0.25, 0.25, 0.25, 1.0]);
         plane.set_pixel(1, 0, [0.75, 0.75, 0.75, 1.0]);
@@ -775,6 +889,7 @@ pub(crate) mod tests {
                 keywords: &[],
                 alpha,
                 layers,
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {
@@ -911,7 +1026,7 @@ pub(crate) mod tests {
                 render_export_layers_for(&ui, export_layer_source(), &smart, &dest, "jpeg", |l, m| log.push(format!("{l}: {m}"))).unwrap()
             };
             finish_export(
-                crate::ExportInput { graph: &ui, source_path: None, source: export_layer_source(), smart: &smart, keywords: &[], alpha, layers },
+                crate::ExportInput { graph: &ui, source_path: None, source: export_layer_source(), smart: &smart, keywords: &[], alpha, layers, beauty: None },
                 &dest,
                 crate::ExportOptions {
                     format: "jpeg",
@@ -947,7 +1062,7 @@ pub(crate) mod tests {
         let (alpha, layers) =
             render_export_layers_for(&ui, export_layer_source(), &smart, &dest, "jpeg", |l, m| log.push(format!("{l}: {m}"))).unwrap();
         let written = finish_export(
-            crate::ExportInput { graph: &ui, source_path: None, source: export_layer_source(), smart: &smart, keywords: &[], alpha, layers },
+            crate::ExportInput { graph: &ui, source_path: None, source: export_layer_source(), smart: &smart, keywords: &[], alpha, layers, beauty: None },
             &dest,
             crate::ExportOptions {
                 format: "jpeg",
@@ -992,6 +1107,7 @@ pub(crate) mod tests {
                 keywords: &[],
                 alpha,
                 layers,
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1033,6 +1149,7 @@ pub(crate) mod tests {
                 keywords: &[],
                 alpha,
                 layers,
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1200,6 +1317,7 @@ pub(crate) mod tests {
                     keywords: &[],
                     alpha,
                     layers,
+                    beauty: None,
                 },
                 &dest,
                 crate::ExportOptions {
@@ -1250,6 +1368,7 @@ pub(crate) mod tests {
                 keywords: &[],
                 alpha,
                 layers,
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1285,6 +1404,7 @@ pub(crate) mod tests {
                 keywords: &[],
                 alpha,
                 layers,
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1327,6 +1447,7 @@ pub(crate) mod tests {
                 keywords: &[],
                 alpha,
                 layers,
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1441,6 +1562,7 @@ pub(crate) mod tests {
                 keywords: &[],
                 alpha,
                 layers,
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1506,6 +1628,7 @@ pub(crate) mod tests {
                 keywords: &[],
                 alpha,
                 layers,
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1546,6 +1669,7 @@ pub(crate) mod tests {
                 keywords: &[],
                 alpha,
                 layers,
+                beauty: None,
             },
             &dest32,
             crate::ExportOptions {
@@ -1591,6 +1715,7 @@ pub(crate) mod tests {
                 keywords: &[],
                 alpha,
                 layers,
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1636,6 +1761,7 @@ pub(crate) mod tests {
                 keywords: &[],
                 alpha,
                 layers,
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1670,6 +1796,7 @@ pub(crate) mod tests {
                 keywords: &[],
                 alpha,
                 layers,
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {

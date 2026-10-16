@@ -12,6 +12,10 @@ pub(crate) struct ExportInput<'a> {
     pub keywords: &'a [String],
     pub alpha: Option<Value>,
     pub layers: Vec<ExportLayer>,
+    /// The beauty, when it was rendered with the alpha and the layers in
+    /// the same banded passes (render_export_layers_and_beauty_for);
+    /// None renders it here.
+    pub beauty: Option<ImageBuf>,
 }
 
 /// A new export setting adds a named field instead of another positional argument.

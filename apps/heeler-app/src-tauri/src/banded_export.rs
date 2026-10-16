@@ -135,3 +135,42 @@ fn plan_the_heavy_48_mp_export() {
     let types: Vec<String> = report.whole.iter().filter_map(|id| g.node(id).map(|n| n.node_type.clone())).collect();
     println!("their types: {types:?}");
 }
+
+fn bits_of(v: &Value) -> (usize, usize, Vec<u32>) {
+    match v {
+        Value::Image(i) => (i.width, i.height, i.data.iter().map(|f| f.to_bits()).collect()),
+        Value::Mask(m) => (m.width, m.height, m.data.iter().map(|f| f.to_bits()).collect()),
+    }
+}
+
+/// The beauty, its alpha and the export layers rendered together in the
+/// same banded passes are what the whole path renders for each, bit for
+/// bit: Phase 8's graph (an alpha port, mask, image and depth-fed layers)
+/// and the Finish tab's tapped layer, in bands of 13 rows.
+#[test]
+fn the_alpha_and_layers_render_with_the_beauty_in_bands() {
+    use crate::export_layers::tests::{depth_plant, export_layer_graph, finish_layer_graph};
+    let photo = photograph(64, 45);
+    for (name, ui, extra) in [("phase 8", export_layer_graph(), depth_plant()), ("finish tap", finish_layer_graph(), HashMap::new())] {
+        let run = |rows: usize| {
+            EXPORT_BAND_ROWS.with(|r| r.set(rows));
+            let out = crate::export_layers::render_export_layers_and_beauty_for(&ui, photo.clone(), &extra, std::path::Path::new("x.exr"), "exr", |_, _| {});
+            let bands = EXPORT_BANDS_MADE.with(|b| b.get());
+            EXPORT_BAND_ROWS.with(|r| r.set(0));
+            (out.unwrap(), bands)
+        };
+        let ((alpha, layers, beauty), bands) = run(13);
+        let ((whole_alpha, whole_layers, whole_beauty), _) = run(usize::MAX);
+        assert!(bands > 1, "{name}: rendered in bands ({bands})");
+        assert!(whole_beauty.is_none(), "{name}: the whole path leaves the beauty to finish_export");
+        let beauty = beauty.expect("the beauty came with the layers");
+        assert_eq!(beauty.data.iter().map(|f| f.to_bits()).collect::<Vec<_>>(), export_in(usize::MAX, &ui, &photo, &extra).data.iter().map(|f| f.to_bits()).collect::<Vec<_>>(), "{name}: beauty");
+        assert_eq!(alpha.as_ref().map(bits_of), whole_alpha.as_ref().map(bits_of), "{name}: alpha");
+        assert_eq!(layers.len(), whole_layers.len(), "{name}: layer count");
+        for (a, b) in layers.iter().zip(&whole_layers) {
+            assert_eq!(a.name, b.name);
+            assert_eq!(bits_of(&a.value), bits_of(&b.value), "{name}: layer {}", a.name);
+            assert_eq!(a.alpha.as_ref().map(bits_of), b.alpha.as_ref().map(bits_of), "{name}: layer {} alpha", a.name);
+        }
+    }
+}

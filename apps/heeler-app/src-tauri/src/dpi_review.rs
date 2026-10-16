@@ -47,6 +47,7 @@ fn export_writer_keeps_resize_alpha_and_metadata_settings() {
                 keywords: &["Print".into()],
                 alpha: None,
                 layers: Vec::new(),
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {
@@ -77,6 +78,7 @@ fn export_writer_keeps_resize_alpha_and_metadata_settings() {
             keywords: &[],
             alpha: None,
             layers: Vec::new(),
+            beauty: None,
         },
         &source_path,
         crate::ExportOptions {
@@ -114,6 +116,7 @@ fn tiff_siblings_share_the_beautys_print_resolution() {
                 keywords: &[],
                 alpha: None,
                 layers,
+                beauty: None,
             },
             &dest,
             crate::ExportOptions {

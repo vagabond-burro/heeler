@@ -89,6 +89,7 @@ fn export_alpha(dest: &Path, format: &str, layers: Vec<ExportLayer>, keep_metada
             keywords: &keywords,
             alpha,
             layers,
+            beauty: None,
         },
         dest,
         crate::ExportOptions {

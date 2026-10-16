@@ -273,7 +273,7 @@ fn export_one(
     // The Output node's alpha port and the graph's Export Layer nodes
     // (26.3 Phase 8), rendered through one executor before the beauty's
     // own, so a shared mask subtree computes once.
-    let (alpha, layers) = crate::render_export_layers_for(&ui, source.clone(), &smart, &dest, format, |level, msg| {
+    let (alpha, layers, beauty) = crate::render_export_layers_and_beauty_for(&ui, source.clone(), &smart, &dest, format, |level, msg| {
         eprintln!("export {level}: {name}: {msg}");
     })?;
     crate::finish_export(
@@ -285,6 +285,7 @@ fn export_one(
             keywords: &keywords,
             alpha,
             layers,
+            beauty,
         },
         &dest,
         crate::ExportOptions {
