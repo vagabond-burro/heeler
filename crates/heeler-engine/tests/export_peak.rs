@@ -757,3 +757,32 @@ fn an_export_that_cannot_fit_is_refused_and_offered_smaller() {
     sources.insert("src".to_string(), SourceImage { image: Arc::new(ImageBuf { width: sw, height: sh, data: Vec::new() }), version: 1, measured: false });
     assert!(heeler_engine::banded::estimate_banded(&graph, &["out"], &sources, 16).unwrap() <= CEILING);
 }
+
+/// End to end, for every edit in the owner's table: rendered band by band
+/// into a JPEG, a 16-bit PNG and a 16-bit TIFF sink, the files are the
+/// whole frame's render encoded, byte for byte.
+#[test]
+fn a_banded_export_writes_the_whole_frames_file() {
+    use heeler_io::band_sink::{BandSink, SinkFormat};
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let (w, h) = (301, 197);
+    let mut sources = HashMap::new();
+    sources.insert("src".to_string(), SourceImage { image: photo(w, h), version: 1, measured: false });
+    for edit in edits() {
+        let graph = (edit.graph)();
+        let whole = terminal_image(Executor::new().render(&graph, "out", &sources).unwrap());
+        for format in [SinkFormat::Jpeg, SinkFormat::Png16, SinkFormat::Tiff16] {
+            let mut sink = BandSink::new(format, w, h).unwrap();
+            heeler_engine::banded::render_banded(&graph, &["out"], &sources, 23, &mut |_, y0, v| {
+                sink.put(y0, v.as_image().unwrap()).map_err(|e| heeler_engine::EngineError::Band(e.to_string()))
+            })
+            .unwrap();
+            let (banded, want) = match format {
+                SinkFormat::Jpeg => (sink.jpeg(90).unwrap(), heeler_io::encode_jpeg(&whole, 90).unwrap()),
+                SinkFormat::Png16 => (sink.png16().unwrap(), heeler_io::encode_png16(&whole).unwrap()),
+                _ => (sink.tiff16(Default::default()).unwrap(), heeler_io::encode_tiff16_export(&whole, Default::default()).unwrap()),
+            };
+            assert!(banded == want, "{} as {format:?}", edit.name);
+        }
+    }
+}

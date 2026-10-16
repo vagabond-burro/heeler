@@ -175,7 +175,7 @@ fn set_strip_offset(fields: &mut [Field], at: usize) {
 /// frame past 4 GB is BigTIFF's job; until this writer speaks it, a
 /// bake that large is refused rather than written with a truncated
 /// StripByteCounts, which is a file that reads back torn or not at all.
-fn strip_len(width: usize, height: usize) -> Result<usize, IoError> {
+pub(crate) fn strip_len(width: usize, height: usize) -> Result<usize, IoError> {
     let n = heeler_engine::memory::bytes(width, height, 1, 6)?;
     if n > u32::MAX as usize {
         return Err(IoError::Unsupported(format!(
@@ -310,7 +310,14 @@ fn encode_tiff16_export_admitted(buf: &ImageBuf, exif: Option<&Exif>, xmp: Optio
     strip_len(buf.width, buf.height)?;
     let alpha = wants_alpha(buf);
     let pixels = srgb16_pixels(buf, alpha)?;
-    let mut fields = common(buf.width, buf.height, pixels.len(), 2, if alpha { 4 } else { 3 }, 16, 1); // RGB
+    tiff16_export_from_pixels(&pixels, buf.width, buf.height, alpha, exif, xmp, dpi)
+}
+
+/// The export TIFF of display-referred 16-bit samples (little-endian,
+/// RGB or with an alpha), `width` by `height`: what the 16-bit TIFF
+/// export and a band sink's TIFF (band_sink.rs) write.
+pub(crate) fn tiff16_export_from_pixels(pixels: &[u8], width: usize, height: usize, alpha: bool, exif: Option<&Exif>, xmp: Option<&str>, dpi: u32) -> Result<Vec<u8>, IoError> {
+    let mut fields = common(width, height, pixels.len(), 2, if alpha { 4 } else { 3 }, 16, 1); // RGB
     fields.push(ascii(270, "Exported by Heeler"));
     fields.push(undefined(34675, crate::icc::srgb_profile()));
     // Print pipelines read their resolution and their camera from the
@@ -341,12 +348,12 @@ fn encode_tiff16_export_admitted(buf: &ImageBuf, exif: Option<&Exif>, xmp: Optio
 
     let sub = exif
         .filter(|e| !e.is_empty())
-        .map(|e| crate::exif::exif_sub_entries(e, buf.width as u32, buf.height as u32))
+        .map(|e| crate::exif::exif_sub_entries(e, width as u32, height as u32))
         .unwrap_or_default();
     if sub.is_empty() {
-        return Ok(write_tiff(&pixels, fields));
+        return Ok(write_tiff(pixels, fields));
     }
-    Ok(write_tiff_with_exif(&pixels, fields, sub))
+    Ok(write_tiff_with_exif(pixels, fields, sub))
 }
 
 /// A Finish layer's 16-bit TIFF sibling (26.3 Phase 7): always four
@@ -699,6 +706,14 @@ fn encode_dng_admitted(buf: &ImageBuf, exif: Option<&Exif>, xmp: Option<&str>, o
             pixels.extend_from_slice(&((v * 65535.0).round() as u16).to_le_bytes());
         }
     }
+    dng_from_pixels(&pixels, buf.width, buf.height, stops, exif, xmp, origin)
+}
+
+/// The scene-linear DNG of 16-bit samples already divided by the frame's
+/// headroom (`stops` of it): what the DNG export and a band sink's DNG
+/// (band_sink.rs) write.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn dng_from_pixels(pixels: &[u8], width: usize, height: usize, stops: f32, exif: Option<&Exif>, xmp: Option<&str>, origin: Option<&str>) -> Result<Vec<u8>, IoError> {
 
     // XYZ (D65) to linear sRGB. The merge came out of the engine in
     // linear sRGB, so as far as a DNG reader is concerned that IS the
@@ -720,7 +735,7 @@ fn encode_dng_admitted(buf: &ImageBuf, exif: Option<&Exif>, xmp: Option<&str>, o
     // TIFF export writes. With None every tag below is exactly what
     // the bake has always written.
     let record = exif.filter(|e| !e.is_empty());
-    let mut fields = common(buf.width, buf.height, pixels.len(), 34892, 3, 16, 1); // LinearRaw
+    let mut fields = common(width, height, pixels.len(), 34892, 3, 16, 1); // LinearRaw
     if let Some(origin) = origin {
         fields.retain(|field| field.tag != 305);
         fields.push(ascii(305, "Heeler Rendered Bake"));
@@ -754,12 +769,12 @@ fn encode_dng_admitted(buf: &ImageBuf, exif: Option<&Exif>, xmp: Option<&str>, o
         fields.push(bytes(crate::exif::TAG_XMP, packet.as_bytes()));
     }
     let sub = record
-        .map(|e| crate::exif::exif_sub_entries(e, buf.width as u32, buf.height as u32))
+        .map(|e| crate::exif::exif_sub_entries(e, width as u32, height as u32))
         .unwrap_or_default();
     if sub.is_empty() {
-        return Ok(write_tiff(&pixels, fields));
+        return Ok(write_tiff(pixels, fields));
     }
-    Ok(write_tiff_with_exif(&pixels, fields, sub))
+    Ok(write_tiff_with_exif(pixels, fields, sub))
 }
 
 /// What the app stamps into UniqueCameraModel on a bake.

@@ -38,6 +38,7 @@ pub mod sidecar;
 pub use sidecar::{read_sidecar, write_sidecar, Sidecar, TakeNote};
 
 pub mod bake;
+pub mod band_sink;
 mod raw_tiff;
 pub use bake::{
     baked_exposure, encode_baked_dng, encode_dng, encode_dng_with_xmp, encode_tiff16, encode_tiff16_export,
@@ -1343,11 +1344,18 @@ pub fn encode_png(buf: &ImageBuf) -> Result<Vec<u8>, IoError> {
     // 17.4 bytes a pixel measured on noise.
     let _job = Job::admit(encode_admission(buf, 22)?, "image encoding, metadata and output")?;
     let data = to_srgb_u8(buf, true)?;
+    png_from_samples(&data, buf.width, buf.height, ExtendedColorType::Rgba8)
+}
+
+/// The sRGB-tagged PNG of `data` (8-bit RGBA, or 16-bit RGBA in native
+/// byte order), `width` by `height`: what encode_png, encode_png16 and a
+/// band sink's PNG (band_sink.rs) write.
+pub(crate) fn png_from_samples(data: &[u8], width: usize, height: usize, color: ExtendedColorType) -> Result<Vec<u8>, IoError> {
     let mut bytes = Encoded::default();
     let mut enc = PngEncoder::new(&mut bytes);
     enc.set_icc_profile(icc::srgb_profile().to_vec())
         .map_err(|e| IoError::Image(image::ImageError::Unsupported(e)))?;
-    enc.write_image(&data, buf.width as u32, buf.height as u32, ExtendedColorType::Rgba8)?;
+    enc.write_image(data, width as u32, height as u32, color)?;
     Ok(bytes.0)
 }
 
@@ -1446,12 +1454,7 @@ pub fn encode_png16(buf: &ImageBuf) -> Result<Vec<u8>, IoError> {
         let a = (buf.data[i + 3].clamp(0.0, 1.0) * 65535.0).round() as u16;
         data.extend_from_slice(&a.to_ne_bytes());
     }
-    let mut bytes = Encoded::default();
-    let mut enc = PngEncoder::new(&mut bytes);
-    enc.set_icc_profile(icc::srgb_profile().to_vec())
-        .map_err(|e| IoError::Image(image::ImageError::Unsupported(e)))?;
-    enc.write_image(&data, buf.width as u32, buf.height as u32, ExtendedColorType::Rgba16)?;
-    Ok(bytes.0)
+    png_from_samples(&data, buf.width, buf.height, ExtendedColorType::Rgba16)
 }
 
 /// Encodes to lossy WebP (8-bit sRGB, alpha kept), quality 1 to 100.
@@ -1473,7 +1476,13 @@ pub fn encode_webp(buf: &ImageBuf, quality: u8) -> Result<Vec<u8>, IoError> {
         }
         data.push((buf.data[i + 3].clamp(0.0, 1.0) * 255.0 + 0.5) as u8);
     }
-    let enc = webp::Encoder::from_rgba(&data, buf.width as u32, buf.height as u32);
+    webp_from_rgba8(&data, buf.width, buf.height, quality)
+}
+
+/// The WebP of 8-bit sRGB RGBA samples: what encode_webp and a band
+/// sink's WebP (band_sink.rs) write.
+pub(crate) fn webp_from_rgba8(data: &[u8], width: usize, height: usize, quality: u8) -> Result<Vec<u8>, IoError> {
+    let enc = webp::Encoder::from_rgba(data, width as u32, height as u32);
     let encoded = enc.encode(quality.clamp(1, 100) as f32);
     let mut bytes = memory::vector(encoded.len(), 0u8, "WebP encoded output")?;
     bytes.copy_from_slice(&encoded);
@@ -1486,11 +1495,17 @@ pub fn encode_jpeg(buf: &ImageBuf, quality: u8) -> Result<Vec<u8>, IoError> {
     // 10.0 bytes a pixel measured on noise.
     let _job = Job::admit(encode_admission(buf, 13)?, "image encoding, metadata and output")?;
     let data = to_srgb_u8(buf, false)?;
+    jpeg_from_rgb8(&data, buf.width, buf.height, quality)
+}
+
+/// The JPEG of 8-bit sRGB RGB samples, `width` by `height`: what
+/// encode_jpeg and a band sink's JPEG (band_sink.rs) both write.
+pub(crate) fn jpeg_from_rgb8(data: &[u8], width: usize, height: usize, quality: u8) -> Result<Vec<u8>, IoError> {
     let mut bytes = Encoded::default();
     let mut enc = JpegEncoder::new_with_quality(&mut bytes, quality.clamp(1, 100));
     enc.set_icc_profile(icc::srgb_profile().to_vec())
         .map_err(|e| IoError::Image(image::ImageError::Unsupported(e)))?;
-    enc.write_image(&data, buf.width as u32, buf.height as u32, ExtendedColorType::Rgb8)?;
+    enc.write_image(data, width as u32, height as u32, ExtendedColorType::Rgb8)?;
     Ok(bytes.0)
 }
 
