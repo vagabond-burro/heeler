@@ -20,9 +20,9 @@ use std::sync::Arc;
 
 use heeler_graph::{Graph, Node, PortKind};
 
-use crate::band::{class_of, with_frame, BandClass, BandFrame};
+use crate::band::{class_of, with_carry, with_frame, BandClass, BandFrame, Carry};
 use crate::buffers::{ImageBuf, MaskBuf, Value};
-use crate::executor::{apply_node, is_source, normal_slot, passthrough_port, raster_fed, EngineError, Executor, SourceImage};
+use crate::executor::{apply_node, is_source, normal_slot, passthrough_port, planted_id, raster_fed, slot, EngineError, Executor, SourceImage};
 use crate::ops;
 
 /// How the banded render makes a node's rows.
@@ -305,6 +305,8 @@ struct Plan {
     /// Each node's inputs in port order: (port, the node feeding it).
     inputs: HashMap<String, Vec<(String, String)>>,
     crops: HashMap<String, CropGeom>,
+    /// Nodes made band by band whose running sums carry from band to band.
+    carried: HashSet<String>,
 }
 
 /// The margin a node's rows grow by, above and below, for a frame `w`
@@ -385,6 +387,55 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
             "heeler.skin_soften" => both(wide(p("softening", 8.0).max(0.0)) + wide(p("detail_back", 4.0).max(0.0))),
             _ => None,
         },
+        // Running sums carried from band to band. Twice the box radius
+        // below (a mean, then a mean of what is made from it) and as
+        // much above, which also leaves a carried sum the rows above its
+        // restart it subtracts, with two rows to spare.
+        BandClass::Carried => match node.node_type.as_str() {
+            "heeler.tone_eq" => both(2 * crate::ops::tone_eq_radius(&node.params, w, h) + 2),
+            "heeler.guided_filter" | "heeler.guided_filter_mask" => {
+                let r = crate::ops_field::guided_radius(node, w, h);
+                both(if r > 1e-3 { 2 * (r.floor() as usize + 1) + 2 } else { 0 })
+            }
+            // One pass at Smoothing, in pixels.
+            "heeler.measure" => {
+                let r = p("smoothing", 0.0).max(0.0).round() as usize;
+                both(if r > 0 { r + 2 } else { 0 })
+            }
+            // One pass at a share of the short side.
+            "heeler.color_console" => {
+                let smoothing = p("smoothing", 50.0).clamp(0.0, 100.0) / 100.0;
+                let r = (crate::ops::frame_short_of(&node.params, w, h).round() * 0.02 * smoothing) as usize;
+                both(if r > 0 { r + 2 } else { 0 })
+            }
+            // Two passes side by side: the smoothing at a share of the
+            // short side, and the around field at Around Radius of it.
+            "heeler.recolor" => {
+                let short = crate::ops::frame_short_of(&node.params, w, h).round();
+                let smoothing = p("smoothing", 50.0).clamp(0.0, 100.0) / 100.0;
+                let r = (short * 0.02 * smoothing) as usize;
+                let around = ((short * (p("around_radius", 15.0).clamp(2.0, 50.0) / 100.0)) as usize).max(1);
+                both(r.max(around) + 2)
+            }
+            // Texture, Clarity and Local Contrast: a guided filter per
+            // scale that is on, each over planes made from the input.
+            "heeler.detail" | "heeler.standard_color" | "heeler.clarity" => {
+                let on = |k: &str| p(k, 0.0) != 0.0;
+                let local = node.node_type == "heeler.clarity" && on("local_contrast");
+                let short = crate::ops::frame_short_of(&node.params, w, h);
+                let r = crate::ops_detail::detail_radii(short, [on("texture"), on("clarity"), local]).max().unwrap_or(0);
+                both(if r > 0 { 2 * r + 2 } else { 0 })
+            }
+            // The guided base at Radius, and at the next whole box radius
+            // to blend toward.
+            "heeler.sharpen" => {
+                let f = p("radius", 1.0).max(0.1) * ops::px_scale(&node.params) * 3f32.sqrt();
+                both(2 * (f.floor() as usize + 1) + 2)
+            }
+            // The hue field's guided blur (twice its radius), when it runs.
+            "heeler.black_white" => both(2 * crate::ops::black_white_hue_radius(w, h) + 2),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -459,9 +510,12 @@ fn plan(
         // frame (a mask that closes its gate, a layer to be fitted), or
         // a class or operator not taken up yet.
         let same_size = sizes.iter().all(|s| *s == (bw, bh));
-        let follows = !planted
-            && !(node.enabled && (raster_fed(&node.node_type) || normal_slot(&node.node_type)))
-            && same_size;
+        // A raster-fed node with nothing planted renders from its inputs
+        // alone (an empty mask, its own geometry, a passthrough).
+        let fed = node.enabled
+            && ((raster_fed(&node.node_type) && sources.contains_key(planted_id(node)))
+                || (normal_slot(&node.node_type) && sources.contains_key(&slot(id, "normal"))));
+        let follows = !planted && !fed && same_size;
         let m = if !follows {
             Mode::Resident
         } else if is_crop {
@@ -494,7 +548,13 @@ fn plan(
             }
         }
     }
-    Ok(Plan { order, dims, mode, inputs, crops })
+    let carried = order
+        .iter()
+        .filter(|id| matches!(mode[*id], Mode::Rows { .. }))
+        .filter(|id| graph.node(id).is_some_and(|n| n.enabled && class_of(n) == Some(BandClass::Carried)))
+        .cloned()
+        .collect();
+    Ok(Plan { order, dims, mode, inputs, crops, carried })
 }
 
 /// Renders `terminals` band by band, `band_rows` output rows at a time,
@@ -564,14 +624,76 @@ pub fn render_banded(
         bands: 0,
     };
     let band_rows = band_rows.max(1);
+    // Every band's rows, before the first is made: a carried node needs
+    // to know where its next band's buffer starts, starts at the frame's
+    // first row (its column sums run from there), and must move down the
+    // frame band by band, never back.
+    let mut schedule = Vec::new();
+    let mut started = HashSet::new();
     let mut y = 0;
     while y < frame_h {
-        let (a, b) = (y, (y + band_rows).min(frame_h));
-        render_band(graph, &plan, &resident, sources, terminals, a, b, sink)?;
-        report.bands += 1;
+        let b = (y + band_rows).min(frame_h);
+        schedule.push(band_needs(&plan, terminals, y, b, &mut started));
         y = b;
     }
+    for id in &plan.carried {
+        let mut last = (0, 0);
+        for band in &schedule {
+            if let Some(&r) = band.reads.get(id) {
+                if r.0 < last.0 || r.1 < last.1 {
+                    return Err(EngineError::Band(format!("'{id}' would read rows {r:?} after {last:?}")));
+                }
+                last = r;
+            }
+        }
+    }
+    let mut carries: HashMap<String, Carry> = HashMap::new();
+    for k in 0..schedule.len() {
+        render_band(graph, &plan, &resident, sources, terminals, &schedule[k], &schedule[k + 1..], &mut carries, sink)?;
+        report.bands += 1;
+    }
     Ok(report)
+}
+
+/// One band's rows: the output rows `a..b`, the rows each node makes for
+/// it, and the rows each node reads of its inputs.
+struct BandNeeds {
+    a: usize,
+    b: usize,
+    need: HashMap<String, (usize, usize)>,
+    reads: HashMap<String, (usize, usize)>,
+}
+
+/// What each node must make for output rows `a..b`, walking back from
+/// the terminals. A carried node not `started` yet reads from the frame's
+/// first row.
+fn band_needs(plan: &Plan, terminals: &[&str], a: usize, b: usize, started: &mut HashSet<String>) -> BandNeeds {
+    let mut need: HashMap<String, (usize, usize)> = HashMap::new();
+    for t in terminals {
+        let r = hull(need.get(*t).copied(), (a, b));
+        need.insert(t.to_string(), r);
+    }
+    let mut reads: HashMap<String, (usize, usize)> = HashMap::new();
+    for id in plan.order.iter().rev() {
+        let Some(&(lo, hi)) = need.get(id) else { continue };
+        let mut r = match plan.mode[id] {
+            Mode::Resident => continue,
+            Mode::Rows { top, bottom } => (lo.saturating_sub(top), (hi + bottom).min(plan.dims[id].1)),
+            Mode::Crop => {
+                let g = &plan.crops[id];
+                g.input_rows(lo, hi).unwrap_or((0, g.in_h))
+            }
+        };
+        if plan.carried.contains(id) && started.insert(id.clone()) {
+            r.0 = 0;
+        }
+        reads.insert(id.clone(), r);
+        for (_, from) in &plan.inputs[id] {
+            let h = hull(need.get(from).copied(), r);
+            need.insert(from.clone(), h);
+        }
+    }
+    BandNeeds { a, b, need, reads }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -581,34 +703,12 @@ fn render_band(
     resident: &HashMap<String, Value>,
     sources: &HashMap<String, SourceImage>,
     terminals: &[&str],
-    a: usize,
-    b: usize,
+    band: &BandNeeds,
+    later: &[BandNeeds],
+    carries: &mut HashMap<String, Carry>,
     sink: &mut dyn FnMut(usize, usize, Value) -> Result<(), EngineError>,
 ) -> Result<(), EngineError> {
-    // What each node must make, walking back from the band.
-    let mut need: HashMap<&str, (usize, usize)> = HashMap::new();
-    for t in terminals {
-        let r = hull(need.get(t).copied(), (a, b));
-        need.insert(t, r);
-    }
-    // What each node reads of its inputs, by the node.
-    let mut reads: HashMap<&str, (usize, usize)> = HashMap::new();
-    for id in plan.order.iter().rev() {
-        let Some(&(lo, hi)) = need.get(id.as_str()) else { continue };
-        let r = match plan.mode[id] {
-            Mode::Resident => continue,
-            Mode::Rows { top, bottom } => (lo.saturating_sub(top), (hi + bottom).min(plan.dims[id].1)),
-            Mode::Crop => {
-                let g = &plan.crops[id];
-                g.input_rows(lo, hi).unwrap_or((0, g.in_h))
-            }
-        };
-        reads.insert(id, r);
-        for (_, from) in &plan.inputs[id] {
-            let h = hull(need.get(from.as_str()).copied(), r);
-            need.insert(from, h);
-        }
-    }
+    let (a, b) = (band.a, band.b);
     let mut slabs: HashMap<&str, Slab> = HashMap::new();
     let rows_from = |slabs: &HashMap<&str, Slab>, from: &str, lo: usize, hi: usize| -> Value {
         match resident.get(from) {
@@ -620,19 +720,31 @@ fn render_band(
         }
     };
     for id in &plan.order {
-        let Some(&(lo, hi)) = need.get(id.as_str()) else { continue };
+        let Some(&(lo, hi)) = band.need.get(id) else { continue };
         let mode = plan.mode[id];
         if mode == Mode::Resident {
             continue;
         }
         let node = graph.node(id).unwrap();
-        let (rlo, rhi) = reads[id.as_str()];
+        let (rlo, rhi) = band.reads[id];
         let (fw, fh, _) = plan.dims[id];
         let value = match mode {
             Mode::Rows { .. } => {
                 let inputs: Vec<(String, Value)> =
                     plan.inputs[id].iter().map(|(port, from)| (port.clone(), rows_from(&slabs, from, rlo, rhi))).collect();
-                let made = with_frame(BandFrame { full_w: fw, full_h: fh, y0: rlo }, || apply_node(id, node, inputs, false, sources))?;
+                let frame = BandFrame { full_w: fw, full_h: fh, y0: rlo };
+                let made = if plan.carried.contains(id) {
+                    let mut carry = carries.remove(id).unwrap_or_default();
+                    carry.next_b0 = later.iter().find_map(|l| l.reads.get(id).map(|r| r.0));
+                    let (made, carry) = with_carry(carry, || with_frame(frame, || apply_node(id, node, inputs, false, sources)));
+                    if let Some(e) = &carry.error {
+                        return Err(EngineError::Band(format!("'{id}': {e}")));
+                    }
+                    carries.insert(id.clone(), carry);
+                    made?
+                } else {
+                    with_frame(frame, || apply_node(id, node, inputs, false, sources))?
+                };
                 let (mw, mh) = match &made {
                     Value::Image(i) => (i.width, i.height),
                     Value::Mask(m) => (m.width, m.height),

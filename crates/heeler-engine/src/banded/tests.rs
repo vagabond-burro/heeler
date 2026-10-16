@@ -247,3 +247,36 @@ fn the_fresh_graph_renders_in_bands_with_nothing_whole() {
         assert_eq!(report.bands, 40usize.div_ceil(rows));
     }
 }
+
+/// Carried running sums chained: a Tone EQ reading a guided filter's
+/// bands, a guided filter reading the Tone EQ's, each carrying its column
+/// sums down a tall frame, at one row a band and at 17.
+#[test]
+fn carried_sums_chain_band_by_band() {
+    let registry = Registry::builtin();
+    let mut g = Graph::new("carried");
+    for (ty, id) in [
+        ("heeler.image_source", "src"),
+        ("heeler.guided_filter", "gf"),
+        ("heeler.tone_eq", "teq"),
+        ("heeler.guided_filter", "gf2"),
+        ("heeler.exposure", "exp"),
+    ] {
+        g.add_node(registry.instantiate(ty, id, Section::Creative).unwrap()).unwrap();
+    }
+    g.set_param("gf", "radius", ParamValue::Number(9.5)).unwrap();
+    g.set_param("teq", "ev_m2", ParamValue::Number(0.7)).unwrap();
+    g.set_param("teq", "ev_p1", ParamValue::Number(-0.5)).unwrap();
+    g.set_param("teq", "smoothing", ParamValue::Number(80.0)).unwrap();
+    g.set_param("gf2", "radius", ParamValue::Number(4.0)).unwrap();
+    g.set_param("exp", "exposure", ParamValue::Number(0.2)).unwrap();
+    g.connect("src", "out", "gf", "in").unwrap();
+    g.connect("gf", "out", "teq", "in").unwrap();
+    g.connect("teq", "out", "gf2", "in").unwrap();
+    g.connect("gf2", "out", "exp", "in").unwrap();
+    let sources = sources_with(frame(64, 150));
+    for rows in [1, BAND] {
+        let report = assert_same(&g, &["exp"], &sources, rows, &format!("{rows} rows"));
+        assert!(report.whole.is_empty(), "{report:?}");
+    }
+}

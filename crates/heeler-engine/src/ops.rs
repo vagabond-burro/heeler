@@ -836,6 +836,8 @@ pub(crate) fn px_scale(params: &std::collections::BTreeMap<String, ParamValue>) 
 /// roi_* params inject_roi_px writes), in which case the frame is the
 /// buffer over the rect. The depth ops' frame_of, for the detail ops.
 pub(crate) fn frame_short_of(params: &std::collections::BTreeMap<String, ParamValue>, w: usize, h: usize) -> f32 {
+    // A band of the frame measures the frame it is rows of.
+    let (w, h, _) = crate::band::placed(w, h);
     let fw = w as f32 / p(params, "roi_w", 1.0).max(1e-4);
     let fh = h as f32 / p(params, "roi_h", 1.0).max(1e-4);
     fw.min(fh)
@@ -1667,6 +1669,15 @@ pub(crate) enum BoxEdge {
 /// one box policy. `guided_blur_lab` is this with two planes and the
 /// clamped box, bit for bit what it computed before the policy existed.
 pub(crate) fn guided_blur_planes(planes: &mut [&mut [f32]], guide: [&[f32]; 3], w: usize, h: usize, r: usize, eps: f32, edge: BoxEdge) {
+    guided_blur_planes_lag(planes, guide, w, h, r, eps, edge, 0);
+}
+
+/// guided_blur_planes for planes and a guide whose last `lag` rows are
+/// not yet exact (in a band), answering the same of the result: the box
+/// means of the inputs lose `r` rows at the foot, and the means of the
+/// coefficients made from them `r` more.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn guided_blur_planes_lag(planes: &mut [&mut [f32]], guide: [&[f32]; 3], w: usize, h: usize, r: usize, eps: f32, edge: BoxEdge, lag: usize) -> usize {
     // PERF (the Guided Filter node, 2026-09-30, 2.8 s on a 24 MP frame):
     // the products, the per-pixel solve and the rebuild ran serially.
     // Each output element is a function of its own pixel's values only,
@@ -1675,13 +1686,16 @@ pub(crate) fn guided_blur_planes(planes: &mut [&mut [f32]], guide: [&[f32]; 3], 
     use rayon::prelude::*;
     let n = w * h;
     let mut scratch = vec![0.0f32; n];
-    let blur = |v: &mut Vec<f32>, scratch: &mut Vec<f32>| match edge {
-        BoxEdge::Clamp => box_blur_pass(v, scratch, w, h, r),
-        BoxEdge::Truncate => box_mean_truncated(v, scratch, w, h, r),
+    let blur = |v: &mut Vec<f32>, scratch: &mut Vec<f32>, lag: usize| match edge {
+        BoxEdge::Clamp => box_blur_pass_lag(v, scratch, w, h, r, lag),
+        BoxEdge::Truncate => box_mean_truncated_lag(v, scratch, w, h, r, lag),
     };
+    // The lag of the means of the inputs, and of the means of what is
+    // made from those.
+    let (mut first, mut second) = (lag, lag);
     let mut mean_g: Vec<Vec<f32>> = guide.iter().map(|g| g.to_vec()).collect();
     for m in mean_g.iter_mut() {
-        blur(m, &mut scratch);
+        first = first.max(blur(m, &mut scratch, lag));
     }
     // The guide's second moments, upper triangle: 00 01 02 11 12 22.
     let pairs = [(0, 0), (0, 1), (0, 2), (1, 1), (1, 2), (2, 2)];
@@ -1690,15 +1704,15 @@ pub(crate) fn guided_blur_planes(planes: &mut [&mut [f32]], guide: [&[f32]; 3], 
         .map(|&(c, d)| guide[c].par_iter().zip(guide[d].par_iter()).map(|(x, y)| x * y).collect())
         .collect();
     for m in corr_gg.iter_mut() {
-        blur(m, &mut scratch);
+        first = first.max(blur(m, &mut scratch, lag));
     }
     for p in planes.iter_mut() {
         let mut mean_p = p.to_vec();
-        blur(&mut mean_p, &mut scratch);
+        first = first.max(blur(&mut mean_p, &mut scratch, lag));
         let mut corr_gp: Vec<Vec<f32>> =
             guide.iter().map(|g| g.par_iter().zip(p.par_iter()).map(|(x, y)| x * y).collect()).collect();
         for m in corr_gp.iter_mut() {
-            blur(m, &mut scratch);
+            first = first.max(blur(m, &mut scratch, lag));
         }
         let solve = |i: usize| -> [f32; 4] {
             let mg = [mean_g[0][i], mean_g[1][i], mean_g[2][i]];
@@ -1745,13 +1759,14 @@ pub(crate) fn guided_blur_planes(planes: &mut [&mut [f32]], guide: [&[f32]; 3], 
                 });
         }
         for m in coef.iter_mut() {
-            blur(m, &mut scratch);
+            second = second.max(blur(m, &mut scratch, first));
         }
-        blur(&mut coef_b, &mut scratch);
+        second = second.max(blur(&mut coef_b, &mut scratch, first));
         p.par_iter_mut().enumerate().for_each(|(i, v)| {
             *v = coef[0][i] * guide[0][i] + coef[1][i] * guide[1][i] + coef[2][i] * guide[2][i] + coef_b[i];
         });
     }
+    second
 }
 
 /// The box mean with the window cut at the frame (BoxEdge::Truncate):
@@ -1760,9 +1775,14 @@ pub(crate) fn guided_blur_planes(planes: &mut [&mut [f32]], guide: [&[f32]; 3], 
 /// arithmetic the plain feather does fresh per pixel, so with a flat
 /// guide the guided feather and the plain one agree to float order
 /// everywhere, the corners included.
-pub(crate) fn box_mean_truncated(data: &mut [f32], scratch: &mut [f32], w: usize, h: usize, r: usize) {
+///
+/// `lag` is how many of the plane's last rows are not yet exact (a
+/// band's plane made from an earlier pass); the answer is the same of
+/// the result. In a whole-frame render every row is exact and neither
+/// matters.
+pub(crate) fn box_mean_truncated_lag(data: &mut [f32], scratch: &mut [f32], w: usize, h: usize, r: usize, lag: usize) -> usize {
     if r == 0 || w == 0 || h == 0 {
-        return;
+        return lag;
     }
     use rayon::prelude::*;
     let sweep = |src: &[f32], dst: &mut [f32], rowlen: usize, r: usize| {
@@ -1794,6 +1814,9 @@ pub(crate) fn box_mean_truncated(data: &mut [f32], scratch: &mut [f32], w: usize
     } else {
         scratch.copy_from_slice(data);
     }
+    if let Some(frame) = crate::band::frame() {
+        return carried_columns(data, scratch, w, h, lag, frame, ColumnSum::Truncate(r));
+    }
     if h > 1 {
         data.par_chunks_mut(h).enumerate().for_each(|(x, col)| {
             for y in 0..h {
@@ -1809,6 +1832,142 @@ pub(crate) fn box_mean_truncated(data: &mut [f32], scratch: &mut [f32], w: usize
     } else {
         data.copy_from_slice(scratch);
     }
+    lag
+}
+
+/// The two column sums a running-sum pass can be: box_blur_pass's window
+/// clamped at the frame's edge, or box_mean_truncated's window cut there.
+#[derive(Clone, Copy)]
+enum ColumnSum {
+    Clamp(usize),
+    Truncate(usize),
+}
+
+/// The vertical half of a running-sum pass on a band of the frame:
+/// `scratch` holds the horizontal half's rows (the buffer's `h` rows, from
+/// frame row `frame.y0`), and `data` gets the result. Each column goes on
+/// from the sum the previous band left (band::carry_slot), adding and
+/// subtracting the very values in the very order the whole frame's sweep
+/// does, for as many rows as its exact input allows; the rows above that
+/// the previous band made come back from the carry. Rows below, which a
+/// band cannot make yet, are left zero; the node's margin keeps them out
+/// of what the band keeps. Answers how many of the last rows are not
+/// exact.
+fn carried_columns(data: &mut [f32], scratch: &mut [f32], w: usize, h: usize, lag: usize, frame: crate::band::BandFrame, kind: ColumnSum) -> usize {
+    use rayon::prelude::*;
+    let (fh, b0) = (frame.full_h, frame.y0);
+    let b1 = b0 + h;
+    let reach = match kind {
+        ColumnSum::Clamp(r) => r.min(fh.saturating_sub(1)),
+        ColumnSum::Truncate(r) => r,
+    };
+    // At the frame's foot every row is exact, as in the frame.
+    let at_foot = b1 == fh;
+    let exact_end = if at_foot { fh } else { b1.saturating_sub(lag) };
+    let end = if at_foot { fh } else { exact_end.saturating_sub(reach) };
+    let lag_out = if at_foot { 0 } else { lag + reach };
+    let done = crate::band::carry_slot(|slot, next_b0| {
+        let start = slot.next_row;
+        if start == 0 && b0 != 0 {
+            return Err(format!("a running sum starts at frame row {b0}, not the frame's first"));
+        }
+        // A sum that goes on needs the rows it subtracts in this buffer and
+        // the rows above it back from the carry; one already at the frame's
+        // foot only hands its rows back.
+        // The first row it subtracts (the frame's row 0 while it is within
+        // the radius of the top, as the frame's sweep clamps it).
+        if start > 0 && ((start < end && start.saturating_sub(reach + 1) < b0) || slot.carry_lo > b0) {
+            return Err(format!("a running sum goes on from row {start} with its buffer from row {b0} (rows carried from {})", slot.carry_lo));
+        }
+        if end < start {
+            return Err(format!("a running sum at row {start} cannot reach row {end}"));
+        }
+        if slot.sums.len() != w {
+            slot.sums = vec![0.0; w];
+        }
+        // Columns, as the whole frame's sweep reads them.
+        data.par_chunks_mut(h).enumerate().for_each(|(x, col)| {
+            for y in 0..h {
+                col[y] = scratch[y * w + x];
+            }
+        });
+        scratch.par_chunks_mut(h).zip(data.par_chunks(h)).zip(slot.sums.par_iter_mut()).for_each(|((out, col), sum)| {
+            out.fill(0.0);
+            let at = |y: usize| col[y - b0];
+            match kind {
+                ColumnSum::Clamp(_) => {
+                    let r = reach;
+                    let norm = 1.0 / (2 * r + 1) as f32;
+                    let mut sm = if start == 0 {
+                        let mut v = at(0) * (r + 1) as f32;
+                        for y in 0..r.min(fh - 1) {
+                            v += at(y.min(fh - 1));
+                        }
+                        v
+                    } else {
+                        *sum
+                    };
+                    for y in start..end {
+                        sm += at((y + r).min(fh - 1));
+                        let back = y as isize - r as isize - 1;
+                        sm -= at(back.max(0) as usize);
+                        out[y - b0] = sm * norm;
+                    }
+                    *sum = sm;
+                }
+                ColumnSum::Truncate(r) => {
+                    let mut sm = if start == 0 {
+                        let mut v = 0.0f32;
+                        for y in 0..r.min(fh) {
+                            v += at(y);
+                        }
+                        v
+                    } else {
+                        *sum
+                    };
+                    for y in start..end {
+                        if y + r < fh {
+                            sm += at(y + r);
+                        }
+                        if y > r {
+                            sm -= at(y - r - 1);
+                        }
+                        let lo = y.saturating_sub(r);
+                        let hi = (y + r).min(fh - 1);
+                        out[y - b0] = sm / (hi - lo + 1) as f32;
+                    }
+                    *sum = sm;
+                }
+            }
+        });
+        // The rows the previous band made, back from the carry.
+        let (carry_lo, carried) = (slot.carry_lo, &slot.rows);
+        scratch.par_chunks_mut(h).enumerate().for_each(|(x, out)| {
+            for y in b0..start {
+                out[y - b0] = carried[(y - carry_lo) * w + x];
+            }
+        });
+        data.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+            for x in 0..w {
+                row[x] = scratch[x * h + y];
+            }
+        });
+        match next_b0 {
+            Some(nb) if nb > end || nb < b0 => return Err(format!("the next band starts at row {nb}, outside rows {b0} to {end}")),
+            Some(nb) => {
+                slot.rows = data[(nb - b0) * w..(end - b0) * w].to_vec();
+                slot.carry_lo = nb;
+            }
+            None => {
+                slot.rows = Vec::new();
+                slot.carry_lo = end;
+            }
+        }
+        slot.next_row = end;
+        Ok(())
+    });
+    debug_assert!(done.is_some() || crate::band::carry_failed(), "a running sum in a band with no carry");
+    lag_out
 }
 
 /// One box-blur pass over a single-channel buffer, horizontal then
@@ -1823,8 +1982,16 @@ pub(crate) fn box_mean_truncated(data: &mut [f32], scratch: &mut [f32], w: usize
 /// keeps the utility honest for any future caller that hands it a tiny
 /// buffer.
 pub(crate) fn box_blur_pass(data: &mut [f32], scratch: &mut [f32], w: usize, h: usize, r: usize) {
+    box_blur_pass_lag(data, scratch, w, h, r, 0);
+}
+
+/// box_blur_pass for a plane whose last `lag` rows are not yet exact (a
+/// band's plane made from an earlier pass), answering how many of the
+/// result's last rows are not. In a whole-frame render every row is
+/// exact and the answer does not matter.
+pub(crate) fn box_blur_pass_lag(data: &mut [f32], scratch: &mut [f32], w: usize, h: usize, r: usize, lag: usize) -> usize {
     if r == 0 {
-        return;
+        return lag;
     }
     use rayon::prelude::*;
     // PERF: both passes used to run serially, and this blur sits on the
@@ -1860,6 +2027,11 @@ pub(crate) fn box_blur_pass(data: &mut [f32], scratch: &mut [f32], w: usize, h: 
         // vertical pass still applies, so stage the data through.
         scratch.copy_from_slice(data);
     }
+    if let Some(frame) = crate::band::frame() {
+        if frame.full_h > 1 {
+            return carried_columns(data, scratch, w, h, lag, frame, ColumnSum::Clamp(r));
+        }
+    }
     if h > 1 {
         // Transpose into data (column x lands at data[x*h + y]), sweep
         // rows of length h, transpose back. Reads strided, writes
@@ -1878,6 +2050,7 @@ pub(crate) fn box_blur_pass(data: &mut [f32], scratch: &mut [f32], w: usize, h: 
     } else {
         data.copy_from_slice(scratch);
     }
+    lag
 }
 
 /// The Tone Zone Equalizer: exposure as a function of
@@ -2106,8 +2279,7 @@ pub(crate) fn eval_eq_points(pts: &[EqPoint], x: f32) -> f32 {
 /// stops away on foliage and cloud edges).
 pub fn tone_eq_illuminance(params: &std::collections::BTreeMap<String, heeler_graph::ParamValue>, src: &ImageBuf) -> Vec<f32> {
     let (w, h) = (src.width, src.height);
-    let smoothing = p(params, "smoothing", 50.0).clamp(0.0, 100.0) / 100.0;
-    let radius = ((w.min(h) as f32) * (0.004 + 0.028 * smoothing)) as usize;
+    let radius = tone_eq_radius(params, w, h);
 
     // Illuminance: an edge-aware estimate via the guided filter (He,
     // Sun, Tang 2010), self-guided on log2 luminance. The first build
@@ -2138,13 +2310,15 @@ pub fn tone_eq_illuminance(params: &std::collections::BTreeMap<String, heeler_gr
             }
         });
     let mut scratch = vec![0.0f32; lg.len()];
-    let boxed = |v: &[f32], scratch: &mut Vec<f32>| -> Vec<f32> {
+    // In a band, the means lose `radius` rows at the foot, and the means
+    // of what is made from them as many again.
+    let boxed = |v: &[f32], scratch: &mut Vec<f32>, lag: usize| -> (Vec<f32>, usize) {
         let mut out = v.to_vec();
-        box_blur_pass(&mut out, scratch, w, h, radius);
-        out
+        let lag = box_blur_pass_lag(&mut out, scratch, w, h, radius, lag);
+        (out, lag)
     };
-    let mean = boxed(&lg, &mut scratch);
-    let corr = boxed(&sq, &mut scratch);
+    let (mean, lag) = boxed(&lg, &mut scratch, 0);
+    let (corr, _) = boxed(&sq, &mut scratch, 0);
     const EPS: f32 = 0.09;
     let mut a = vec![0.0f32; lg.len()];
     let mut b = vec![0.0f32; lg.len()];
@@ -2159,8 +2333,8 @@ pub fn tone_eq_illuminance(params: &std::collections::BTreeMap<String, heeler_gr
                 rb[i] = rm[i] * (1.0 - ra[i]);
             }
         });
-    let mean_a = boxed(&a, &mut scratch);
-    let mean_b = boxed(&b, &mut scratch);
+    let (mean_a, _) = boxed(&a, &mut scratch, lag);
+    let (mean_b, _) = boxed(&b, &mut scratch, lag);
     let mut illum = vec![0.0f32; lg.len()];
     illum
         .par_iter_mut()
@@ -2176,6 +2350,14 @@ pub fn tone_eq_illuminance(params: &std::collections::BTreeMap<String, heeler_gr
 /// What Tone Equalizer's curve is read at, per pixel: tone_eq_illuminance in EV
 /// from middle gray, clamped as the op clamps it. Range shift is not in
 /// it; the curve is read at this plus the shift.
+/// The Tone Equalizer's box radius: a share of the frame's short side,
+/// which a band of the frame shares.
+pub(crate) fn tone_eq_radius(params: &std::collections::BTreeMap<String, heeler_graph::ParamValue>, w: usize, h: usize) -> usize {
+    let (w, h, _) = crate::band::placed(w, h);
+    let smoothing = p(params, "smoothing", 50.0).clamp(0.0, 100.0) / 100.0;
+    ((w.min(h) as f32) * (0.004 + 0.028 * smoothing)) as usize
+}
+
 pub fn tone_eq_lookup(params: &std::collections::BTreeMap<String, heeler_graph::ParamValue>, src: &ImageBuf) -> Vec<f32> {
     use rayon::prelude::*;
     tone_eq_illuminance(params, src).par_iter().map(|v| (v / 0.18).log2().clamp(-8.0, 6.0)).collect()
@@ -2485,6 +2667,13 @@ fn hue_field_cached_in(cache: &HueFieldCache, src: &Arc<ImageBuf>) -> Arc<Vec<(f
 /// guess and stood bright, a halo (2026-09-15). The guide sees the ridge as a lightness
 /// edge and stops there; a JPEG's chroma blocks have no lightness edge and are
 /// flattened.
+/// The hue field's guided radius: six tenths of a percent of the frame's
+/// short side, which a band of the frame shares.
+pub(crate) fn black_white_hue_radius(w: usize, h: usize) -> usize {
+    let (w, h, _) = crate::band::placed(w, h);
+    ((w.min(h) as f32) * 0.006) as usize
+}
+
 pub(crate) fn black_white_hue_field(src: &ImageBuf) -> Vec<(f32, f32)> {
     let (w, h) = (src.width, src.height);
     if w == 0 || h == 0 {
@@ -2508,7 +2697,7 @@ pub(crate) fn black_white_hue_field(src: &ImageBuf) -> Vec<(f32, f32)> {
                 }
             });
     }
-    let radius = ((w.min(h) as f32) * 0.006) as usize;
+    let radius = black_white_hue_radius(w, h);
     if radius > 0 {
         // Guided by all three channels (2026-09-15: "The halo is bad again"):
         // lightness alone let a sky's hue smear into sunlit twigs and rock

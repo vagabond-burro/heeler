@@ -262,7 +262,9 @@ pub fn morphology_reach(radius: f64, mode: &str) -> f64 {
 /// The box radius in this buffer's pixels: the radius in photograph
 /// pixels times px_scale. Not finite or negative is none; past the
 /// frame's long side every box is the whole frame anyway.
-fn guided_radius(node: &Node, w: usize, h: usize) -> f32 {
+pub(crate) fn guided_radius(node: &Node, w: usize, h: usize) -> f32 {
+    // Capped by the frame, which a band of the frame shares.
+    let (w, h, _) = crate::band::placed(w, h);
     let r = p(&node.params, "radius", 8.0) * px_scale(&node.params);
     if r.is_finite() && r > 0.0 { r.min(w.max(h) as f32) } else { 0.0 }
 }

@@ -178,6 +178,82 @@ pub(crate) fn with_frame<T>(frame: BandFrame, f: impl FnOnce() -> T) -> T {
     f()
 }
 
+/// What a running-sum pass carries from one band into the next
+/// (box_blur_pass and box_mean_truncated in a banded render): each
+/// column's sum after the last row it made, the row it goes on from, and
+/// the rows it made from where the next band's buffer starts, which that
+/// band reads back instead of making them again. Each column then adds
+/// and subtracts exactly the values, in exactly the order, the whole
+/// frame's sweep does.
+#[derive(Debug, Default)]
+pub(crate) struct CarrySlot {
+    pub(crate) next_row: usize,
+    pub(crate) sums: Vec<f32>,
+    pub(crate) carry_lo: usize,
+    pub(crate) rows: Vec<f32>,
+}
+
+/// One node's carried passes, in the order its operator calls them: the
+/// same order every band, since a band runs the same code on the same
+/// params. `next_b0` is the frame row the node's buffer starts at in the
+/// next band (None after the last). A pass that cannot go on exactly
+/// says why in `error`, and the render stops rather than drift.
+#[derive(Debug, Default)]
+pub(crate) struct Carry {
+    pub(crate) next_b0: Option<usize>,
+    pub(crate) slots: Vec<CarrySlot>,
+    pub(crate) at: usize,
+    pub(crate) error: Option<String>,
+}
+
+thread_local! {
+    static CARRY: std::cell::RefCell<Option<Carry>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f` with `carry` as the node's carried passes, handing it back
+/// after with what the passes left in it.
+pub(crate) fn with_carry<T>(mut carry: Carry, f: impl FnOnce() -> T) -> (T, Carry) {
+    carry.at = 0;
+    struct Reset(Option<Carry>);
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            CARRY.with(|c| *c.borrow_mut() = self.0.take());
+        }
+    }
+    let reset = Reset(CARRY.with(|c| c.borrow_mut().replace(carry)));
+    let out = f();
+    let carry = CARRY.with(|c| c.borrow_mut().take()).unwrap_or_default();
+    drop(reset);
+    (out, carry)
+}
+
+/// Whether a carried pass in the node running now has failed.
+pub(crate) fn carry_failed() -> bool {
+    CARRY.with(|c| c.borrow().as_ref().is_some_and(|c| c.error.is_some()))
+}
+
+/// The next carried pass's slot and the node's next buffer start, for a
+/// running-sum pass in a banded render; None outside one.
+pub(crate) fn carry_slot<T>(f: impl FnOnce(&mut CarrySlot, Option<usize>) -> Result<T, String>) -> Option<T> {
+    CARRY.with(|c| {
+        let mut c = c.borrow_mut();
+        let carry = c.as_mut()?;
+        let at = carry.at;
+        carry.at += 1;
+        if carry.slots.len() <= at {
+            carry.slots.resize_with(at + 1, CarrySlot::default);
+        }
+        let next = carry.next_b0;
+        match f(&mut carry.slots[at], next) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                carry.error.get_or_insert(e);
+                None
+            }
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

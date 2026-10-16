@@ -304,14 +304,16 @@ pub(crate) fn guided_self(plane: &[f32], w: usize, h: usize, r: usize, eps: f32)
         return plane.to_vec();
     }
     let mut scratch = vec![0.0f32; plane.len()];
-    let boxed = |v: &[f32], scratch: &mut Vec<f32>| -> Vec<f32> {
+    // In a band, the means lose `r` rows at the foot and the means of the
+    // coefficients made from them `r` more (box_blur_pass_lag).
+    let boxed = |v: &[f32], scratch: &mut Vec<f32>, lag: usize| -> (Vec<f32>, usize) {
         let mut out = v.to_vec();
-        crate::ops::box_blur_pass(&mut out, scratch, w, h, r);
-        out
+        let lag = crate::ops::box_blur_pass_lag(&mut out, scratch, w, h, r, lag);
+        (out, lag)
     };
     let sq: Vec<f32> = plane.par_iter().map(|v| v * v).collect();
-    let mean = boxed(plane, &mut scratch);
-    let corr = boxed(&sq, &mut scratch);
+    let (mean, lag) = boxed(plane, &mut scratch, 0);
+    let (corr, _) = boxed(&sq, &mut scratch, 0);
     let mut a = vec![0.0f32; plane.len()];
     let mut b = vec![0.0f32; plane.len()];
     a.par_iter_mut()
@@ -323,8 +325,8 @@ pub(crate) fn guided_self(plane: &[f32], w: usize, h: usize, r: usize, eps: f32)
             *ra = var / (var + eps);
             *rb = m * (1.0 - *ra);
         });
-    let mean_a = boxed(&a, &mut scratch);
-    let mean_b = boxed(&b, &mut scratch);
+    let (mean_a, _) = boxed(&a, &mut scratch, lag);
+    let (mean_b, _) = boxed(&b, &mut scratch, lag);
     mean_a
         .par_iter()
         .zip(mean_b.par_iter())
@@ -633,6 +635,16 @@ pub(crate) const DETAIL_SCALES: [DetailScale; 3] = [
 /// scales read the same neighbors they read on the whole frame: the
 /// guided filter's two box passes each reach the box radius, plus one.
 /// As a fraction of the frame's short side, for the desktop's ROI.
+/// The box radius of each Detail scale on a frame whose short side is
+/// `short`, for the scales that are on.
+pub(crate) fn detail_radii(short: f32, active: [bool; 3]) -> impl Iterator<Item = usize> {
+    let short = short.max(1.0);
+    DETAIL_SCALES.iter().zip(active).filter(|(_, on)| *on).map(move |(sc, _)| {
+        let sigma = (short * sc.share).max(sc.min);
+        ((sigma * 3f32.sqrt()).round() as usize).max(1)
+    })
+}
+
 pub fn detail_reach(short: f32, active: [bool; 3]) -> f32 {
     let short = short.max(1.0);
     let mut px = 0.0f32;

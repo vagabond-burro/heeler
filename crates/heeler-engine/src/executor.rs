@@ -116,14 +116,14 @@ fn value_bytes(v: &Value) -> usize {
 pub const PLANTED_AS: &str = "planted_as";
 
 /// The id a raster-fed node's planted raster is kept under.
-fn planted_id(node: &Node) -> &str {
+pub(crate) fn planted_id(node: &Node) -> &str {
     node.params.get(PLANTED_AS).and_then(|v| v.as_str()).unwrap_or(&node.id)
 }
 
 /// The slot a node's planted output is kept under in the sources map:
 /// `{id}@{port}`, as Depth Map's plane at `@depth`, a File node's mask at
 /// `@mask` and Depth Lighting's normals at `@normal`.
-fn slot(node_id: &str, port: &str) -> String {
+pub(crate) fn slot(node_id: &str, port: &str) -> String {
     format!("{node_id}@{port}")
 }
 
