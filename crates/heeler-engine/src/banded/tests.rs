@@ -710,6 +710,36 @@ fn key_light_dof_and_flare_band_over_a_planted_plane() {
     }
 }
 
+/// A chain of deep reaches asks its first nodes for many times a band's
+/// rows; the plan makes the node whose cut lowers the estimate most
+/// whole, and the render is the whole frame's bit for bit.
+#[test]
+fn deep_reaches_in_a_row_take_a_cut() {
+    CUTS_IN_TESTS.with(|c| c.set(true));
+    let registry = Registry::builtin();
+    let sources = sources_with(frame(157, 131));
+    let mut g = Graph::new("deep");
+    g.add_node(registry.instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+    let mut from = "src".to_string();
+    for (i, ty) in ["heeler.tone_eq", "heeler.standard_color", "heeler.key_light", "heeler.halation", "heeler.blur", "heeler.blur"].iter().enumerate() {
+        let id = format!("n{i}");
+        let mut node = registry.instantiate(ty, &id, Section::Creative).unwrap();
+        for (k, v) in [("radius", 18.0), ("amount", 80.0), ("strength", 60.0), ("detail", 40.0), ("clarity", 40.0)] {
+            if node.params.contains_key(k) {
+                node.params.insert(k.into(), ParamValue::Number(v));
+            }
+        }
+        g.add_node(node).unwrap();
+        g.connect(&from, "out", &id, "in").unwrap();
+        from = id;
+    }
+    let none = estimate_cut(&g, &[from.as_str()], &sources, 8, &HashSet::new()).unwrap();
+    let cut = cuts(&g, &[from.as_str()], &sources, 8).unwrap();
+    assert!(!cut.is_empty() && estimate_banded(&g, &[from.as_str()], &sources, 8).unwrap() < none, "{cut:?}");
+    let report = assert_same(&g, &[from.as_str()], &sources, 8, "deep");
+    assert!(cut.iter().all(|c| report.whole.contains(c)), "{cut:?} {report:?}");
+}
+
 /// Transform and Perspective gather each band from the whole photograph,
 /// as the lens does: under their defaults, their sweeps, and a move,
 /// turn and scale together, and a strong keystone with a zoom.

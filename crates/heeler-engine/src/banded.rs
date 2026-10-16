@@ -596,6 +596,7 @@ fn plan(
     terminals: &[&str],
     sources: &HashMap<String, SourceImage>,
     rendered: &HashMap<String, (usize, usize, usize)>,
+    cut: &HashSet<String>,
 ) -> Result<Plan, EngineError> {
     let order = reached(graph, terminals)?;
     let mut dims: HashMap<String, (usize, usize, usize)> = HashMap::new();
@@ -714,7 +715,7 @@ fn plan(
                 mode.insert(id.clone(), Mode::Resident);
             }
             None => {
-                mode.insert(id.clone(), m);
+                mode.insert(id.clone(), if cut.contains(id) { Mode::Resident } else { m });
             }
         }
         inputs.insert(id.clone(), wired);
@@ -769,7 +770,8 @@ pub fn render_banded(
 ) -> Result<BandedReport, EngineError> {
     // Admitted as a whole before anything renders, as Executor::render is:
     // the caller's sink comes on top, in the caller's own job.
-    let _job = crate::memory::Job::admit(estimate_banded(graph, terminals, sources, band_rows)?, "banded render")?;
+    let cut = cuts(graph, terminals, sources, band_rows)?;
+    let _job = crate::memory::Job::admit(estimate_cut(graph, terminals, sources, band_rows, &cut)?, "banded render")?;
     let band_rows = band_rows.max(1);
     let mut resident: HashMap<String, Value> = HashMap::new();
     for (id, src) in sources {
@@ -787,7 +789,7 @@ pub fn render_banded(
     let mut whole: Vec<String> = Vec::new();
     let mut wides: HashMap<String, Wide> = HashMap::new();
     let plan = 'plan: loop {
-        let plan = plan(graph, terminals, sources, &rendered)?;
+        let plan = plan(graph, terminals, sources, &rendered, &cut)?;
         for id in &plan.order {
             let node = graph.node(id).unwrap();
             if plan.wide.contains(id) && !wides.contains_key(id) {
@@ -1069,13 +1071,79 @@ pub fn estimate_banded(
     sources: &HashMap<String, SourceImage>,
     band_rows: usize,
 ) -> Result<usize, EngineError> {
+    estimate_cut(graph, terminals, sources, band_rows, &cuts(graph, terminals, sources, band_rows)?)
+}
+
+/// The nodes a banded render of `band_rows` makes whole although the
+/// bands could follow them, because that costs less. A node's margin
+/// grows every band of every node above it: deep reaches in a row (a
+/// Key Light and a Depth of Field after a dozen carried passes) can ask
+/// the first nodes for forty times a band's rows, and the carried sums
+/// keep that many, where the node made whole asks its inputs for its
+/// own reach once. Chosen greedily by the estimate itself, the node
+/// whose cut lowers it most first, among the widest margins, until no
+/// cut lowers it; the render takes the same cuts.
+fn cuts(
+    graph: &Graph,
+    terminals: &[&str],
+    sources: &HashMap<String, SourceImage>,
+    band_rows: usize,
+) -> Result<HashSet<String>, EngineError> {
+    let mut cut = HashSet::new();
+    // The unit tests' frames are small enough that a cut is nearly free,
+    // which would take the very nodes they band whole; a test that wants
+    // cuts asks for them.
+    #[cfg(test)]
+    if !CUTS_IN_TESTS.with(|c| c.get()) {
+        return Ok(cut);
+    }
+    let mut best = estimate_cut(graph, terminals, sources, band_rows, &cut)?;
+    for _ in 0..8 {
+        let plan = plan(graph, terminals, sources, &HashMap::new(), &cut)?;
+        let mut wide: Vec<(usize, &String)> = plan
+            .order
+            .iter()
+            .filter_map(|id| match plan.mode[id] {
+                Mode::Rows { top, bottom } if top + bottom >= 32 => Some((top + bottom, id)),
+                _ => None,
+            })
+            .collect();
+        wide.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(b.1)));
+        let mut pick: Option<(usize, String)> = None;
+        for (_, id) in wide.into_iter().take(12) {
+            let mut with = cut.clone();
+            with.insert(id.clone());
+            let Ok(est) = estimate_cut(graph, terminals, sources, band_rows, &with) else { continue };
+            if est < best && pick.as_ref().is_none_or(|(e, _)| est < *e) {
+                pick = Some((est, id.clone()));
+            }
+        }
+        let Some((est, id)) = pick else { break };
+        best = est;
+        cut.insert(id);
+    }
+    Ok(cut)
+}
+
+#[cfg(test)]
+thread_local! {
+    static CUTS_IN_TESTS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// estimate_banded with the nodes in `cut` made whole.
+fn estimate_cut(
+    graph: &Graph,
+    terminals: &[&str],
+    sources: &HashMap<String, SourceImage>,
+    band_rows: usize,
+    cut: &HashSet<String>,
+) -> Result<usize, EngineError> {
     use crate::memory::sum;
-    let plan = plan(graph, terminals, sources, &HashMap::new())?;
+    let plan = plan(graph, terminals, sources, &HashMap::new(), cut)?;
     let heights: HashSet<usize> = terminals.iter().map(|t| plan.dims[*t].1).collect();
     if heights.len() != 1 {
         return Err(EngineError::Band("terminals of different heights".into()));
     }
-    let frame_h = *heights.iter().next().unwrap();
     let mut seen = HashSet::new();
     let mut source_bytes = 0usize;
     for s in sources.values() {
@@ -1083,8 +1151,63 @@ pub fn estimate_banded(
             source_bytes = sum([source_bytes, crate::memory::bytes(s.image.width, s.image.height, 4, 4)?])?;
         }
     }
-    // The bands.
     let band_rows = band_rows.max(1);
+    // The reduced blurs' small images, kept from their prepass on.
+    let mut wides = 0usize;
+    for id in &plan.wide {
+        let (w, h, _) = plan.dims[id];
+        wides = sum([wides, wide_bytes(graph.node(id).unwrap(), w, h)?])?;
+    }
+    // Each prepass is a banded pass up to its node, before the main one.
+    let mut prepass = 0usize;
+    for id in &plan.wide {
+        let (peak, carried) = pass_cost(graph, &plan, &[id.as_str()], band_rows)?;
+        prepass = prepass.max(sum([peak, carried])?);
+    }
+    // The nodes made whole, in the graph's order: the whole frames made
+    // so far, each banded input put together by a pass of its own (that
+    // pass's working set and carries while it runs, beside the inputs put
+    // together before it), then the operator's scratch and output on the
+    // whole frame.
+    let (mut whole_outs, mut whole_peak) = (0usize, 0usize);
+    for id in &plan.order {
+        let node = graph.node(id).unwrap();
+        if plan.mode[id] != Mode::Resident || is_source(&node.node_type) {
+            continue;
+        }
+        let (w, h, c) = plan.dims[id];
+        let mut inputs = 0usize;
+        for (_, from) in &plan.inputs[id] {
+            if plan.mode[from] != Mode::Resident {
+                let (iw, ih, ic) = plan.dims[from];
+                let frame = rows_bytes(iw, ih, ic)?;
+                let (peak, carried) = pass_cost(graph, &plan, &[from.as_str()], band_rows)?;
+                whole_peak = whole_peak.max(sum([whole_outs, inputs, frame, peak, carried])?);
+                inputs = sum([inputs, frame])?;
+            }
+        }
+        let out = rows_bytes(w, h, c)?;
+        let scratch = if !node.enabled {
+            0
+        } else if let Some(b) = crate::executor::padded_scratch(node, w, h) {
+            b?
+        } else {
+            crate::memory::bytes(w, h, 16, crate::executor::workspace(node))?
+        };
+        whole_peak = whole_peak.max(sum([whole_outs, inputs, scratch, out])?);
+        whole_outs = sum([whole_outs, out])?;
+    }
+    let (peak, carried) = pass_cost(graph, &plan, terminals, band_rows)?;
+    let bands = sum([whole_outs, wides, prepass.max(sum([peak, carried])?)])?;
+    Ok(sum([source_bytes, whole_peak.max(bands)])?)
+}
+
+/// One banded pass over `terminals` as run_pass makes it: the most any
+/// band holds at once, and what its carried nodes carry from band to
+/// band.
+fn pass_cost(graph: &Graph, plan: &Plan, terminals: &[&str], band_rows: usize) -> Result<(usize, usize), EngineError> {
+    use crate::memory::sum;
+    let frame_h = terminals.iter().map(|t| plan.dims[*t].1).max().unwrap_or(0);
     let mut started = HashSet::new();
     let mut carried_rows: HashMap<&str, usize> = HashMap::new();
     let mut band_peak = 0usize;
@@ -1162,52 +1285,18 @@ pub fn estimate_banded(
         y = b;
     }
     let mut carries = 0usize;
-    for id in &plan.wide {
-        let (w, h, _) = plan.dims[id];
-        carries = sum([carries, wide_bytes(graph.node(id).unwrap(), w, h)?])?;
-    }
     for (id, rows) in &carried_rows {
         let (w, _, _) = plan.dims[*id];
         let node = graph.node(id).unwrap();
         carries = sum([carries, crate::memory::bytes(w, *rows, carry_slots(node), 4)?])?;
     }
-    // The nodes made whole, in the graph's order: the whole frames made
-    // so far, this one's inputs put together (a banded pass's working set
-    // while they are), then its operator's scratch and output on the
-    // whole frame.
-    let (mut whole_outs, mut whole_peak) = (0usize, 0usize);
-    let assembling = sum([carries, band_peak])?;
-    for id in &plan.order {
-        let node = graph.node(id).unwrap();
-        if plan.mode[id] != Mode::Resident || is_source(&node.node_type) {
-            continue;
-        }
-        let (w, h, c) = plan.dims[id];
-        let mut inputs = 0usize;
-        for (_, from) in &plan.inputs[id] {
-            if plan.mode[from] != Mode::Resident {
-                let (iw, ih, ic) = plan.dims[from];
-                inputs = sum([inputs, rows_bytes(iw, ih, ic)?])?;
-            }
-        }
-        let out = rows_bytes(w, h, c)?;
-        let scratch = if !node.enabled {
-            0
-        } else if let Some(b) = crate::executor::padded_scratch(node, w, h) {
-            b?
-        } else {
-            crate::memory::bytes(w, h, 16, crate::executor::workspace(node))?
-        };
-        whole_peak = whole_peak.max(sum([whole_outs, inputs, assembling.max(sum([scratch, out])?)])?);
-        whole_outs = sum([whole_outs, out])?;
-    }
-    Ok(sum([source_bytes, whole_peak.max(sum([whole_outs, carries, band_peak])?)])?)
+    Ok((band_peak, carries))
 }
 
 /// A terminal's whole-frame size and channels (4 for an image, 1 for a
 /// mask), as the banded render plans it, without rendering anything.
 pub fn output_size(graph: &Graph, terminal: &str, sources: &HashMap<String, SourceImage>) -> Result<(usize, usize, usize), EngineError> {
-    Ok(plan(graph, &[terminal], sources, &HashMap::new())?.dims[terminal])
+    Ok(plan(graph, &[terminal], sources, &HashMap::new(), &HashSet::new())?.dims[terminal])
 }
 
 /// The tallest band, up to the frame's height, whose banded render of
@@ -1225,7 +1314,7 @@ pub fn band_rows_for(
     let fits = |rows: usize| -> Result<bool, EngineError> {
         Ok(crate::memory::sum([estimate_banded(graph, terminals, sources, rows)?, sink])? <= ceiling)
     };
-    let plan = plan(graph, terminals, sources, &HashMap::new())?;
+    let plan = plan(graph, terminals, sources, &HashMap::new(), &HashSet::new())?;
     let frame_h = terminals.iter().map(|t| plan.dims[*t].1).max().unwrap_or(1).max(1);
     if !fits(1)? {
         return Ok(None);
@@ -1274,7 +1363,7 @@ pub fn largest_export_edge(
             let s = sized.get_mut(*id).unwrap();
             s.image = Arc::new(ImageBuf { width: w, height: h, data: Vec::new() });
         }
-        let plan = plan(graph, terminals, &sized, &HashMap::new())?;
+        let plan = plan(graph, terminals, &sized, &HashMap::new(), &HashSet::new())?;
         let (ow, oh) = terminals.iter().map(|t| (plan.dims[*t].0, plan.dims[*t].1)).next().unwrap_or((0, 0));
         let sink = crate::memory::bytes(ow, oh, 1, sink_per_pixel)?;
         let rows = min_rows.min(oh.max(1));
