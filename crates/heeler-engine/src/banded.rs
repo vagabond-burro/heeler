@@ -389,6 +389,7 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
                 both(if radius > 0.0 { wide(radius) } else { 0 })
             }
             "heeler.halation" => crate::ops_halation::halation_reach(node, w, h).map(|r| (r, r)),
+            "heeler.paint" | "heeler.clone" => crate::ops_masks::paint_band_reach(node, w, h).and_then(both),
             // Shadow, Glow and Bevel spread the alpha over a padded plane
             // and blur it: the blur's reach on that plane and the offset.
             "heeler.fx_shadow" | "heeler.fx_glow" | "heeler.fx_bevel" => both(crate::ops_fx::fx_reach(node, w, h)),

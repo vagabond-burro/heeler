@@ -1334,12 +1334,57 @@ pub(crate) fn invert_mask(node: &Node, inputs: &[(String, Value)]) -> Result<Val
     Ok(Value::Mask(std::sync::Arc::new(out)))
 }
 
+/// The rows past a band a Paint or Clone layer reads, when it can render
+/// one. Every stroke is swept per pixel at its place in the frame; a
+/// flat color and an erase stay on their pixel, a clone reads its source
+/// at the stroke's offset (and a pixel past the buffer reads as nothing,
+/// so the band must hold it), and a blur or blend brush convolves a crop
+/// of the composite out to its kernel's reach. Each stroke reads what
+/// the strokes before it laid, so the reaches add up. A heal solves over
+/// the stroke's whole footprint, and a clip that keys on a color read at
+/// a point of the frame needs that point: whole.
+pub(crate) fn paint_band_reach(node: &Node, w: usize, h: usize) -> Option<usize> {
+    let (strokes, roi) = strokes_and_roi(node).ok()?;
+    if roi != (0.0, 0.0, 1.0, 1.0) {
+        return None;
+    }
+    let node_heal = p_bool(&node.params, "heal", false);
+    let short = w.min(h) as f32;
+    let mut reach = 0usize;
+    for stroke in strokes.iter().filter(|s| !s.points.is_empty()) {
+        if stroke.clip.as_deref().is_some_and(crate::ops_selection::regions_sample_points) {
+            return None;
+        }
+        let kernel = |sigma: f32| (sigma * 3.0).ceil() as usize + 2;
+        if stroke.blend && !stroke.erase {
+            reach += kernel((stroke.radius * short * 0.5).max(0.6));
+            continue;
+        }
+        if stroke.blur && !stroke.erase {
+            reach += kernel((stroke.radius * short * stroke.blur_strength).max(0.3));
+            continue;
+        }
+        let cloning = stroke.src_dx != 0.0 || stroke.src_dy != 0.0;
+        if cloning && stroke.heal.unwrap_or(node_heal) {
+            return None;
+        }
+        if cloning {
+            reach += (stroke.src_dy * h as f32).abs().ceil() as usize + 2;
+        }
+    }
+    Some(reach)
+}
+
 pub(crate) fn paint(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineError> {
     let src = image_input(inputs, "in", &node.id)?;
     let (strokes, roi) = strokes_and_roi(node)?;
     let node_heal = p_bool(&node.params, "heal", false);
     let (w, h) = (src.width, src.height);
-    let win = FrameWindow::of(roi, w, h);
+    // The ROI patch's window, else the band's (the whole frame unbanded).
+    let win = match FrameWindow::of(roi, w, h) {
+        win if win.is_whole(w, h) => FrameWindow::of_band(w, h),
+        win => win,
+    };
 
     let mut canvas = ImageBuf::new(w, h); // zeroed: transparent black
     for stroke in &strokes {

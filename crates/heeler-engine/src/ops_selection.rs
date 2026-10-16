@@ -966,7 +966,11 @@ fn combine_regions(
 /// the frame (a Key or a set of Samples), which a band of the frame may
 /// not hold; the banded render takes such a node whole.
 pub(crate) fn shapes_sample_points(node: &Node) -> bool {
-    let raw = node.params.get("regions").and_then(|v| v.as_str()).unwrap_or("[]");
+    regions_sample_points(node.params.get("regions").and_then(|v| v.as_str()).unwrap_or("[]"))
+}
+
+/// Whether a region list (JSON) holds a Key or a set of Samples.
+pub(crate) fn regions_sample_points(raw: &str) -> bool {
     let regions: Vec<Region> = serde_json::from_str(raw).unwrap_or_default();
     regions.iter().any(|r| matches!(r, Region::Key { .. } | Region::Samples { .. }))
 }

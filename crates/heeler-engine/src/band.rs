@@ -123,10 +123,14 @@ pub fn class_of(node: &Node) -> Option<BandClass> {
         "heeler.smart_mask" | "heeler.matte_mask" | "heeler.inpaint" | "heeler.selection_mask"
         | "heeler.brush_mask" | "heeler.model_denoise" => Raster,
 
+        // Strokes laid per pixel, a clone's source at its offset and a
+        // blur brush's kernel; a heal's Poisson solve over the stroke
+        // keeps the layer whole (ops_masks paint_band_reach).
+        "heeler.paint" | "heeler.clone" => Neighborhood,
+
         // The distance transform runs the parabola envelope down whole
-        // columns; Paint and Clone heal through a Poisson solve over the
-        // stroke, and Clone reads its source wherever the offset points.
-        "heeler.distance_field" | "heeler.paint" | "heeler.clone" => Unbandable,
+        // columns.
+        "heeler.distance_field" => Unbandable,
 
         _ => return None,
     })

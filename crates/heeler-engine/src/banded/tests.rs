@@ -465,6 +465,42 @@ fn the_selection_and_brush_masks_band() {
     assert_eq!(report.whole, vec!["m".to_string()]);
 }
 
+/// Paint and Clone render a band at a time: flat color, erase, a clone
+/// from above and below (and from the layer itself), a blur and a blend
+/// brush, a stroke clipped to a selection. A heal keeps the layer whole.
+#[test]
+fn paint_and_clone_band() {
+    let registry = Registry::builtin();
+    let (w, h) = (157, 131);
+    let clip = r#"[{"kind":"marquee","op":"add","x0":0.1,"y0":0.2,"x1":0.7,"y1":0.9}]"#.replace('"', "\\\"");
+    let strokes = format!(
+        r##"[{{"points":[[0.1,0.1],[0.5,0.6],[0.9,0.3]],"radius":0.06,"hardness":0.5,"flow":0.8,"color":"#ff8800"}},
+            {{"points":[[0.2,0.8],[0.7,0.2]],"radius":0.04,"color":"#2040ff","clip":"{clip}"}},
+            {{"points":[[0.3,0.2],[0.4,0.9]],"radius":0.03,"erase":true}},
+            {{"points":[[0.6,0.7],[0.8,0.75]],"radius":0.05,"src_dx":-0.2,"src_dy":-0.3}},
+            {{"points":[[0.2,0.3],[0.3,0.35]],"radius":0.04,"src_dx":0.1,"src_dy":0.4}},
+            {{"points":[[0.5,0.2],[0.5,0.5]],"radius":0.04,"src_dx":0.05,"src_dy":0.25,"sample_layer":true}},
+            {{"points":[[0.1,0.5],[0.9,0.55]],"radius":0.05,"blur":true,"blur_strength":0.5}},
+            {{"points":[[0.4,0.1],[0.45,0.9]],"radius":0.06,"blend":true}},
+            {{"points":[[0.7,0.1],[0.75,0.9]],"radius":0.04,"blur":true,"blur_build":true,"sample_layer":true}}]"##
+    );
+    let heal = r#"[{"points":[[0.6,0.7],[0.8,0.75]],"radius":0.05,"src_dx":-0.2,"src_dy":-0.3,"heal":true}]"#;
+    for (ty, raw, banded) in [("heeler.paint", strokes.as_str(), true), ("heeler.clone", strokes.as_str(), true), ("heeler.clone", heal, false)] {
+        let mut g = Graph::new("paint");
+        g.add_node(registry.instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+        g.add_node(registry.instantiate(ty, "p", Section::Creative).unwrap()).unwrap();
+        g.set_param("p", "strokes", ParamValue::Text(raw.into())).unwrap();
+        g.connect("src", "out", "p", "in").unwrap();
+        let sources = sources_with(frame(w, h));
+        let report = assert_same(&g, &["p"], &sources, BAND, ty);
+        if banded {
+            assert!(report.banded.iter().any(|n| n == "p") && report.whole.is_empty(), "{ty}: {report:?}");
+        } else {
+            assert_eq!(report.whole, vec!["p".to_string()], "{ty} heal");
+        }
+    }
+}
+
 /// Transform and Perspective gather each band from the whole photograph,
 /// as the lens does: under their defaults, their sweeps, and a move,
 /// turn and scale together, and a strong keystone with a zoom.
