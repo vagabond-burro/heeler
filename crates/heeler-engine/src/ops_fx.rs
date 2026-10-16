@@ -107,7 +107,7 @@ fn spread_alpha(
         let wide = || gaussian_blur_wide(&plane, sigma.max(0.3));
         plane = match crate::band::frame() {
             None => wide(),
-            Some(_) => crate::band::with_frame(crate::band::BandFrame { full_w: pw, full_h: ph, y0: p0, rows: p1 - p0, layers_whole: false }, wide),
+            Some(_) => crate::band::with_frame(crate::band::BandFrame { full_w: pw, full_h: ph, y0: p0, rows: p1 - p0, layers_whole: false, planes_whole: false }, wide),
         };
     }
     let mut out = vec![0.0f32; w * bh];

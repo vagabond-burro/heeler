@@ -587,6 +587,78 @@ fn placed_and_warped_layers_band() {
     }
 }
 
+/// The depth readers that read their planted plane per pixel render a
+/// band at a time, the plane resampled through the band's frame: each
+/// under its param sets, with its depth switched on, measured and not.
+#[test]
+fn planted_depth_planes_read_in_bands() {
+    let registry = Registry::builtin();
+    let (w, h) = (157, 131);
+    let mut plane = ImageBuf::new(41, 29);
+    for (i, px) in plane.data.chunks_exact_mut(4).enumerate() {
+        let (x, y) = ((i % 41) as f32 / 41.0, (i / 41) as f32 / 29.0);
+        let v = (0.2 + 0.6 * y + 0.15 * (6.0 * x).sin()).clamp(0.0, 1.0);
+        px.copy_from_slice(&[v, v, v, 1.0]);
+    }
+    let types = [
+        "heeler.fog", "heeler.halation", "heeler.recolor", "heeler.range_mask", "heeler.hue_range_mask", "heeler.radial_mask",
+        "heeler.linear_mask", "heeler.selection_mask", "heeler.brush_mask", "heeler.smart_mask", "heeler.matte_mask",
+    ];
+    let mut read = std::collections::BTreeSet::new();
+    for ty in types {
+        let mut sets = param_sets(&registry, ty);
+        for set in sets.iter_mut() {
+            set.push(("depth_on".into(), ParamValue::Bool(true)));
+            set.push(("by_depth".into(), ParamValue::Number(60.0)));
+            // Something to weigh: a marquee, and a range on the plane.
+            set.push(("regions".into(), ParamValue::Text(r#"[{"kind":"marquee","op":"add","x0":0.1,"y0":0.1,"x1":0.8,"y1":0.9},{"kind":"range","op":"intersect","channel":"depth","lo":0.3,"hi":0.7,"soft":0.1}]"#.into())));
+        }
+        for (i, params) in sets.iter().enumerate() {
+            for measured in [false, true] {
+                let mut g = Graph::new("depth");
+                g.add_node(registry.instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+                g.add_node(registry.instantiate("heeler.luminance_extract", "lum", Section::Creative).unwrap()).unwrap();
+                g.add_node(registry.instantiate("heeler.depth_map", "dm", Section::Creative).unwrap()).unwrap();
+                g.connect("src", "out", "lum", "in").unwrap();
+                g.connect("src", "out", "dm", "in").unwrap();
+                let mut node = registry.instantiate(ty, "n", Section::Creative).unwrap();
+                for (k, v) in params {
+                    if node.params.contains_key(k) {
+                        node.params.insert(k.clone(), v.clone());
+                    }
+                }
+                let ports: Vec<(String, PortKind)> = node.inputs.iter().map(|p| (p.name.clone(), p.kind)).collect();
+                g.add_node(node).unwrap();
+                for (port, kind) in ports {
+                    if port == "depth" {
+                        g.connect("dm", "depth", "n", "depth").unwrap();
+                    } else {
+                        g.connect(if kind == PortKind::Image { "src" } else { "lum" }, "out", "n", &port).unwrap();
+                    }
+                }
+                let mut sources = sources_with(frame(w, h));
+                sources.insert("dm@depth".into(), SourceImage { image: Arc::new(plane.clone()), version: 1, measured });
+                if Executor::new().render(&g, "n", &sources).is_err() {
+                    continue;
+                }
+                let what = format!("{ty} set {}{}", i + 1, if measured { ", measured" } else { "" });
+                let report = assert_same(&g, &["n"], &sources, BAND, &what);
+                assert!(report.banded.iter().any(|n| n == "n"), "{what}: {report:?}");
+                let flat = sources_with(frame(w, h));
+                if let (Ok(a), Ok(b)) = (Executor::new().render(&g, "n", &sources), Executor::new().render(&g, "n", &flat)) {
+                    if bits(&a) != bits(&b) {
+                        read.insert(ty);
+                    }
+                }
+            }
+        }
+    }
+    // The plane shapes them: the test reads what it means to.
+    for ty in ["heeler.fog", "heeler.halation", "heeler.range_mask", "heeler.radial_mask", "heeler.brush_mask", "heeler.selection_mask", "heeler.smart_mask"] {
+        assert!(read.contains(ty), "{ty} never read its plane: {read:?}");
+    }
+}
+
 /// Transform and Perspective gather each band from the whole photograph,
 /// as the lens does: under their defaults, their sweeps, and a move,
 /// turn and scale together, and a strong keystone with a zoom.

@@ -86,8 +86,11 @@ fn plane_in_window(
         return None;
     }
     // The window of this buffer the plane covers, in pixels: the whole
-    // buffer unless the caller says otherwise (plane_for_node).
-    let (wx, wy, ww, wh) = window.unwrap_or((0, 0, w, h));
+    // buffer unless the caller says otherwise (plane_for_node), or for a
+    // planted plane handed whole to a band, the frame, from the band's
+    // first row up.
+    let band = crate::band::frame().filter(|f| f.planes_whole && f.full_w == w && f.rows == h).map(|f| (0, -(f.y0 as isize), f.full_w, f.full_h));
+    let (wx, wy, ww, wh) = window.or(band).unwrap_or((0, 0, w, h));
     let (ww, wh) = (ww.max(1) as f32, wh.max(1) as f32);
     let mut out = vec![0.0f32; w * h];
     use rayon::prelude::*;

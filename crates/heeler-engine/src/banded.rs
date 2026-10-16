@@ -317,6 +317,9 @@ struct Plan {
     carried: HashSet<String>,
     /// Nodes made band by band whose reduced wide blurs take a prepass.
     wide: HashSet<String>,
+    /// The planted planes each node made band by band reads, resampled
+    /// through the band's frame: (port, planting node, its port).
+    plants: HashMap<String, Vec<(String, String, String)>>,
 }
 
 /// The margin a node's rows grow by, above and below, for a frame `w`
@@ -537,6 +540,17 @@ fn gathers_whole_input(ty: &str) -> bool {
     matches!(ty, "heeler.lens_correct" | "heeler.transform" | "heeler.perspective" | "heeler.grid_warp" | "heeler.shape_warp")
 }
 
+/// Nodes whose operator reads a planted depth plane per pixel, or within
+/// its own margin, resampled through the band's frame (ops_depth.rs
+/// plane_in_window), outside a 1:1 slice's depth window.
+fn plane_in_bands(node: &Node) -> bool {
+    matches!(
+        node.node_type.as_str(),
+        "heeler.fog" | "heeler.halation" | "heeler.recolor" | "heeler.range_mask" | "heeler.hue_range_mask" | "heeler.radial_mask"
+            | "heeler.linear_mask" | "heeler.selection_mask" | "heeler.brush_mask" | "heeler.smart_mask" | "heeler.matte_mask"
+    ) && !node.params.contains_key("depth_roi_w")
+}
+
 /// Raster-fed nodes whose operator reads its planted raster a band at a
 /// time, resampling it through the frame's size and row.
 fn reads_raster_in_bands(ty: &str) -> bool {
@@ -557,6 +571,7 @@ fn plan(
     let mut mode: HashMap<String, Mode> = HashMap::new();
     let mut inputs: HashMap<String, Vec<(String, String)>> = HashMap::new();
     let mut crops = HashMap::new();
+    let mut plants: HashMap<String, Vec<(String, String, String)>> = HashMap::new();
     for id in &order {
         let node = graph.node(id).ok_or_else(|| EngineError::NodeNotFound(id.clone()))?;
         if is_source(&node.node_type) {
@@ -580,7 +595,11 @@ fn plan(
                 continue;
             };
             if c.from.1 != "out" && !passthrough_port(graph, &c.from.0, &c.from.1) {
-                planted = true;
+                if port.name == "depth" && c.from.1 == "depth" && plane_in_bands(node) {
+                    plants.entry(id.clone()).or_insert_with(Vec::new).push((port.name.clone(), c.from.0.clone(), c.from.1.clone()));
+                } else {
+                    planted = true;
+                }
                 continue;
             }
             let d = dims[&c.from.0];
@@ -700,7 +719,7 @@ fn plan(
         .filter(|id| graph.node(id).is_some_and(|n| n.enabled && wide_slots(n) > 0))
         .cloned()
         .collect();
-    Ok(Plan { order, dims, mode, inputs, crops, carried, wide })
+    Ok(Plan { order, dims, mode, inputs, crops, carried, wide, plants })
 }
 
 /// Renders `terminals` band by band, `band_rows` output rows at a time,
@@ -1348,13 +1367,19 @@ fn render_band(
         let (fw, fh, _) = plan.dims[id];
         let value = match mode {
             Mode::Rows { .. } => {
-                let inputs: Vec<(String, Value)> =
+                let mut inputs: Vec<(String, Value)> =
                     plan.inputs[id].iter().map(|(port, from)| (port.clone(), rows_from(&slabs, from, rlo, rhi))).collect();
-                let frame = BandFrame { full_w: fw, full_h: fh, y0: rlo, rows: rhi - rlo, layers_whole: false };
+                // A planted plane whole, read through the band's frame.
+                let mut depth_measured = false;
+                for (port, from, from_port) in plan.plants.get(id).into_iter().flatten() {
+                    depth_measured |= sources.get(&slot(from, from_port)).is_some_and(|s| s.measured);
+                    inputs.push((port.clone(), crate::executor::planted_port_value(from, from_port, sources)));
+                }
+                let frame = BandFrame { full_w: fw, full_h: fh, y0: rlo, rows: rhi - rlo, layers_whole: false, planes_whole: plan.plants.contains_key(id) };
                 let made = if plan.carried.contains(id) {
                     let mut carry = carries.remove(id).unwrap_or_default();
                     carry.next_b0 = later.iter().find_map(|l| l.reads.get(id).map(|r| r.0));
-                    let (made, carry) = with_carry(carry, || with_frame(frame, || apply_node(id, node, inputs, false, sources)));
+                    let (made, carry) = with_carry(carry, || with_frame(frame, || apply_node(id, node, inputs, depth_measured, sources)));
                     if let Some(e) = &carry.error {
                         return Err(EngineError::Band(format!("'{id}': {e}")));
                     }
@@ -1362,12 +1387,12 @@ fn render_band(
                     carries.insert(id.clone(), carry);
                     made?
                 } else if let Some(wide) = wides.remove(id) {
-                    let (made, wide) = with_wide(wide, || with_frame(frame, || apply_node(id, node, inputs, false, sources)));
+                    let (made, wide) = with_wide(wide, || with_frame(frame, || apply_node(id, node, inputs, depth_measured, sources)));
                     debug_assert!(wide.slots.len() <= wide_slots(node), "'{id}' makes {} reduced blurs, charged {}", wide.slots.len(), wide_slots(node));
                     wides.insert(id.clone(), wide);
                     made?
                 } else {
-                    with_frame(frame, || apply_node(id, node, inputs, false, sources))?
+                    with_frame(frame, || apply_node(id, node, inputs, depth_measured, sources))?
                 };
                 let (mw, mh) = match &made {
                     Value::Image(i) => (i.width, i.height),
@@ -1393,7 +1418,7 @@ fn render_band(
                     .iter()
                     .map(|(port, from)| (port.clone(), if port == "base" { rows_from(&slabs, from, lo, hi) } else { resident[from].clone() }))
                     .collect();
-                let frame = BandFrame { full_w: fw, full_h: fh, y0: lo, rows: hi - lo, layers_whole: true };
+                let frame = BandFrame { full_w: fw, full_h: fh, y0: lo, rows: hi - lo, layers_whole: true, planes_whole: false };
                 let made = with_frame(frame, || apply_node(id, node, inputs, false, sources))?;
                 let (mw, mh) = match &made {
                     Value::Image(i) => (i.width, i.height),
@@ -1407,7 +1432,7 @@ fn render_band(
             Mode::Gather => {
                 let inputs: Vec<(String, Value)> =
                     plan.inputs[id].iter().map(|(port, from)| (port.clone(), resident[from].clone())).collect();
-                let frame = BandFrame { full_w: fw, full_h: fh, y0: lo, rows: hi - lo, layers_whole: false };
+                let frame = BandFrame { full_w: fw, full_h: fh, y0: lo, rows: hi - lo, layers_whole: false, planes_whole: false };
                 let made = with_frame(frame, || apply_node(id, node, inputs, false, sources))?;
                 let (mw, mh) = match &made {
                     Value::Image(i) => (i.width, i.height),

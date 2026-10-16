@@ -151,6 +151,9 @@ pub(crate) struct BandFrame {
     /// A blend's layer, clip and mask come whole and its base a band
     /// (banded.rs Mode::Layer): the blend places the band's rows of them.
     pub(crate) layers_whole: bool,
+    /// The operator's planted depth plane comes whole, not as the band's
+    /// rows (banded.rs Plan::plants): it is read through the frame.
+    pub(crate) planes_whole: bool,
 }
 
 thread_local! {
