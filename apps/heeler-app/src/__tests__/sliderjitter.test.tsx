@@ -22,7 +22,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import { reduce, type State } from "../state";
 
-const counts = vi.hoisted(() => ({ viewer: 0, histogram: 0, images: 0 }));
+const counts = vi.hoisted(() => ({ viewer: 0, histogram: 0, images: 0, actions: [] as string[] }));
+
+// Every action the app reduces, by type, so a test can wait for the
+// last of what launching the app sets in motion.
+vi.mock("../state", async (original) => {
+  const mod = await original<typeof import("../state")>();
+  return {
+    ...mod,
+    reduce: (state: Parameters<typeof mod.reduce>[0], action: Parameters<typeof mod.reduce>[1]) => {
+      counts.actions.push(action.type);
+      return mod.reduce(state, action);
+    },
+  };
+});
 
 vi.mock("../ui/viewer", async (original) => {
   const mod = await original<typeof import("../ui/viewer")>();
@@ -82,6 +95,18 @@ function lift(el: Element, x: number) {
   });
 }
 
+/** Wait, a few milliseconds at a time, until `done` holds, however long
+ * this machine takes to get there; fail after ten seconds. */
+async function until(done: () => boolean, what: string) {
+  const deadline = Date.now() + 10_000;
+  while (!done()) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+    });
+  }
+}
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -90,9 +115,16 @@ afterEach(() => {
 
 describe("a slider drag renders the window once per step", () => {
   it("the viewer renders once for each step of an Exposure drag", async () => {
+    counts.actions = [];
     render(<App />);
+    // The last thing launching sets in motion: the library asks which
+    // folders hold missing files 250 ms after its folders land
+    // (ui/chrome.tsx), and the answer re-renders the window. A fixed
+    // wait let it land inside the drag below on a loaded machine, which
+    // counted six renders for five steps. Wait for the answer itself.
+    await until(() => counts.actions.includes("set_folders_missing"), "the missing-files answer");
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 20));
     });
     const track = within(screen.getAllByTestId("slider-exposure")[0]).getByRole("slider");
     press(track, 200);
