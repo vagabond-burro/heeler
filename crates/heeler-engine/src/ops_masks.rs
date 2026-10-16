@@ -324,6 +324,12 @@ impl FrameWindow {
         }
     }
 
+    /// The window a mask node renders: from_params when a Warp layer's
+    /// mask beyond the frame placed it, else the band's (of_band).
+    pub(crate) fn of_node(params: &std::collections::BTreeMap<String, heeler_graph::ParamValue>, w: usize, h: usize) -> FrameWindow {
+        if params.contains_key(FRAME_W) { FrameWindow::from_params(params, w, h) } else { FrameWindow::of_band(w, h) }
+    }
+
     /// Whether a `w` by `h` buffer in this window is the frame itself.
     pub(crate) fn is_whole(&self, w: usize, h: usize) -> bool {
         self.x0 == 0 && self.y0 == 0 && self.full_w == w && self.full_h == h
@@ -1065,6 +1071,26 @@ fn baked_base<'a>(node: &Node, inputs: &'a [(String, Value)]) -> Option<&'a Imag
     inputs.iter().find(|(port, _)| port == "raster").and_then(|(_, v)| v.as_image()).map(|a| a.as_ref())
 }
 
+/// The rows past a band a Brush mask reads, when it can render one: its
+/// frozen selection's reach, the strokes being swept per pixel at their
+/// place in the frame. A blend stroke's blur slides its sums down from
+/// the top of the stroke's own crop, which a band does not hold, and a
+/// mask placed past the frame renders its own canvas: whole.
+pub(crate) fn brush_band_reach(node: &Node, w: usize, h: usize) -> Option<usize> {
+    if [BEYOND_WARP, FRAME_W, CANVAS_W].iter().any(|k| node.params.contains_key(*k)) {
+        return None;
+    }
+    let raw = node.params.get("strokes").and_then(|v| v.as_str()).unwrap_or("[]");
+    let strokes: Vec<Stroke> = serde_json::from_str(raw).ok()?;
+    if strokes.iter().any(|s| s.blend && !s.points.is_empty()) {
+        return None;
+    }
+    match frozen_selection(node) {
+        Some(sel) => crate::ops_selection::selection_band_reach(&sel, w, h),
+        None => Some(0),
+    }
+}
+
 /// Rasterizes the stroke list in order. Paint strokes sweep their
 /// footprint in with max; erase strokes sweep the same footprint and
 /// then multiply it down, so erasing after painting works like an
@@ -1078,7 +1104,7 @@ pub(crate) fn brush_mask(node: &Node, inputs: &[(String, Value)]) -> Result<Valu
     // frame itself, but for a Warp layer's mask beyond the frame
     // (beyond_render).
     let (cw, ch) = canvas_of(node, src);
-    let win = FrameWindow::from_params(&node.params, cw, ch);
+    let win = FrameWindow::of_node(&node.params, cw, ch);
     let raw = node
         .params
         .get("strokes")

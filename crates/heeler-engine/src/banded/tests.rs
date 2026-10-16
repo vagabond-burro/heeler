@@ -400,6 +400,71 @@ fn the_smart_and_object_masks_band_with_their_rasters() {
     assert_eq!(report.whole, vec!["m".to_string()]);
 }
 
+/// The Selection and Brush masks render a band at a time: regions and
+/// strokes laid per pixel at their place in the frame, Grow, Smooth, the
+/// polish strokes and Feather each with their reach, a baked base read
+/// through the frame and a frozen selection under the strokes. A blend
+/// stroke keeps its brush whole.
+#[test]
+fn the_selection_and_brush_masks_band() {
+    let registry = Registry::builtin();
+    let (w, h) = (157, 131);
+    let mut raster = ImageBuf::new(61, 47);
+    for (i, px) in raster.data.chunks_exact_mut(4).enumerate() {
+        let (x, y) = ((i % 61) as f32 / 61.0, (i / 61) as f32 / 47.0);
+        let v = if (x - 0.4).powi(2) + (y - 0.5).powi(2) < 0.06 { 0.9 } else { 0.1 * y };
+        px.copy_from_slice(&[v, v, v, 1.0]);
+    }
+    let shapes = r#"[{"kind":"path","op":"add","points":[[0.1,0.2],[0.8,0.21],[0.7,0.8],[0.3,0.6]],"smooth":0.3},{"kind":"marquee","op":"subtract","shape":"ellipse","x0":0.4,"y0":0.35,"x1":0.6,"y1":0.7},{"kind":"brush","op":"add","points":[[0.2,0.9],[0.9,0.85]],"radius":0.04},{"kind":"bezier","op":"add","points":[[0.05,0.05,0.2,0.0],[0.3,0.3,0.1,0.4]]}]"#;
+    let range = r#"[{"kind":"range","op":"add","channel":"luma","lo":0.2,"hi":0.6,"soft":0.1},{"kind":"marquee","op":"intersect","x0":0.1,"y0":0.1,"x1":0.9,"y1":0.75}]"#;
+    let polish = r#"[{"points":[[0.1,0.5],[0.6,0.55]],"radius":0.05,"mode":"foreground"},{"points":[[0.5,0.1],[0.55,0.9]],"radius":0.04,"mode":"feather"},{"points":[[0.8,0.2],[0.3,0.95]],"radius":0.03,"mode":"background"}]"#;
+    let strokes = r#"[{"points":[[0.1,0.1],[0.5,0.6],[0.9,0.3]],"radius":0.06,"hardness":0.5,"flow":0.8},{"points":[[0.2,0.8],[0.7,0.1]],"radius":0.04,"brush":"texture"},{"points":[[0.3,0.2],[0.4,0.9]],"radius":0.05,"erase":true}]"#;
+    let blend = r#"[{"points":[[0.1,0.1],[0.9,0.9]],"radius":0.1},{"points":[[0.5,0.1],[0.5,0.9]],"radius":0.06,"blend":true}]"#;
+    let n = |v: f64| ParamValue::Number(v);
+    let t = |v: &str| ParamValue::Text(v.into());
+    let cases: Vec<(&str, &str, Vec<(&str, ParamValue)>, bool)> = vec![
+        ("selection, shapes", "heeler.selection_mask", vec![("regions", t(shapes))], false),
+        ("selection, grow, smooth, feather", "heeler.selection_mask", vec![("regions", t(shapes)), ("grow", n(3.0)), ("smooth", n(4.0)), ("feather", n(6.0))], false),
+        ("selection, shrink, polish, ramp", "heeler.selection_mask", vec![("regions", t(shapes)), ("grow", n(-2.0)), ("strokes", t(polish)), ("ramp", n(40.0)), ("invert", ParamValue::Bool(true))], false),
+        ("selection, range, hard edge", "heeler.selection_mask", vec![("regions", t(range)), ("feather", n(2.0)), ("antialias", ParamValue::Bool(false))], false),
+        ("selection, refined raster", "heeler.selection_mask", vec![("matte_contrast", n(40.0)), ("feather", n(3.0))], true),
+        ("selection, baked raster and shapes", "heeler.selection_mask", vec![("matte_id", t("baked:ab")), ("regions", t(shapes)), ("grow", n(1.5))], true),
+        ("brush, strokes", "heeler.brush_mask", vec![("strokes", t(strokes))], false),
+        ("brush, strokes, inverted", "heeler.brush_mask", vec![("strokes", t(strokes)), ("invert", ParamValue::Bool(true))], false),
+        ("brush, baked base", "heeler.brush_mask", vec![("strokes", t(strokes)), ("matte_id", t("baked:cd"))], true),
+        ("brush, frozen selection", "heeler.brush_mask", vec![("strokes", t(strokes)), ("base.regions", t(shapes)), ("base.feather", n(5.0)), ("base.grow", n(2.0)), ("base_invert", ParamValue::Bool(true))], false),
+    ];
+    for (what, ty, params, planted) in cases {
+        let mut g = Graph::new("mask");
+        g.add_node(registry.instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+        // Straight onto the node: a frozen selection's base.* params are
+        // laid out by the desktop, not declared.
+        let mut m = registry.instantiate(ty, "m", Section::Creative).unwrap();
+        for (k, v) in &params {
+            m.params.insert(k.to_string(), v.clone());
+        }
+        g.add_node(m).unwrap();
+        g.add_node(registry.instantiate("heeler.exposure", "exp", Section::Creative).unwrap()).unwrap();
+        g.set_param("exp", "exposure", n(1.0)).unwrap();
+        g.connect("src", "out", "m", "in").unwrap();
+        g.connect("src", "out", "exp", "in").unwrap();
+        g.connect("m", "out", "exp", "mask").unwrap();
+        let mut sources = sources_with(frame(w, h));
+        if planted {
+            sources.insert("m".into(), SourceImage { image: Arc::new(raster.clone()), version: 1, measured: false });
+        }
+        let report = assert_same(&g, &["exp", "m"], &sources, BAND, what);
+        assert!(report.banded.iter().any(|n| n == "m") && report.whole.is_empty(), "{what}: {report:?}");
+    }
+    let mut g = Graph::new("blend");
+    g.add_node(registry.instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+    g.add_node(registry.instantiate("heeler.brush_mask", "m", Section::Creative).unwrap()).unwrap();
+    g.set_param("m", "strokes", t(blend)).unwrap();
+    g.connect("src", "out", "m", "in").unwrap();
+    let report = assert_same(&g, &["m"], &sources_with(frame(w, h)), BAND, "blend");
+    assert_eq!(report.whole, vec!["m".to_string()]);
+}
+
 /// Transform and Perspective gather each band from the whole photograph,
 /// as the lens does: under their defaults, their sweeps, and a move,
 /// turn and scale together, and a strong keystone with a zoom.

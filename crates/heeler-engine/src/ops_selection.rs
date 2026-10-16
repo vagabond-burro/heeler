@@ -1347,6 +1347,36 @@ pub(crate) fn raster_onto_window(r: &ImageBuf, out: &mut [f32], w: usize, h: usi
     });
 }
 
+/// The rows past a band a Selection mask reads, when it can render one.
+/// Its regions fill per pixel at their place in the frame and its
+/// feathers sum each window fresh, cut at the buffer's edge, so a band
+/// is exact but for the rows each pass's reach brings in from the edge,
+/// in order: Grow (a pixel's distance matters only out to the grow, and
+/// a path that long spans no more rows), Smooth, the polish strokes'
+/// feathers, the Feather. A Key or Samples reads the picture at a point,
+/// a guided feather runs carried sums, a mask past the frame renders its
+/// own canvas: whole.
+pub(crate) fn selection_band_reach(node: &Node, w: usize, h: usize) -> Option<usize> {
+    use crate::ops_masks::{BEYOND_WARP, CANVAS_W, FRAME_W};
+    if [BEYOND_WARP, FRAME_W, CANVAS_W].iter().any(|k| node.params.contains_key(*k))
+        || shapes_sample_points(node)
+        || p_bool(&node.params, "feather_guided", false)
+    {
+        return None;
+    }
+    let short = w.min(h) as f32;
+    let grow = p(&node.params, "grow", 0.0) * 0.05 * short;
+    let mut reach = if grow.abs() < 0.01 { 0 } else { (grow.abs() + 0.5).ceil() as usize + 2 };
+    reach += 2 * (p(&node.params, "smooth", 0.0).max(0.0) * 0.03 * short).round() as usize;
+    let raw = node.params.get("strokes").and_then(|v| v.as_str()).unwrap_or("[]");
+    let strokes: Vec<PolishStroke> = serde_json::from_str(raw).ok()?;
+    for s in strokes.iter().filter(|s| !s.points.is_empty() && s.mode == "feather") {
+        reach += 2 * (s.radius * short).round().max(1.0) as usize;
+    }
+    reach += 2 * (p(&node.params, "feather", 0.0).max(0.0) * 0.05 * short).round() as usize;
+    Some(if reach > 0 { reach + 1 } else { 0 })
+}
+
 pub(crate) fn selection_mask(
     node: &Node,
     inputs: &[(String, Value)],
@@ -1358,7 +1388,7 @@ pub(crate) fn selection_mask(
     // Where this canvas lies in the frame: the frame itself, but for a
     // Warp layer's mask beyond the frame (beyond_render).
     let (cw, ch) = crate::ops_masks::canvas_of(node, src);
-    let win = crate::ops_masks::FrameWindow::from_params(&node.params, cw, ch);
+    let win = crate::ops_masks::FrameWindow::of_node(&node.params, cw, ch);
     let raw = node
         .params
         .get("regions")
