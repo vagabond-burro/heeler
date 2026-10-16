@@ -459,6 +459,23 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
         BandClass::Geometric if node.node_type == "heeler.lens_correct" => {
             if crate::ops_lens::lens_untouched(node).unwrap_or(false) { both(0) } else { None }
         }
+        // The Smart and Object masks: the planted raster resampled to the
+        // frame per pixel, then Expand's pass and Feather's three, carried,
+        // each losing its radius at a band's foot. Drawn shapes that read
+        // the picture at a point of the frame keep the node whole.
+        BandClass::Raster => match node.node_type.as_str() {
+            "heeler.smart_mask" | "heeler.matte_mask" => {
+                if crate::ops_selection::shapes_sample_points(node) {
+                    return None;
+                }
+                let expand = node.node_type == "heeler.smart_mask" && p("expand", 0.0) != 0.0;
+                let r1 = if expand { crate::ops_smart::smart_expand_radius(node, w, h) } else { 0 };
+                let r2 = if p("feather", 0.0) > 0.0 { crate::ops_smart::mask_feather_radius(node, w, h) } else { 0 };
+                let lag = r1 + 3 * r2;
+                both(if lag > 0 { lag + 2 } else { 0 })
+            }
+            _ => None,
+        },
         // A layer on a frame its own size, neither placed nor warped, is
         // composited pixel by pixel: every fit and conform of it is the
         // layer itself. The plan has already sent layers of other sizes
@@ -475,6 +492,12 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
         },
         _ => None,
     }
+}
+
+/// Raster-fed nodes whose operator reads its planted raster a band at a
+/// time, resampling it through the frame's size and row.
+fn reads_raster_in_bands(ty: &str) -> bool {
+    matches!(ty, "heeler.smart_mask" | "heeler.matte_mask")
 }
 
 /// What the banded render knows before its first band. `rendered`
@@ -553,7 +576,7 @@ fn plan(
         // A raster-fed node with nothing planted renders from its inputs
         // alone (an empty mask, its own geometry, a passthrough).
         let fed = node.enabled
-            && ((raster_fed(&node.node_type) && sources.contains_key(planted_id(node)))
+            && ((raster_fed(&node.node_type) && sources.contains_key(planted_id(node)) && !reads_raster_in_bands(&node.node_type))
                 || (normal_slot(&node.node_type) && sources.contains_key(&slot(id, "normal"))));
         let follows = !planted && !fed && same_size;
         // A gather reads its input anywhere, so only a resident input
@@ -603,7 +626,7 @@ fn plan(
     let carried = order
         .iter()
         .filter(|id| matches!(mode[*id], Mode::Rows { .. }))
-        .filter(|id| graph.node(id).is_some_and(|n| n.enabled && class_of(n) == Some(BandClass::Carried)))
+        .filter(|id| graph.node(id).is_some_and(|n| n.enabled && carry_slots(n) > 0))
         .cloned()
         .collect();
     let wide = order
@@ -847,6 +870,9 @@ fn carry_slots(node: &Node) -> usize {
         "heeler.tone_eq" | "heeler.recolor" => 4,
         "heeler.color_console" => 2,
         "heeler.measure" => 1,
+        // Expand's pass and Feather's three; the Object mask feathers only.
+        "heeler.smart_mask" => 4,
+        "heeler.matte_mask" => 3,
         _ => 0,
     }
 }

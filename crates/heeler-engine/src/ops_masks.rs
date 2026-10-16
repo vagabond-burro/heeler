@@ -286,6 +286,16 @@ impl FrameWindow {
         FrameWindow { full_w: w, full_h: h, x0: 0, y0: 0 }
     }
 
+    /// The window a `w` by `h` buffer is in a banded render, when it is
+    /// the band's buffer: the frame's rows from the band's first; the
+    /// whole frame otherwise.
+    pub(crate) fn of_band(w: usize, h: usize) -> FrameWindow {
+        match crate::band::frame() {
+            Some(f) if f.full_w == w && f.rows == h => FrameWindow { full_w: f.full_w, full_h: f.full_h, x0: 0, y0: f.y0 as isize },
+            _ => FrameWindow::whole(w, h),
+        }
+    }
+
     /// The window a `w` by `h` buffer is when it covers `roi` (fractions
     /// of the frame: x, y, width, height).
     pub(crate) fn of(roi: (f32, f32, f32, f32), w: usize, h: usize) -> FrameWindow {

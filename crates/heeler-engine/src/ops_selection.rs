@@ -962,6 +962,15 @@ fn combine_regions(
 /// only what is inside it, at whatever size the render is (the regions
 /// are fractions of the frame). The plane is the whole frame: these
 /// masks are cut for the 1:1 slice on their own wire, after they render.
+/// Whether a node's drawn shapes read the picture's color at a point of
+/// the frame (a Key or a set of Samples), which a band of the frame may
+/// not hold; the banded render takes such a node whole.
+pub(crate) fn shapes_sample_points(node: &Node) -> bool {
+    let raw = node.params.get("regions").and_then(|v| v.as_str()).unwrap_or("[]");
+    let regions: Vec<Region> = serde_json::from_str(raw).unwrap_or_default();
+    regions.iter().any(|r| matches!(r, Region::Key { .. } | Region::Samples { .. }))
+}
+
 pub(crate) fn combine_drawn_shapes(node: &Node, inputs: &[(String, Value)], src: &ImageBuf, mask: &mut MaskBuf) -> Result<(), EngineError> {
     let raw = node.params.get("regions").and_then(|v| v.as_str()).unwrap_or("[]");
     let regions: Vec<Region> =
@@ -970,7 +979,7 @@ pub(crate) fn combine_drawn_shapes(node: &Node, inputs: &[(String, Value)], src:
         return Ok(());
     }
     let (w, h) = (mask.width, mask.height);
-    let win = crate::ops_masks::FrameWindow::whole(w, h);
+    let win = crate::ops_masks::FrameWindow::of_band(w, h);
     let depth_in = crate::ops_depth::plane_for_node(node, inputs, "depth", w, h);
     combine_regions(&mut mask.data, &regions, src, depth_in.as_deref(), w, h, &win);
     Ok(())

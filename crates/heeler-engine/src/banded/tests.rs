@@ -344,3 +344,58 @@ fn the_lens_gathers_each_band_from_the_whole_photograph() {
         assert!(report.banded.iter().any(|n| n == "lens") && report.whole.is_empty(), "set {}: {report:?}", i + 1);
     }
 }
+
+/// The Smart and Object masks band by band: a planted raster of another
+/// size resampled to the frame, Expand and Feather carried down it, drawn
+/// shapes (a path, a marquee, a brush, a subtract) placed on the frame,
+/// inverted and not, gating an Exposure; and a Key region, which reads
+/// the picture at a point and keeps its mask whole.
+#[test]
+fn the_smart_and_object_masks_band_with_their_rasters() {
+    let registry = Registry::builtin();
+    let (w, h) = (157, 131);
+    let mut raster = ImageBuf::new(61, 47);
+    for (i, px) in raster.data.chunks_exact_mut(4).enumerate() {
+        let (x, y) = ((i % 61) as f32 / 61.0, (i / 61) as f32 / 47.0);
+        let v = if (x - 0.5).powi(2) + (y - 0.45).powi(2) < 0.09 { 0.95 } else { 0.05 + 0.1 * x };
+        px.copy_from_slice(&[v, v, v, 1.0]);
+    }
+    let shapes = r#"[{"kind":"path","op":"add","points":[[0.1,0.2],[0.8,0.21],[0.7,0.8],[0.3,0.6]]},{"kind":"marquee","op":"subtract","shape":"ellipse","x0":0.4,"y0":0.35,"x1":0.6,"y1":0.7},{"kind":"brush","op":"add","points":[[0.2,0.9],[0.9,0.85]],"radius":0.04}]"#;
+    let key = r#"[{"kind":"key","op":"add","x":0.3,"y":0.8,"tolerance":0.2}]"#;
+    let cases: Vec<(&str, &str, Vec<(&str, ParamValue)>, bool)> = vec![
+        ("smart, raster", "heeler.smart_mask", vec![("threshold", ParamValue::Number(40.0))], true),
+        ("smart, expand and feather", "heeler.smart_mask", vec![("expand", ParamValue::Number(35.0)), ("feather", ParamValue::Number(20.0))], true),
+        ("smart, shrink, shapes, inverted", "heeler.smart_mask", vec![("expand", ParamValue::Number(-25.0)), ("regions", ParamValue::Text(shapes.into())), ("invert", ParamValue::Bool(true))], true),
+        ("smart, shapes alone", "heeler.smart_mask", vec![("regions", ParamValue::Text(shapes.into())), ("feather", ParamValue::Number(10.0))], false),
+        ("object, raster, feather", "heeler.matte_mask", vec![("feather", ParamValue::Number(30.0))], true),
+        ("object, shapes, feather, no raster", "heeler.matte_mask", vec![("regions", ParamValue::Text(shapes.into())), ("feather", ParamValue::Number(15.0))], false),
+        ("object, nothing drawn, feather", "heeler.matte_mask", vec![("feather", ParamValue::Number(15.0))], false),
+    ];
+    for (what, ty, params, planted) in cases {
+        let mut g = Graph::new("mask");
+        g.add_node(registry.instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+        g.add_node(registry.instantiate(ty, "m", Section::Creative).unwrap()).unwrap();
+        g.add_node(registry.instantiate("heeler.exposure", "exp", Section::Creative).unwrap()).unwrap();
+        for (k, v) in &params {
+            g.set_param("m", k, v.clone()).unwrap();
+        }
+        g.set_param("exp", "exposure", ParamValue::Number(1.0)).unwrap();
+        g.connect("src", "out", "m", "in").unwrap();
+        g.connect("src", "out", "exp", "in").unwrap();
+        g.connect("m", "out", "exp", "mask").unwrap();
+        let mut sources = sources_with(frame(w, h));
+        if planted {
+            sources.insert("m".into(), SourceImage { image: Arc::new(raster.clone()), version: 1, measured: false });
+        }
+        let report = assert_same(&g, &["exp", "m"], &sources, BAND, what);
+        assert!(report.banded.iter().any(|n| n == "m") && report.whole.is_empty(), "{what}: {report:?}");
+    }
+    // A Key reads the picture's color at a point of the frame: whole.
+    let mut g = Graph::new("key");
+    g.add_node(registry.instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+    g.add_node(registry.instantiate("heeler.smart_mask", "m", Section::Creative).unwrap()).unwrap();
+    g.set_param("m", "regions", ParamValue::Text(key.into())).unwrap();
+    g.connect("src", "out", "m", "in").unwrap();
+    let report = assert_same(&g, &["m"], &sources_with(frame(w, h)), BAND, "key");
+    assert_eq!(report.whole, vec!["m".to_string()]);
+}

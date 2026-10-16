@@ -12,7 +12,7 @@ use heeler_graph::Node;
 
 use crate::buffers::{MaskBuf, Value};
 use crate::executor::EngineError;
-use crate::ops::{box_blur_pass, image_input, p, p_bool};
+use crate::ops::{box_blur_pass_lag, image_input, p, p_bool};
 
 /// The soft band around the threshold: a hard step aliases the mask
 /// edge, and SAM's confidence falls off over a few percent anyway.
@@ -64,11 +64,13 @@ pub(crate) fn smart_mask(node: &Node, inputs: &[(String, Value)]) -> Result<Valu
     // Expand or contract: blur the cut mask, then re-cut it low (grow)
     // or high (shrink). Blur radius carries the amount, so the control
     // is continuous and its cost tracks its size.
+    // In a band, the passes below lose rows at the band's foot: `lag`.
+    let mut lag = 0;
     let expand = p(&node.params, "expand", 0.0).clamp(-100.0, 100.0);
     if expand != 0.0 {
-        let radius = ((expand.abs() / 100.0) * 0.08 * w.min(h) as f32).max(1.0) as usize;
+        let radius = smart_expand_radius(node, w, h);
         let mut scratch = vec![0.0f32; w * h];
-        box_blur_pass(&mut mask.data, &mut scratch, w, h, radius);
+        lag = box_blur_pass_lag(&mut mask.data, &mut scratch, w, h, radius, lag);
         let cut = if expand > 0.0 { 0.12 } else { 0.88 };
         mask.data.par_iter_mut().for_each(|v| {
             *v = smoothstep(cut - 0.1, cut + 0.1, *v);
@@ -87,10 +89,10 @@ pub(crate) fn smart_mask(node: &Node, inputs: &[(String, Value)]) -> Result<Valu
     // final shape. Three box passes read as gaussian.
     let feather = p(&node.params, "feather", 0.0).clamp(0.0, 100.0);
     if feather > 0.0 {
-        let radius = ((feather / 100.0) * 0.06 * w.min(h) as f32).max(1.0) as usize;
+        let radius = mask_feather_radius(node, w, h);
         let mut scratch = vec![0.0f32; w * h];
         for _ in 0..3 {
-            box_blur_pass(&mut mask.data, &mut scratch, w, h, radius);
+            lag = box_blur_pass_lag(&mut mask.data, &mut scratch, w, h, radius, lag);
         }
     }
 
@@ -104,14 +106,33 @@ pub(crate) fn smart_mask(node: &Node, inputs: &[(String, Value)]) -> Result<Valu
 }
 
 /// The raster's R channel, bilinearly sampled to the mask's size.
+/// Smart Mask's Expand radius: a share of the frame's short side, which
+/// a band of the frame shares.
+pub(crate) fn smart_expand_radius(node: &Node, w: usize, h: usize) -> usize {
+    let (w, h, _) = crate::band::placed(w, h);
+    let expand = p(&node.params, "expand", 0.0).clamp(-100.0, 100.0);
+    ((expand.abs() / 100.0) * 0.08 * w.min(h) as f32).max(1.0) as usize
+}
+
+/// The Smart and Object masks' Feather radius, likewise.
+pub(crate) fn mask_feather_radius(node: &Node, w: usize, h: usize) -> usize {
+    let (w, h, _) = crate::band::placed(w, h);
+    let feather = p(&node.params, "feather", 0.0).clamp(0.0, 100.0);
+    ((feather / 100.0) * 0.06 * w.min(h) as f32).max(1.0) as usize
+}
+
+/// The planted raster resampled to the frame, a band of it the frame's
+/// rows from the band's first.
 fn resample_r(raster: &crate::buffers::ImageBuf, mask: &mut MaskBuf) {
     use rayon::prelude::*;
-    let (w, h) = (mask.width, mask.height);
+    let (w, _) = (mask.width, mask.height);
+    let (_, h, y0) = crate::band::placed(mask.width, mask.height);
     let (rw, rh) = (raster.width, raster.height);
     mask.data
         .par_chunks_mut(w)
         .enumerate()
         .for_each(|(y, mask_row)| {
+            let y = y + y0;
             let sy = ((y as f32 + 0.5) * rh as f32 / h as f32 - 0.5).clamp(0.0, (rh - 1) as f32);
             let y0 = sy.floor() as usize;
             let y1 = (y0 + 1).min(rh - 1);
@@ -149,11 +170,16 @@ pub(crate) fn matte_mask(node: &Node, inputs: &[(String, Value)]) -> Result<Valu
     // Shapes drawn on it with the selection tools, as on a Smart mask.
     crate::ops_selection::combine_drawn_shapes(node, inputs, src, &mut mask)?;
     let feather = p(&node.params, "feather", 0.0).clamp(0.0, 100.0);
-    if feather > 0.0 && (raster.is_some() || mask.data.iter().any(|v| *v != 0.0)) {
-        let radius = ((feather / 100.0) * 0.06 * w.min(h) as f32).max(1.0) as usize;
+    // A band cannot see whether the frame's mask is empty, and its
+    // passes carry from band to band, so it always feathers: an empty
+    // mask feathered is the same zeros the whole frame skips making.
+    let banded = crate::band::frame().is_some();
+    if feather > 0.0 && (banded || raster.is_some() || mask.data.iter().any(|v| *v != 0.0)) {
+        let radius = mask_feather_radius(node, w, h);
         let mut scratch = vec![0.0f32; w * h];
+        let mut lag = 0;
         for _ in 0..3 {
-            box_blur_pass(&mut mask.data, &mut scratch, w, h, radius);
+            lag = box_blur_pass_lag(&mut mask.data, &mut scratch, w, h, radius, lag);
         }
     }
     if p_bool(&node.params, "invert", false) {
