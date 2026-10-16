@@ -389,6 +389,9 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
                 both(if radius > 0.0 { wide(radius) } else { 0 })
             }
             "heeler.halation" => crate::ops_halation::halation_reach(node, w, h).map(|r| (r, r)),
+            // Shadow, Glow and Bevel spread the alpha over a padded plane
+            // and blur it: the blur's reach on that plane and the offset.
+            "heeler.fx_shadow" | "heeler.fx_glow" | "heeler.fx_bevel" => both(crate::ops_fx::fx_reach(node, w, h)),
             // A high pass at Softening, then a blur at Detail back of it.
             "heeler.skin_soften" => both(wide(p("softening", 8.0).max(0.0)) + wide(p("detail_back", 4.0).max(0.0))),
             _ => None,
@@ -904,6 +907,8 @@ fn wide_slots(node: &Node) -> usize {
         "heeler.skin_soften" => 3,
         // A gaussian Blur of color and alpha.
         "heeler.blur" => 2,
+        // The spread alpha's blur.
+        "heeler.fx_shadow" | "heeler.fx_glow" | "heeler.fx_bevel" => 1,
         _ => 0,
     }
 }
@@ -924,6 +929,9 @@ fn wide_bytes(node: &Node, w: usize, h: usize) -> Result<usize, EngineError> {
         "heeler.high_pass" | "heeler.sharpening" => vec![p("radius", 3.0).max(0.0) * scale],
         "heeler.skin_soften" => vec![p("softening", 8.0).max(0.0), p("detail_back", 4.0).max(0.0)],
         "heeler.blur" => vec![p("radius", 0.0).max(0.0) * scale],
+        // On a plane padded past the frame; its block factor is the same.
+        "heeler.fx_shadow" | "heeler.fx_glow" => vec![(p("size", 12.0).max(0.0) * scale / 2.0).max(0.3)],
+        "heeler.fx_bevel" => vec![(p("size", 6.0).max(1.0) * scale / 2.0).max(0.3)],
         _ => Vec::new(),
     };
     let factor = sigmas.iter().filter_map(|s| crate::ops_detail::wide_blur_factor(*s, w, h)).min();

@@ -43,20 +43,47 @@ fn spread_alpha(
     invert: bool,
     gain: f32,
 ) -> Vec<f32> {
-    let (w, h) = (src.width, src.height);
+    let (w, bh) = (src.width, src.height);
+    // In a banded render the buffer is rows `b0..` of a frame `h` tall.
+    let (_, h, b0) = crate::band::placed(w, bh);
     // Keep the shifted silhouette beyond the frame while it softens
     // back into view. Clamp-to-edge on the original frame turned a
     // border pixel into a bar, and cutting before blur lost shadows.
     let sigma = radius / 2.0;
     let pad = (2.5 * sigma).ceil() as usize + dx.abs().ceil().max(dy.abs().ceil()) as usize + 1;
     let (pw, ph) = (w + 2 * pad, h + 2 * pad);
-    let mut plane = ImageBuf::new(pw, ph);
+    // The frame's alpha at (x, y) of the frame: none past it; in a band,
+    // the buffer holds rows b0..b0 + bh (held at its edge past them,
+    // which only reaches rows the margin keeps out of the band).
     let alpha_at = |x: i64, y: i64| {
         if x < 0 || y < 0 || x >= w as i64 || y >= h as i64 { 0.0 }
-        else { src.pixel(x as usize, y as usize)[3].clamp(0.0, 1.0) }
+        else { src.pixel(x as usize, (y - b0 as i64).clamp(0, bh as i64 - 1) as usize)[3].clamp(0.0, 1.0) }
     };
+    // Which of the padded plane's rows this buffer makes exactly: all of
+    // them for the whole frame; for a band, those whose four taps' rows
+    // are in the buffer or past the frame.
+    let exact = |py: usize| {
+        let iy = (py as f32 - pad as f32 - dy).floor() as i64;
+        let row_ok = |r: i64| r < 0 || r >= h as i64 || (r >= b0 as i64 && r < (b0 + bh) as i64);
+        row_ok(iy) && row_ok(iy + 1)
+    };
+    // The run of exact rows through the band's own rows (the rows past
+    // the frame are exact too, a run of their own when the band is not at
+    // the frame's edge).
+    let (p0, p1) = if bh == h {
+        (0, ph)
+    } else {
+        // The plane row whose taps read the buffer's middle row: exact,
+        // and the margin (fx_reach) keeps every row read out in its run.
+        let mid = ((b0 + bh / 2 + pad) as f32 + dy).round().clamp(0.0, (ph - 1) as f32) as usize;
+        let p0 = (0..=mid).rev().take_while(|&py| exact(py)).last().unwrap_or(mid);
+        let p1 = (mid..ph).take_while(|&py| exact(py)).last().map_or(mid, |py| py + 1);
+        (p0, p1)
+    };
+    let mut plane = ImageBuf::new(pw, p1 - p0);
     use rayon::prelude::*;
     plane.data.par_chunks_mut(pw * 4).enumerate().for_each(|(y, row)| {
+        let y = y + p0;
         for x in 0..pw {
             // Fractional offsets survive a reduced preview instead of
             // rounding to different photograph pixels at each tier.
@@ -72,18 +99,41 @@ fn spread_alpha(
             row[x * 4 + 3] = 1.0;
         }
     });
-    if radius >= 0.5 {
+    if radius >= 0.5 && plane.height > 0 {
         // Wide effects use the same reduced Gaussian as wide Blur,
-        // rather than hundreds of taps per full-resolution pixel.
-        plane = gaussian_blur_wide(&plane, sigma.max(0.3));
+        // rather than hundreds of taps per full-resolution pixel. In a
+        // band, the rows made are rows p0.. of the whole padded plane, and
+        // the blur reads them so.
+        let wide = || gaussian_blur_wide(&plane, sigma.max(0.3));
+        plane = match crate::band::frame() {
+            None => wide(),
+            Some(_) => crate::band::with_frame(crate::band::BandFrame { full_w: pw, full_h: ph, y0: p0, rows: p1 - p0 }, wide),
+        };
     }
-    let mut out = vec![0.0f32; w * h];
+    let mut out = vec![0.0f32; w * bh];
     out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+        // The frame's row y in the plane's rows made, held at their edge
+        // past them (rows the margin keeps out of the band).
+        let py = (y + b0 + pad).clamp(p0, p1.max(p0 + 1) - 1) - p0;
         for (x, o) in row.iter_mut().enumerate() {
-            *o = (plane.data[((y + pad) * pw + x + pad) * 4] * gain).clamp(0.0, 1.0);
+            *o = plane.data.get((py * pw + x + pad) * 4).map_or(0.0, |v| (v * gain).clamp(0.0, 1.0));
         }
     });
     out
+}
+
+/// How many frame rows a layer effect reads past a row in a banded render:
+/// its blur's reach on the padded plane, the shadow's offset, and a row
+/// for the bevel's slope.
+pub(crate) fn fx_reach(node: &Node, w: usize, h: usize) -> usize {
+    let bevel = node.node_type == "heeler.fx_bevel";
+    let scale = px_scale(&node.params);
+    let radius = if bevel { p(&node.params, "size", 6.0).max(1.0) } else { p(&node.params, "size", 12.0).max(0.0) } * scale;
+    let distance = if node.node_type == "heeler.fx_shadow" { p(&node.params, "distance", 0.0).max(0.0) * scale } else { 0.0 };
+    let sigma = radius / 2.0;
+    let pad = (2.5 * sigma).ceil() as usize + distance.ceil() as usize + 1;
+    let blur = if radius >= 0.5 { crate::ops_detail::wide_blur_band_reach(sigma.max(0.3), w + 2 * pad, h + 2 * pad) } else { 0 };
+    blur + distance.ceil() as usize + 2 + bevel as usize
 }
 
 fn color_of(node: &Node, key: &str, fallback: [f32; 3]) -> [f32; 3] {
