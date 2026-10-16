@@ -141,24 +141,28 @@ fn one_node(registry: &Registry, ty: &str, params: &[(String, ParamValue)]) -> G
 #[test]
 fn every_node_type_renders_the_same_in_bands() {
     let registry = Registry::builtin();
-    let sources = sources_with(frame(61, 47));
     let mut banded_types = std::collections::BTreeSet::new();
     let mut whole_types = std::collections::BTreeSet::new();
-    for ty in registry.types() {
-        if matches!(ty, "heeler.image_source" | "heeler.file" | "heeler.catalog") {
-            continue;
-        }
-        for (i, params) in param_sets(&registry, ty).iter().enumerate() {
-            let g = one_node(&registry, ty, params);
-            // A set the whole frame itself refuses is not a banding question.
-            if Executor::new().render(&g, "n", &sources).is_err() {
+    // A frame the big margins swallow whole, and one the bands sit well
+    // inside, so a band's slab edge falls mid-frame.
+    for (w, h) in [(61, 47), (157, 131)] {
+        let sources = sources_with(frame(w, h));
+        for ty in registry.types() {
+            if matches!(ty, "heeler.image_source" | "heeler.file" | "heeler.catalog") {
                 continue;
             }
-            let report = assert_same(&g, &["n"], &sources, BAND, &format!("{ty}, set {}", i + 1));
-            if report.banded.iter().any(|n| n == "n") {
-                banded_types.insert(ty.to_string());
-            } else {
-                whole_types.insert(ty.to_string());
+            for (i, params) in param_sets(&registry, ty).iter().enumerate() {
+                let g = one_node(&registry, ty, params);
+                // A set the whole frame itself refuses is not a banding question.
+                if Executor::new().render(&g, "n", &sources).is_err() {
+                    continue;
+                }
+                let report = assert_same(&g, &["n"], &sources, BAND, &format!("{ty}, set {}, {w} by {h}", i + 1));
+                if report.banded.iter().any(|n| n == "n") {
+                    banded_types.insert(ty.to_string());
+                } else {
+                    whole_types.insert(ty.to_string());
+                }
             }
         }
     }

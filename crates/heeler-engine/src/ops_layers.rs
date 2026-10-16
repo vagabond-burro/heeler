@@ -228,7 +228,12 @@ fn motion_blur(src: &ImageBuf, length: f32, angle_deg: f32) -> ImageBuf {
     let rad = angle_deg.to_radians();
     let (dx, dy) = (rad.cos(), rad.sin());
     let mut out = ImageBuf::new(src.width, src.height);
-    let (w, h) = (src.width as f32, src.height as f32);
+    // Sampled in the frame's coordinates, which a band's buffer is rows
+    // `y0..` of: a tap's row is the frame's row, rounded as the frame
+    // rounds it, then read from the buffer.
+    let (_, fh, y0) = crate::band::placed(src.width, src.height);
+    let (w, h) = (src.width as f32, fh as f32);
+    let held = src.height;
     // PERF: the sample loop used to run serially over the whole frame.
     // It now parallelizes over rows; each output pixel still walks the
     // same centered tap sequence (k from -steps/2 to steps/2) with the
@@ -244,7 +249,8 @@ fn motion_blur(src: &ImageBuf, length: f32, angle_deg: f32) -> ImageBuf {
                 // picture sideways as well as smearing it.
                 for k in -steps / 2..=steps / 2 {
                     let sx = (x as f32 + dx * k as f32).clamp(0.0, w - 1.0) as usize;
-                    let sy = (y as f32 + dy * k as f32).clamp(0.0, h - 1.0) as usize;
+                    let sy = ((y + y0) as f32 + dy * k as f32).clamp(0.0, h - 1.0) as usize;
+                    let sy = sy.clamp(y0, y0 + held - 1) - y0;
                     let i = (sy * src.width + sx) * 4;
                     for c in 0..4 {
                         acc[c] += src.data[i + c];

@@ -311,7 +311,9 @@ fn rank_plane(vals: &[f32], keys: &[u16], w: usize, h: usize, half: usize, pct: 
 /// photograph's pixels times px_scale, to the nearest whole pixel, held
 /// at MEDIAN_MAX_HALF and under the frame's diagonal. Not finite or
 /// under half a pixel is no window at all.
-fn median_half(node: &Node, w: usize, h: usize) -> usize {
+pub(crate) fn median_half(node: &Node, w: usize, h: usize) -> usize {
+    // Capped by the frame's diagonal, which a band of the frame shares.
+    let (w, h, _) = crate::band::placed(w, h);
     let radius = p(&node.params, "radius", 2.0);
     let r = radius.min(MEDIAN_MAX_HALF) * px_scale(&node.params);
     if !radius.is_finite() || r < 0.5 {
@@ -322,7 +324,7 @@ fn median_half(node: &Node, w: usize, h: usize) -> usize {
 }
 
 /// The percentile as a share, 0..1; NaN is the median.
-fn median_pct(node: &Node) -> f32 {
+pub(crate) fn median_pct(node: &Node) -> f32 {
     finite_or(p(&node.params, "percentile", 50.0), 50.0).clamp(0.0, 100.0) / 100.0
 }
 

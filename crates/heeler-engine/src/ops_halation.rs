@@ -66,7 +66,10 @@ pub(crate) fn halation(node: &Node, inputs: &[(String, Value)]) -> Result<Value,
     // the full frame's short side.
     let rw = p(&node.params, "roi_w", 1.0).max(1e-4);
     let rh = p(&node.params, "roi_h", 1.0).max(1e-4);
-    let short = (w as f32 / rw).min(h as f32 / rh);
+    // The radii are fractions of the frame's short side, which a band
+    // of the frame shares.
+    let (fw, fh, _) = crate::band::placed(w, h);
+    let short = (fw as f32 / rw).min(fh as f32 / rh);
     let format = node.params.get("format").and_then(|v| v.as_str()).unwrap_or("35mm");
     let scale = format_scale(format);
     let threshold_stops = p(&node.params, "threshold", 50.0) / 100.0 * 4.0; // 0..4 stops above gray
@@ -197,6 +200,39 @@ pub(crate) fn halation(node: &Node, inputs: &[(String, Value)]) -> Result<Value,
 }
 
 /// Whether a halation node wants the depth plane: its desktop planting rule.
+/// How many frame rows Halation reads past a row, for a frame `w` by `h`:
+/// the background gate's blur at Radius, then the widest of the halo, the
+/// ring and the bloom it blurs the gated light by. None for the "source"
+/// view, which divides by the frame's peak.
+pub(crate) fn halation_reach(node: &Node, w: usize, h: usize) -> Option<usize> {
+    let amount = p(&node.params, "amount", 100.0) / 100.0;
+    let mix = p(&node.params, "mix", 100.0) / 100.0;
+    let bloom = p(&node.params, "bloom", 0.0) / 100.0;
+    let view = node.params.get("view").and_then(|v| v.as_str()).unwrap_or("");
+    if view == "source" {
+        return None;
+    }
+    if (amount <= 0.0 || mix <= 0.0) && bloom <= 0.0 {
+        return Some(0);
+    }
+    let rw = p(&node.params, "roi_w", 1.0).max(1e-4);
+    let rh = p(&node.params, "roi_h", 1.0).max(1e-4);
+    let short = (w as f32 / rw).min(h as f32 / rh);
+    let scale = format_scale(node.params.get("format").and_then(|v| v.as_str()).unwrap_or("35mm"));
+    let radius = (p(&node.params, "radius", 4.0) / 100.0 * short * scale).max(0.5);
+    let bloom_radius = (p(&node.params, "bloom_radius", 20.0) / 100.0 * short * scale).max(0.5);
+    let reach = |s: f32| crate::ops_detail::wide_blur_reach(s, w, h);
+    let gate = if p(&node.params, "background", 50.0) > 0.0 { reach(radius) } else { 0 };
+    let mut glow = 0;
+    if amount > 0.0 {
+        glow = glow.max(reach(radius)).max(reach(radius * 0.45));
+    }
+    if bloom > 0.0 {
+        glow = glow.max(reach(bloom_radius));
+    }
+    Some(gate + glow)
+}
+
 pub fn halation_wants_depth(params: &std::collections::HashMap<String, serde_json::Value>) -> bool {
     params.get("by_depth").and_then(|v| v.as_f64()).unwrap_or(0.0) != 0.0
 }

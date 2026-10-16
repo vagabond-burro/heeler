@@ -177,27 +177,40 @@ const WIDE_BLUR_TARGET_SIGMA: f32 = 6.0;
 /// a fraction of the frame, interactive.
 pub(crate) fn gaussian_blur_wide(src: &ImageBuf, sigma: f32) -> ImageBuf {
     let (w, h) = (src.width, src.height);
+    // In a banded render the buffer is rows `y0..` of a frame `fh` tall,
+    // and the path, the block grid and the draw-up are the frame's: the
+    // grid is anchored at the frame's first row, only the blocks wholly
+    // inside the buffer are averaged (or the frame's own partial last
+    // block), and each row draws up from the blocks the frame's row
+    // would. Rows near the buffer's edges come out wrong; the banded
+    // render's margin (wide_blur_reach) keeps them out of the band.
+    let (_, fh, y0) = crate::band::placed(w, h);
     let factor = (sigma / WIDE_BLUR_TARGET_SIGMA).floor() as usize;
-    if sigma <= WIDE_BLUR_SIGMA || factor < 2 || w < 4 * factor || h < 4 * factor {
+    if sigma <= WIDE_BLUR_SIGMA || factor < 2 || w < 4 * factor || fh < 4 * factor {
         return gaussian_blur(src, sigma);
     }
     use rayon::prelude::*;
-    let (sw, sh) = (w.div_ceil(factor), h.div_ceil(factor));
+    let (sw, sh) = (w.div_ceil(factor), fh.div_ceil(factor));
+    // The frame's block rows this buffer holds whole.
+    let s0 = y0.div_ceil(factor);
+    let s1 = if y0 + h == fh { sh } else { (y0 + h) / factor };
+    let s1 = s1.max(s0);
     // Down: each small pixel is the mean of its block, clipped at the
     // frame's edge so a partial block averages only what is there.
-    let mut small = ImageBuf::new(sw, sh);
+    let mut small = ImageBuf::new(sw, s1 - s0);
     small
         .data
         .par_chunks_mut(sw * 4)
         .enumerate()
-        .for_each(|(sy, row)| {
-            let y0 = sy * factor;
-            let y1 = (y0 + factor).min(h);
+        .for_each(|(r, row)| {
+            let sy = s0 + r;
+            let fy0 = sy * factor;
+            let fy1 = (fy0 + factor).min(fh);
             for sx in 0..sw {
                 let x0 = sx * factor;
                 let x1 = (x0 + factor).min(w);
                 let mut acc = [0.0f32; 3];
-                for y in y0..y1 {
+                for y in fy0 - y0..fy1 - y0 {
                     let base = (y * w + x0) * 4;
                     for px in src.data[base..base + (x1 - x0) * 4].chunks(4) {
                         acc[0] += px[0];
@@ -205,7 +218,7 @@ pub(crate) fn gaussian_blur_wide(src: &ImageBuf, sigma: f32) -> ImageBuf {
                         acc[2] += px[2];
                     }
                 }
-                let n = ((y1 - y0) * (x1 - x0)) as f32;
+                let n = ((fy1 - fy0) * (x1 - x0)) as f32;
                 let o = sx * 4;
                 row[o] = acc[0] / n;
                 row[o + 1] = acc[1] / n;
@@ -213,28 +226,37 @@ pub(crate) fn gaussian_blur_wide(src: &ImageBuf, sigma: f32) -> ImageBuf {
                 row[o + 3] = 1.0;
             }
         });
+    if small.height == 0 {
+        // No whole block in the buffer: nothing here is in the band.
+        return gaussian_blur(src, sigma);
+    }
+    // A direct kernel: its clamps at the held blocks' edges only reach
+    // rows the margin keeps out of the band.
     let blurred = gaussian_blur(&small, sigma / factor as f32);
     // Up: bilinear between small-pixel centers, clamped at the edges,
     // alpha copied through from the source as gaussian_blur does.
     let mut out = ImageBuf::new(w, h);
     let f = factor as f32;
+    let held = small.height;
     out.data
         .par_chunks_mut(w * 4)
         .enumerate()
         .for_each(|(y, row)| {
-            let fy = ((y as f32 + 0.5) / f - 0.5).clamp(0.0, (sh - 1) as f32);
-            let y0 = fy.floor() as usize;
-            let y1 = (y0 + 1).min(sh - 1);
-            let ty = fy - y0 as f32;
+            let fy = (((y + y0) as f32 + 0.5) / f - 0.5).clamp(0.0, (sh - 1) as f32);
+            let fy0 = fy.floor() as usize;
+            let fy1 = (fy0 + 1).min(sh - 1);
+            let ty = fy - fy0 as f32;
+            // The blocks the frame's row reads, as rows of the ones held.
+            let (y0s, y1s) = (fy0.clamp(s0, s0 + held - 1) - s0, fy1.clamp(s0, s0 + held - 1) - s0);
             for x in 0..w {
                 let fx = ((x as f32 + 0.5) / f - 0.5).clamp(0.0, (sw - 1) as f32);
                 let x0 = fx.floor() as usize;
                 let x1 = (x0 + 1).min(sw - 1);
                 let tx = fx - x0 as f32;
-                let i00 = (y0 * sw + x0) * 4;
-                let i01 = (y0 * sw + x1) * 4;
-                let i10 = (y1 * sw + x0) * 4;
-                let i11 = (y1 * sw + x1) * 4;
+                let i00 = (y0s * sw + x0) * 4;
+                let i01 = (y0s * sw + x1) * 4;
+                let i10 = (y1s * sw + x0) * 4;
+                let i11 = (y1s * sw + x1) * 4;
                 let o = x * 4;
                 for c in 0..3 {
                     let top = blurred.data[i00 + c] * (1.0 - tx) + blurred.data[i01 + c] * tx;
@@ -245,6 +267,19 @@ pub(crate) fn gaussian_blur_wide(src: &ImageBuf, sigma: f32) -> ImageBuf {
             }
         });
     out
+}
+
+/// How many frame rows gaussian_blur_wide reads past a row, for a frame
+/// `w` by `h`: the direct kernel's 2.5 sigma, or on the reduced path the
+/// small blur's reach in blocks, the draw-up's neighbor block and the
+/// block itself, in frame rows. A band grows by this to be exact.
+pub(crate) fn wide_blur_reach(sigma: f32, w: usize, h: usize) -> usize {
+    let factor = (sigma / WIDE_BLUR_TARGET_SIGMA).floor() as usize;
+    if sigma <= WIDE_BLUR_SIGMA || factor < 2 || w < 4 * factor || h < 4 * factor {
+        return if sigma > 0.0 { (2.5 * sigma).ceil() as usize } else { 0 };
+    }
+    let small = (2.5 * (sigma / factor as f32)).ceil() as usize;
+    (small + 3) * factor
 }
 
 /// A plane smoothed by the guided filter, guided by itself (He, Sun and

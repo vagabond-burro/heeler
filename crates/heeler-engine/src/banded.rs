@@ -307,21 +307,91 @@ struct Plan {
     crops: HashMap<String, CropGeom>,
 }
 
-/// The margin a node's rows grow by, above and below, when the banded
-/// render follows it; None when it does not yet. Pointwise nodes read
-/// their own rows. The classes that need more (windows, carried sums,
-/// statistics) are taken up one operator at a time, each with a test
-/// that holds its bands to its whole frame.
-fn margin(node: &Node) -> Option<(usize, usize)> {
+/// The margin a node's rows grow by, above and below, for a frame `w`
+/// by `h`, when the banded render follows it; None when it does not
+/// yet. Pointwise nodes read their own rows. A window's margin is at
+/// least its reach, so a kept row never reads past its band's slab
+/// (where the operator would clamp to the slab's edge rather than the
+/// frame's) and only a band at the frame's own edge clamps, as the
+/// frame does. Each operator here is held to its whole frame, bit for
+/// bit, by the tests.
+fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
     if !node.enabled {
         return Some((0, 0));
     }
+    let p = |k: &str, d: f64| ops::p(&node.params, k, d);
+    let both = |r: usize| Some((r, r));
+    // A gaussian_blur_wide of sigma `s` on this frame.
+    let wide = |s: f32| crate::ops_detail::wide_blur_reach(s, w, h);
     match class_of(node)? {
         BandClass::Pointwise => Some((0, 0)),
+        BandClass::Neighborhood => match node.node_type.as_str() {
+            // A gaussian of sigma 0.6 + 2.4 * strength, 2.5 sigma of taps.
+            "heeler.denoise" => {
+                let s = p("strength", 0.0) / 100.0;
+                if s <= 0.0 { both(0) } else { both((2.5 * (0.6 + 2.4 * s)).ceil() as usize) }
+            }
+            // A 7 by 7 search, each neighbor compared over a 5 by 5 block.
+            "heeler.nlm_denoise" => both(5),
+            // The eight neighbors; the frame's border is left alone.
+            "heeler.hot_pixel" => both(1),
+            "heeler.median" | "heeler.median_mask" => {
+                let half = crate::ops_advanced::median_half(node, w, h);
+                let pct = crate::ops_advanced::median_pct(node);
+                // Percentile 0 or 100 is a min or max that folds the whole
+                // frame once the window covers it.
+                let diag = ((w * w + h * h) as f64).sqrt().ceil() as usize;
+                if (pct <= 0.0 || pct >= 1.0) && half >= diag { None } else { both(half) }
+            }
+            "heeler.morphology" => {
+                let half = crate::ops_field::morph_half(node);
+                let round = node.params.get("shape").and_then(|v| v.as_str()) != Some("square");
+                let reach_all = if round { ((w * w + h * h) as f64).sqrt().ceil() as usize } else { w.max(h) };
+                let passes = match node.params.get("mode").and_then(|v| v.as_str()) {
+                    Some("open") | Some("close") => 2,
+                    _ => 1,
+                };
+                if half >= reach_all { None } else { both(passes * half) }
+            }
+            // The smoothing gaussian's 3 sigma and the operator's pixel.
+            "heeler.edge_field" => {
+                let sigma = crate::ops_field::edge_sigma(node, w, h);
+                both(if sigma > 0.05 { (3.0 * sigma).ceil() as usize } else { 0 } + 1)
+            }
+            // A pixel's neighbors, one each way.
+            "heeler.depth_normals" => both(1),
+            "heeler.blur" => {
+                let radius = p("radius", 0.0).max(0.0) * ops::px_scale(&node.params);
+                if radius <= 0.0 {
+                    return both(0);
+                }
+                match node.params.get("kind").and_then(|v| v.as_str()) {
+                    Some("box") => both(radius.round() as usize),
+                    // Centered taps, steps / 2 each way along the angle.
+                    Some("motion") => {
+                        let steps = ((radius * 2.0).round() as isize).max(1);
+                        let dy = p("angle", 0.0).to_radians().sin().abs();
+                        both((dy * (steps / 2) as f32).ceil() as usize + 1)
+                    }
+                    _ => both(wide(radius)),
+                }
+            }
+            "heeler.high_pass" | "heeler.sharpening" => {
+                let radius = p("radius", 3.0).max(0.0) * ops::px_scale(&node.params);
+                both(if radius > 0.0 { wide(radius) } else { 0 })
+            }
+            "heeler.halation" => crate::ops_halation::halation_reach(node, w, h).map(|r| (r, r)),
+            // A high pass at Softening, then a blur at Detail back of it.
+            "heeler.skin_soften" => both(wide(p("softening", 8.0).max(0.0)) + wide(p("detail_back", 4.0).max(0.0))),
+            _ => None,
+        },
         _ => None,
     }
 }
 
+/// What the banded render knows before its first band. `rendered`
+/// holds the sizes of nodes already rendered whole, which stand over
+/// what their inputs say (a layer effect pads its frame).
 fn plan(
     graph: &Graph,
     terminals: &[&str],
@@ -397,7 +467,7 @@ fn plan(
         } else if is_crop {
             if bc == 4 { Mode::Crop } else { Mode::Resident }
         } else {
-            match margin(node) {
+            match margin(node, bw, bh) {
                 Some((top, bottom)) => Mode::Rows { top, bottom },
                 None => Mode::Resident,
             }

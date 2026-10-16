@@ -164,8 +164,13 @@ pub(crate) fn extreme(data: &[f32], w: usize, h: usize, half: usize, round: bool
     // diagonal, a square past the long side) is the frame's own
     // extreme everywhere: answered directly, so a typed radius of a
     // million costs what a radius of the frame does.
-    let reach_all = if round { ((w * w + h * h) as f64).sqrt().ceil() as usize } else { w.max(h) };
+    // Whether the window covers the whole frame, a band of it included:
+    // the banded render takes such a node whole (banded.rs margin), so a
+    // band never folds only its own rows.
+    let (fw, fh, _) = crate::band::placed(w, h);
+    let reach_all = if round { ((fw * fw + fh * fh) as f64).sqrt().ceil() as usize } else { fw.max(fh) };
     if half >= reach_all {
+        debug_assert!(crate::band::frame().is_none(), "a band folds only its own rows");
         let all = data.iter().fold(op.neutral(), |a, &v| op.pick(a, v));
         return vec![all; data.len()];
     }
@@ -179,7 +184,7 @@ pub(crate) fn extreme(data: &[f32], w: usize, h: usize, half: usize, round: bool
 /// The window's half-width in this buffer's pixels: the radius in the
 /// photograph's pixels times px_scale, to the nearest whole pixel. Not
 /// finite or below half a pixel is no window at all.
-fn morph_half(node: &Node) -> usize {
+pub(crate) fn morph_half(node: &Node) -> usize {
     let r = p(&node.params, "radius", 2.0) * px_scale(&node.params);
     if !r.is_finite() || r < 0.5 {
         return 0;
@@ -597,7 +602,8 @@ pub(crate) fn finite_or(v: f32, d: f32) -> f32 {
 /// kernel is already 385 taps a pass: the slider stops at 10, and a
 /// typed scale past 64 photograph pixels measures at 64 before preview
 /// scaling, keeping the same footprint at every tier.
-fn edge_sigma(node: &Node, w: usize, h: usize) -> f32 {
+pub(crate) fn edge_sigma(node: &Node, w: usize, h: usize) -> f32 {
+    let (w, h, _) = crate::band::placed(w, h);
     let scale = p(&node.params, "scale", 1.0);
     let s = scale.min(64.0) * px_scale(&node.params);
     if scale.is_finite() && s > 0.0 { s.min(w.max(h) as f32) } else { 0.0 }
