@@ -132,6 +132,52 @@ pub fn class_of(node: &Node) -> Option<BandClass> {
     })
 }
 
+/// Where the buffer an operator is handed sits in its frame, while a
+/// banded render runs it: the frame's whole size, and the frame row the
+/// buffer's first row is. Full-width bands, so the column is always 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct BandFrame {
+    pub(crate) full_w: usize,
+    pub(crate) full_h: usize,
+    pub(crate) y0: usize,
+}
+
+thread_local! {
+    static FRAME: std::cell::Cell<Option<BandFrame>> = const { std::cell::Cell::new(None) };
+}
+
+/// The frame the current operator's buffer is a band of; None in a
+/// whole-frame render. Read on the thread that runs the operator, before
+/// it hands work to rayon, whose threads have no band.
+pub(crate) fn frame() -> Option<BandFrame> {
+    FRAME.with(|f| f.get())
+}
+
+/// The frame a `w` by `h` buffer is a band of, as its width, its height
+/// and the frame row the buffer's first row is; the buffer itself, from
+/// row 0, in a whole-frame render. An operator that reads where a pixel
+/// is in the frame (a vignette's center, a mask's ellipse, a gradient's
+/// line, a noise hashed by position) reads it from here.
+pub(crate) fn placed(w: usize, h: usize) -> (usize, usize, usize) {
+    match frame() {
+        Some(f) => (f.full_w, f.full_h, f.y0),
+        None => (w, h, 0),
+    }
+}
+
+/// Runs `f` with `frame` as the band the operator's buffer is, restoring
+/// what was there after, unwinding included.
+pub(crate) fn with_frame<T>(frame: BandFrame, f: impl FnOnce() -> T) -> T {
+    struct Reset(Option<BandFrame>);
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            FRAME.with(|f| f.set(self.0));
+        }
+    }
+    let _reset = Reset(FRAME.with(|f| f.replace(Some(frame))));
+    f()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

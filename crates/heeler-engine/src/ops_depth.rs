@@ -165,9 +165,17 @@ struct Frame {
     w: f32,
     h: f32,
     short: f32,
+    /// In a banded render, the frame row the buffer's first row is.
+    y0: usize,
 }
 
 fn frame_of(node: &Node, w: usize, h: usize) -> Frame {
+    // A band of the frame is the frame's own rows: its size is the
+    // frame's, whole integers, and the roi is the export's whole frame.
+    if let Some(f) = crate::band::frame() {
+        let (fw, fh) = (f.full_w as f32, f.full_h as f32);
+        return Frame { roi: [0.0, 0.0, 1.0, 1.0], w: fw, h: fh, short: fw.min(fh), y0: f.y0 };
+    }
     let roi = [
         p(&node.params, "roi_x", 0.0),
         p(&node.params, "roi_y", 0.0),
@@ -184,7 +192,7 @@ fn frame_of(node: &Node, w: usize, h: usize) -> Frame {
     // pre-merge review). Snap within a few ULP; a genuinely
     // fractional size keeps its fraction.
     let (fw, fh) = (snap_frame(fw), snap_frame(fh));
-    Frame { roi, w: fw, h: fh, short: fw.min(fh) }
+    Frame { roi, w: fw, h: fh, short: fw.min(fh), y0: 0 }
 }
 
 /// A frame size reconstructed from a buffer and its rect (w / roi_w)
@@ -381,7 +389,7 @@ pub(crate) fn fog(node: &Node, inputs: &[(String, Value)]) -> Result<Value, Engi
             let x = ((far[i] - start) / (1.0 - start).max(1e-3)).clamp(0.0, 1.0);
             let mut f = 1.0 - (-3.0 * density * x.powf(gamma)).exp();
             if texture > 0.0 {
-                let (px_x, px_y) = ((i % src.width) as f32, (i / src.width) as f32);
+                let (px_x, px_y) = ((i % src.width) as f32, (i / src.width + frame.y0) as f32);
                 let n = fractal_noise(px_x / wavelength + shift_x, px_y / wavelength + shift_y);
                 f = (f * (1.0 + texture * (n * 2.0 - 1.0) * 0.85)).clamp(0.0, 1.0);
             }

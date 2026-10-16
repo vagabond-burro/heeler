@@ -986,7 +986,9 @@ pub(crate) fn vignette(node: &Node, inputs: &[(String, Value)]) -> Result<Value,
     // diagonal, and how soft its shoulder is.
     let mid = (p(&node.params, "vignette_mid", 50.0) / 100.0).clamp(0.05, 1.0);
     let softness = p(&node.params, "softness", 0.5).clamp(0.05, 1.0);
-    let (w, h) = (src.width as f32, src.height as f32);
+    // The frame's center, which a band of the frame shares.
+    let (fw, fh, y0) = crate::band::placed(src.width, src.height);
+    let (w, h) = (fw as f32, fh as f32);
     let (cx, cy) = (w / 2.0, h / 2.0);
     // Normalized so the corner sits at distance 1 whatever the aspect.
     let inv = 1.0 / (cx * cx + cy * cy).sqrt();
@@ -999,7 +1001,7 @@ pub(crate) fn vignette(node: &Node, inputs: &[(String, Value)]) -> Result<Value,
         .enumerate()
         .for_each(|(px, o)| {
             let x = (px % src.width) as f32 - cx;
-            let y = (px / src.width) as f32 - cy;
+            let y = (px / src.width + y0) as f32 - cy;
             let d = (x * x + y * y).sqrt() * inv;
             // Cubic smoothstep between the shoulder's ends.
             let t = ((d - lo) / (hi - lo)).clamp(0.0, 1.0);

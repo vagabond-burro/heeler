@@ -2083,7 +2083,9 @@ pub(crate) fn radial_mask(node: &Node, inputs: &[(String, Value)]) -> Result<Val
     let (rx, ry) = (radius * aspect.sqrt(), radius / aspect.sqrt());
     let (sin_r, cos_r) = ((-rotation).sin(), (-rotation).cos());
 
-    let (w, h) = (src.width as f32, src.height as f32);
+    // Measured on the frame, which a band of the frame is rows of.
+    let (fw, fh, y0) = crate::band::placed(src.width, src.height);
+    let (w, h) = (fw as f32, fh as f32);
     // A circle drawn in 0..1 coordinates on a 3:2 frame is an ellipse
     // half again as wide as it is tall, so distances want measuring in
     // units of the short side. Correcting that is right, and it would
@@ -2105,7 +2107,7 @@ pub(crate) fn radial_mask(node: &Node, inputs: &[(String, Value)]) -> Result<Val
     mask.data.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
         for (x, m) in row.iter_mut().enumerate() {
             let nx = ((x as f32 + 0.5) / w - cx) * ax;
-            let ny = ((y as f32 + 0.5) / h - cy) * ay;
+            let ny = (((y + y0) as f32 + 0.5) / h - cy) * ay;
             // Into the shape's own frame: unrotate, then scale so the
             // shape is the unit one shape_distance describes.
             let ux = (nx * cos_r - ny * sin_r) / rx;
@@ -2132,7 +2134,8 @@ pub(crate) fn linear_mask(node: &Node, inputs: &[(String, Value)]) -> Result<Val
     let invert = p_bool(&node.params, "invert", false);
     let (dx, dy) = (angle.cos(), angle.sin());
 
-    let (w, h) = (src.width as f32, src.height as f32);
+    let (fw, fh, y0) = crate::band::placed(src.width, src.height);
+    let (w, h) = (fw as f32, fh as f32);
     let mut mask = MaskBuf::new(src.width, src.height);
     use rayon::prelude::*;
     let width = src.width;
@@ -2141,7 +2144,7 @@ pub(crate) fn linear_mask(node: &Node, inputs: &[(String, Value)]) -> Result<Val
             // Project onto the gradient direction, centered so position 0.5
             // puts the transition mid-image at any angle.
             let px = (x as f32 + 0.5) / w - 0.5;
-            let py = (y as f32 + 0.5) / h - 0.5;
+            let py = ((y + y0) as f32 + 0.5) / h - 0.5;
             let t = px * dx + py * dy + 0.5;
             let v = 1.0 - smoothstep(position - span / 2.0, position + span / 2.0, t);
             *m = if invert { 1.0 - v } else { v };

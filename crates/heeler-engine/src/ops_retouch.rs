@@ -789,6 +789,9 @@ pub(crate) struct GradientGeom {
     sin: f32,
     cos: f32,
     span: f32,
+    /// In a banded render: the frame's size and the band's first row,
+    /// which stand in for the buffer's.
+    band: Option<(usize, usize, usize)>,
 }
 
 impl GradientGeom {
@@ -799,10 +802,12 @@ impl GradientGeom {
         let rh = p(&node.params, "roi_h", 1.0).max(1e-6);
         // The frame's own aspect, so a 45-degree gradient runs corner to
         // corner rather than finishing early on the long side.
+        let band = crate::band::frame().map(|f| (f.full_w, f.full_h, f.y0));
+        let (w, h) = band.map_or((w, h), |(fw, fh, _)| (fw, fh));
         let aspect = (w as f32 / rw) / (h as f32 / rh).max(1e-6);
         let (sin, cos) = angle.sin_cos();
         let span = cos.abs() * aspect + sin.abs();
-        GradientGeom { rx, ry, rw, rh, radial, aspect, sin, cos, span }
+        GradientGeom { rx, ry, rw, rh, radial, aspect, sin, cos, span, band }
     }
 
     /// Where a pixel sits along the gradient, 0..1.
@@ -812,6 +817,10 @@ impl GradientGeom {
     /// every patch would be a different picture at every zoom level. The
     /// roi params say which slice of the frame this buffer is.
     pub(crate) fn t(&self, x: usize, y: usize, w: usize, h: usize) -> f32 {
+        let (y, w, h) = match self.band {
+            Some((fw, fh, y0)) => (y + y0, fw, fh),
+            None => (y, w, h),
+        };
         let fx = self.rx + ((x as f32 + 0.5) / w as f32) * self.rw;
         let fy = self.ry + ((y as f32 + 0.5) / h as f32) * self.rh;
         if self.radial {

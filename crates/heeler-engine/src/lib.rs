@@ -11,6 +11,7 @@ pub mod color;
 pub mod noise;
 pub mod executor;
 pub mod band;
+pub mod banded;
 pub mod cut;
 pub mod ops;
 mod ops_depth;

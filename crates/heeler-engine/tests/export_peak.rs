@@ -464,6 +464,11 @@ fn operator_sets() -> Vec<(&'static str, usize, Vec<Set>)> {
         ("heeler.grain", 2, vec![vec![("intensity", num(40.0))], vec![("intensity", num(100.0)), ("size", num(100.0)), ("pattern", text("coarse"))], vec![("intensity", num(100.0)), ("pattern", text("cinema"))]]),
         ("heeler.vignette", 2, vec![vec![("vignette", num(-40.0))]]),
         ("heeler.lens_correct", 2, vec![vec![("distortion", num(20.0))], vec![("distortion", num(-40.0)), ("ca_red", num(50.0)), ("ca_blue", num(-50.0)), ("vignette", num(40.0))]]),
+        // The layer effects spread the layer's alpha over a plane padded
+        // past the frame by the blur's reach and the offset.
+        ("heeler.fx_shadow", 2, vec![vec![], vec![("size", num(250.0)), ("distance", num(250.0))]]),
+        ("heeler.fx_glow", 2, vec![vec![], vec![("size", num(250.0))]]),
+        ("heeler.fx_bevel", 2, vec![vec![], vec![("size", num(250.0))]]),
     ]
 }
 

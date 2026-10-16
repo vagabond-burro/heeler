@@ -37,6 +37,11 @@ pub enum EngineError {
     },
     #[error("node '{node}' is disabled but has no image input to pass through")]
     NoPassthroughInput { node: String },
+    /// A banded render met a graph it cannot follow band by band (its
+    /// terminals of different heights, a node's rows not the size its
+    /// frame said). The caller renders the frame whole instead.
+    #[error("the banded render cannot follow this graph: {0}")]
+    Band(String),
 }
 
 /// A decoded source image plus a version. The version participates in cache
@@ -137,14 +142,14 @@ fn hash_slot<'s>(hasher: &mut Hasher, sources: &'s HashMap<String, SourceImage>,
 
 /// Nodes whose output is a registered picture rather than a function of
 /// their inputs: the photograph itself, and any file read in beside it.
-fn is_source(ty: &str) -> bool {
+pub(crate) fn is_source(ty: &str) -> bool {
     matches!(ty, "heeler.image_source" | "heeler.file" | "heeler.catalog")
 }
 
 /// Depth Lighting's second planted slot, `{id}@normal`: the surface
 /// normals a render wrote into its own file, when the desktop found
 /// and converted them.
-fn normal_slot(ty: &str) -> bool {
+pub(crate) fn normal_slot(ty: &str) -> bool {
     ty == "heeler.key_light"
 }
 
@@ -171,7 +176,7 @@ fn planted_port_value(node_id: &str, port: &str, sources: &HashMap<String, Sourc
 /// unchanged, so a wire off its `image` or `mask` output is the node's
 /// own render, never the planted slot other non-"out" ports answer
 /// with.
-fn passthrough_port(graph: &Graph, node_id: &str, port: &str) -> bool {
+pub(crate) fn passthrough_port(graph: &Graph, node_id: &str, port: &str) -> bool {
     (port == "image" || port == "mask")
         && graph
             .node(node_id)
@@ -179,7 +184,7 @@ fn passthrough_port(graph: &Graph, node_id: &str, port: &str) -> bool {
             .unwrap_or(false)
 }
 
-fn raster_fed(ty: &str) -> bool {
+pub(crate) fn raster_fed(ty: &str) -> bool {
     matches!(
         ty,
         "heeler.smart_mask"
@@ -224,6 +229,30 @@ fn consumers(graph: &Graph, terminal: &str) -> HashMap<String, usize> {
         }
     }
     count
+}
+
+/// The layer effects' scratch, which is not a whole number of frames:
+/// they spread the layer's alpha over a plane padded past the frame by
+/// the blur's reach and the offset (ops_fx.rs spread_alpha), so a large
+/// Size on a small frame holds planes several times the frame. Two
+/// padded RGBA planes and a frame: Phase 0's sweep measured 2.02 to 2.06
+/// frames at 24 MP, where the padding is a few percent, and about two
+/// padded planes on a 640 by 480 frame. None for every other operator.
+fn padded_scratch(node: &Node, w: usize, h: usize) -> Option<Result<usize, crate::memory::MemoryError>> {
+    use crate::memory;
+    let bevel = node.node_type == "heeler.fx_bevel";
+    if !bevel && !matches!(node.node_type.as_str(), "heeler.fx_shadow" | "heeler.fx_glow") {
+        return None;
+    }
+    let scale = ops::px_scale(&node.params);
+    let size = if bevel { ops::p(&node.params, "size", 6.0).max(1.0) } else { ops::p(&node.params, "size", 12.0).max(0.0) } * scale;
+    // The offset's larger component is at most the distance itself.
+    let distance = if node.node_type == "heeler.fx_shadow" { ops::p(&node.params, "distance", 0.0).max(0.0) * scale } else { 0.0 };
+    let pad = (2.5 * (size / 2.0)).ceil() as usize + distance.ceil() as usize + 2;
+    Some((|| {
+        let plane = memory::bytes(w.saturating_add(2 * pad), h.saturating_add(2 * pad), 16, 1)?;
+        memory::sum([plane, plane, memory::bytes(w, h, 16, 1)?])
+    })())
 }
 
 /// An operator's scratch while it runs, in whole f32 RGBA frames of its
@@ -495,7 +524,7 @@ impl Executor {
                     // on as it is (ops::passthrough, ops::export_layer): a
                     // reference to pixels already counted, none new.
                     let out = if matches!(node.node_type.as_str(), "heeler.output" | "heeler.export_layer") { 0 } else { memory::bytes(w, h, channels, 4)? };
-                    let scratch = if node.enabled { memory::bytes(w, h, 16, workspace(node))? } else { 0 };
+                    let scratch = if !node.enabled { 0 } else if let Some(bytes) = padded_scratch(node, w, h) { bytes? } else { memory::bytes(w, h, 16, workspace(node))? };
                     // This node's worst moment: its inputs held, its
                     // scratch and its output allocated, and what the cache
                     // keeps beside them. Without a budget the cache holds
@@ -741,42 +770,8 @@ impl Executor {
         let value = if is_source(&node.node_type) {
             let src = sources.get(node_id).expect("checked above");
             Value::Image(src.image.clone())
-        } else if !node.enabled {
-            self.passthrough(node_id, node, &inputs)?
         } else {
-            // The smart mask's computed raster is planted by the
-            // desktop under the node's own id; the op reads it as an
-            // input like any other and applies its dials. No raster,
-            // no injection: the op answers empty. A selection mask's
-            // raster is its ViTMatte-refined base (P4); without one it
-            // rasterizes its geometry as it always did.
-            if raster_fed(&node.node_type) {
-                if let Some(src) = sources.get(planted_id(node)) {
-                    inputs.push(("raster".to_string(), Value::Image(src.image.clone())));
-                }
-            }
-            if normal_slot(&node.node_type) {
-                if let Some(src) = sources.get(&slot(node_id, "normal")) {
-                    inputs.push(("normal".to_string(), Value::Image(src.image.clone())));
-                }
-            }
-            // The measured mark rides an internal numeric param on a
-            // copy of the node, never on the graph: not in the spec,
-            // never serialized, never shown (the registry test below
-            // pins that no node declares it).
-            let marked;
-            let node = if depth_measured {
-                let mut copy = node.clone();
-                copy.params.insert("depth_measured".to_string(), heeler_graph::ParamValue::Number(1.0));
-                marked = copy;
-                &marked
-            } else {
-                node
-            };
-            weigh_mask_input(node, &mut inputs);
-            let result = ops::execute(node, &inputs)?;
-            let result = if mask_is_off(node) { open_everywhere(result) } else { result };
-            self.blend_through_mask(node, &inputs, result)
+            apply_node(node_id, node, inputs, depth_measured, sources)?
         };
 
         *self
@@ -856,7 +851,6 @@ impl Executor {
     /// "in" (the else branch), which is the only answer that is never a
     /// surprise.
     fn passthrough(
-        &self,
         node_id: &str,
         node: &heeler_graph::Node,
         inputs: &[(String, Value)],
@@ -917,7 +911,6 @@ impl Executor {
     /// if/then/else, which made the hole worth closing rather than
     /// documenting: no same-size triple, no blend.
     fn blend_through_mask(
-        &self,
         node: &heeler_graph::Node,
         inputs: &[(String, Value)],
         result: Value,
@@ -956,6 +949,58 @@ impl Executor {
             _ => result,
         }
     }
+}
+
+/// What a node that is not a source renders from its resolved inputs:
+/// its input handed on when it is off, else its planted raster and
+/// normals injected, the mask weighed, the operator run, a mask turned
+/// off opened everywhere and the result blended through the mask. One
+/// definition for the whole-frame render and the banded one
+/// (banded.rs), so a band runs a node exactly as the frame does.
+pub(crate) fn apply_node(
+    node_id: &str,
+    node: &Node,
+    mut inputs: Vec<(String, Value)>,
+    depth_measured: bool,
+    sources: &HashMap<String, SourceImage>,
+) -> Result<Value, EngineError> {
+    Ok(if !node.enabled {
+        Executor::passthrough(node_id, node, &inputs)?
+    } else {
+        // The smart mask's computed raster is planted by the
+        // desktop under the node's own id; the op reads it as an
+        // input like any other and applies its dials. No raster,
+        // no injection: the op answers empty. A selection mask's
+        // raster is its ViTMatte-refined base (P4); without one it
+        // rasterizes its geometry as it always did.
+        if raster_fed(&node.node_type) {
+            if let Some(src) = sources.get(planted_id(node)) {
+                inputs.push(("raster".to_string(), Value::Image(src.image.clone())));
+            }
+        }
+        if normal_slot(&node.node_type) {
+            if let Some(src) = sources.get(&slot(node_id, "normal")) {
+                inputs.push(("normal".to_string(), Value::Image(src.image.clone())));
+            }
+        }
+        // The measured mark rides an internal numeric param on a
+        // copy of the node, never on the graph: not in the spec,
+        // never serialized, never shown (the registry test below
+        // pins that no node declares it).
+        let marked;
+        let node = if depth_measured {
+            let mut copy = node.clone();
+            copy.params.insert("depth_measured".to_string(), heeler_graph::ParamValue::Number(1.0));
+            marked = copy;
+            &marked
+        } else {
+            node
+        };
+        weigh_mask_input(node, &mut inputs);
+        let result = ops::execute(node, &inputs)?;
+        let result = if mask_is_off(node) { open_everywhere(result) } else { result };
+        Executor::blend_through_mask(node, &inputs, result)
+    })
 }
 
 /// The internal param that scales a node's mask: a Develop layer's
