@@ -1388,6 +1388,21 @@ export function mockEmitProgress(p: OpProgress): void {
 
 /** The Cancel button: marks the operation's id canceled; the worker
  * notices between units. */
+/** Asks the desktop to decode the open photograph at full size in the
+ * background, so the first 1:1 zoom, the full-resolution settle and the
+ * export find it ready (lib.rs warm_full_source). Answers whether it
+ * decoded; false in the browser build, for a stack or panorama, while
+ * another is decoding, or when it was ready already. */
+export async function warmFullSource(state: State): Promise<boolean> {
+  if (!isTauri() || !state.activeImage) return false;
+  return await call<boolean>("warm_full_source", { imageId: state.activeImage, graph: serializeGraph(state) });
+}
+
+/** How long a photograph stays open before its full-size decode is
+ * started in the background: long enough that paging through a folder
+ * with the arrow keys starts none. */
+export const WARM_FULL_AFTER_MS = 1500;
+
 export async function cancelOperation(id: string): Promise<void> {
   if (!isTauri()) {
     mockCancels.push(id);

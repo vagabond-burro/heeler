@@ -9978,6 +9978,40 @@ fn full_source_cached(app: &tauri::AppHandle, image_id: &str, opts: heeler_io::R
     Ok(decoded_cache_get(decoded_full, decoded_full_lru, &key))
 }
 
+/// Decodes the open photograph at full size in the background, into the
+/// same cache full_source reads, once it has been on screen a moment
+/// (viewer.tsx): the first 1:1 zoom, the full-resolution settle and the
+/// export then find it ready. Before, the first zoom paid the decode
+/// first, 1 to 6 s for the RAW files measured and 17 to 22 s for one RAF
+/// in the console log. One at a time; a stack or a panorama, whose full
+/// size is a whole merge, is left for when it is asked for; a decode the
+/// memory cannot admit is skipped. Answers whether it decoded.
+#[tauri::command]
+async fn warm_full_source(app: tauri::AppHandle, image_id: String, graph: UiGraph) -> Result<bool, String> {
+    static WARMING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if WARMING.swap(true, std::sync::atomic::Ordering::AcqRel) {
+        return Ok(false);
+    }
+    struct Done;
+    impl Drop for Done {
+        fn drop(&mut self) {
+            WARMING.store(false, std::sync::atomic::Ordering::Release);
+        }
+    }
+    let done = Done;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _done = done;
+        let opts = source_opts_of(&graph);
+        let path = with_session(&app, |s| Ok(s.paths.get(&image_id).cloned()))?;
+        if path.as_deref().is_none_or(|p| is_stack_path(p) || is_pano_path(p)) || full_source_cached(&app, &image_id, opts)?.is_some() {
+            return Ok(false);
+        }
+        Ok(memory::catch(|| full_source(&app, &image_id, opts)).ok().and_then(|r| r.ok()).is_some())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 fn full_source(
     app: &tauri::AppHandle,
     image_id: &str,
@@ -22272,6 +22306,7 @@ pub fn run() {
             console_log_file,
             append_console_log,
             cancel_operation,
+            warm_full_source,
             resume_stack_merge,
             resume_pano_stitch
         ])

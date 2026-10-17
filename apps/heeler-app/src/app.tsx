@@ -87,6 +87,8 @@ import {
   renderTimedOut,
   STACK_SET_ASIDE,
   PANO_CANCELED,
+  warmFullSource,
+  WARM_FULL_AFTER_MS,
 } from "./bridge";
 import type { NodeRecipe } from "./noderecipes";
 import { loadRecipeFiles, moveCatalogRecipes, runRecipeOps } from "./recipefiles";
@@ -1259,6 +1261,21 @@ export function App() {
   }, [state.activeImage, state.activeFolderPath, state.folderTree?.path]);
 
   useFolderWatcher(stateRef, dispatch);
+
+  // A photograph that stays open is decoded at full size in the
+  // background, once, so its first 1:1 zoom and its export find the
+  // decode ready (the console showed 1 to 6 s, and 17 to 22 s for one
+  // RAF, paid on the first zoom). Paging through a folder starts none.
+  useEffect(() => {
+    const id = state.activeImage;
+    if (!id) return;
+    const t = window.setTimeout(() => {
+      const st = stateRef.current;
+      if (st.activeImage !== id || st.gesture !== null) return;
+      void warmFullSource(st).catch(() => {});
+    }, WARM_FULL_AFTER_MS);
+    return () => window.clearTimeout(t);
+  }, [state.activeImage]);
 
   // Switching images drops the previous image's frame instantly so the
   // viewer never shows a stale render of the wrong photo.

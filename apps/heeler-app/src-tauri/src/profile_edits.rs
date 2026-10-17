@@ -131,3 +131,39 @@ fn profile_depth_refinement() {
         println!("run {run}: refine_depth_for_export {} ms", t.elapsed().as_millis());
     }
 }
+
+/// A 1:1 patch of each edit, as the viewer asks for one at the frame's
+/// center (a 2560 by 1440 viewport), cold and after the first Exposure is
+/// nudged, with the slowest nodes. Same inputs as profile_saved_edits.
+#[test]
+#[ignore = "renders the owner's photographs; run by hand in release"]
+fn profile_one_to_one_patches() {
+    let list = std::fs::read_to_string(std::env::var("HEELER_PROFILE_EDITS").expect("HEELER_PROFILE_EDITS")).unwrap();
+    let graphs = PathBuf::from(std::env::var("HEELER_PROFILE_GRAPHS").expect("HEELER_PROFILE_GRAPHS"));
+    let n: usize = std::env::var("HEELER_PROFILE_N").ok().and_then(|v| v.parse().ok()).unwrap_or(usize::MAX);
+    let registry = Registry::builtin();
+    println!("\nid\text\tpatch\tcold\tnudge\tslowest nodes");
+    for line in list.lines().take(n) {
+        let Some((id, path)) = line.split_once('\t') else { continue };
+        let Ok(Some(json)) = load_graph_file(&graphs, id) else { continue };
+        let Some(ui) = ui_graph_from_saved(&json) else { continue };
+        let Ok(full) = heeler_io::decode_any_with(Path::new(path), source_opts_of(&ui)) else { continue };
+        let full = Arc::new(full);
+        let (fw, fh) = (full.width as f64, full.height as f64);
+        let (vw, vh) = (2560.0f64.min(fw), 1440.0f64.min(fh));
+        let rect = [(1.0 - vw / fw) / 2.0, (1.0 - vh / fh) / 2.0, vw / fw, vh / fh];
+        let Some((patch, _)) = inject_roi_for_view(&ui, rect, (full.width, full.height), None) else { println!("{id}\tno patch"); continue };
+        let Ok((took, ops, mut exec, _, sources, terminal)) = render_timed(&patch, full.clone()) else { println!("{id}\tpatch failed"); continue };
+        let nudge = nudged(&patch).and_then(|ui| build_graph(&ui, &registry).ok()).map(|g| {
+            let t = Instant::now();
+            let _ = exec.render(&g, &terminal, &sources);
+            ms(t.elapsed())
+        });
+        let ty = |id: &str| patch.nodes.iter().find(|n| n.id == id).map(|n| n.node_type.trim_start_matches("heeler.").to_string()).unwrap_or_else(|| id.to_string());
+        let mut slow: Vec<_> = ops.iter().map(|(k, d)| (ms(*d), ty(k))).collect();
+        slow.sort_by(|a, b| b.0.total_cmp(&a.0));
+        let top: Vec<String> = slow.iter().take(4).map(|(m, t)| format!("{t} {m:.0}")).collect();
+        let ext = Path::new(path).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+        println!("{id}\t{ext}\t{vw}x{vh}\t{:.0}\t{}\t{}", ms(took), nudge.map_or("-".into(), |m| format!("{m:.0}")), top.join(", "));
+    }
+}
