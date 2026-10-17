@@ -1820,10 +1820,14 @@ fn raster_file_name(version: u64) -> String {
 }
 
 /// Whether a file carries the name this app gives a raster: sixteen hex
-/// digits and .png. The sweep and the inventory answer to this, not to
+/// digits and .png, or an export's depth plane slot (exportdepth-N.f32). The sweep and the inventory answer to this, not to
 /// the extension, so a PNG somebody dropped into the folder is not
 /// this app's to count or remove.
 fn is_app_raster_name(name: &str) -> bool {
+    // The PNG rasters, and the exports' full-size depth planes.
+    if let Some(slot) = name.strip_prefix("exportdepth-").and_then(|n| n.strip_suffix(".f32")) {
+        return slot == "next" || (slot.len() == 1 && slot.bytes().all(|b| b.is_ascii_digit()));
+    }
     let Some(stem) = name.strip_suffix(".png") else {
         return false;
     };
@@ -5483,6 +5487,7 @@ fn depth_guide_for_export(
 /// for it. Falls back to the planted plane when the raw answer is not on
 /// disk (a cache from before the section existed) or the recipe asks for
 /// nothing.
+#[allow(clippy::too_many_arguments)]
 fn refine_depth_for_export(
     base: &Path,
     graph: &UiGraph,
@@ -5491,6 +5496,8 @@ fn refine_depth_for_export(
     sources: &mut HashMap<String, SourceImage>,
     file_depth: Option<&FileDepth>,
     depth_input: Option<u64>,
+    photo_key: &str,
+    layers_held: bool,
 ) {
     let recipe = depth_recipe(graph);
     // A depth pass in the file is exact at the export's own size, so it
@@ -5508,10 +5515,140 @@ fn refine_depth_for_export(
     // which changes their versions. Find the depth slots by their
     // readers, not by an un-cropped version they no longer carry.
     let keys: Vec<String> = sources.keys().filter(|key| is_depth_plane_key(graph, key)).cloned().collect();
-    if keys.is_empty() {
+    if keys.is_empty() || !depth_read_by_the_export(graph, layers_held) {
         return;
     }
-    let Ok(full) = photo.pixels() else { return };
+    // A second export of the same edit reads the plane back instead of
+    // refining it again, which took 11 to 14 s at 24 MP.
+    let shape = photo.shape();
+    let cache = export_depth_key(want, depth_input, file_depth, photo_key, (shape.width, shape.height));
+    let refined = match read_export_depth(base, cache) {
+        Some(plane) => Arc::new(plane),
+        None => {
+            let Some((plane, exact)) = refine_export_plane(base, graph, image_id, photo, sources, file_depth, depth_input, recipe, levels) else { return };
+            if exact {
+                write_export_depth(base, cache, &plane);
+            }
+            Arc::new(plane)
+        }
+    };
+    // A file's own pass at the export's size, unrefined, is measured;
+    // the model's is not.
+    let measured = file_depth.is_some() && recipe.edges == 0 && recipe.flatten == 0;
+    let mut full_sources: HashMap<String, SourceImage> = keys.iter().map(|key| (key.clone(), SourceImage { image: refined.clone(), version: want, measured })).collect();
+    // Refinement reads the node's input, which already carries the
+    // geometry upstream of its seat. Only crops downstream of the seat
+    // still fall on each consumer, exactly once.
+    let seat = depth_seat_geometry(graph, depth_input.filter(|_| file_depth.is_none()));
+    conform_rasters_to_geometry(graph, &mut full_sources, &keys, Some((shape.width, shape.height)), &seat);
+    sources.extend(full_sources);
+}
+
+/// Whether anything the export writes reads the depth: a reader of a
+/// Depth Map's plane other than an Export Layer, or one the container
+/// holds. A JPEG whose depth feeds only a layer it drops refines nothing.
+fn depth_read_by_the_export(graph: &UiGraph, layers_held: bool) -> bool {
+    graph.connections.iter().any(|c| {
+        c.from.1 == "depth"
+            && graph.nodes.iter().any(|n| n.id == c.from.0 && n.node_type == "heeler.depth_map")
+            && (layers_held || !graph.nodes.iter().any(|n| n.id == c.to.0 && n.node_type == "heeler.export_layer"))
+    })
+}
+
+/// What the refined full-size plane depends on: the plane's version
+/// (image, model, recipe, Levels and the node's input), a file's own
+/// pass, the photograph's decode when it is the guide, and the size.
+fn export_depth_key(version: u64, depth_input: Option<u64>, file_depth: Option<&FileDepth>, photo_key: &str, (w, h): (usize, usize)) -> u64 {
+    let file = file_depth.map_or(0, |f| f.stamp);
+    let input = depth_input.map_or(String::from("-"), |k| format!("{k:016x}"));
+    fnv1a64(format!("exportdepth|1|{version:016x}|{input}|{file:016x}|{photo_key}|{w}x{h}").as_bytes())
+}
+
+/// The full-size planes are kept in EXPORT_DEPTH_SLOTS files beside the
+/// rasters, raw f32 farness so a plane read back is the one refined, to
+/// the bit, each headed by its key. A new plane overwrites the slot used
+/// least lately, so the disk stays bounded (about 100 MB a plane at
+/// 24 MP) and nothing is ever deleted; Storage's Clear sweeps them with
+/// the rasters.
+const EXPORT_DEPTH_SLOTS: usize = 4;
+const EXPORT_DEPTH_MAGIC: &[u8; 4] = b"HXD2";
+const EXPORT_DEPTH_HEAD: usize = 20;
+
+fn export_depth_slot(base: &Path, slot: usize) -> PathBuf {
+    smart_raster_dir(base).join(format!("exportdepth-{slot}.f32"))
+}
+
+/// A slot's key and size, from its head alone.
+fn export_depth_head(path: &Path) -> Option<(u64, usize, usize)> {
+    use std::io::Read;
+    let mut head = [0u8; EXPORT_DEPTH_HEAD];
+    std::fs::File::open(path).ok()?.read_exact(&mut head).ok()?;
+    if &head[..4] != EXPORT_DEPTH_MAGIC {
+        return None;
+    }
+    let key = u64::from_le_bytes(head[4..12].try_into().ok()?);
+    let w = u32::from_le_bytes(head[12..16].try_into().ok()?) as usize;
+    let h = u32::from_le_bytes(head[16..20].try_into().ok()?) as usize;
+    Some((key, w, h))
+}
+
+fn read_export_depth(base: &Path, key: u64) -> Option<ImageBuf> {
+    let path = (0..EXPORT_DEPTH_SLOTS).map(|slot| export_depth_slot(base, slot)).find(|p| export_depth_head(p).is_some_and(|(k, _, _)| k == key))?;
+    let (_, w, h) = export_depth_head(&path)?;
+    let bytes = std::fs::read(&path).ok()?;
+    let body = bytes.get(EXPORT_DEPTH_HEAD..)?;
+    if body.len() != w.checked_mul(h)?.checked_mul(4)? {
+        return None;
+    }
+    let far: Vec<f32> = body.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+    // Touched, so the slot used least lately is the one overwritten.
+    let _ = std::fs::File::options().append(true).open(&path).and_then(|f| f.set_modified(std::time::SystemTime::now()));
+    Some(plane_raster(&far, w, h))
+}
+
+/// Keeps a gray plane whose alpha is 1, as plane_raster makes it, in an
+/// empty slot or over the one used least lately. On any failure nothing
+/// is kept and the next export refines again.
+fn write_export_depth(base: &Path, key: u64, plane: &ImageBuf) {
+    if !plane.data.chunks_exact(4).all(|px| px[1].to_bits() == px[0].to_bits() && px[2].to_bits() == px[0].to_bits() && px[3] == 1.0) {
+        return;
+    }
+    let mut bytes = Vec::with_capacity(EXPORT_DEPTH_HEAD + plane.width * plane.height * 4);
+    bytes.extend_from_slice(EXPORT_DEPTH_MAGIC);
+    bytes.extend_from_slice(&key.to_le_bytes());
+    bytes.extend_from_slice(&(plane.width as u32).to_le_bytes());
+    bytes.extend_from_slice(&(plane.height as u32).to_le_bytes());
+    for px in plane.data.chunks_exact(4) {
+        bytes.extend_from_slice(&px[0].to_le_bytes());
+    }
+    if std::fs::create_dir_all(smart_raster_dir(base)).is_err() {
+        return;
+    }
+    let used = |slot: usize| std::fs::metadata(export_depth_slot(base, slot)).and_then(|m| m.modified()).ok();
+    let slot = (0..EXPORT_DEPTH_SLOTS).find(|&s| used(s).is_none())
+        .unwrap_or_else(|| (0..EXPORT_DEPTH_SLOTS).min_by_key(|&s| used(s)).unwrap_or(0));
+    // Written aside and moved over the slot, so a slot is never half a plane.
+    let aside = smart_raster_dir(base).join("exportdepth-next.f32");
+    if std::fs::write(&aside, &bytes).is_ok() {
+        let _ = std::fs::rename(&aside, export_depth_slot(base, slot));
+    }
+}
+
+/// The refinement itself, at the export's size, before the planted
+/// copies take their consumers' geometry.
+#[allow(clippy::too_many_arguments)]
+fn refine_export_plane(
+    base: &Path,
+    graph: &UiGraph,
+    image_id: &str,
+    photo: &ExportPhoto,
+    sources: &HashMap<String, SourceImage>,
+    file_depth: Option<&FileDepth>,
+    depth_input: Option<u64>,
+    recipe: DepthRecipe,
+    levels: Option<DepthLevels>,
+) -> Option<(ImageBuf, bool)> {
+    let full = photo.pixels().ok()?;
     let full = &full;
     // The guide: a file's own pass is refined against the photograph as
     // always; the model's plane is refined against the node's rendered
@@ -5521,18 +5658,16 @@ fn refine_depth_for_export(
         None if depth_input.is_some() => depth_guide_for_export(graph, full, sources),
         None => None,
     };
+    // A wired input whose render failed guides with the photograph for
+    // this export, but that plane is not the edit's and is not kept.
+    let exact = guide.is_some() || file_depth.is_some() || depth_input.is_none();
     let guide: &ImageBuf = guide.as_ref().unwrap_or(full);
     let (w, h) = (guide.width, guide.height);
     let stretched = match file_depth {
-        Some(f) => match file_depth_plane(f, w, h) {
-            Ok(plane) => plane,
-            Err(_) => return,
-        },
+        Some(f) => file_depth_plane(f, w, h).ok()?,
         None => {
             let raw_path = smart_raster_path(base, depth_version(image_id, depth_raw_recipe(recipe), depth_input));
-            let Some(raw) = std::fs::read(&raw_path).ok().and_then(|b| heeler_io::decode_png_raw(&b).ok()) else {
-                return;
-            };
+            let raw = std::fs::read(&raw_path).ok().and_then(|b| heeler_io::decode_png_raw(&b).ok())?;
             let small: Vec<f32> = raw.data.chunks(4).map(|px| px[0]).collect();
             heeler_vision::resize_plane(&small, raw.width, raw.height, w, h)
         }
@@ -5544,20 +5679,10 @@ fn refine_depth_for_export(
         }
     }
     let refined = plane_raster(&refine_plane(&stretched, &rgb, w, h, recipe), w, h);
-    let refined = Arc::new(match levels {
+    Some((match levels {
         Some(l) => levelled_plane(&refined, l),
         None => refined,
-    });
-    // A file's own pass at the export's size, unrefined, is measured;
-    // the model's is not.
-    let measured = file_depth.is_some() && recipe.edges == 0 && recipe.flatten == 0;
-    let mut full_sources: HashMap<String, SourceImage> = keys.iter().map(|key| (key.clone(), SourceImage { image: refined.clone(), version: want, measured })).collect();
-    // Refinement reads the node's input, which already carries the
-    // geometry upstream of its seat. Only crops downstream of the seat
-    // still fall on each consumer, exactly once.
-    let seat = depth_seat_geometry(graph, depth_input.filter(|_| file_depth.is_none()));
-    conform_rasters_to_geometry(graph, &mut full_sources, &keys, Some((full.width, full.height)), &seat);
-    sources.extend(full_sources);
+    }, exact))
 }
 
 /// What a depth_map call bought: the shared depth version, and whether
@@ -11828,7 +11953,7 @@ async fn export_image(
         // the noise model's full-frame answer, computed now if it must be.
         if let Some(base) = export_vision_base(vision_base(&app), &graph)? {
             let depth_input = with_session(&app, |s| Ok(depth_input_key_in_session(s, &graph, &image_id))).unwrap_or(None);
-            refine_depth_for_export(&base, &graph, &image_id, &photo, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input);
+            refine_depth_for_export(&base, &graph, &image_id, &photo, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input, &denoise_fingerprint, ContainerHolds::of(&export_container(&dest, &format)).layers);
             let file_path = with_session(&app, |s| Ok(s.paths.get(&image_id).cloned()))?;
             mattes_for_export(&graph, &image_id, file_path.as_deref(), photo.shape(), &mut smart);
             normals_for_export(&graph, &image_id, file_path.as_deref(), photo.shape(), &mut smart);
@@ -18322,7 +18447,7 @@ async fn export_to(
         // the noise model's full-frame answer, computed now if it must be.
         if let Some(base) = export_vision_base(vision_base(&app), &graph)? {
             let depth_input = with_session(&app, |s| Ok(depth_input_key_in_session(s, &graph, &image_id))).unwrap_or(None);
-            refine_depth_for_export(&base, &graph, &image_id, &photo, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input);
+            refine_depth_for_export(&base, &graph, &image_id, &photo, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input, &denoise_fingerprint, ContainerHolds::of(&export_container(Path::new(&dest), &format)).layers);
             mark("depth refinement");
             let file_path = with_session(&app, |s| Ok(s.paths.get(&image_id).cloned()))?;
             mattes_for_export(&graph, &image_id, file_path.as_deref(), photo.shape(), &mut smart);
@@ -21133,7 +21258,7 @@ async fn bake_composite(
         let mut smart = export_sources_for(&app, &graph, &image_id)?;
         if let Some(base) = export_vision_base(vision_base(&app), &graph)? {
             let depth_input = with_session(&app, |s| Ok(depth_input_key_in_session(s, &graph, &image_id))).unwrap_or(None);
-            refine_depth_for_export(&base, &graph, &image_id, &photo, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input);
+            refine_depth_for_export(&base, &graph, &image_id, &photo, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input, &denoise_fingerprint, true);
             let file_path = with_session(&app, |s| Ok(s.paths.get(&image_id).cloned()))?;
             mattes_for_export(&graph, &image_id, file_path.as_deref(), &source, &mut smart);
             normals_for_export(&graph, &image_id, file_path.as_deref(), &source, &mut smart);
@@ -25503,6 +25628,10 @@ mod tests {
         assert!(!is_app_raster_name("0000000000000abc.PNG"));
         assert!(!is_app_raster_name("abc.png"));
         assert!(!is_app_raster_name("00000000000000000.png"));
+        assert!(is_app_raster_name("exportdepth-0.f32"));
+        assert!(is_app_raster_name("exportdepth-next.f32"));
+        assert!(!is_app_raster_name("exportdepth-12.f32"));
+        assert!(!is_app_raster_name("0.f32"));
     }
 
     /// A raster a saved edit points at is not the cache's to lose. The
@@ -27825,7 +27954,7 @@ mod tests {
         // Cropped: the plane is refined in the node's input frame (the
         // crop's 8x6), and the seat's crop is not applied a second time.
         let mut cut = HashMap::from([("depthmap@depth".to_string(), planted.clone())]);
-        refine_depth_for_export(dir.path(), &graph, "img", &ExportPhoto::decoded(full.clone()), &mut cut, None, key);
+        refine_depth_for_export(dir.path(), &graph, "img", &ExportPhoto::decoded(full.clone()), &mut cut, None, key, "", true);
         assert_eq!((cut["depthmap@depth"].image.width, cut["depthmap@depth"].image.height), (8, 6));
         // A constant plane survives edge refinement. A second Levels
         // application would move 0.223.. to a very different depth.
@@ -27838,7 +27967,7 @@ mod tests {
         let upath = smart_raster_path(dir.path(), depth_version("img", depth_raw_recipe(recipe), ukey));
         std::fs::write(upath, heeler_io::encode_png_raw(&raw).unwrap()).unwrap();
         let mut whole = HashMap::from([("depthmap@depth".to_string(), planted)]);
-        refine_depth_for_export(dir.path(), &uncropped, "img", &ExportPhoto::decoded(full.clone()), &mut whole, None, ukey);
+        refine_depth_for_export(dir.path(), &uncropped, "img", &ExportPhoto::decoded(full.clone()), &mut whole, None, ukey, "", true);
         assert_eq!((whole["depthmap@depth"].image.width, whole["depthmap@depth"].image.height), (16, 12));
         assert!((whole["depthmap@depth"].image.pixel(0, 0)[0] - levelled_depth_sample(&graph, 0.4)).abs() < 1e-5);
     }
@@ -28073,13 +28202,89 @@ mod tests {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, heeler_io::encode_png_raw(&raw).unwrap()).unwrap();
         let mut sources = HashMap::from([("depthmap@depth".to_string(), SourceImage { image: raw.clone(), version: 0, measured: false })]);
-        refine_depth_for_export(dir.path(), &graph, "img", &ExportPhoto::decoded(full.clone()), &mut sources, None, key);
+        refine_depth_for_export(dir.path(), &graph, "img", &ExportPhoto::decoded(full.clone()), &mut sources, None, key, "", true);
         assert_eq!(
             (sources["depthmap@depth"].image.width, sources["depthmap@depth"].image.height),
             (8, 6),
             "the plane was refined in the input's frame and the seat's crop was not applied twice"
         );
         assert!((sources["depthmap@depth"].image.pixel(0, 0)[0] - 0.4).abs() < 0.05, "a constant plane survives refinement: {}", sources["depthmap@depth"].image.pixel(0, 0)[0]);
+    }
+
+    /// A second export of the same edit reads
+    /// the full-size plane back, to the bit, instead of refining again;
+    /// another photograph decode or size refines afresh; and a JPEG whose
+    /// depth feeds only an Export Layer refines nothing.
+    #[test]
+    fn the_export_keeps_its_full_size_depth_plane() {
+        let dir = tempfile::tempdir().unwrap();
+        let graph = serde_json::from_value::<UiGraph>(serde_json::json!({
+            "graph_id":"g", "nodes":[
+                {"id":"src","type":"heeler.image_source","enabled":true,"params":{}},
+                {"id":"depthmap","type":"heeler.depth_map","enabled":true,"params":{"edges":25}},
+                {"id":"fog","type":"heeler.fog","enabled":true,"params":{"density":40}},
+                {"id":"layer","type":"heeler.export_layer","enabled":true,"params":{}},
+                {"id":"output","type":"heeler.output","enabled":true,"params":{}}
+            ], "connections":[
+                {"from":["src","out"],"to":["depthmap","in"]},
+                {"from":["depthmap","out"],"to":["fog","in"]},
+                {"from":["depthmap","depth"],"to":["fog","depth"]},
+                {"from":["depthmap","depth"],"to":["layer","mask"]},
+                {"from":["fog","out"],"to":["output","in"]}
+            ]
+        })).unwrap();
+        let mut full = ImageBuf::new(16, 12);
+        for (i, px) in full.data.chunks_exact_mut(4).enumerate() {
+            let v = ((i * 37) % 23) as f32 / 23.0;
+            px.copy_from_slice(&[v, 1.0 - v, 0.5 * v, 1.0]);
+        }
+        let full = Arc::new(full);
+        let key = depth_input_key(&graph, "testbase", None);
+        let recipe = depth_recipe(&graph);
+        let mut raw = ImageBuf::new(4, 4);
+        for (i, px) in raw.data.chunks_exact_mut(4).enumerate() {
+            let v = i as f32 / 16.0;
+            px.copy_from_slice(&[v, v, v, 1.0]);
+        }
+        let raw_path = smart_raster_path(dir.path(), depth_version("img", depth_raw_recipe(recipe), key));
+        std::fs::create_dir_all(raw_path.parent().unwrap()).unwrap();
+        std::fs::write(&raw_path, heeler_io::encode_png_raw(&raw).unwrap()).unwrap();
+        let planted = || HashMap::from([("depthmap@depth".to_string(), SourceImage { image: Arc::new(raw.clone()), version: 0, measured: false })]);
+        let refine = |photo: &Arc<ImageBuf>, photo_key: &str, held: bool| {
+            let mut sources = planted();
+            refine_depth_for_export(dir.path(), &graph, "img", &ExportPhoto::decoded(photo.clone()), &mut sources, None, key, photo_key, held);
+            sources.remove("depthmap@depth").unwrap()
+        };
+        let bits = |s: &SourceImage| (s.image.width, s.image.height, s.version, s.image.data.iter().map(|v| v.to_bits()).collect::<Vec<_>>());
+        let first = refine(&full, "decode-a", true);
+        assert_eq!((first.image.width, first.image.height), (16, 12));
+        // Without the model's answer on disk the refinement cannot run:
+        // the plane can only come from what the first export kept.
+        std::fs::remove_file(&raw_path).unwrap();
+        assert_eq!(bits(&refine(&full, "decode-a", true)), bits(&first), "read back to the bit");
+        assert_eq!(refine(&full, "decode-b", true).image.width, 4, "another decode is not the kept plane");
+        let bigger = Arc::new(ImageBuf::filled(20, 15, [0.3, 0.3, 0.3, 1.0]));
+        assert_eq!(refine(&bigger, "decode-a", true).image.width, 4, "another size is not the kept plane");
+        // Fog reads the depth too, so a JPEG still refines; with the
+        // layer as the only reader it does not.
+        assert_eq!(refine(&full, "decode-a", false).image.width, 16);
+        let mut only_layer = graph.clone();
+        only_layer.connections.retain(|c| !(c.from.1 == "depth" && c.to.0 == "fog"));
+        assert!(depth_read_by_the_export(&only_layer, true));
+        assert!(!depth_read_by_the_export(&only_layer, false));
+        // The planes kept on disk stay in their slots, the newest kept.
+        let plane = plane_raster(&[0.5; 4], 2, 2);
+        for k in 0..EXPORT_DEPTH_SLOTS as u64 + 3 {
+            write_export_depth(dir.path(), 1000 + k, &plane);
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let names: Vec<String> = std::fs::read_dir(smart_raster_dir(dir.path())).unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).filter(|n| n.starts_with("exportdepth-")).collect();
+        assert_eq!(names.len(), EXPORT_DEPTH_SLOTS, "{names:?}");
+        for k in 3..EXPORT_DEPTH_SLOTS as u64 + 3 {
+            assert!(read_export_depth(dir.path(), 1000 + k).is_some(), "plane {k} is among the newest");
+        }
+        assert!(read_export_depth(dir.path(), 1000).is_none(), "the oldest was overwritten");
     }
 
     /// The frontend's copy of the registry's defaults is this registry's.
@@ -35253,7 +35458,7 @@ mod file_depth_tests {
             std::fs::create_dir_all(raw_path.parent().unwrap()).unwrap();
             std::fs::write(&raw_path, heeler_io::encode_png_raw(&raw).unwrap()).unwrap();
             let mut sources = HashMap::from([("depthmap@depth".to_string(), SourceImage { image: raw.clone(), version: depth_version("img", recipe, input), measured: false })]);
-            refine_depth_for_export(dir.path(), &graph, "img", &ExportPhoto::decoded(full.clone()), &mut sources, from_file.then_some(&file_depth), input);
+            refine_depth_for_export(dir.path(), &graph, "img", &ExportPhoto::decoded(full.clone()), &mut sources, from_file.then_some(&file_depth), input, "", true);
             let plant = &sources["depthmap@depth"];
             assert_eq!(plant.measured, expect, "from file {from_file} at edges {edges}");
             if from_file {
