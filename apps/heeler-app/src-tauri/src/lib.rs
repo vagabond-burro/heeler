@@ -11580,6 +11580,53 @@ fn render_export_banded(g: &Graph, terminal: &str, sources: &HashMap<String, Sou
     }))
 }
 
+/// The band height an export of `terminals` (`h` rows tall) renders in,
+/// beside `kept` bytes the caller keeps of the frame (the f32 frames put
+/// together, or an encoder's samples): as tall as fit the smaller of
+/// EXPORT_BAND_TARGET and what memory allows, never shorter than
+/// EXPORT_BAND_FLOOR while memory holds that. None when the bands cannot
+/// follow the graph or no band fits, and the caller renders whole.
+fn export_band_rows(g: &Graph, terminals: &[&str], sources: &HashMap<String, SourceImage>, kept: usize, h: usize) -> Result<Option<usize>, String> {
+    use heeler_engine::banded;
+    let forced = EXPORT_BAND_ROWS.with(|r| r.get());
+    // Bands as tall as fit the target. When nodes the bands do not follow
+    // must be made whole and that alone is past it, bands as tall as
+    // memory allows would only fill the room up again (measured: a 48 MP
+    // export of the dumped Finish graph held 10.2 GB in one band against
+    // 6.9 whole), so modest bands, EXPORT_BAND_FLOOR rows, if those still
+    // ask less than the whole render; else the whole render.
+    let ceiling = memory::available_to_job().min(EXPORT_BAND_TARGET.saturating_add(kept));
+    let floor = EXPORT_BAND_FLOOR.min(h);
+    let rows = match banded::band_rows_for(g, terminals, sources, ceiling, kept) {
+        Ok(Some(_)) if forced > 0 => forced,
+        // Short bands keep less but make the reaches' margins again more
+        // often (the every-effect 48 MP graph: 36 s in bands of 29 rows,
+        // 17 s in bands of 256), so on the desktop never shorter than the
+        // floor while memory holds those.
+        Ok(Some(rows)) if rows < floor => match banded::estimate_banded(g, terminals, sources, floor) {
+            Ok(est) if memory::sum([est, kept]).map_err(|e| e.to_string())? <= memory::available_to_job() => floor,
+            _ => rows,
+        },
+        Ok(Some(rows)) => rows,
+        Ok(None) => {
+            let mut exec = Executor::new();
+            exec.trim_bytes(1);
+            let mut whole = 0usize;
+            for t in terminals {
+                whole = whole.max(exec.estimate(g, t, sources).map_err(|e| e.to_string())?);
+            }
+            match banded::estimate_banded(g, terminals, sources, floor) {
+                Ok(est) if memory::sum([est, kept]).map_err(|e| e.to_string())? < whole => if forced > 0 { forced } else { floor },
+                Ok(_) | Err(heeler_engine::EngineError::Band(_)) => return Ok(None),
+                Err(e) => return Err(e.to_string()),
+            }
+        }
+        Err(heeler_engine::EngineError::Band(_)) => return Ok(None),
+        Err(e) => return Err(e.to_string()),
+    };
+    Ok(Some(rows))
+}
+
 /// Several nodes' whole frames rendered together band by band, in the
 /// same passes, so the work above them is done once per band for all of
 /// them (the beauty, its alpha and the export layers): each the same to
@@ -11606,41 +11653,7 @@ pub(crate) fn render_frames_banded(g: &Graph, terminals: &[&str], sources: &Hash
     }
     let h = sizes[0].1;
     let frame_bytes = memory::sum(sizes.iter().map(|(w, h, c)| w * h * c * 4)).map_err(|e| e.to_string())?;
-    // Bands as tall as fit the target. When nodes the bands do not follow
-    // must be made whole and that alone is past it, bands as tall as
-    // memory allows would only fill the room up again (measured: a 48 MP
-    // export of the dumped Finish graph held 10.2 GB in one band against
-    // 6.9 whole), so modest bands, EXPORT_BAND_FLOOR rows, if those still
-    // ask less than the whole render; else the whole render.
-    let ceiling = memory::available_to_job().min(EXPORT_BAND_TARGET.saturating_add(frame_bytes));
-    let floor = EXPORT_BAND_FLOOR.min(h);
-    let rows = match banded::band_rows_for(g, terminals, sources, ceiling, frame_bytes) {
-        Ok(Some(_)) if forced > 0 => forced,
-        // Short bands keep less but make the reaches' margins again more
-        // often (the every-effect 48 MP graph: 36 s in bands of 29 rows,
-        // 17 s in bands of 256), so on the desktop never shorter than the
-        // floor while memory holds those.
-        Ok(Some(rows)) if rows < floor => match banded::estimate_banded(g, terminals, sources, floor) {
-            Ok(est) if memory::sum([est, frame_bytes]).map_err(|e| e.to_string())? <= memory::available_to_job() => floor,
-            _ => rows,
-        },
-        Ok(Some(rows)) => rows,
-        Ok(None) => {
-            let mut exec = Executor::new();
-            exec.trim_bytes(1);
-            let mut whole = 0usize;
-            for t in terminals {
-                whole = whole.max(exec.estimate(g, t, sources).map_err(|e| e.to_string())?);
-            }
-            match banded::estimate_banded(g, terminals, sources, floor) {
-                Ok(est) if memory::sum([est, frame_bytes]).map_err(|e| e.to_string())? < whole => if forced > 0 { forced } else { floor },
-                Ok(_) | Err(heeler_engine::EngineError::Band(_)) => return Ok(None),
-                Err(e) => return Err(e.to_string()),
-            }
-        }
-        Err(heeler_engine::EngineError::Band(_)) => return Ok(None),
-        Err(e) => return Err(e.to_string()),
-    };
+    let Some(rows) = export_band_rows(g, terminals, sources, frame_bytes, h)? else { return Ok(None) };
     let _frame_job = Job::admit(frame_bytes, "export frames").map_err(|e| e.to_string())?;
     let mut images: Vec<Option<ImageBuf>> = Vec::new();
     let mut masks: Vec<Option<MaskBuf>> = Vec::new();
@@ -11872,7 +11885,7 @@ fn attach_export_metadata(
     bytes: &mut Vec<u8>,
     ext: &str,
     source_path: &Option<PathBuf>,
-    image: &ImageBuf,
+    size: (usize, usize),
     keywords: &[String],
     dpi: u32,
 ) {
@@ -11881,7 +11894,7 @@ fn attach_export_metadata(
         if let Ok(raw) = std::fs::read(p) {
             let exif = heeler_io::read_exif(&raw);
             if !exif.is_empty() {
-                let tiff = heeler_io::write_exif_tiff(&exif, heeler_io::ExifExportOptions { width: image.width as u32, height: image.height as u32, dpi: dpi });
+                let tiff = heeler_io::write_exif_tiff(&exif, heeler_io::ExifExportOptions { width: size.0 as u32, height: size.1 as u32, dpi: dpi });
                 if ext == "png" {
                     heeler_io::embed_png_exif(bytes, &tiff);
                 } else {
@@ -18381,6 +18394,62 @@ fn extension_for(format: &str) -> &'static str {
     }
 }
 
+/// The band sink an export's container writes through, when it has one:
+/// the encoders finish_export ends in, but the float TIFF and the EXR.
+fn streamed_encoding(ext: &str, format: &str) -> Option<heeler_io::band_sink::SinkFormat> {
+    use heeler_io::band_sink::SinkFormat;
+    Some(match ext {
+        "tif" | "tiff" if format == "tiff32" => return None,
+        "tif" | "tiff" => SinkFormat::Tiff16,
+        "png" if format == "png16" => SinkFormat::Png16,
+        "png" => SinkFormat::Png8,
+        "dng" => SinkFormat::Dng,
+        "webp" => SinkFormat::Webp,
+        "exr" => return None,
+        _ => SinkFormat::Jpeg,
+    })
+}
+
+/// The export's frame rendered band by band straight into a sink of
+/// `format` (heeler_io::band_sink): the samples its encoder takes, never
+/// the f32 frame. None when the frame needs more than the encoder after
+/// the render (a reduction to `max_edge`, 0 for none), when the bands
+/// cannot follow the graph or do not fit, or when a test asks for the
+/// whole frame; the caller then renders the frame as before.
+fn render_export_streamed(
+    ui: &UiGraph,
+    source: Arc<ImageBuf>,
+    extra: &HashMap<String, SourceImage>,
+    format: heeler_io::band_sink::SinkFormat,
+    max_edge: usize,
+) -> Result<Option<heeler_io::band_sink::BandSink>, String> {
+    memory::catch(|| {
+        EXPORT_BANDS_MADE.with(|b| b.set(0));
+        if EXPORT_BAND_ROWS.with(|r| r.get()) == usize::MAX {
+            return Ok(None);
+        }
+        let _job = Job::admit(memory::bytes(source.width, source.height, 1, 48).map_err(|e| e.to_string())?, "export working images").map_err(|e| e.to_string())?;
+        let (g, sources, terminal) = export_render_setup(ui, source, extra)?;
+        let (w, h, c) = match heeler_engine::banded::output_size(&g, &terminal, &sources) {
+            Ok(d) => d,
+            Err(_) => return Ok(None),
+        };
+        if c != 4 || (max_edge > 0 && w.max(h) > max_edge) {
+            return Ok(None);
+        }
+        let kept = memory::bytes(w, h, format.bytes_per_pixel(), 1).map_err(|e| e.to_string())?;
+        let Some(rows) = export_band_rows(&g, &[terminal.as_str()], &sources, kept, h)? else { return Ok(None) };
+        match heeler_io::band_sink::render_into_sink(&g, &terminal, &sources, rows, format).map_err(|e| e.to_string())? {
+            Some((sink, report)) => {
+                EXPORT_BANDS_MADE.with(|b| b.set(report.bands));
+                Ok(Some(sink))
+            }
+            None => Ok(None),
+        }
+    })
+    .map_err(|e| e.to_string())?
+}
+
 /// All export entry points use named settings and the same admitted writer.
 pub(crate) fn finish_export(
     input: ExportInput<'_>,
@@ -18447,22 +18516,6 @@ fn finish_export_admitted(
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    // The beauty rendered with the alpha and the layers, when it was;
-    // else rendered here.
-    let mut image = match beauty {
-        Some(image) => image,
-        None => render_export(graph, source, smart)?,
-    };
-    // A mask the engine could not place closed its layer; the export
-    // says which (mask_on_frame), the layer ticks and the alpha pipe
-    // this thread rendered just ahead of it included.
-    for line in heeler_engine::ops::take_mask_mismatches() {
-        log("warn", &line);
-    }
-    // The Output node's alpha port (26.3 Phase 5): a mask pipe on it IS
-    // the beauty's alpha. Wired, it wins over the Transparent matte
-    // toggle below; unwired, the toggle behaves as it always did. A
-    // format with no fourth sample drops the port and says so.
     // The destination decides the encoder where it carries an
     // extension: the bytes must match the name every other program will
     // read the file by. With no extension there is nothing to override
@@ -18477,45 +18530,6 @@ fn finish_export_admitted(
     // "jpeg" export named .tif wrote a TIFF without its alpha and said
     // the format carried none (the 26.5.1 review).
     let holds_alpha = ContainerHolds::of(&ext).alpha;
-    let alpha_wired = alpha.is_some();
-    if let Some(a) = &alpha {
-        if holds_alpha {
-            apply_alpha(&mut image, a);
-        } else {
-            log("warn", export_layers::ALPHA_NOT_HELD);
-        }
-    }
-    // Background removal: the graph's Smart mask becomes the alpha
-    // channel, for the formats that can carry one. The matte multiplies
-    // whatever alpha the render produced; a graph without a smart mask (or
-    // without its raster) exports opaque and says so in the log, never
-    // silently different.
-    if matte && !alpha_wired && holds_alpha {
-        let node = graph.nodes.iter().find(|n| n.node_type == "heeler.smart_mask");
-        match node.and_then(|n| smart.get(&n.id)) {
-            Some(sr) => apply_matte(&mut image, &sr.image),
-            None => log(
-                "warn",
-                "transparent export asked, but the graph has no computed Smart mask; exported opaque",
-            ),
-        }
-    }
-    if let Some(me) = max_edge {
-        if me > 0 {
-            image = downscale(&image, me as usize);
-        }
-    }
-    // Percent sizing lives here rather than in the UI because only this
-    // side knows the frame's real resolution before it has rendered.
-    // Only the quick export asks for it; batch callers pass None.
-    if let Some(p) = scale_percent {
-        if p > 0.0 && p < 100.0 {
-            let edge = ((image.width.max(image.height) as f32) * p / 100.0).round() as usize;
-            if edge > 0 {
-                image = downscale(&image, edge);
-            }
-        }
-    }
     // The catalog's keywords go into the TIFF containers at encode time,
     // not spliced on after: a directory grown after the fact has to move,
     // and a TIFF whose directory sits past the pixels is the one file the
@@ -18525,74 +18539,163 @@ fn finish_export_admitted(
     } else {
         None
     };
-    // EXR (26.3 Phase 8): one file with the beauty and every layer
-    // packed (export_layers.rs). It takes the path, not bytes, so this
-    // branch stands alone; siblings and metadata splices do not apply.
-    if ext == "exr" {
-        if keep_metadata && (xmp.is_some() || source_path.is_some()) {
-            log("info", "the EXR carries no camera record or keywords; nothing was embedded");
+    // An export with nothing after the render that reads the whole frame
+    // (no alpha port, matte, resize or export layer, an encoder the band
+    // sink writes) renders band by band straight into its encoder's
+    // samples: the f32 frame is never held, the file is the same.
+    let streamed = if beauty.is_none() && alpha.is_none() && !(matte && holds_alpha) && layers.is_empty() && !scale_percent.is_some_and(|p| p > 0.0 && p < 100.0) {
+        match streamed_encoding(&ext, format) {
+            Some(sink) => render_export_streamed(graph, source.clone(), smart, sink, max_edge.unwrap_or(0) as usize)?,
+            None => None,
         }
-        write_exr(dest, &image, &layers, &mut log)?;
-        return Ok(dest.to_string_lossy().to_string());
-    }
-    // A layer the chosen container cannot hold is dropped, named, and
-    // the export still runs (the panel warned at choice time). The
-    // container is the one the name picked, as for the main file below:
-    // asked by the format, a "tiff" export named .png wrote TIFF siblings
-    // under .png names and warned of nothing.
-    if !layers.is_empty() && !matches!(ext.as_str(), "tif" | "tiff") {
-        for ch in &layers {
-            log("warn", &export_layers::layer_not_held(&ch.name));
-        }
-    }
-    let mut bytes = match ext.as_str() {
-        "tif" | "tiff" if format == "tiff32" => {
-            // The float TIFF (26.3 Phase 3b): scene-linear, no curve, no
-            // clamp. Alpha rides when the render (or the matte) produced
-            // any. It carries no camera record or keywords; the 16-bit
-            // TIFF is the one that keeps metadata.
-            if keep_metadata && (xmp.is_some() || source_path.is_some()) {
-                log("info", "the 32-bit float TIFF carries no metadata; nothing was embedded");
+    } else {
+        None
+    };
+    let (mut bytes, size) = match streamed {
+        Some(sink) => {
+            for line in heeler_engine::ops::take_mask_mismatches() {
+                log("warn", &line);
             }
-            let alpha = image.data.chunks_exact(4).any(|px| px[3] < 1.0);
-            heeler_io::encode_tiff32f(&image, heeler_io::FloatTiffOptions { include_alpha: alpha, dpi: Some(dpi) })
-        }
-        "tif" | "tiff" => {
-            // Same rule as the single export: the TIFF's camera record
-            // is a directory written at encode time, not a splice.
-            let exif = if keep_metadata {
-                source_exif(&source_path.cloned())
-            } else {
-                None
+            let exif = if keep_metadata && matches!(ext.as_str(), "tif" | "tiff" | "dng") { source_exif(&source_path.cloned()) } else { None };
+            let q = quality.clamp(1, 100);
+            let encoding = match streamed_encoding(&ext, format) {
+                Some(heeler_io::band_sink::SinkFormat::Jpeg) | None => heeler_io::band_sink::Encoding::Jpeg(q),
+                Some(heeler_io::band_sink::SinkFormat::Png8) => heeler_io::band_sink::Encoding::Png8,
+                Some(heeler_io::band_sink::SinkFormat::Png16) => heeler_io::band_sink::Encoding::Png16,
+                Some(heeler_io::band_sink::SinkFormat::Webp) => heeler_io::band_sink::Encoding::Webp(q),
+                Some(heeler_io::band_sink::SinkFormat::Tiff16) => heeler_io::band_sink::Encoding::Tiff16(heeler_io::TiffExportOptions { exif: exif.as_ref(), xmp: xmp.as_deref(), dpi }),
+                Some(heeler_io::band_sink::SinkFormat::Dng) => heeler_io::band_sink::Encoding::Dng { exif: exif.as_ref(), xmp: xmp.as_deref() },
             };
-            heeler_io::encode_tiff16_export(&image, heeler_io::TiffExportOptions { exif: exif.as_ref(), xmp: xmp.as_deref(), dpi: dpi })
+            let size = sink.size();
+            (sink.encode(encoding).map_err(|e| e.to_string())?, size)
         }
-        // png16 shares the .png extension, so the format string breaks
-        // the tie the extension cannot.
-        "png" if format == "png16" => heeler_io::encode_png16(&image),
-        "png" => heeler_io::encode_png(&image),
-        // The DNG's camera record goes in at encode time, the same
-        // bargain the TIFF makes: a metadata-keeping export of a camera
-        // file still says which camera, and a bake (None) writes exactly
-        // the file it always wrote.
-        "dng" => {
-            let exif = if keep_metadata {
-                source_exif(&source_path.cloned())
-            } else {
-                None
+        None => {
+            // The beauty rendered with the alpha and the layers, when it was;
+            // else rendered here.
+            let mut image = match beauty {
+                Some(image) => image,
+                None => render_export(graph, source, smart)?,
             };
-            heeler_io::encode_dng_with_xmp(&image, exif.as_ref(), xmp.as_deref())
+            // A mask the engine could not place closed its layer; the export
+            // says which (mask_on_frame), the layer ticks and the alpha pipe
+            // this thread rendered just ahead of it included.
+            for line in heeler_engine::ops::take_mask_mismatches() {
+                log("warn", &line);
+            }
+            // The Output node's alpha port (26.3 Phase 5): a mask pipe on it IS
+            // the beauty's alpha. Wired, it wins over the Transparent matte
+            // toggle below; unwired, the toggle behaves as it always did. A
+            // format with no fourth sample drops the port and says so.
+            let alpha_wired = alpha.is_some();
+            if let Some(a) = &alpha {
+                if holds_alpha {
+                    apply_alpha(&mut image, a);
+                } else {
+                    log("warn", export_layers::ALPHA_NOT_HELD);
+                }
+            }
+            // Background removal: the graph's Smart mask becomes the alpha
+            // channel, for the formats that can carry one. The matte multiplies
+            // whatever alpha the render produced; a graph without a smart mask (or
+            // without its raster) exports opaque and says so in the log, never
+            // silently different.
+            if matte && !alpha_wired && holds_alpha {
+                let node = graph.nodes.iter().find(|n| n.node_type == "heeler.smart_mask");
+                match node.and_then(|n| smart.get(&n.id)) {
+                    Some(sr) => apply_matte(&mut image, &sr.image),
+                    None => log(
+                        "warn",
+                        "transparent export asked, but the graph has no computed Smart mask; exported opaque",
+                    ),
+                }
+            }
+            if let Some(me) = max_edge {
+                if me > 0 {
+                    image = downscale(&image, me as usize);
+                }
+            }
+            // Percent sizing lives here rather than in the UI because only this
+            // side knows the frame's real resolution before it has rendered.
+            // Only the quick export asks for it; batch callers pass None.
+            if let Some(p) = scale_percent {
+                if p > 0.0 && p < 100.0 {
+                    let edge = ((image.width.max(image.height) as f32) * p / 100.0).round() as usize;
+                    if edge > 0 {
+                        image = downscale(&image, edge);
+                    }
+                }
+            }
+            // EXR (26.3 Phase 8): one file with the beauty and every layer
+            // packed (export_layers.rs). It takes the path, not bytes, so this
+            // branch stands alone; siblings and metadata splices do not apply.
+            if ext == "exr" {
+                if keep_metadata && (xmp.is_some() || source_path.is_some()) {
+                    log("info", "the EXR carries no camera record or keywords; nothing was embedded");
+                }
+                write_exr(dest, &image, &layers, &mut log)?;
+                return Ok(dest.to_string_lossy().to_string());
+            }
+            // A layer the chosen container cannot hold is dropped, named, and
+            // the export still runs (the panel warned at choice time). The
+            // container is the one the name picked, as for the main file below:
+            // asked by the format, a "tiff" export named .png wrote TIFF siblings
+            // under .png names and warned of nothing.
+            if !layers.is_empty() && !matches!(ext.as_str(), "tif" | "tiff") {
+                for ch in &layers {
+                    log("warn", &export_layers::layer_not_held(&ch.name));
+                }
+            }
+            let bytes = match ext.as_str() {
+                "tif" | "tiff" if format == "tiff32" => {
+                    // The float TIFF (26.3 Phase 3b): scene-linear, no curve, no
+                    // clamp. Alpha rides when the render (or the matte) produced
+                    // any. It carries no camera record or keywords; the 16-bit
+                    // TIFF is the one that keeps metadata.
+                    if keep_metadata && (xmp.is_some() || source_path.is_some()) {
+                        log("info", "the 32-bit float TIFF carries no metadata; nothing was embedded");
+                    }
+                    let alpha = image.data.chunks_exact(4).any(|px| px[3] < 1.0);
+                    heeler_io::encode_tiff32f(&image, heeler_io::FloatTiffOptions { include_alpha: alpha, dpi: Some(dpi) })
+                }
+                "tif" | "tiff" => {
+                    // Same rule as the single export: the TIFF's camera record
+                    // is a directory written at encode time, not a splice.
+                    let exif = if keep_metadata {
+                        source_exif(&source_path.cloned())
+                    } else {
+                        None
+                    };
+                    heeler_io::encode_tiff16_export(&image, heeler_io::TiffExportOptions { exif: exif.as_ref(), xmp: xmp.as_deref(), dpi: dpi })
+                }
+                // png16 shares the .png extension, so the format string breaks
+                // the tie the extension cannot.
+                "png" if format == "png16" => heeler_io::encode_png16(&image),
+                "png" => heeler_io::encode_png(&image),
+                // The DNG's camera record goes in at encode time, the same
+                // bargain the TIFF makes: a metadata-keeping export of a camera
+                // file still says which camera, and a bake (None) writes exactly
+                // the file it always wrote.
+                "dng" => {
+                    let exif = if keep_metadata {
+                        source_exif(&source_path.cloned())
+                    } else {
+                        None
+                    };
+                    heeler_io::encode_dng_with_xmp(&image, exif.as_ref(), xmp.as_deref())
+                }
+                "webp" => heeler_io::encode_webp(&image, quality.clamp(1, 100)),
+                _ => heeler_io::encode_jpeg(&image, quality.clamp(1, 100)),
+            }
+            .map_err(|e| e.to_string())?;
+            (bytes, (image.width, image.height))
         }
-        "webp" => heeler_io::encode_webp(&image, quality.clamp(1, 100)),
-        _ => heeler_io::encode_jpeg(&image, quality.clamp(1, 100)),
-    }
-    .map_err(|e| e.to_string())?;
+    };
     if keep_metadata {
         match ext.as_str() {
             // The TIFF containers took their keywords at encode time;
             // WebP carries none; the rest get the splice.
             "tif" | "tiff" | "dng" | "webp" => {}
-            _ => attach_export_metadata(&mut bytes, &ext, &source_path.cloned(), &image, keywords, dpi),
+            _ => attach_export_metadata(&mut bytes, &ext, &source_path.cloned(), size, keywords, dpi),
         }
     }
     // The print resolution, metadata kept or not: it describes the
@@ -18600,14 +18703,14 @@ fn finish_export_admitted(
     // is for another editor, and an EXR has nowhere to put one.
     match ext.as_str() {
         "png" => heeler_io::set_png_dpi(&mut bytes, dpi),
-        "webp" => heeler_io::set_webp_dpi(&mut bytes, dpi, image.width as u32, image.height as u32),
+        "webp" => heeler_io::set_webp_dpi(&mut bytes, dpi, size.0 as u32, size.1 as u32),
         "tif" | "tiff" | "dng" => {}
         _ => heeler_io::set_jpeg_dpi(&mut bytes, dpi),
     }
     write_named(dest, &bytes)?;
     // The export layers' TIFF form: one sibling per layer beside the
     // beauty, from the same options (export_layers.rs).
-    write_tiff_siblings(dest, &ext, (image.width, image.height), &layers, &options, &mut log)?;
+    write_tiff_siblings(dest, &ext, size, &layers, &options, &mut log)?;
     Ok(dest.to_string_lossy().to_string())
 }
 

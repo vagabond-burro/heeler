@@ -50,6 +50,48 @@ fn the_dumped_finish_graph_exports_the_same_in_bands() {
     assert_bit_for_bit(&on, &photo, &extra, "every node on, the matte planted");
 }
 
+/// An export with nothing after the render that reads the whole frame
+/// streams its bands straight into the encoder's samples, and writes the
+/// whole-frame export's file byte for byte, in every container the band
+/// sink writes; one reduced to a smaller edge renders its frame as
+/// before, and writes the same file too.
+#[test]
+fn a_streamed_export_writes_the_whole_exports_file() {
+    let graph: UiGraph = serde_json::from_str(include_str!("../tests/fixtures/finish_object_mask.json")).unwrap();
+    let photo = photograph(237, 163);
+    let dir = tempfile::tempdir().unwrap();
+    let write = |rows: usize, name: &str, format: &str, max_edge: Option<u32>| -> (Vec<u8>, usize) {
+        EXPORT_BAND_ROWS.with(|r| r.set(rows));
+        let dest = dir.path().join(format!("{rows}-{name}"));
+        let written = finish_export(
+            crate::ExportInput { graph: &graph, source_path: None, source: photo.clone(), smart: &HashMap::new(), keywords: &[], alpha: None, layers: Vec::new(), beauty: None },
+            &dest,
+            crate::ExportOptions { format, quality: 87, max_edge, keep_metadata: false, matte: false, scale_percent: None, allow_overwrite: false, dpi: heeler_io::DEFAULT_DPI },
+            |_, _| {},
+        );
+        let bands = EXPORT_BANDS_MADE.with(|b| b.get());
+        EXPORT_BAND_ROWS.with(|r| r.set(0));
+        (std::fs::read(written.unwrap()).unwrap(), bands)
+    };
+    for (name, format, max_edge, streams) in [
+        ("a.jpg", "jpeg", None, true),
+        ("a.png", "png", None, true),
+        ("b.png", "png16", None, true),
+        ("a.webp", "webp", None, true),
+        ("a.tif", "tiff", None, true),
+        ("a.dng", "dng", None, true),
+        ("small.jpg", "jpeg", Some(120), false),
+        ("float.tif", "tiff32", None, false),
+    ] {
+        let (whole, _) = write(usize::MAX, name, format, max_edge);
+        let (banded, bands) = write(13, name, format, max_edge);
+        assert!(banded == whole, "{name}: the streamed file differs from the whole export's");
+        if streams {
+            assert_eq!(bands, 163usize.div_ceil(13), "{name}: streamed in bands of 13 rows");
+        }
+    }
+}
+
 #[test]
 fn the_reducers_finish_layer_graphs_export_the_same_in_bands() {
     let dir = tempfile::tempdir().unwrap();
@@ -72,7 +114,8 @@ fn the_reducers_finish_layer_graphs_export_the_same_in_bands() {
 ///
 ///   HEELER_EXPORT_MODE=banded /usr/bin/time -l cargo test --release -p heeler-desktop measure_a_heavy_48_mp_export -- --ignored --nocapture
 ///
-/// HEELER_EXPORT_ROWS sets the band height instead of the export's choice.
+/// HEELER_EXPORT_ROWS sets the band height instead of the export's choice;
+/// HEELER_EXPORT_MODE=streamed renders into the JPEG's samples.
 #[test]
 #[ignore = "renders a 48 MP frame; run by hand in release under /usr/bin/time"]
 fn measure_a_heavy_48_mp_export() {
@@ -98,6 +141,18 @@ fn measure_a_heavy_48_mp_export() {
     let rows = std::env::var("HEELER_EXPORT_ROWS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     EXPORT_BAND_ROWS.with(|r| r.set(if mode == "whole" { usize::MAX } else { rows }));
     let started = std::time::Instant::now();
+    // HEELER_EXPORT_MODE=streamed renders into the JPEG's samples, as an
+    // export with nothing after the render does (finish_export).
+    if mode == "streamed" {
+        EXPORT_BAND_ROWS.with(|r| r.set(rows));
+        let sink = render_export_streamed(&graph, photo, &HashMap::new(), heeler_io::band_sink::SinkFormat::Jpeg, 0).unwrap().expect("streams");
+        let rendered = started.elapsed();
+        let bands = EXPORT_BANDS_MADE.with(|b| b.get());
+        let (w, h) = sink.size();
+        let jpeg = sink.jpeg(90).unwrap();
+        println!("{mode}: {w}x{h} in {bands} bands, render {:.1} s, encode to {} MiB in {:.1} s", rendered.as_secs_f64(), jpeg.len() >> 20, (started.elapsed() - rendered).as_secs_f64());
+        return;
+    }
     let image = render_export(&graph, photo, &HashMap::new()).unwrap();
     let rendered = started.elapsed();
     let bands = EXPORT_BANDS_MADE.with(|b| b.get());

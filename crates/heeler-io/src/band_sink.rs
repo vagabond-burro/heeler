@@ -15,8 +15,12 @@
 //! its sink keeps scene-linear RGB (12 bytes a pixel) and the peak as the
 //! bands go, and quantizes at the end.
 
+use std::collections::HashMap;
+
+use heeler_engine::banded::{self, BandedReport};
 use heeler_engine::memory;
-use heeler_engine::ImageBuf;
+use heeler_engine::{EngineError, ImageBuf, SourceImage, Value};
+use heeler_graph::Graph;
 
 use crate::{linear_to_srgb, srgb_u8, Exif, IoError, TiffExportOptions};
 
@@ -200,12 +204,149 @@ impl BandSink {
         crate::bake::dng_from_pixels(&pixels, self.width, self.height, stops, exif, xmp, None)
     }
 
+    /// The file, as `encoding` writes it.
+    pub fn encode(self, encoding: Encoding<'_>) -> Result<Vec<u8>, IoError> {
+        match encoding {
+            Encoding::Jpeg(q) => self.jpeg(q),
+            Encoding::Png8 => self.png8(),
+            Encoding::Png16 => self.png16(),
+            Encoding::Webp(q) => self.webp(q),
+            Encoding::Tiff16(options) => self.tiff16(options),
+            Encoding::Dng { exif, xmp } => self.dng(exif, xmp),
+        }
+    }
+
+    /// The frame's width and height.
+    pub fn size(&self) -> (usize, usize) {
+        (self.width, self.height)
+    }
+
     fn expect(&self, format: SinkFormat) -> Result<(), IoError> {
         if self.format != format {
             return Err(IoError::Unsupported(format!("a {:?} sink cannot write a {format:?}", self.format)));
         }
         self.complete()
     }
+}
+
+/// How a streamed export is encoded: the format and what it takes.
+#[derive(Clone, Copy)]
+pub enum Encoding<'a> {
+    /// At quality 1 to 100.
+    Jpeg(u8),
+    Png8,
+    Png16,
+    /// At quality 1 to 100.
+    Webp(u8),
+    Tiff16(TiffExportOptions<'a>),
+    Dng { exif: Option<&'a Exif>, xmp: Option<&'a str> },
+}
+
+impl Encoding<'_> {
+    /// The sink this encoding's samples are kept in.
+    pub fn format(&self) -> SinkFormat {
+        match self {
+            Encoding::Jpeg(_) => SinkFormat::Jpeg,
+            Encoding::Png8 => SinkFormat::Png8,
+            Encoding::Png16 => SinkFormat::Png16,
+            Encoding::Webp(_) => SinkFormat::Webp,
+            Encoding::Tiff16(_) => SinkFormat::Tiff16,
+            Encoding::Dng { .. } => SinkFormat::Dng,
+        }
+    }
+}
+
+/// An engine error as the sink's: a refusal stays a refusal.
+fn engine_error(e: EngineError) -> IoError {
+    match e {
+        EngineError::Memory(m) => IoError::Memory(m),
+        e => IoError::Unsupported(e.to_string()),
+    }
+}
+
+/// The bytes a sink of `format` keeps for `terminal`'s frame, and the
+/// frame's size; None when the terminal is not a picture.
+fn sink_bytes(graph: &Graph, terminal: &str, sources: &HashMap<String, SourceImage>, format: SinkFormat) -> Result<Option<(usize, usize, usize)>, IoError> {
+    let (w, h, c) = match banded::output_size(graph, terminal, sources) {
+        Ok(d) => d,
+        Err(EngineError::Band(_)) => return Ok(None),
+        Err(e) => return Err(engine_error(e)),
+    };
+    if c != 4 {
+        return Ok(None);
+    }
+    Ok(Some((w, h, memory::bytes(w, h, format.bytes_per_pixel(), 1)?)))
+}
+
+/// The tallest band whose banded render of `terminal`, beside a sink of
+/// `format` for its whole frame, fits `ceiling` bytes; None when no band
+/// fits or the bands cannot follow the graph.
+pub fn sink_band_rows(
+    graph: &Graph,
+    terminal: &str,
+    sources: &HashMap<String, SourceImage>,
+    ceiling: usize,
+    format: SinkFormat,
+) -> Result<Option<usize>, IoError> {
+    let Some((_, _, kept)) = sink_bytes(graph, terminal, sources, format)? else { return Ok(None) };
+    match banded::band_rows_for(graph, &[terminal], sources, ceiling, kept) {
+        Ok(rows) => Ok(rows),
+        Err(EngineError::Band(_)) => Ok(None),
+        Err(e) => Err(engine_error(e)),
+    }
+}
+
+/// `terminal`'s frame rendered band by band, `band_rows` rows at a time,
+/// each band handed straight to a sink of `format`: the whole frame is
+/// never held as f32, only as the samples its encoder takes. The sink's
+/// file is the whole-frame render's encode, byte for byte. None when the
+/// bands cannot follow the graph (render it whole) or the terminal is
+/// not a picture.
+pub fn render_into_sink(
+    graph: &Graph,
+    terminal: &str,
+    sources: &HashMap<String, SourceImage>,
+    band_rows: usize,
+    format: SinkFormat,
+) -> Result<Option<(BandSink, BandedReport)>, IoError> {
+    let Some((w, h, kept)) = sink_bytes(graph, terminal, sources, format)? else { return Ok(None) };
+    let _job = memory::Job::admit(kept, "export samples")?;
+    let mut sink = BandSink::new(format, w, h)?;
+    let mut failed: Option<IoError> = None;
+    let rendered = banded::render_banded(graph, &[terminal], sources, band_rows, &mut |_, y0, v| match v {
+        Value::Image(band) => sink.put(y0, &band).map_err(|e| {
+            failed = Some(e);
+            EngineError::Cancelled
+        }),
+        Value::Mask(_) => Err(EngineError::TypeMismatch { node: terminal.to_string(), port: "out".into() }),
+    });
+    if let Some(e) = failed {
+        return Err(e);
+    }
+    match rendered {
+        Ok(report) => Ok(Some((sink, report))),
+        Err(EngineError::Band(_)) => Ok(None),
+        Err(e) => Err(engine_error(e)),
+    }
+}
+
+/// An export within `ceiling` bytes, for a caller with no whole-frame
+/// steps of its own after the render (the iOS port): the tallest band
+/// that fits, rendered into the sink and encoded. The file and the
+/// frame's size; None when no band fits or the bands cannot follow the
+/// graph, which the caller answers by rendering whole or exporting
+/// smaller (heeler_engine::banded::largest_export_edge).
+pub fn export_in_bands(
+    graph: &Graph,
+    terminal: &str,
+    sources: &HashMap<String, SourceImage>,
+    ceiling: usize,
+    encoding: Encoding<'_>,
+) -> Result<Option<(Vec<u8>, usize, usize)>, IoError> {
+    let Some(rows) = sink_band_rows(graph, terminal, sources, ceiling, encoding.format())? else { return Ok(None) };
+    let Some((sink, _)) = render_into_sink(graph, terminal, sources, rows, encoding.format())? else { return Ok(None) };
+    let (w, h) = sink.size();
+    Ok(Some((sink.encode(encoding)?, w, h)))
 }
 
 #[cfg(test)]
@@ -270,5 +411,49 @@ mod tests {
         assert!(s.put(parts[1].0, &parts[1].1).is_err());
         s.put(parts[0].0, &parts[0].1).unwrap();
         assert!(s.jpeg(90).is_err());
+    }
+
+    /// A graph rendered straight into the sink, band by band, writes the
+    /// whole-frame render's file byte for byte in every format, at band
+    /// heights that divide the frame and that do not; within a ceiling,
+    /// export_in_bands picks its band and writes the same file.
+    #[test]
+    fn a_graph_rendered_into_the_sink_writes_the_whole_renders_file() {
+        use heeler_graph::{ParamValue, Registry, Section};
+        let registry = Registry::builtin();
+        let mut g = Graph::new("stream");
+        for (ty, id) in [("heeler.image_source", "src"), ("heeler.exposure", "exp"), ("heeler.blur", "blur"), ("heeler.grain", "grain")] {
+            g.add_node(registry.instantiate(ty, id, Section::Creative).unwrap()).unwrap();
+        }
+        g.set_param("exp", "exposure", ParamValue::Number(0.6)).unwrap();
+        g.set_param("blur", "radius", ParamValue::Number(3.0)).unwrap();
+        g.set_param("grain", "intensity", ParamValue::Number(40.0)).unwrap();
+        g.connect("src", "out", "exp", "in").unwrap();
+        g.connect("exp", "out", "blur", "in").unwrap();
+        g.connect("blur", "out", "grain", "in").unwrap();
+        for opaque in [true, false] {
+            let sources = HashMap::from([("src".to_string(), SourceImage { image: std::sync::Arc::new(frame(61, 43, opaque)), version: 1, measured: false })]);
+            let whole = match heeler_engine::Executor::new().render(&g, "grain", &sources).unwrap() {
+                Value::Image(i) => i,
+                Value::Mask(_) => unreachable!(),
+            };
+            let cases: [(Encoding<'_>, Vec<u8>); 6] = [
+                (Encoding::Jpeg(88), crate::encode_jpeg(&whole, 88).unwrap()),
+                (Encoding::Png8, crate::encode_png(&whole).unwrap()),
+                (Encoding::Png16, crate::encode_png16(&whole).unwrap()),
+                (Encoding::Webp(80), crate::encode_webp(&whole, 80).unwrap()),
+                (Encoding::Tiff16(Default::default()), crate::encode_tiff16_export(&whole, Default::default()).unwrap()),
+                (Encoding::Dng { exif: None, xmp: None }, crate::encode_dng_with_xmp(&whole, None, None).unwrap()),
+            ];
+            for (encoding, want) in cases {
+                for rows in [7, 43] {
+                    let (sink, report) = render_into_sink(&g, "grain", &sources, rows, encoding.format()).unwrap().unwrap();
+                    assert!(report.whole.is_empty(), "{report:?}");
+                    assert_eq!(sink.encode(encoding).unwrap(), want, "{:?} in bands of {rows}, opaque {opaque}", encoding.format());
+                }
+                let (bytes, w, h) = export_in_bands(&g, "grain", &sources, 1 << 30, encoding).unwrap().unwrap();
+                assert_eq!((bytes, w, h), (want, 61, 43), "{:?} within a ceiling", encoding.format());
+            }
+        }
     }
 }

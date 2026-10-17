@@ -6,6 +6,8 @@ edition.workspace = true
 
 [dependencies]
 heeler-engine = { path = "../heeler-engine" }
+# The graph a streamed export renders (band_sink::render_into_sink).
+heeler-graph = { path = "../heeler-graph" }
 heeler-raw = { path = "../heeler-raw", optional = true }
 image = "0.25"
 # Multi-page TIFF reading (src/tiff_pages.rs): the image crate decodes
