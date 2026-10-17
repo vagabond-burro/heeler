@@ -137,6 +137,57 @@ describe("the Expand settings on select toggle", () => {
   });
 });
 
+describe("on: a second click on the selected layer folds its settings", () => {
+  // 2026-10-17: "click on an adjustment layer expands the controls,
+  // clicking again does nothing when it should collapse".
+  const press = (id: string) => {
+    fireEvent.mouseDown(screen.getByTestId(`art-layer-${id}`), { button: 0 });
+    fireEvent.click(screen.getByTestId(`art-strip-${id}`));
+  };
+
+  it("folds and opens again on the strip, and opens again when it is chosen anew", () => {
+    const { s, a, b } = adjustments(true);
+    mount(s);
+    press(a);
+    expect(sliders(a)).not.toBeNull();
+    press(a);
+    expect(sliders(a)).toBeNull();
+    expect(screen.getByTestId(`art-layer-${a}`)).toHaveAttribute("data-settings", "closed");
+    press(a);
+    expect(sliders(a)).not.toBeNull();
+    press(a);
+    press(b);
+    expect(sliders(b)).not.toBeNull();
+    press(a);
+    expect(sliders(a)).not.toBeNull();
+  });
+
+  it("does not fold from the press that selects it, a control on its strip, or a modifier click", () => {
+    const { s, a } = adjustments(true);
+    mount(s);
+    press(a);
+    expect(sliders(a)).not.toBeNull();
+    const strip = screen.getByTestId(`art-strip-${a}`);
+    const button = within(strip).queryAllByRole("button")[0];
+    if (button) {
+      fireEvent.mouseDown(screen.getByTestId(`art-layer-${a}`), { button: 0 });
+      fireEvent.click(button);
+      expect(sliders(a)).not.toBeNull();
+    }
+    fireEvent.mouseDown(screen.getByTestId(`art-layer-${a}`), { button: 0, shiftKey: true });
+    fireEvent.click(strip, { shiftKey: true });
+    expect(sliders(a)).not.toBeNull();
+  });
+
+  it("leaves the chevron's way alone when Expand settings on select is off", () => {
+    const { s, a } = adjustments(false);
+    mount(s);
+    press(a);
+    press(a);
+    expect(sliders(a)).toBeNull();
+  });
+});
+
 describe("on: selecting a layer opens its settings", () => {
   it("the selected layer's settings open and the one before closes, with no chevrons", () => {
     const { s, a, b } = adjustments(true);

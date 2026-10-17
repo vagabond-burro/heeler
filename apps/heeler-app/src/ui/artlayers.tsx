@@ -304,6 +304,16 @@ export function ArtLayersTab({ state, dispatch, width }: { state: State; dispatc
   // selecting another layer leaves it alone (2026-09-30: an edit button
   // "so layers aren't expanding and collapsing all the time").
   const [openSettings, setOpenSettings] = useState<Set<string>>(new Set());
+  // With Expand settings on select on, the selected layer whose strip was
+  // clicked again to fold its settings (2026-10-17: "clicking again does
+  // nothing when it should collapse"). A click on another layer, or a
+  // second click on this one, opens them again.
+  const [folded, setFolded] = useState<string | null>(null);
+  // The layer a plain press landed on while it was already the selected
+  // one: a press that selects a layer must not also fold it, and the
+  // click that follows the press runs after the selection has rendered.
+  const pressedSelected = useRef<string | null>(null);
+  useEffect(() => setFolded(null), [active]);
   const toggleSettings = (id: string) =>
     setOpenSettings((prev) => {
       const next = new Set(prev);
@@ -387,6 +397,7 @@ export function ArtLayersTab({ state, dispatch, width }: { state: State; dispatc
   };
 
   const pick = (e: React.MouseEvent, id: string) => {
+    pressedSelected.current = !e.ctrlKey && !e.metaKey && !e.shiftKey && id === active ? id : null;
     if (e.ctrlKey || e.metaKey) {
       const next = selected.includes(id)
         ? selected.filter((x) => x !== id)
@@ -516,7 +527,7 @@ export function ArtLayersTab({ state, dispatch, width }: { state: State; dispatc
         // reading them differently.
         const clipped = (l.blend.params.clip ?? 0) !== 0;
         const collapsible = layerCollapsible(l);
-        const settingsOpen = layerSettingsOpen(state, l, isActive, openSettings.has(l.blend.id));
+        const settingsOpen = layerSettingsOpen(state, l, isActive && folded !== l.blend.id, openSettings.has(l.blend.id));
         return (
           <div
             key={l.blend.id}
@@ -540,7 +551,16 @@ export function ArtLayersTab({ state, dispatch, width }: { state: State; dispatc
               cursor: "default",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <div
+              style={{ display: "flex", alignItems: "center", gap: 7 }}
+              data-testid={`art-strip-${l.blend.id}`}
+              onClick={(e) => {
+                // The strip itself, not a button or field on it.
+                if ((e.target as HTMLElement).closest("button, input, select, textarea, [role=button]")) return;
+                if (!state.layerExpandOnSelect || !collapsible || pressedSelected.current !== l.blend.id) return;
+                setFolded((f) => (f === l.blend.id ? null : l.blend.id));
+              }}
+            >
               {isGroup && (
                 <button
                   style={{ all: "unset", cursor: "pointer", width: 10, color: "var(--text-faint)" }}

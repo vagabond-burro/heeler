@@ -1,5 +1,22 @@
 # What's new
 
+## 2026.6
+
+### New
+
+- **Big exports fit in less memory.** A full-size export renders the photograph in horizontal strips and writes each strip into the file as it goes, so even a 48 MP photograph with heavy edits exports within a phone's memory, with the same pixels as before. Heeler also hands memory back to the system sooner, which keeps large exports lighter on any computer. [Exporting](user-guide/export.md).
+
+### Faster
+
+- **Exports of light edits take about half the time.** An export that fits in memory now renders in one piece instead of in strips, and choosing how to split a heavy one no longer costs a tenth of a second before it starts. [Exporting](user-guide/export.md).
+- **Exporting the same edit again skips the depth refinement.** An edit that uses the Depth Map keeps its full-size refined depth after the first export, so the next one starts straight away instead of refining it again for several seconds. [Depth Map](user-guide/adjustments/depth-map.md).
+- **RAW files with blown highlights open faster.** With Highlights on **Blend**, Heeler develops a clipped RAW twice and mixes the two; it now runs both at once. A Fujifilm RAF opens in about half the time, and GoPro and phone DNG files in about two thirds. [Source](user-guide/adjustments/source.md).
+
+### Fixes
+
+- **Grain shows in the canvas.** Grain on a new edit is sized to the photograph, so on the fitted preview it is smaller than a screen pixel, and the preview faded it too much: it looked as if the grain was missing, though the thumbnail and the export had it. The preview now shows it as strong as the export looks at that size. [Grain](user-guide/adjustments/grain.md).
+- **Click a layer again to fold it.** With **Expand settings on select** on, clicking the selected layer's row now folds its settings, and clicking again opens them. [Finish](user-guide/finish/README.md#settings-that-open-and-close).
+
 ## 2026.5.5
 
 ### New
