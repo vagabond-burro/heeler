@@ -728,6 +728,81 @@ fn the_banded_estimate_covers_a_crop_keeping_its_rows() {
     }
 }
 
+/// The banded estimate against the live heap at each band height, for
+/// each edit at the sizes asked (HEELER_PEAK_SIZES) and the heights asked
+/// (HEELER_PEAK_ROWS, default 256, 1024, 2048 and the whole frame).
+#[test]
+#[ignore = "renders full-size frames; run by hand in release"]
+fn measure_the_estimate_by_band_height() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let rows_asked = std::env::var("HEELER_PEAK_ROWS").unwrap_or_else(|_| "256,1024,2048,0".into());
+    let only = std::env::var("HEELER_PEAK_EDITS").ok();
+    println!();
+    println!("{:>4} {:<17} {:>6} {:>10} {:>10} {:>7}", "MP", "edit", "rows", "est MiB", "peak MiB", "ratio");
+    for (label, w, h) in sizes() {
+        for edit in edits().into_iter().filter(|e| only.as_deref().is_none_or(|o| o.split(',').any(|n| n == e.name))) {
+            let graph = (edit.graph)();
+            for r in rows_asked.split(',').filter_map(|r| r.trim().parse::<usize>().ok()) {
+                let rows = if r == 0 { h } else { r.min(h) };
+                let (peak, est) = peak_of(|| {
+                    let mut sources = HashMap::new();
+                    sources.insert("src".to_string(), SourceImage { image: photo(w, h), version: 1, measured: false });
+                    let est = heeler_engine::banded::estimate_banded(&graph, &["out"], &sources, rows).unwrap();
+                    render_in_bands(&graph, &sources, rows);
+                    est
+                });
+                println!("{:>4} {:<17} {:>6} {:>10} {:>10} {:>7.2}", label, edit.name, rows, mib(est), mib(peak), est as f64 / peak as f64);
+            }
+        }
+    }
+}
+
+/// The same, streamed into a JPEG's samples from a JPEG kept as its
+/// codes (the phone's export): the estimate with the sink beside it, and
+/// the encode's own admission, against the live heap of the whole export.
+#[test]
+#[ignore = "renders full-size frames; run by hand in release"]
+fn measure_the_streamed_estimate_by_band_height() {
+    use heeler_io::band_sink::{self, Encoding, SinkFormat};
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let rows_asked = std::env::var("HEELER_PEAK_ROWS").unwrap_or_else(|_| "256,1024,2048,0".into());
+    let only = std::env::var("HEELER_PEAK_EDITS").ok();
+    // Cargo's own scratch folder for this test target, under target/:
+    // one JPEG a size, written over each run.
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"));
+    println!();
+    println!("{:>4} {:<17} {:>6} {:>10} {:>10} {:>10} {:>7}", "MP", "edit", "rows", "est MiB", "enc MiB", "peak MiB", "ratio");
+    for (label, w, h) in sizes() {
+        let jpeg = dir.join(format!("streamed-estimate-{label}.jpg"));
+        {
+            let mut g = Graph::new("write");
+            g.add_node(Registry::builtin().instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+            let sources = HashMap::from([("src".to_string(), SourceImage { image: photo(w, h), version: 1, measured: false })]);
+            let (bytes, _, _) = band_sink::export_in_bands(&g, "src", &sources, usize::MAX / 4, Encoding::Jpeg(92)).unwrap().unwrap();
+            std::fs::write(&jpeg, bytes).unwrap();
+        }
+        for edit in edits().into_iter().filter(|e| only.as_deref().is_none_or(|o| o.split(',').any(|n| n == e.name))) {
+            let graph = (edit.graph)();
+            for r in rows_asked.split(',').filter_map(|r| r.trim().parse::<usize>().ok()) {
+                let rows = if r == 0 { h } else { r.min(h) };
+                let (peak, (est, enc)) = peak_of(|| {
+                    let kept = heeler_io::decode_rows_with(&jpeg, Default::default()).unwrap().unwrap();
+                    let sources = HashMap::from([("src".to_string(), SourceImage { image: Arc::new(ImageBuf { width: w, height: h, data: Vec::new() }), version: 1, measured: false })]);
+                    let row_sources = HashMap::from([("src".to_string(), kept)]);
+                    heeler_engine::banded::with_row_sources(row_sources, || {
+                        let est = heeler_engine::banded::estimate_banded(&graph, &["out"], &sources, rows).unwrap() + w * h * 3;
+                        let enc = heeler_engine::banded::source_bytes(&graph, &["out"], &sources).unwrap() + SinkFormat::Jpeg.encoding_bytes(w, h).unwrap();
+                        let (sink, _) = band_sink::render_into_sink(&graph, "out", &sources, rows, SinkFormat::Jpeg).unwrap().unwrap();
+                        drop(sink.encode(Encoding::Jpeg(92)).unwrap());
+                        (est, enc)
+                    })
+                });
+                println!("{:>4} {:<17} {:>6} {:>10} {:>10} {:>10} {:>7.2}", label, edit.name, rows, mib(est), mib(enc), mib(peak), est.max(enc) as f64 / peak as f64);
+            }
+        }
+    }
+}
+
 /// The owner's table, banded: for each edit at 24 and 48 MP, the band
 /// height that fits 2.5 GiB, what the banded estimate asks at it, and the
 /// heap's real high-water mark rendering it.
