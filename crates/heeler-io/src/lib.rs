@@ -584,14 +584,11 @@ fn develop_full(bytes: &[u8], dev: heeler_raw::DevelopOpts) -> Result<(ImageBuf,
         let sensor_data = sensor.sensor_data;
         return Ok((sensor_to_imagebuf(sensor), sensor_data));
     }
-    let clip = heeler_raw::decode_sensor_with(bytes, heeler_raw::DevelopOpts { highlight: 0, ..dev })?;
+    let (clip, blend) = clip_and_blend(bytes, dev)?;
     let sensor_data = clip.sensor_data;
-    let Some(weight) = clipped_weight(&clip) else {
+    let Some((weight, blend)) = blend else {
         return Ok((sensor_to_imagebuf(clip), sensor_data));
     };
-    // The Clip develop waits as its compact samples and the mask a byte a
-    // pixel, so the second develop fits a stack frame's slice.
-    let blend = heeler_raw::decode_sensor_with(bytes, dev)?;
     if (blend.width, blend.height) != (clip.width, clip.height) {
         return Ok((sensor_to_imagebuf(clip), sensor_data));
     }
@@ -607,6 +604,56 @@ fn develop_full(bytes: &[u8], dev: heeler_raw::DevelopOpts) -> Result<(ImageBuf,
         out.data[o + 3] = 1.0;
     }
     Ok((out, sensor_data))
+}
+
+/// The Clip develop and, where it reached white (clipped_weight), the
+/// Blend develop with that weight. The two run at the same time when the
+/// budget holds both: Blend on a second LibRaw handle beside Clip, in a
+/// slice of one job for the pair (Job::worker), stopped at its next stage
+/// when Clip finds nothing clipped. Each develop is the one it would be
+/// alone, so the result is the same to the bit; a Blend develop that did
+/// not finish beside Clip (refused, failed) runs after it, as one did
+/// before, and so do both when the pair does not fit.
+#[cfg(feature = "libraw")]
+fn clip_and_blend(bytes: &[u8], dev: heeler_raw::DevelopOpts) -> Result<(heeler_raw::SensorImage, Option<(Vec<u8>, heeler_raw::SensorImage)>), heeler_raw::RawError> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let clip_opts = heeler_raw::DevelopOpts { highlight: 0, ..dev };
+    let one = heeler_raw::develop_bytes(bytes, dev).ok();
+    let pair = one.and_then(|one| memory::sum([one, one]).ok()).and_then(|two| Job::admit(two, "RAW Clip and Blend develops").ok());
+    let (clip, beside) = match (pair, one) {
+        (Some(pair), Some(one)) => {
+            let worker = pair.worker(one);
+            let stop = AtomicBool::new(false);
+            let (clip, blend) = std::thread::scope(|s| {
+                let blend = s.spawn(|| worker.run(|| heeler_raw::decode_sensor_until(bytes, dev, &stop)));
+                let clip = heeler_raw::decode_sensor_with(bytes, clip_opts).map(|c| {
+                    let weight = clipped_weight(&c);
+                    (c, weight)
+                });
+                if !matches!(clip, Ok((_, Some(_)))) {
+                    stop.store(true, Ordering::Relaxed);
+                }
+                (clip, blend.join().ok().and_then(|b| b.ok()))
+            });
+            drop(worker);
+            drop(pair);
+            (clip?, blend)
+        }
+        _ => {
+            let clip = heeler_raw::decode_sensor_with(bytes, clip_opts)?;
+            let weight = clipped_weight(&clip);
+            ((clip, weight), None)
+        }
+    };
+    let (clip, weight) = clip;
+    let Some(weight) = weight else { return Ok((clip, None)) };
+    // The Clip develop waits as its compact samples and the mask a byte a
+    // pixel, so a second develop after it fits a stack frame's slice.
+    let blend = match beside {
+        Some(blend) => blend,
+        None => heeler_raw::decode_sensor_with(bytes, dev)?,
+    };
+    Ok((clip, Some((weight, blend))))
 }
 
 /// Where a Clip develop reached white, as Blend's weight a byte a pixel:
@@ -934,13 +981,12 @@ fn keep_develop(path: &Path, bytes: &[u8], opts: RawSourceOpts) -> Result<Option
             let s = heeler_raw::decode_sensor_with(bytes, dev)?;
             return Ok((KeptSamples16::One { gain: s.headroom.max(1.0), rgb: s.rgb }, s.width, s.height, s.sensor_data));
         }
-        let clip = heeler_raw::decode_sensor_with(bytes, heeler_raw::DevelopOpts { highlight: 0, ..dev })?;
+        let (clip, blend) = clip_and_blend(bytes, dev)?;
         let sensor_data = clip.sensor_data;
         let (w, h) = (clip.width, clip.height);
-        let Some(weight) = clipped_weight(&clip) else {
+        let Some((weight, blend)) = blend else {
             return Ok((KeptSamples16::One { gain: clip.headroom.max(1.0), rgb: clip.rgb }, w, h, sensor_data));
         };
-        let blend = heeler_raw::decode_sensor_with(bytes, dev)?;
         if (blend.width, blend.height) != (w, h) {
             return Ok((KeptSamples16::One { gain: clip.headroom.max(1.0), rgb: clip.rgb }, w, h, sensor_data));
         }
@@ -2050,6 +2096,33 @@ mod tests {
     #[cfg(feature = "libraw")]
     fn clipped_sky() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../heeler-raw/tests/fixtures/IMG_3310.CR2")
+    }
+
+    /// The Clip and Blend develops run side by side when the budget holds
+    /// both, and one after the other when it holds one: the same frame to
+    /// the bit either way, and the same as the two develops run alone. A
+    /// develop asked to stop before it starts stops.
+    #[cfg(feature = "libraw")]
+    #[test]
+    fn the_blend_develops_side_by_side_are_the_serial_ones() {
+        use std::sync::atomic::AtomicBool;
+        let bytes = std::fs::read(clipped_sky()).unwrap();
+        let dev = heeler_raw::DevelopOpts { highlight: 2, ..heeler_raw::DevelopOpts::default() };
+        let alone_clip = heeler_raw::decode_sensor_with(&bytes, heeler_raw::DevelopOpts { highlight: 0, ..dev }).unwrap();
+        let alone_blend = heeler_raw::decode_sensor_with(&bytes, dev).unwrap();
+        let one = heeler_raw::develop_bytes(&bytes, dev).unwrap();
+        let check = |what: &str, (clip, blend): (heeler_raw::SensorImage, Option<(Vec<u8>, heeler_raw::SensorImage)>)| {
+            assert_eq!(clip.rgb, alone_clip.rgb, "{what}: the Clip develop");
+            let (weight, blend) = blend.expect("the sky clips");
+            assert_eq!(Some(weight), clipped_weight(&alone_clip), "{what}: the weight");
+            assert_eq!(blend.rgb, alone_blend.rgb, "{what}: the Blend develop");
+        };
+        check("side by side", clip_and_blend(&bytes, dev).unwrap());
+        // Room for one develop and a little: the pair is refused and the
+        // develops run one after the other.
+        check("one at a time", memory::with_budget(one + one / 2, || clip_and_blend(&bytes, dev).unwrap()));
+        let stopped = AtomicBool::new(true);
+        assert!(matches!(heeler_raw::decode_sensor_until(&bytes, dev, &stopped), Err(heeler_raw::RawError::Cancelled)));
     }
 
     /// A full-size Blend develop is the Clip develop away from clipping,

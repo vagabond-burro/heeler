@@ -9,8 +9,16 @@ fn main() {
         let p = std::path::Path::new(&path);
         let time = |opts: heeler_io::RawSourceOpts| {
             let t = Instant::now();
-            let _ = heeler_io::decode_any_with(p, opts);
-            t.elapsed().as_secs_f64() * 1000.0
+            let img = heeler_io::decode_any_with(p, opts);
+            let ms = t.elapsed().as_secs_f64() * 1000.0;
+            if std::env::var_os("HEELER_DECODE_HASH").is_some() {
+                let mut h: u64 = 0xcbf29ce484222325;
+                for v in img.iter().flat_map(|i| i.data.iter()) {
+                    h = (h ^ v.to_bits() as u64).wrapping_mul(0x100000001b3);
+                }
+                eprintln!("hash {path} highlight {} sharpen {}: {h:016x}", opts.highlight, opts.capture_sharpen);
+            }
+            ms
         };
         let base = heeler_io::RawSourceOpts::default();
         let ext = p.extension().map(|e| e.to_string_lossy().to_string()).unwrap_or_default();

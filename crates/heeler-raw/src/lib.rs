@@ -5,6 +5,7 @@
 //! auto-brighten), which maps directly onto Heeler's working space.
 
 use std::ffi::{c_char, c_int, c_uint, c_void, CStr};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // Linked, not called. LibRaw's deflate DNG decoder calls zlib from C++,
 // and Rust drops a dependency nothing in Rust refers to, so the symbols
@@ -49,6 +50,10 @@ pub enum RawError {
     Code(String, c_int),
     #[error("libraw produced an unexpected image format")]
     Unexpected,
+    /// A develop stopped by its caller (decode_sensor_until) between
+    /// LibRaw's stages.
+    #[error("RAW develop canceled")]
+    Cancelled,
     /// A GoPro GPR that could not be decoded, said as such rather than as
     /// a LibRaw code: the failure is in the file or its VC-5 tile, before
     /// LibRaw sees anything.
@@ -77,6 +82,7 @@ extern "C" {
     fn libraw_get_iheight(d: *mut c_void) -> c_int;
     fn libraw_unpack(d: *mut c_void) -> c_int;
     fn libraw_dcraw_process(d: *mut c_void) -> c_int;
+    fn libraw_set_progress_handler(d: *mut c_void, cb: Option<unsafe extern "C" fn(*mut c_void, c_int, c_int, c_int) -> c_int>, data: *mut c_void);
     fn libraw_dcraw_make_mem_image(d: *mut c_void, errc: *mut c_int) -> *mut ProcessedImage;
     fn libraw_dcraw_clear_mem(p: *mut ProcessedImage);
     fn libraw_strerror(err: c_int) -> *const c_char;
@@ -309,6 +315,49 @@ unsafe extern "C" fn apply_stage3_opcodes(d: *mut c_void) {
 }
 
 pub fn decode_sensor_with(bytes: &[u8], opts: DevelopOpts) -> Result<SensorImage, RawError> {
+    develop(bytes, opts, None)
+}
+
+/// decode_sensor_with, stopped with RawError::Cancelled once `stop` is
+/// set: checked before the develop starts and at each stage LibRaw
+/// reports, so a develop nobody needs any more ends at its next stage.
+/// What a develop that runs to the end returns is decode_sensor_with's.
+pub fn decode_sensor_until(bytes: &[u8], opts: DevelopOpts, stop: &AtomicBool) -> Result<SensorImage, RawError> {
+    develop(bytes, opts, Some(stop))
+}
+
+/// The memory a full decode_sensor_with of `bytes` admits, from the
+/// header alone (a GPR's from its VC-5 header, its converted DNG
+/// counted), for a caller that runs two develops at once.
+pub fn develop_bytes(bytes: &[u8], opts: DevelopOpts) -> Result<usize, RawError> {
+    let per_pixel = if opts.half_size { 24 } else { 48 };
+    if let Some((w, h)) = gpr::dimensions(bytes) {
+        let converted = heeler_engine::memory::bytes(w, h, 1, 2)?;
+        return Ok(heeler_engine::memory::sum([heeler_engine::memory::bytes(w, h, 1, per_pixel)?, bytes.len(), converted, converted])?);
+    }
+    let p = unsafe { libraw_init(0) };
+    if p.is_null() {
+        return Err(RawError::Init);
+    }
+    let handle = Handle(p);
+    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    let (width, height) = unsafe { (heeler_raw_width(handle.0) as usize, heeler_raw_height(handle.0) as usize) };
+    if width == 0 || height == 0 {
+        return Err(RawError::Unexpected);
+    }
+    Ok(heeler_engine::memory::sum([heeler_engine::memory::bytes(width, height, 1, per_pixel)?, bytes.len(), unsafe { heeler_xtrans_extra(handle.0) }])?)
+}
+
+/// LibRaw's progress callback: a nonzero answer cancels the develop.
+unsafe extern "C" fn stop_requested(data: *mut c_void, _stage: c_int, _iteration: c_int, _expected: c_int) -> c_int {
+    (*(data as *const AtomicBool)).load(Ordering::Relaxed) as c_int
+}
+
+fn develop(bytes: &[u8], opts: DevelopOpts, stop: Option<&AtomicBool>) -> Result<SensorImage, RawError> {
+    let stopped = || stop.is_some_and(|s| s.load(Ordering::Relaxed));
+    if stopped() {
+        return Err(RawError::Cancelled);
+    }
     // A GoPro GPR's VC-5 tile is decoded here; LibRaw sees a plain DNG.
     let converted = gpr::as_dng(bytes)?;
     let bytes = converted.as_deref().unwrap_or(bytes);
@@ -348,10 +397,17 @@ pub fn decode_sensor_with(bytes: &[u8], opts: DevelopOpts) -> Result<SensorImage
     // tile buffer per worker (the patched xtrans_interpolate).
     let needed = heeler_engine::memory::sum([heeler_engine::memory::bytes(width, height, 1, if opts.half_size { 24 } else { 48 })?, bytes.len(), unsafe { heeler_xtrans_extra(handle.0) }])?;
     let _job = heeler_engine::memory::Job::admit(needed, "RAW decode and demosaic")?;
-    check(unsafe { libraw_unpack(handle.0) })?;
+    if let Some(stop) = stop {
+        if stopped() {
+            return Err(RawError::Cancelled);
+        }
+        unsafe { libraw_set_progress_handler(handle.0, Some(stop_requested), stop as *const AtomicBool as *mut c_void) };
+    }
+    let cancelled = |code: c_int| if stopped() { Err(RawError::Cancelled) } else { check(code) };
+    cancelled(unsafe { libraw_unpack(handle.0) })?;
     unsafe { apply_dng_gain_maps(handle.0) };
     unsafe { heeler_use_stage3_opcodes(handle.0, apply_stage3_opcodes) };
-    check(unsafe { libraw_dcraw_process(handle.0) })?;
+    cancelled(unsafe { libraw_dcraw_process(handle.0) })?;
     let headroom = if opts.highlight >= 2 { unsafe { heeler_wb_headroom(handle.0) } } else { 1.0 };
 
     let mut errc: c_int = 0;
