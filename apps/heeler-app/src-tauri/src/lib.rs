@@ -11703,7 +11703,7 @@ thread_local! {
 /// never shorter than EXPORT_BAND_FLOOR rows while memory holds them.
 const EXPORT_BAND_TARGET: usize = 3 << 30;
 const EXPORT_BAND_FLOOR: usize = 256;
-const DESKTOP_BANDS: heeler_engine::banded::BandPolicy = heeler_engine::banded::BandPolicy { target: EXPORT_BAND_TARGET, floor: EXPORT_BAND_FLOOR };
+const DESKTOP_BANDS: heeler_engine::banded::BandPolicy = heeler_engine::banded::BandPolicy { target: EXPORT_BAND_TARGET, floor: EXPORT_BAND_FLOOR, whole_when_it_fits: true };
 
 /// The export's frame rendered band by band (heeler_engine::banded), the
 /// same picture to the bit as the whole-frame render, gathered into the
@@ -11730,7 +11730,9 @@ fn render_export_banded(g: &Graph, terminal: &str, sources: &HashMap<String, Sou
 /// render asks less, and the caller renders whole.
 fn export_band_rows(g: &Graph, terminals: &[&str], sources: &HashMap<String, SourceImage>, kept: usize) -> Result<Option<usize>, String> {
     let forced = EXPORT_BAND_ROWS.with(|r| r.get());
-    let rows = heeler_engine::banded::export_band_rows(g, terminals, sources, kept, DESKTOP_BANDS).map_err(|e| e.to_string())?;
+    // A height a test forces is for bands, so it asks past the whole render.
+    let policy = heeler_engine::banded::BandPolicy { whole_when_it_fits: forced == 0, ..DESKTOP_BANDS };
+    let rows = heeler_engine::banded::export_band_rows(g, terminals, sources, kept, policy).map_err(|e| e.to_string())?;
     Ok(rows.map(|rows| if forced > 0 { forced } else { rows }))
 }
 

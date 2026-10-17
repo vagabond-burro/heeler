@@ -1650,10 +1650,16 @@ pub fn output_size(graph: &Graph, terminal: &str, sources: &HashMap<String, Sour
 /// of 29 rows, 17 s in bands of 256); bands as tall as memory allows hold
 /// about what the whole render does. The desktop takes 3 GiB and 256
 /// rows; a phone takes a smaller target.
+///
+/// With `whole_when_it_fits`, an export whose whole render and what the
+/// caller keeps fit the target renders whole (export_band_rows answers
+/// None): bands re-make their margins and gather the frame again, which
+/// made a light 24 MP edit's export twice its whole render.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BandPolicy {
     pub target: usize,
     pub floor: usize,
+    pub whole_when_it_fits: bool,
 }
 
 /// The band height an export of `terminals` renders in under `policy`,
@@ -1682,6 +1688,42 @@ pub fn export_band_rows(
     let available = crate::memory::available_to_job();
     let ceiling = available.min(policy.target.saturating_add(kept));
     let floor = policy.floor.clamp(1, h.max(1));
+    let whole = || -> Result<usize, EngineError> {
+        let mut exec = crate::executor::Executor::new();
+        exec.trim_bytes(1);
+        let mut whole = 0usize;
+        for t in terminals {
+            whole = whole.max(exec.estimate(graph, t, sources)?);
+        }
+        Ok(whole)
+    };
+    if policy.whole_when_it_fits && crate::memory::sum([whole()?, kept])? <= ceiling {
+        return Ok(None);
+    }
+    // The tallest band at or past the floor, searched from the floor up:
+    // the search from one row paid most of its time choosing cuts for
+    // bands of one row (108 to 470 ms of a 24 MP export's planning) to
+    // learn what the floor already says.
+    let fits = |rows: usize| -> Result<bool, EngineError> {
+        Ok(crate::memory::sum([estimate_banded(graph, terminals, sources, rows)?, kept])? <= ceiling)
+    };
+    match fits(floor) {
+        Ok(true) => {
+            let (mut lo, mut hi) = (floor, h.max(floor));
+            while lo < hi {
+                let mid = lo + (hi - lo).div_ceil(2);
+                if fits(mid)? {
+                    lo = mid;
+                } else {
+                    hi = mid - 1;
+                }
+            }
+            return Ok(Some(lo));
+        }
+        Ok(false) => {}
+        Err(EngineError::Band(_)) => return Ok(None),
+        Err(e) => return Err(e),
+    }
     match band_rows_for(graph, terminals, sources, ceiling, kept) {
         Ok(Some(rows)) if rows < floor => match estimate_banded(graph, terminals, sources, floor) {
             Ok(est) if crate::memory::sum([est, kept])? <= available => Ok(Some(floor)),
@@ -1689,12 +1731,7 @@ pub fn export_band_rows(
         },
         Ok(Some(rows)) => Ok(Some(rows)),
         Ok(None) => {
-            let mut exec = crate::executor::Executor::new();
-            exec.trim_bytes(1);
-            let mut whole = 0usize;
-            for t in terminals {
-                whole = whole.max(exec.estimate(graph, t, sources)?);
-            }
+            let whole = whole()?;
             match estimate_banded(graph, terminals, sources, floor) {
                 Ok(est) if crate::memory::sum([est, kept])? < whole => Ok(Some(floor)),
                 Ok(_) | Err(EngineError::Band(_)) => Ok(None),

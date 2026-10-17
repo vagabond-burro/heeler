@@ -681,17 +681,23 @@ fn the_export_band_policy_fits_its_target_and_keeps_its_floor() {
         let mut last = 0;
         for target in [est(8), est(32), est(128), usize::MAX / 4] {
             for floor in [1, 16, 64] {
-                let rows = banded::export_band_rows(&graph, &["out"], &sources, kept, BandPolicy { target, floor }).unwrap().unwrap();
+                let rows = banded::export_band_rows(&graph, &["out"], &sources, kept, BandPolicy { target, floor, whole_when_it_fits: false }).unwrap().unwrap();
                 assert!(rows <= h, "{}: {rows} rows", edit.name);
                 assert!(rows >= floor.min(h), "{}: {rows} rows under the floor {floor}", edit.name);
                 assert!(rows == floor.min(h) || est(rows) <= target, "{}: {rows} rows past the target {target}", edit.name);
             }
-            let rows = banded::export_band_rows(&graph, &["out"], &sources, kept, BandPolicy { target, floor: 1 }).unwrap().unwrap();
+            let rows = banded::export_band_rows(&graph, &["out"], &sources, kept, BandPolicy { target, floor: 1, whole_when_it_fits: false }).unwrap().unwrap();
             assert!(rows >= last, "{}: a taller target gave shorter bands", edit.name);
             last = rows;
         }
-        let rows = banded::export_band_rows(&graph, &["out"], &sources, kept, BandPolicy { target: usize::MAX / 4, floor: 10 * h }).unwrap().unwrap();
+        let rows = banded::export_band_rows(&graph, &["out"], &sources, kept, BandPolicy { target: usize::MAX / 4, floor: 10 * h, whole_when_it_fits: false }).unwrap().unwrap();
         assert_eq!(rows, h, "{}", edit.name);
+        // Asked to, an export whose whole render fits renders whole, and
+        // one whose whole render does not still takes bands.
+        let whole = BandPolicy { target: usize::MAX / 4, floor: 16, whole_when_it_fits: true };
+        assert_eq!(banded::export_band_rows(&graph, &["out"], &sources, kept, whole).unwrap(), None, "{}", edit.name);
+        let tight = BandPolicy { target: est(32), floor: 16, whole_when_it_fits: true };
+        assert!(banded::export_band_rows(&graph, &["out"], &sources, kept, tight).unwrap().is_some(), "{}", edit.name);
     }
 }
 
