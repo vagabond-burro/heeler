@@ -3513,7 +3513,8 @@ interface SectionSpec {
   denoiseMethod?: boolean;
   /** Tone Equalizer's parametric EQ widget above the rows */
   eqWidget?: boolean;
-  /** Recolor's routing grid and curve widget above the rows */
+  /** Recolor's routing grid and curve widget, drawn just above its
+   * Neutral guard row */
   recolorWidget?: boolean;
   /** the Color Tune's band strip and wheel above the rows */
   consoleWidget?: boolean;
@@ -4555,8 +4556,10 @@ export const SECTIONS: SectionSpec[] = [
     layerTool: "recolor",
     node: (s) => toolNode(s, "recolor"),
     rows: [
-      { label: "Neutral guard", param: "neutral_guard", centered: false },
       { label: "Smoothing", param: "smoothing", centered: false },
+      // Drawn under the routing grid and curve, which render just above
+      // this row.
+      { label: "Neutral guard", param: "neutral_guard", centered: false },
     ],
   },
   {
@@ -6943,6 +6946,51 @@ menu"). The graph inspector's Source node draws the same rows.*/}
                     // every render of the panel.
                     return (
                       <React.Fragment key={r.label}>
+                        {/* Recolor's graph, with the Neutral guard and its
+                            strip under it (2026-10-17: "Move the neutral
+                            guard below the graph"); Smoothing above. */}
+                        {sec.recolorWidget && !closed && r.param === "neutral_guard" &&
+                          (() => {
+                            const n = sec.node(state);
+                            return n ? (
+                              <div style={{ margin: "2px 0 6px" }}>
+                                <RecolorHost
+                                  state={state}
+                                  node={n}
+                                  allNodes={state.nodes}
+                                  clipboard={state.recolorClipboard}
+                                  dispatch={dispatch}
+                                  width={Math.max(220, (width ?? 320) - 24)}
+                                  frame={
+                                    frame ??
+                                    state.images.find((i) => i.id === state.activeImage)?.src
+                                  }
+                                  cell={state.recolorCell}
+                                  onCell={(c) => dispatch({ type: "set_recolor_cell", cell: c })}
+                                  pickArmed={state.recolorPick === n.id}
+                                  hoverX={state.recolorPick === n.id ? state.recolorHoverX : null}
+                                  onTogglePick={() => dispatch({ type: "toggle_recolor_pick", id: n.id })}
+                                  matchArmed={state.recolorMatch?.id === n.id}
+                                  onToggleMatch={() => dispatch({ type: "toggle_recolor_match", id: n.id })}
+                                  depthView={state.depthView}
+                                  depthRed={state.maskRed}
+                                  onToggleDepthView={(flavor) => dispatch({ type: "toggle_depth_view", flavor })}
+                                />
+                                {/* The Around row's one dial, seated with the
+                                    row it serves rather than among the node's
+                                    globals. */}
+                                {state.recolorCell.startsWith("around_") && (
+                                  <Slider
+                                    label="Around reach"
+                                    param="around_radius"
+                                    node={n}
+                                    dispatch={dispatch}
+                                    centered={false}
+                                  />
+                                )}
+                              </div>
+                            ) : null;
+                          })()}
                         {i === 0 && sec.note && (
                           <div
                             data-testid={`section-note-${sec.title.toLowerCase().replace(/[^a-z]+/g, "-")}`}
@@ -7040,48 +7088,6 @@ menu"). The graph inspector's Source node draws the same rows.*/}
                   (() => {
                     const n = sec.node(state);
                     return n ? <StreakRibbon state={state} dispatch={dispatch} node={n} /> : null;
-                  })()}
-                {sec.recolorWidget &&
-                  (() => {
-                    const n = sec.node(state);
-                    return n ? (
-                      <div style={{ margin: "2px 0 6px" }}>
-                        <RecolorHost
-                          state={state}
-                          node={n}
-                          allNodes={state.nodes}
-                          clipboard={state.recolorClipboard}
-                          dispatch={dispatch}
-                          width={Math.max(220, (width ?? 320) - 24)}
-                          frame={
-                            frame ??
-                            state.images.find((i) => i.id === state.activeImage)?.src
-                          }
-                          cell={state.recolorCell}
-                          onCell={(c) => dispatch({ type: "set_recolor_cell", cell: c })}
-                          pickArmed={state.recolorPick === n.id}
-                          hoverX={state.recolorPick === n.id ? state.recolorHoverX : null}
-                          onTogglePick={() => dispatch({ type: "toggle_recolor_pick", id: n.id })}
-                          matchArmed={state.recolorMatch?.id === n.id}
-                          onToggleMatch={() => dispatch({ type: "toggle_recolor_match", id: n.id })}
-                          depthView={state.depthView}
-                          depthRed={state.maskRed}
-                          onToggleDepthView={(flavor) => dispatch({ type: "toggle_depth_view", flavor })}
-                        />
-                        {/* The Around row's one dial, seated with the
-                            row it serves rather than among the node's
-                            globals. */}
-                        {state.recolorCell.startsWith("around_") && (
-                          <Slider
-                            label="Around reach"
-                            param="around_radius"
-                            node={n}
-                            dispatch={dispatch}
-                            centered={false}
-                          />
-                        )}
-                      </div>
-                    ) : null;
                   })()}
                 {sec.zonesWidget && <ZonesBlock state={state} dispatch={dispatch} frame={frame} />}
                 {sec.printWidget && <PrintControls node={node} dispatch={dispatch} />}

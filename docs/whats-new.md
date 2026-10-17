@@ -15,6 +15,7 @@
 ### Fixes
 
 - **Grain shows in the canvas.** Grain on a new edit is sized to the photograph, so on the fitted preview it is smaller than a screen pixel, and the preview faded it too much: it looked as if the grain was missing, though the thumbnail and the export had it. The preview now shows it as strong as the export looks at that size. [Grain](user-guide/adjustments/grain.md).
+- **Recolor's Neutral guard sits under the curve.** The guard and its strip now come after the routing grid and curve they act on, with Smoothing above. [Recolor](user-guide/adjustments/recolor.md).
 - **Click a layer again to fold it.** With **Expand settings on select** on, clicking the selected layer's row now folds its settings, and clicking again opens them. [Finish](user-guide/finish/README.md#settings-that-open-and-close).
 
 ## 2026.5.5

@@ -231,7 +231,9 @@ describe("the guard strip", () => {
     expect(histMock).toHaveBeenCalledTimes(1);
   });
 
-  it("sits right under the Neutral guard slider in the Develop panel", async () => {
+  it("sits right under the Neutral guard slider, which sits under the graph, in the Develop panel", async () => {
+    // 2026-10-17: "Move the neutral guard below the graph". Smoothing,
+    // then the routing grid and curve, then the guard and its strip.
     histMock.mockResolvedValue(DUSK);
     render(<App />);
     const fold = screen.getByTestId("collapse-recolor");
@@ -240,8 +242,11 @@ describe("the guard strip", () => {
     const strip = screen.getByTestId("guard-strip");
     const guard = screen.getByRole("slider", { name: /neutral guard/i });
     const smoothing = screen.getByRole("slider", { name: /^smoothing/i });
-    expect(guard.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(strip.compareDocumentPosition(smoothing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const graph = screen.getByTestId("recolor-block");
+    const before = (a: Element, b: Element) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    expect(before(smoothing, graph), "Smoothing above the graph").toBe(true);
+    expect(before(graph, guard), "the guard under the graph").toBe(true);
+    expect(before(guard, strip), "the strip under the guard").toBe(true);
   });
 
   // 2026-10-08: dragging a point wrapped the accented line and made
