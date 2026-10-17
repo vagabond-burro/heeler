@@ -67,6 +67,9 @@ pub struct ExecStats {
     /// How many times each node actually executed (cache misses).
     pub executions: HashMap<String, u64>,
     pub cache_hits: u64,
+    /// The time each node's own operator took (not its inputs'), summed
+    /// over its executions, for profiling.
+    pub op_time: HashMap<String, std::time::Duration>,
 }
 
 /// Pull-based, memoizing executor. Cache keys are content hashes over
@@ -767,12 +770,14 @@ impl Executor {
 
         // A source has nothing to pass through, so "off" on one is the
         // same picture: the branch comes before the bypass.
+        let started = std::time::Instant::now();
         let value = if is_source(&node.node_type) {
             let src = sources.get(node_id).expect("checked above");
             Value::Image(src.image.clone())
         } else {
             apply_node(node_id, node, inputs, depth_measured, sources)?
         };
+        *self.stats.op_time.entry(node_id.to_string()).or_default() += started.elapsed();
 
         *self
             .stats

@@ -80,6 +80,10 @@ name = "rawdiff"
 required-features = ["rawler", "libraw"]
 
 [[example]]
+name = "decodetime"
+required-features = ["libraw"]
+
+[[example]]
 name = "dngprobe"
 required-features = ["libraw"]
 
