@@ -312,6 +312,7 @@ pub(crate) fn noise(node: &Node, inputs: &[(String, Value)]) -> Result<Value, En
     let by_frame = p_bool(&node.params, "by_frame", false);
     let format = node.params.get("format").and_then(|v| v.as_str()).unwrap_or("35mm").to_string();
     let (sigma, amp) = grain_sigma(size, &pattern, by_frame, frame_short(node, src.width, src.height), &format);
+    let amp = reduced_grain_amp(sigma, amp, by_frame, crate::ops::px_scale(&node.params)).unwrap_or(amp);
     let field = grain_field(src.width, src.height, sigma, &pattern, color, seed, frame_origin(node, src.width, src.height));
     let mut out = ImageBuf::new(src.width, src.height);
     for (o, n) in out.data.chunks_exact_mut(4).zip(field.data.chunks_exact(4)) {
@@ -394,6 +395,67 @@ pub(crate) fn grain_sigma(size: f32, pattern: &str, by_frame: bool, short: f32, 
     } else {
         (sigma, 1.0)
     }
+}
+
+/// A reduced preview's grain amplitude: what the export's grain keeps
+/// once the export is shown at the preview's size. A frame-sized grain
+/// is a few export pixels across, so the preview draws it under a
+/// pixel, and grain_sigma's own fade (the amplitude falling with the
+/// sigma) left the 2048 preview of a 24 MP frame with half the grain the
+/// export showed at the same size, and a small preview with a third:
+/// a new edit's grain looked missing in the canvas. The export's field,
+/// its blur at least half a pixel and its amplitude its sigma below one
+/// pixel (grain_sigma), averaged over the preview's pixels (an area
+/// downscale by 1 / px_scale), keeps area_noise_kept of its spread; the
+/// preview's grain is drawn at that. None at the export's own size and
+/// for a graph saved before Enlargement, whose pixel grain is unchanged.
+fn reduced_grain_amp(sigma: f32, amp: f32, by_frame: bool, px_scale: f32) -> Option<f32> {
+    if !by_frame || px_scale >= 1.0 {
+        return None;
+    }
+    let drawn = if amp < 1.0 { amp } else { sigma };
+    let export = drawn / px_scale;
+    Some(export.min(1.0) * area_noise_kept(export.max(0.5), 1.0 / px_scale))
+}
+
+/// How much of a noise field's spread an area downscale by `k` keeps,
+/// for white noise blurred at `blur` pixels by the grain's own kernel
+/// (gaussian_blur's taps, 2.5 sigma a side): on each axis the variance
+/// of a mean over k samples of a field whose correlation is the
+/// kernel's own, which is the spread's factor over the two axes.
+fn area_noise_kept(blur: f32, k: f32) -> f32 {
+    let radius = (2.5 * blur).ceil() as i64;
+    let taps: Vec<f32> = (-radius..=radius).map(|i| (-((i * i) as f32) / (2.0 * blur * blur)).exp()).collect();
+    let energy: f32 = taps.iter().map(|t| t * t).sum();
+    let correlation = |d: i64| -> f32 {
+        let d = d.unsigned_abs() as usize;
+        if d >= taps.len() {
+            return 0.0;
+        }
+        taps.iter().zip(&taps[d..]).map(|(a, b)| a * b).sum::<f32>() / energy
+    };
+    // An area downscale's output pixel averages the input over a span k
+    // wide, partly covered pixels weighted by their cover; the span of
+    // output pixel x starts at x k, so where it falls against the pixel
+    // grid repeats along the row, and the variance is averaged over the
+    // first PHASES output pixels' starts (all at 0 for a whole k).
+    let k = k.clamp(1.0, 256.0);
+    const PHASES: usize = 32;
+    let mut axis = 0.0f32;
+    for p in 0..PHASES {
+        let start = (p as f32 * k).fract();
+        let end = start + k;
+        let cells = end.ceil() as usize;
+        let cover: Vec<f32> = (0..cells).map(|j| ((j as f32 + 1.0).min(end) - (j as f32).max(start)).max(0.0) / k).collect();
+        let mut v = 0.0f32;
+        for (i, a) in cover.iter().enumerate() {
+            for (j, b) in cover.iter().enumerate() {
+                v += a * b * correlation(i as i64 - j as i64);
+            }
+        }
+        axis += v / PHASES as f32;
+    }
+    axis
 }
 
 /// The full frame's short side in this render's pixels: the render's
@@ -544,6 +606,7 @@ pub(crate) fn grain(node: &Node, inputs: &[(String, Value)]) -> Result<Value, En
     let by_frame = p_bool(&node.params, "by_frame", false);
     let format = node.params.get("format").and_then(|v| v.as_str()).unwrap_or("35mm").to_string();
     let (sigma, amp) = grain_sigma(size, pattern, by_frame, frame_short(node, src.width, src.height), &format);
+    let amp = reduced_grain_amp(sigma, amp, by_frame, crate::ops::px_scale(&node.params)).unwrap_or(amp);
     let field = grain_field(src.width, src.height, sigma, pattern, color, 0, frame_origin(node, src.width, src.height));
     let base_amp = intensity * amp;
     let range_gain = 2f32.powf(p(&node.params, "range_ev", 0.0));
