@@ -71,6 +71,8 @@ fn the_reducers_finish_layer_graphs_export_the_same_in_bands() {
 /// export's JPEG. Measure the process from outside:
 ///
 ///   HEELER_EXPORT_MODE=banded /usr/bin/time -l cargo test --release -p heeler-desktop measure_a_heavy_48_mp_export -- --ignored --nocapture
+///
+/// HEELER_EXPORT_ROWS sets the band height instead of the export's choice.
 #[test]
 #[ignore = "renders a 48 MP frame; run by hand in release under /usr/bin/time"]
 fn measure_a_heavy_48_mp_export() {
@@ -92,7 +94,9 @@ fn measure_a_heavy_48_mp_export() {
         }
     }
     let photo = photograph(8064, 6048);
-    EXPORT_BAND_ROWS.with(|r| r.set(if mode == "whole" { usize::MAX } else { 0 }));
+    // HEELER_EXPORT_ROWS asks for bands of that many rows (when bands fit).
+    let rows = std::env::var("HEELER_EXPORT_ROWS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    EXPORT_BAND_ROWS.with(|r| r.set(if mode == "whole" { usize::MAX } else { rows }));
     let started = std::time::Instant::now();
     let image = render_export(&graph, photo, &HashMap::new()).unwrap();
     let rendered = started.elapsed();

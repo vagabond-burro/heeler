@@ -752,6 +752,18 @@ fn plan(
         .iter()
         .filter(|id| matches!(mode[*id], Mode::Rows { .. }))
         .filter(|id| graph.node(id).is_some_and(|n| n.enabled && wide_slots(n) > 0))
+        // A prepass is a banded pass of all above the node, so a Blur, High
+        // Pass, Sharpening or Skin Softening whose blurs are none of them
+        // wide enough at this size to be reduced (wide_bytes reads their
+        // exact sigmas) takes none. The others keep theirs: Halation's gate
+        // and a layer effect's padded plane are not in that reckoning.
+        .filter(|id| {
+            let (w, h, _) = dims[*id];
+            graph.node(id).is_some_and(|n| {
+                !matches!(n.node_type.as_str(), "heeler.blur" | "heeler.high_pass" | "heeler.sharpening" | "heeler.skin_soften")
+                    || wide_bytes(n, w, h).map_or(true, |b| b > 0)
+            })
+        })
         .cloned()
         .collect();
     Ok(Plan { order, dims, mode, inputs, crops, carried, wide, plants })
@@ -928,7 +940,7 @@ fn assemble(
 }
 
 /// One pass of bands over `terminals`, top to bottom, handing their rows
-/// to `sink`; the number of bands. Every band's rows are planned before
+/// to `sink`; the number of bands that hand rows on. Every step is planned before
 /// the first is made: a carried node needs to know where its next band's
 /// buffer starts, starts at the frame's first row (its column sums run
 /// from there), and must move down the frame band by band, never back.
@@ -943,15 +955,7 @@ fn run_pass(
     wides: &mut HashMap<String, Wide>,
     sink: &mut dyn FnMut(usize, usize, Value) -> Result<(), EngineError>,
 ) -> Result<usize, EngineError> {
-    let frame_h = terminals.iter().map(|t| plan.dims[*t].1).max().unwrap_or(0);
-    let mut schedule = Vec::new();
-    let mut started = HashSet::new();
-    let mut y = 0;
-    while y < frame_h {
-        let b = (y + band_rows).min(frame_h);
-        schedule.push(band_needs(plan, terminals, y, b, &mut started));
-        y = b;
-    }
+    let schedule = schedule(plan, terminals, band_rows);
     for id in &plan.carried {
         let mut last = (0, 0);
         for band in &schedule {
@@ -964,10 +968,11 @@ fn run_pass(
         }
     }
     let mut carries: HashMap<String, Carry> = HashMap::new();
+    let mut kept: HashMap<String, Slab> = HashMap::new();
     for k in 0..schedule.len() {
-        render_band(graph, plan, resident, sources, terminals, &schedule[k], &schedule[k + 1..], &mut carries, wides, sink)?;
+        render_band(graph, plan, resident, sources, terminals, &schedule[k], &schedule[k + 1..], &mut carries, wides, &mut kept, sink)?;
     }
-    Ok(schedule.len())
+    Ok(schedule.iter().filter(|s| s.b > s.a).count())
 }
 
 /// How many running-sum passes a carried node's operator makes, each
@@ -1203,29 +1208,51 @@ fn estimate_cut(
 }
 
 /// One banded pass over `terminals` as run_pass makes it: the most any
-/// band holds at once, and what its carried nodes carry from band to
-/// band.
+/// band holds at once (the rows each node kept from the band before
+/// among it), and what its carried nodes carry from band to band.
 fn pass_cost(graph: &Graph, plan: &Plan, terminals: &[&str], band_rows: usize) -> Result<(usize, usize), EngineError> {
     use crate::memory::sum;
-    let frame_h = terminals.iter().map(|t| plan.dims[*t].1).max().unwrap_or(0);
-    let mut started = HashSet::new();
+    // The bands one ahead of each other, as the schedule makes them: what a
+    // band keeps depends on what the next one needs.
+    let mut walk = Walk::new(plan, terminals, band_rows);
+    let mut upcoming = walk.next(plan, terminals);
     let mut carried_rows: HashMap<&str, usize> = HashMap::new();
     let mut band_peak = 0usize;
-    let mut y = 0;
-    while y < frame_h {
-        let b = (y + band_rows).min(frame_h);
-        let band = band_needs(&plan, terminals, y, b, &mut started);
-        let mut readers = band_readers(&plan, &band);
-        let mut kept: HashMap<&str, usize> = HashMap::new();
-        let mut live = 0usize;
+    // The bytes of each node's rows kept for the next band.
+    let mut held: HashMap<&str, usize> = HashMap::new();
+    while let Some(band) = upcoming.take() {
+        upcoming = walk.next(plan, terminals);
+        let next = upcoming.as_ref();
+        let band = &band;
+        let keeps = |id: &str| -> Result<usize, EngineError> {
+            let Some(&(lo, hi)) = band.need.get(id).filter(|_| plan.mode[id] != Mode::Resident) else { return Ok(0) };
+            let (fw, _, fc) = plan.dims[id];
+            Ok(match next.and_then(|n| n.need.get(id)) {
+                Some(&(nlo, _)) if nlo < hi => rows_bytes(fw, hi - nlo.max(lo), fc)?,
+                _ => 0,
+            })
+        };
+        let mut readers = band_readers(plan, band);
+        let mut slab: HashMap<&str, usize> = HashMap::new();
+        let mut live = held.values().try_fold(0usize, |a, b| sum([a, *b]))?;
+        let mut kept_next: HashMap<&str, usize> = HashMap::new();
         for id in &plan.order {
             let Some(&(lo, hi)) = band.need.get(id) else { continue };
             if plan.mode[id] == Mode::Resident {
                 continue;
             }
             let node = graph.node(id).unwrap();
-            let (rlo, rhi) = band.reads[id];
             let (fw, _, fc) = plan.dims[id];
+            let keep = rows_bytes(fw, hi - lo, fc)?;
+            let before = held.remove(id.as_str()).unwrap_or(0);
+            if !band.make.contains_key(id) {
+                // Its slab is cut from what it kept.
+                band_peak = band_peak.max(sum([live, keep])?);
+                live = sum([live.saturating_sub(before), keep])?;
+                slab.insert(id, keep);
+                continue;
+            }
+            let (rlo, rhi) = band.reads[id];
             let mut inputs = 0usize;
             if plan.mode[id] != Mode::Gather {
                 for (port, from) in &plan.inputs[id] {
@@ -1236,7 +1263,6 @@ fn pass_cost(graph: &Graph, plan: &Plan, terminals: &[&str], band_rows: usize) -
                     inputs = sum([inputs, rows_bytes(iw, rhi - rlo, ic)?])?;
                 }
             }
-            let keep = rows_bytes(fw, hi - lo, fc)?;
             let (made, scratch) = match plan.mode[id] {
                 Mode::Crop => (0, 0),
                 _ => {
@@ -1259,9 +1285,9 @@ fn pass_cost(graph: &Graph, plan: &Plan, terminals: &[&str], band_rows: usize) -
                     (made, scratch)
                 }
             };
-            band_peak = band_peak.max(sum([live, inputs, made, scratch, keep])?);
-            live = sum([live, keep])?;
-            kept.insert(id, keep);
+                    band_peak = band_peak.max(sum([live, inputs, made, scratch, keep])?);
+            live = sum([live.saturating_sub(before), keep])?;
+            slab.insert(id, keep);
             if plan.carried.contains(id) {
                 let r = carried_rows.entry(id).or_insert(0);
                 *r = (*r).max(rhi - rlo);
@@ -1270,7 +1296,9 @@ fn pass_cost(graph: &Graph, plan: &Plan, terminals: &[&str], band_rows: usize) -
                 if let Some(n) = readers.get_mut(from.as_str()) {
                     *n -= 1;
                     if *n == 0 && !terminals.contains(&from.as_str()) {
-                        live = live.saturating_sub(kept.get(from.as_str()).copied().unwrap_or(0));
+                        let k = keeps(from)?;
+                        live = sum([live.saturating_sub(slab.get(from.as_str()).copied().unwrap_or(0)), k])?;
+                        kept_next.insert(from.as_str(), k);
                     }
                 }
             }
@@ -1279,10 +1307,16 @@ fn pass_cost(graph: &Graph, plan: &Plan, terminals: &[&str], band_rows: usize) -
         let mut handed = 0usize;
         for t in terminals {
             let (w, _, c) = plan.dims[*t];
-            handed = sum([handed, rows_bytes(w, b - y, c)?])?;
+            handed = sum([handed, rows_bytes(w, band.b - band.a, c)?])?;
         }
         band_peak = band_peak.max(sum([live, handed])?);
-        y = b;
+        // What the slabs still standing keep for the next band.
+        for id in slab.keys() {
+            if !kept_next.contains_key(id) {
+                kept_next.insert(id, keeps(id)?);
+            }
+        }
+        held = kept_next.into_iter().filter(|(_, b)| *b > 0).collect();
     }
     let mut carries = 0usize;
     for (id, rows) in &carried_rows {
@@ -1384,59 +1418,201 @@ pub fn largest_export_edge(
     Ok(Some(lo))
 }
 
-/// One band's rows: the output rows `a..b`, the rows each node makes for
-/// it, and the rows each node reads of its inputs.
+/// One step of a pass: the output rows `a..b` it hands on (none while the
+/// pass fills); the rows of each node it holds (`need`, its slab, with
+/// the rows the node's readers will still read); the rows each node makes
+/// new in it (`make`), the rest kept from the step before; and the rows
+/// of its inputs each node reads to make them (`reads`, its buffer).
 struct BandNeeds {
     a: usize,
     b: usize,
     need: HashMap<String, (usize, usize)>,
+    make: HashMap<String, (usize, usize)>,
     reads: HashMap<String, (usize, usize)>,
 }
 
-/// What each node must make for output rows `a..b`, walking back from
-/// the terminals. A carried node not `started` yet reads from the frame's
-/// first row.
-fn band_needs(plan: &Plan, terminals: &[&str], a: usize, b: usize, started: &mut HashSet<String>) -> BandNeeds {
-    let mut need: HashMap<String, (usize, usize)> = HashMap::new();
-    for t in terminals {
-        let r = hull(need.get(*t).copied(), (a, b));
-        need.insert(t.to_string(), r);
+/// How a pass walks the frame: each node's lead (how far past the output
+/// rows it runs: the most of its readers' leads and their margins below),
+/// the nodes reading each node, the step and the output's height.
+struct Walk {
+    lead: HashMap<String, usize>,
+    readers: HashMap<String, Vec<String>>,
+    step: usize,
+    frame_h: usize,
+    started: HashSet<String>,
+    held: HashMap<String, (usize, usize)>,
+    /// How far down each node has made its rows.
+    made: HashMap<String, usize>,
+    /// The output row the step reaches (the nodes run their lead past it),
+    /// and the last handed on.
+    t: isize,
+    out: usize,
+}
+
+impl Walk {
+    fn new(plan: &Plan, terminals: &[&str], band_rows: usize) -> Walk {
+        let frame_h = terminals.iter().map(|t| plan.dims[*t].1).max().unwrap_or(0);
+        // The nodes this pass makes: the terminals and what they read, up
+        // to the resident frames.
+        let mut walked: HashSet<String> = HashSet::new();
+        let mut stack: Vec<String> = terminals.iter().map(|t| t.to_string()).collect();
+        while let Some(id) = stack.pop() {
+            if plan.mode[&id] == Mode::Resident || !walked.insert(id.clone()) {
+                continue;
+            }
+            stack.extend(plan.inputs[&id].iter().map(|(_, from)| from.clone()));
+        }
+        let mut readers: HashMap<String, Vec<String>> = HashMap::new();
+        for id in &plan.order {
+            if !walked.contains(id) {
+                continue;
+            }
+            for (_, from) in &plan.inputs[id] {
+                readers.entry(from.clone()).or_default().push(id.clone());
+            }
+        }
+        let mut lead: HashMap<String, usize> = HashMap::new();
+        for id in plan.order.iter().rev().filter(|id| walked.contains(*id)) {
+            let l = readers.get(id).into_iter().flatten().filter_map(|c| {
+                let below = match plan.mode[c] {
+                    Mode::Rows { bottom, .. } => bottom,
+                    _ => 0,
+                };
+                lead.get(c).map(|l| l + below)
+            });
+            lead.insert(id.clone(), l.max().unwrap_or(0));
+        }
+        let step = band_rows.max(1);
+        let most = lead.values().copied().max().unwrap_or(0);
+        // The first step runs the deepest node at most a step's rows in;
+        // each step after runs every node a step further, so none makes
+        // much more than a step's rows at once, and the output comes once
+        // the nodes below it have run far enough, a whole step at a time.
+        let t = step as isize - (most.div_ceil(step) * step) as isize;
+        Walk { lead, readers, step, frame_h, started: HashSet::new(), held: HashMap::new(), made: HashMap::new(), t, out: 0 }
     }
+
+    fn next(&mut self, plan: &Plan, terminals: &[&str]) -> Option<BandNeeds> {
+        if self.out >= self.frame_h {
+            return None;
+        }
+        let b = self.t.clamp(0, self.frame_h as isize) as usize;
+        let band = band_needs(plan, terminals, self, self.out, b);
+        self.out = b;
+        self.t += self.step as isize;
+        Some(band)
+    }
+}
+
+/// Every step of a pass over `terminals`, top to bottom.
+fn schedule(plan: &Plan, terminals: &[&str], band_rows: usize) -> Vec<BandNeeds> {
+    let mut walk = Walk::new(plan, terminals, band_rows);
+    std::iter::from_fn(|| walk.next(plan, terminals)).collect()
+}
+
+/// What each node holds, makes and reads in the step that hands on output
+/// rows `a..b`, walking back from the terminals. A node's rows are made
+/// once: those the step before made and kept (`held`) are not made again,
+/// and the node makes the rows past them, out to what its readers read
+/// and to its lead past the step, from a buffer that starts its margin
+/// above them. It keeps every row a reader will still read. A carried
+/// node reads from the frame's first row the first time it runs.
+fn band_needs(plan: &Plan, terminals: &[&str], walk: &mut Walk, a: usize, b: usize) -> BandNeeds {
+    let mut need: HashMap<String, (usize, usize)> = HashMap::new();
+    if b > a {
+        for t in terminals {
+            let r = hull(need.get(*t).copied(), (a, b));
+            need.insert(t.to_string(), r);
+        }
+    }
+    let mut make: HashMap<String, (usize, usize)> = HashMap::new();
     let mut reads: HashMap<String, (usize, usize)> = HashMap::new();
     for id in plan.order.iter().rev() {
-        let Some(&(lo, hi)) = need.get(id) else { continue };
+        if !walk.lead.contains_key(id) {
+            continue;
+        }
+        let h = plan.dims[id].1;
+        // The lowest row a reader will still read, now that this step has
+        // run it (a reader that has not started may read from the top).
+        let floor = walk.readers.get(id).into_iter().flatten().filter_map(|c| {
+            let made = walk.made.get(c).copied();
+            match (plan.mode[c], made) {
+                (Mode::Resident | Mode::Gather, _) => None,
+                (_, Some(m)) if m >= plan.dims[c].1 => None,
+                (Mode::Rows { .. }, None) if plan.carried.contains(c) => Some(0),
+                (_, None) => Some(0),
+                (Mode::Rows { top, .. }, Some(m)) => Some(m.saturating_sub(top)),
+                (Mode::Crop, Some(m)) => Some(plan.crops[c].input_rows(m, plan.dims[c].1).map_or(0, |r| r.0)),
+                (Mode::Layer, Some(m)) => Some(m),
+            }
+        }).min();
+        let lead = (walk.t + walk.lead[id] as isize).clamp(0, h as isize) as usize;
+        let demand = need.get(id).copied();
+        let lo = demand.map(|d| d.0).into_iter().chain(floor).min();
+        // What it has made it holds, while a reader will read it.
+        let frontier = walk.made.get(id).copied().unwrap_or(0);
+        let mut hi = demand.map_or(lead, |d| d.1.max(lead)).max(frontier);
+        // A node with a reach taller than a step makes its rows up to a
+        // reach at a time, at most four steps, so its margins are not
+        // made again every few rows: the rows kept ahead grow with the
+        // step the caller's memory allows, and the work made twice
+        // shrinks with it.
+        if let Mode::Rows { top, bottom } = plan.mode[id] {
+            if hi > frontier {
+                let chunk = walk.step.max((top + bottom).min(4 * walk.step));
+                hi = hi.max((frontier + chunk).min(h));
+            }
+        }
+        let Some(lo) = lo.filter(|lo| *lo < hi) else {
+            // Nothing to hold this step, and none of it a reader will read:
+            // it keeps nothing (the render drops a slab no step needs).
+            need.remove(id);
+            walk.held.remove(id);
+            continue;
+        };
+        // Kept from the step before: its rows from `lo` on are not made again.
+        let kept = walk.held.get(id).copied().filter(|&(hlo, hhi)| hlo <= lo && lo <= hhi);
+        let from = kept.map_or(lo, |(_, hhi)| hhi);
+        let slab_hi = kept.map_or(hi, |(_, hhi)| hhi.max(hi));
+        walk.held.insert(id.clone(), (lo, slab_hi));
+        need.insert(id.clone(), (lo, slab_hi));
+        if hi <= from {
+            continue;
+        }
+        make.insert(id.clone(), (from, hi));
+        walk.made.insert(id.clone(), hi);
         let mut r = match plan.mode[id] {
-            Mode::Resident => continue,
-            Mode::Rows { top, bottom } => (lo.saturating_sub(top), (hi + bottom).min(plan.dims[id].1)),
+            Mode::Resident => unreachable!(),
+            Mode::Rows { top, bottom } => (from.saturating_sub(top), (hi + bottom).min(h)),
             Mode::Crop => {
                 let g = &plan.crops[id];
-                g.input_rows(lo, hi).unwrap_or((0, g.in_h))
+                g.input_rows(from, hi).unwrap_or((0, g.in_h))
             }
             // Its input is resident and read whole; it makes its own rows.
             Mode::Gather => {
-                reads.insert(id.clone(), (lo, hi));
+                reads.insert(id.clone(), (from, hi));
                 continue;
             }
             // Its base's same rows; the layer's inputs are resident.
             Mode::Layer => {
-                reads.insert(id.clone(), (lo, hi));
-                for (_, from) in plan.inputs[id].iter().filter(|(port, _)| port == "base") {
-                    let h = hull(need.get(from).copied(), (lo, hi));
-                    need.insert(from.clone(), h);
+                reads.insert(id.clone(), (from, hi));
+                for (_, input) in plan.inputs[id].iter().filter(|(port, _)| port == "base") {
+                    let h = hull(need.get(input).copied(), (from, hi));
+                    need.insert(input.clone(), h);
                 }
                 continue;
             }
         };
-        if plan.carried.contains(id) && started.insert(id.clone()) {
+        if plan.carried.contains(id) && walk.started.insert(id.clone()) {
             r.0 = 0;
         }
         reads.insert(id.clone(), r);
-        for (_, from) in &plan.inputs[id] {
-            let h = hull(need.get(from).copied(), r);
-            need.insert(from.clone(), h);
+        for (_, input) in &plan.inputs[id] {
+            let h = hull(need.get(input).copied(), r);
+            need.insert(input.clone(), h);
         }
     }
-    BandNeeds { a, b, need, reads }
+    BandNeeds { a, b, need, make, reads }
 }
 
 /// For one band: how many nodes made in it read each node's rows, a
@@ -1444,7 +1620,7 @@ fn band_needs(plan: &Plan, terminals: &[&str], a: usize, b: usize, started: &mut
 fn band_readers<'p>(plan: &'p Plan, band: &BandNeeds) -> HashMap<&'p str, usize> {
     let mut readers: HashMap<&str, usize> = HashMap::new();
     for id in &plan.order {
-        if plan.mode[id] == Mode::Resident || !band.need.contains_key(id) {
+        if plan.mode[id] == Mode::Resident || !band.make.contains_key(id) {
             continue;
         }
         for (_, from) in &plan.inputs[id] {
@@ -1465,15 +1641,28 @@ fn render_band(
     later: &[BandNeeds],
     carries: &mut HashMap<String, Carry>,
     wides: &mut HashMap<String, Wide>,
+    kept: &mut HashMap<String, Slab>,
     sink: &mut dyn FnMut(usize, usize, Value) -> Result<(), EngineError>,
 ) -> Result<(), EngineError> {
     let (a, b) = (band.a, band.b);
     let mut slabs: HashMap<&str, Slab> = HashMap::new();
+    // What a slab keeps for the next band: its rows from the first the
+    // next band needs of the node, if it needs any the slab has.
+    let next = later.first();
+    let keep_for_next = |id: &str, slab: Slab, kept: &mut HashMap<String, Slab>| {
+        let Some(&(nlo, _)) = next.and_then(|n| n.need.get(id)) else { return };
+        let end = slab.y0 + rows_of(&slab.value);
+        if plan.mode[id] == Mode::Resident || nlo >= end {
+            return;
+        }
+        let from = nlo.max(slab.y0);
+        kept.insert(id.to_string(), Slab { y0: from, value: slice_rows(&slab.value, slab.y0, from, end) });
+    };
     let rows_from = |slabs: &HashMap<&str, Slab>, from: &str, lo: usize, hi: usize| -> Value {
         match resident.get(from) {
             Some(v) => slice_rows(v, 0, lo, hi),
             None => {
-                let s = &slabs[from];
+                let s = slabs.get(from).unwrap_or_else(|| panic!("no rows of '{from}' for this band"));
                 slice_rows(&s.value, s.y0, lo, hi)
             }
         }
@@ -1488,6 +1677,13 @@ fn render_band(
         if mode == Mode::Resident {
             continue;
         }
+        let before = kept.remove(id.as_str());
+        // Every row it needs kept from the band before: nothing to make.
+        let Some(&(lo_new, hi_new)) = band.make.get(id) else {
+            let s = before.ok_or_else(|| EngineError::Band(format!("'{id}' kept no rows for this band")))?;
+            slabs.insert(id, Slab { y0: lo, value: slice_rows(&s.value, s.y0, lo, hi) });
+            continue;
+        };
         let node = graph.node(id).unwrap();
         let (rlo, rhi) = band.reads[id];
         let (fw, fh, _) = plan.dims[id];
@@ -1527,7 +1723,7 @@ fn render_band(
                 if (mw, mh) != (fw, rhi - rlo) {
                     return Err(EngineError::Band(format!("'{id}' made {mw} by {mh} of a {fw} wide band of {} rows", rhi - rlo)));
                 }
-                slice_rows(&made, rlo, lo, hi)
+                slice_rows(&made, rlo, lo_new, hi_new)
             }
             Mode::Crop => {
                 let g = &plan.crops[id];
@@ -1537,28 +1733,28 @@ fn render_band(
                     return Err(EngineError::TypeMismatch { node: id.clone(), port: "in".into() });
                 };
                 let px = |x: usize, y: usize| img.pixel(x, y - rlo);
-                Value::Image(Arc::new(g.render(lo, hi, &px)))
+                Value::Image(Arc::new(g.render(lo_new, hi_new, &px)))
             }
             Mode::Layer => {
                 let inputs: Vec<(String, Value)> = plan.inputs[id]
                     .iter()
-                    .map(|(port, from)| (port.clone(), if port == "base" { rows_from(&slabs, from, lo, hi) } else { resident[from].clone() }))
+                    .map(|(port, from)| (port.clone(), if port == "base" { rows_from(&slabs, from, lo_new, hi_new) } else { resident[from].clone() }))
                     .collect();
-                let frame = BandFrame { full_w: fw, full_h: fh, y0: lo, rows: hi - lo, layers_whole: true, planes_whole: false };
+                let frame = BandFrame { full_w: fw, full_h: fh, y0: lo_new, rows: hi_new - lo_new, layers_whole: true, planes_whole: false };
                 let made = with_frame(frame, || apply_node(id, node, inputs, false, sources))?;
                 let (mw, mh) = match &made {
                     Value::Image(i) => (i.width, i.height),
                     Value::Mask(m) => (m.width, m.height),
                 };
-                if (mw, mh) != (fw, hi - lo) {
-                    return Err(EngineError::Band(format!("'{id}' laid {mw} by {mh} for a {fw} wide band of {} rows", hi - lo)));
+                if (mw, mh) != (fw, hi_new - lo_new) {
+                    return Err(EngineError::Band(format!("'{id}' laid {mw} by {mh} for a {fw} wide band of {} rows", hi_new - lo_new)));
                 }
                 made
             }
             Mode::Gather => {
                 let inputs: Vec<(String, Value)> =
                     plan.inputs[id].iter().map(|(port, from)| (port.clone(), resident[from].clone())).collect();
-                let frame = BandFrame { full_w: fw, full_h: fh, y0: lo, rows: hi - lo, layers_whole: false, planes_whole: false };
+                let frame = BandFrame { full_w: fw, full_h: fh, y0: lo_new, rows: hi_new - lo_new, layers_whole: false, planes_whole: false };
                 let made = with_frame(frame, || apply_node(id, node, inputs, false, sources))?;
                 let (mw, mh) = match &made {
                     Value::Image(i) => (i.width, i.height),
@@ -1567,26 +1763,33 @@ fn render_band(
                 if (mw, mh) == (fw, fh) {
                     // Handed back whole: its input untouched (nothing on),
                     // whose band is the band's rows.
-                    slice_rows(&made, 0, lo, hi)
-                } else if (mw, mh) == (fw, hi - lo) {
+                    slice_rows(&made, 0, lo_new, hi_new)
+                } else if (mw, mh) == (fw, hi_new - lo_new) {
                     made
                 } else {
-                    return Err(EngineError::Band(format!("'{id}' gathered {mw} by {mh} for a {fw} wide band of {} rows", hi - lo)));
+                    return Err(EngineError::Band(format!("'{id}' gathered {mw} by {mh} for a {fw} wide band of {} rows", hi_new - lo_new)));
                 }
             }
             Mode::Resident => unreachable!(),
+        };
+        // The rows kept from the band before, then the rows made new.
+        let value = match before {
+            Some(s) if lo < lo_new => stack_rows(&slice_rows(&s.value, s.y0, lo, lo_new), &value),
+            _ => value,
         };
         slabs.insert(id, Slab { y0: lo, value });
         for (_, from) in &plan.inputs[id] {
             if let Some(n) = readers.get_mut(from.as_str()) {
                 *n -= 1;
                 if *n == 0 && !terminals.contains(&from.as_str()) {
-                    slabs.remove(from.as_str());
+                    if let Some(slab) = slabs.remove(from.as_str()) {
+                        keep_for_next(from, slab, kept);
+                    }
                 }
             }
         }
     }
-    for (i, t) in terminals.iter().enumerate() {
+    for (i, t) in terminals.iter().enumerate().filter(|_| b > a) {
         let v = match resident.get(*t) {
             Some(v) => slice_rows(v, 0, a, b),
             None => {
@@ -1596,7 +1799,30 @@ fn render_band(
         };
         sink(i, a, v)?;
     }
+    for (id, slab) in slabs {
+        keep_for_next(id, slab, kept);
+    }
     Ok(())
+}
+
+/// Two runs of rows, one under the other, as one.
+fn stack_rows(top: &Value, bottom: &Value) -> Value {
+    match (top, bottom) {
+        (Value::Image(t), Value::Image(u)) => {
+            let mut data = Vec::with_capacity(t.data.len() + u.data.len());
+            data.extend_from_slice(&t.data);
+            data.extend_from_slice(&u.data);
+            Value::Image(Arc::new(ImageBuf { width: t.width, height: t.height + u.height, data }))
+        }
+        (Value::Mask(t), Value::Mask(u)) => {
+            let mut data = Vec::with_capacity(t.data.len() + u.data.len());
+            data.extend_from_slice(&t.data);
+            data.extend_from_slice(&u.data);
+            Value::Mask(Arc::new(MaskBuf { width: t.width, height: t.height + u.height, data }))
+        }
+        // A node's rows are one kind band after band.
+        (_, u) => u.clone(),
+    }
 }
 
 #[cfg(test)]

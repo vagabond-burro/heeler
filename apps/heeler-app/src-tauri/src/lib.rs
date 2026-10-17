@@ -11557,9 +11557,10 @@ thread_local! {
 /// 48 MP edit held (around 11 GB, which made a 16 GB Mac page).
 const EXPORT_BAND_TARGET: usize = 3 << 30;
 
-/// The band height an export falls back to when nodes made whole keep it
-/// past EXPORT_BAND_TARGET: tall enough that margins cost little, short
-/// enough that the bands add little to what the whole nodes hold.
+/// The shortest band an export takes while memory holds it, and the one
+/// it falls back to when nodes made whole keep it past
+/// EXPORT_BAND_TARGET: tall enough that margins cost little, short enough
+/// that the bands add little to what the whole nodes hold.
 const EXPORT_BAND_FLOOR: usize = 256;
 
 /// The export's frame rendered band by band (heeler_engine::banded), the
@@ -11612,8 +11613,17 @@ pub(crate) fn render_frames_banded(g: &Graph, terminals: &[&str], sources: &Hash
     // 6.9 whole), so modest bands, EXPORT_BAND_FLOOR rows, if those still
     // ask less than the whole render; else the whole render.
     let ceiling = memory::available_to_job().min(EXPORT_BAND_TARGET.saturating_add(frame_bytes));
+    let floor = EXPORT_BAND_FLOOR.min(h);
     let rows = match banded::band_rows_for(g, terminals, sources, ceiling, frame_bytes) {
         Ok(Some(_)) if forced > 0 => forced,
+        // Short bands keep less but make the reaches' margins again more
+        // often (the every-effect 48 MP graph: 36 s in bands of 29 rows,
+        // 17 s in bands of 256), so on the desktop never shorter than the
+        // floor while memory holds those.
+        Ok(Some(rows)) if rows < floor => match banded::estimate_banded(g, terminals, sources, floor) {
+            Ok(est) if memory::sum([est, frame_bytes]).map_err(|e| e.to_string())? <= memory::available_to_job() => floor,
+            _ => rows,
+        },
         Ok(Some(rows)) => rows,
         Ok(None) => {
             let mut exec = Executor::new();
@@ -11622,7 +11632,6 @@ pub(crate) fn render_frames_banded(g: &Graph, terminals: &[&str], sources: &Hash
             for t in terminals {
                 whole = whole.max(exec.estimate(g, t, sources).map_err(|e| e.to_string())?);
             }
-            let floor = EXPORT_BAND_FLOOR.min(h);
             match banded::estimate_banded(g, terminals, sources, floor) {
                 Ok(est) if memory::sum([est, frame_bytes]).map_err(|e| e.to_string())? < whole => if forced > 0 { forced } else { floor },
                 Ok(_) | Err(heeler_engine::EngineError::Band(_)) => return Ok(None),
