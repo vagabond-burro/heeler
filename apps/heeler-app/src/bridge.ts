@@ -1460,6 +1460,7 @@ export async function exportTo(
     keepMetadata?: boolean;
     matte?: boolean;
     dpi?: number;
+    exportLayers?: boolean;
   }
 ): Promise<string | null> {
   if (!isTauri()) {
@@ -1476,6 +1477,7 @@ export async function exportTo(
     keepMetadata: settings.keepMetadata ?? true,
     matte: settings.matte ?? false,
     dpi: exportDpi(settings.dpi),
+    exportLayers: settings.exportLayers ?? true,
   });
 }
 

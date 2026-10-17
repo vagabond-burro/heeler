@@ -11691,6 +11691,19 @@ thread_local! {
     static LOCK_WAITED: std::cell::Cell<std::time::Duration> = const { std::cell::Cell::new(std::time::Duration::ZERO) };
 }
 
+/// The graph with every Export Layer switched off, for an export asked to
+/// write the picture alone (2026-10-17: "there should be an option in the
+/// export panel to ignore any render layers that might be turned on").
+/// The layers are taps off the picture, so the picture is the same; a
+/// switched-off one is never rendered, never named as not written, and
+/// leaves the export free to stream (export_layers::reads_the_photo).
+fn without_export_layers(mut graph: UiGraph) -> UiGraph {
+    for n in graph.nodes.iter_mut().filter(|n| n.node_type == "heeler.export_layer") {
+        n.enabled = false;
+    }
+    graph
+}
+
 /// An export's stages and how long each took, for the line a slow export
 /// logs (2026-10-10: EXR and 16-bit TIFF exports "upwards of 30 seconds
 /// each"): the stages, how the frame was rendered, and the time spent
@@ -18417,7 +18430,11 @@ async fn export_to(
     matte: Option<bool>,
     // The print resolution the file declares; absent is 300.
     dpi: Option<u32>,
+    // The Export panel's Layers switch: false leaves the graph's Export
+    // Layers out of a TIFF or EXR; absent writes them, as before.
+    export_layers: Option<bool>,
 ) -> Result<String, String> {
+    let graph = if export_layers == Some(false) { without_export_layers(graph) } else { graph };
     tauri::async_runtime::spawn_blocking(move || {
         let export_t0 = std::time::Instant::now();
         debug_log!(
@@ -28238,6 +28255,41 @@ mod tests {
             "the plane was refined in the input's frame and the seat's crop was not applied twice"
         );
         assert!((sources["depthmap@depth"].image.pixel(0, 0)[0] - 0.4).abs() < 0.05, "a constant plane survives refinement: {}", sources["depthmap@depth"].image.pixel(0, 0)[0]);
+    }
+
+    /// The Export panel's Layers switch off: a TIFF of a graph with an
+    /// Export Layer writes the picture alone, the same picture, renders
+    /// no layer, names none as not written, and may keep its photograph
+    /// as samples (reads_the_photo).
+    #[test]
+    fn an_export_without_its_layers_writes_the_picture_alone() {
+        let graph = serde_json::from_value::<UiGraph>(serde_json::json!({
+            "graph_id": "g", "nodes": [
+                {"id":"src","type":"heeler.image_source","enabled":true,"params":{}},
+                {"id":"exp","type":"heeler.exposure","enabled":true,"params":{"exposure":0.5}},
+                {"id":"tap","type":"heeler.export_layer","enabled":true,"params":{}},
+                {"id":"output","type":"heeler.output","enabled":true,"params":{}}
+            ], "connections": [
+                {"from":["src","out"],"to":["exp","in"]},
+                {"from":["exp","out"],"to":["tap","in"]},
+                {"from":["exp","out"],"to":["output","in"]}
+            ]
+        })).unwrap();
+        let photo = Arc::new(ImageBuf::filled(8, 6, [0.2, 0.3, 0.4, 1.0]));
+        let dest = Path::new("out.tif");
+        let holds = ContainerHolds::of(&export_container(dest, "tiff"));
+        let (_, with, _) = render_export_layers_and_beauty_for(&graph, photo.clone(), &HashMap::new(), dest, "tiff", |_, _| {}).unwrap();
+        assert_eq!(with.len(), 1, "the tap is a layer of the TIFF");
+        assert!(export_layers::reads_the_photo(&graph, holds));
+        let alone = without_export_layers(graph.clone());
+        let mut said = Vec::new();
+        let (alpha, without, _) = render_export_layers_and_beauty_for(&alone, photo.clone(), &HashMap::new(), dest, "tiff", |_, m| said.push(m.to_string())).unwrap();
+        assert!(alpha.is_none() && without.is_empty(), "no layer rendered");
+        assert!(said.is_empty(), "nothing named as not written: {said:?}");
+        assert!(!export_layers::reads_the_photo(&alone, holds), "free to stream");
+        let a = render_export(&graph, photo.clone(), &HashMap::new()).unwrap();
+        let b = render_export(&alone, photo, &HashMap::new()).unwrap();
+        assert_eq!(a.data, b.data, "the same picture");
     }
 
     /// A slow export's line names its stages over 50 ms, how its frame was

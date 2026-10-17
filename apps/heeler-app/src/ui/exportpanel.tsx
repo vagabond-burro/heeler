@@ -228,7 +228,7 @@ export function ExportPanel({ state, dispatch }: { state: State; dispatch: D }) 
               // the matte existed load with it off. Both still set the
               // field: a saved spread carries matte, and leaving it out
               // here kept whatever the tab happened to have.
-              if (p) setSettings({ format: p.format, quality: p.quality, maxEdge: p.maxEdge, template: p.template, keepMetadata: p.keepMetadata ?? true, matte: p.matte ?? false, dpi: exportDpi(p.dpi) });
+              if (p) setSettings({ format: p.format, quality: p.quality, maxEdge: p.maxEdge, template: p.template, keepMetadata: p.keepMetadata ?? true, matte: p.matte ?? false, dpi: exportDpi(p.dpi), exportLayers: p.exportLayers ?? true });
             }}
           />
         )}
@@ -365,18 +365,44 @@ that cannot carry alpha, never removed.*/}
           const alphaOk =
             settings.format === "png" || settings.format === "png16" ||
             settings.format === "tiff" || settings.format === "tiff32" || settings.format === "exr";
+          const holdsLayers = settings.format === "exr" || settings.format === "tiff" || settings.format === "tiff32";
+          const included = settings.exportLayers !== false;
+          const many = layers === 1 ? "" : "s";
           return (
             <>
+              {/* A TIFF or EXR writes the layers unless this says to leave
+                  them out, for the picture alone without switching each
+                  layer off in the graph. */}
+              {layers > 0 && holdsLayers &&
+                row(
+                  "Layers",
+                  <button
+                    className="chip"
+                    data-testid="export-layers-toggle"
+                    data-active={included}
+                    aria-pressed={included}
+                    data-hint={
+                      included
+                        ? `Writes the graph's ${layers} export layer${many} with the picture. Click to export the picture alone.`
+                        : `Leaves the graph's ${layers} export layer${many} out and exports the picture alone. Click to write them.`
+                    }
+                    onClick={() => setSettings({ ...settings, exportLayers: !included })}
+                  >
+                    {included ? "Included" : "Left out"}
+                  </button>,
+                )}
               {layers > 0 && (
                 <div
                   data-testid="export-layers-line"
-                  style={{ fontSize: 10, color: settings.format === "exr" || settings.format === "tiff" || settings.format === "tiff32" ? "var(--text-faint)" : "var(--accent)", lineHeight: 1.5 }}
+                  style={{ fontSize: 10, color: holdsLayers ? "var(--text-faint)" : "var(--accent)", lineHeight: 1.5 }}
                 >
-                  {settings.format === "exr"
-                    ? `${layers} export layer${layers === 1 ? "" : "s"}, one EXR`
-                    : settings.format === "tiff" || settings.format === "tiff32"
-                      ? `${layers} export layer${layers === 1 ? "" : "s"}, ${layers} sibling TIFF${layers === 1 ? "" : "s"}`
-                      : `${layers} export layer${layers === 1 ? "" : "s"} need${layers === 1 ? "s" : ""} TIFF or EXR; ${settings.format.toUpperCase()} drops them`}
+                  {holdsLayers && !included
+                    ? `${layers} export layer${many} left out; the picture alone`
+                    : settings.format === "exr"
+                      ? `${layers} export layer${many}, one EXR`
+                      : settings.format === "tiff" || settings.format === "tiff32"
+                        ? `${layers} export layer${many}, ${layers} sibling TIFF${many}`
+                        : `${layers} export layer${many} need${layers === 1 ? "s" : ""} TIFF or EXR; ${settings.format.toUpperCase()} drops them`}
                 </div>
               )}
               {alphaWired && !alphaOk && (

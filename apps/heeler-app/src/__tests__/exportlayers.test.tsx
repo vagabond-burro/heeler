@@ -206,6 +206,28 @@ describe("the export panel's layer lines", () => {
   it("warns that JPEG drops the layers", () => {
     render(<ExportPanel state={withLayers("jpeg")} dispatch={() => {}} />);
     expect(screen.getByTestId("export-layers-line").textContent).toContain("need TIFF or EXR");
+    expect(screen.queryByTestId("export-layers-toggle"), "a JPEG has no layers to leave out").toBeNull();
+  });
+
+  // 2026-10-17: "Even for formats that support render layers there
+  // should be an option in the export panel to ignore any render layers
+  // that might be turned on."
+  it("leaves a TIFF's or EXR's layers out on request, and keeps the choice", () => {
+    for (const format of ["tiff", "exr"] as const) {
+      let s = withLayers(format);
+      const view = render(<ExportPanel state={s} dispatch={(c) => { s = run(s, c); }} />);
+      const toggle = () => screen.getByTestId("export-layers-toggle");
+      expect(toggle()).toHaveAttribute("aria-pressed", "true");
+      expect(toggle().textContent).toBe("Included");
+      fireEvent.click(toggle());
+      view.rerender(<ExportPanel state={s} dispatch={(c) => { s = run(s, c); }} />);
+      expect(toggle()).toHaveAttribute("aria-pressed", "false");
+      expect(toggle().textContent).toBe("Left out");
+      expect(screen.getByTestId("export-layers-line").textContent).toContain("2 export layers left out; the picture alone");
+      const group = s.exportQueue.groups[s.exportQueue.active];
+      expect(group.settings.exportLayers, format).toBe(false);
+      view.unmount();
+    }
   });
 
   it("warns when the wired alpha cannot ride the format", () => {

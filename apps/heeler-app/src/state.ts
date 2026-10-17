@@ -2669,6 +2669,11 @@ export interface ExportSettings {
   /** matte the photograph onto transparency through the graph's Smart
    * mask; alpha formats only, quietly ignored elsewhere*/
   matte?: boolean;
+  /** write the graph's Export Layers into a TIFF or EXR; absent (a
+   * preset saved before the switch) reads as on. Other formats never
+   * carry layers (2026-10-17: "there should be an option in the export
+   * panel to ignore any render layers that might be turned on").*/
+  exportLayers?: boolean;
 }
 
 export const DEFAULT_EXPORT_SETTINGS: ExportSettings = {

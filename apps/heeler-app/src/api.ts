@@ -279,6 +279,7 @@ export async function handleApiAsync(
             ? p.keepMetadata
             : DEFAULT_EXPORT_SETTINGS.keepMetadata,
         ...(typeof p.matte === "boolean" ? { matte: p.matte } : {}),
+        ...(typeof p.exportLayers === "boolean" ? { exportLayers: p.exportLayers } : {}),
         dpi: exportDpi(typeof p.dpi === "number" ? p.dpi : undefined),
       };
       // The panel's own pipeline: per-image graphs, template naming,
