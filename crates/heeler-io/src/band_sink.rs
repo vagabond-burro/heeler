@@ -47,6 +47,20 @@ impl SinkFormat {
             SinkFormat::Dng => 12,
         }
     }
+
+    /// Peak samples, encoder scratch and growing output. These use the
+    /// whole-frame encoders' admission bounds, which include samples.
+    pub fn encoding_bytes(self, width: usize, height: usize) -> Result<usize, IoError> {
+        let per_pixel = match self {
+            SinkFormat::Jpeg => 13,
+            SinkFormat::Png8 => 22,
+            SinkFormat::Webp => 8,
+            SinkFormat::Png16 => 48,
+            SinkFormat::Tiff16 | SinkFormat::Dng => 32,
+        };
+        Ok(memory::sum([memory::bytes(width, height, 1, per_pixel)?, 64 * 1024])?)
+    }
+
 }
 
 /// A frame `width` by `height` arriving top to bottom, kept as `format`
@@ -152,30 +166,35 @@ impl BandSink {
     /// The JPEG, at `quality` 1 to 100.
     pub fn jpeg(self, quality: u8) -> Result<Vec<u8>, IoError> {
         self.expect(SinkFormat::Jpeg)?;
+        let _job = memory::Job::admit(self.format.encoding_bytes(self.width, self.height)?, "streamed image encoding and output")?;
         crate::jpeg_from_rgb8(&self.samples, self.width, self.height, quality)
     }
 
     /// The 8-bit PNG.
     pub fn png8(self) -> Result<Vec<u8>, IoError> {
         self.expect(SinkFormat::Png8)?;
+        let _job = memory::Job::admit(self.format.encoding_bytes(self.width, self.height)?, "streamed image encoding and output")?;
         crate::png_from_samples(&self.samples, self.width, self.height, image::ExtendedColorType::Rgba8)
     }
 
     /// The 16-bit PNG.
     pub fn png16(self) -> Result<Vec<u8>, IoError> {
         self.expect(SinkFormat::Png16)?;
+        let _job = memory::Job::admit(self.format.encoding_bytes(self.width, self.height)?, "streamed image encoding and output")?;
         crate::png_from_samples(&self.samples, self.width, self.height, image::ExtendedColorType::Rgba16)
     }
 
     /// The WebP, at `quality` 1 to 100.
     pub fn webp(self, quality: u8) -> Result<Vec<u8>, IoError> {
         self.expect(SinkFormat::Webp)?;
+        let _job = memory::Job::admit(self.format.encoding_bytes(self.width, self.height)?, "streamed image encoding and output")?;
         crate::webp_from_rgba8(&self.samples, self.width, self.height, quality)
     }
 
     /// The 16-bit TIFF export.
     pub fn tiff16(mut self, options: TiffExportOptions<'_>) -> Result<Vec<u8>, IoError> {
         self.expect(SinkFormat::Tiff16)?;
+        let _job = memory::Job::admit(self.format.encoding_bytes(self.width, self.height)?, "streamed image encoding and output")?;
         crate::bake::strip_len(self.width, self.height)?;
         if !self.alpha {
             // Six bytes a pixel, in place: each pixel moves down to where
@@ -192,6 +211,7 @@ impl BandSink {
     /// The scene-linear DNG.
     pub fn dng(self, exif: Option<&Exif>, xmp: Option<&str>) -> Result<Vec<u8>, IoError> {
         self.expect(SinkFormat::Dng)?;
+        let _job = memory::Job::admit(self.format.encoding_bytes(self.width, self.height)?, "streamed image encoding and output")?;
         crate::bake::strip_len(self.width, self.height)?;
         let (scale, stops) = if !self.peak.is_finite() || self.peak <= 1.0 { (1.0, 0.0) } else { (self.peak, self.peak.log2()) };
         let mut pixels = memory::vector(memory::bytes(self.width, self.height, 6, 1)?, 0u8, "DNG samples")?;
@@ -343,10 +363,25 @@ pub fn export_in_bands(
     ceiling: usize,
     encoding: Encoding<'_>,
 ) -> Result<Option<(Vec<u8>, usize, usize)>, IoError> {
-    let Some(rows) = sink_band_rows(graph, terminal, sources, ceiling, encoding.format())? else { return Ok(None) };
-    let Some((sink, _)) = render_into_sink(graph, terminal, sources, rows, encoding.format())? else { return Ok(None) };
-    let (w, h) = sink.size();
-    Ok(Some((sink.encode(encoding)?, w, h)))
+    let format = encoding.format();
+    let Some((w, h, kept)) = sink_bytes(graph, terminal, sources, format)? else { return Ok(None) };
+    let encoding_peak = memory::sum([
+        banded::source_bytes(graph, &[terminal], sources).map_err(engine_error)?,
+        format.encoding_bytes(w, h)?,
+    ])?;
+    if encoding_peak > ceiling {
+        return Ok(None);
+    }
+    let Some(rows) = sink_band_rows(graph, terminal, sources, ceiling, format)? else { return Ok(None) };
+    let render_peak = memory::sum([
+        banded::estimate_banded(graph, &[terminal], sources, rows).map_err(engine_error)?, kept,
+    ])?;
+    let job = memory::Job::admit(render_peak.max(encoding_peak), "banded export and encoding")?;
+    // A nested encoder admission may not grow beyond the caller's ceiling.
+    job.worker(ceiling).run(|| {
+        let Some((sink, _)) = render_into_sink(graph, terminal, sources, rows, format)? else { return Ok(None) };
+        Ok(Some((sink.encode(encoding)?, w, h)))
+    })
 }
 
 /// export_in_bands with the photographs in `rows` making their rows on
@@ -471,5 +506,49 @@ mod tests {
                 assert_eq!((bytes, w, h), (want, 61, 43), "{:?} within a ceiling", encoding.format());
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod ceiling_tests {
+    use super::*;
+    use heeler_graph::{Registry, Section};
+    use std::sync::Arc;
+
+    #[test]
+    fn an_export_ceiling_covers_encoding_as_well_as_rendering() {
+        let (w, h) = (512, 128);
+        let mut image = ImageBuf::new(w, h);
+        for (i, px) in image.data.chunks_exact_mut(4).enumerate() {
+            let mut n = (i as u32).wrapping_mul(0x9e3779b1);
+            n ^= n >> 15;
+            px.copy_from_slice(&[(n & 255) as f32 / 255.0, ((n >> 8) & 255) as f32 / 255.0, ((n >> 16) & 255) as f32 / 255.0, 1.0]);
+        }
+        let mut graph = Graph::new("encoding ceiling");
+        graph.add_node(Registry::builtin().instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+        let sources = HashMap::from([("src".to_string(), SourceImage { image: Arc::new(image), version: 1, measured: false })]);
+        let source = w * h * 16;
+        for encoding in [Encoding::Jpeg(90), Encoding::Png8, Encoding::Png16, Encoding::Webp(80), Encoding::Tiff16(Default::default()), Encoding::Dng { exif: None, xmp: None }] {
+            let format = encoding.format();
+            let render_only = banded::estimate_banded(&graph, &["src"], &sources, 1).unwrap() + w * h * format.bytes_per_pixel();
+            assert!(sink_band_rows(&graph, "src", &sources, render_only, format).unwrap().is_some());
+            assert!(export_in_bands(&graph, "src", &sources, render_only, encoding).unwrap().is_none(), "{format:?} must also fit its encoder");
+            let ceiling = source + format.encoding_bytes(w, h).unwrap();
+            let want = export_in_bands(&graph, "src", &sources, 1 << 30, encoding).unwrap().unwrap().0;
+            memory::with_budget(ceiling, || {
+                let got = export_in_bands(&graph, "src", &sources, ceiling, encoding).unwrap().unwrap();
+                assert_eq!(got.0, want, "{format:?} at its encoding ceiling");
+                assert!(memory::budget().snapshot().peak <= ceiling);
+            });
+        }
+    }
+
+    #[test]
+    fn a_sink_encoder_admits_its_workspace_before_encoding() {
+        let mut sink = BandSink::new(SinkFormat::Png8, 128, 128).unwrap();
+        sink.put(0, &ImageBuf::new(128, 128)).unwrap();
+        memory::with_budget(128 * 128 * 4, || {
+            assert!(matches!(sink.png8(), Err(IoError::Memory(_))));
+        });
     }
 }

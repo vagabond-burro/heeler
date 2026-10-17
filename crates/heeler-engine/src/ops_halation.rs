@@ -152,15 +152,19 @@ pub(crate) fn halation(node: &Node, inputs: &[(String, Value)]) -> Result<Value,
     // of the frame, so the reduced path (gaussian_blur_wide): the direct
     // kernel at these sigmas was the 4-second render of the owner's demo.
     // No halo work at amount 0: only the bloom is asked for.
+    let input_reach = if background > 0.0 {
+        crate::ops_detail::wide_blur_input_reach(radius, fw, fh)
+    } else { 0 };
+    let blur_source = |sigma| crate::ops_detail::gaussian_blur_wide_after(&source, sigma, input_reach);
     let halo_on = amount > 0.0;
-    let wide = if halo_on { Some(gaussian_blur_wide(&source, radius)) } else { None };
+    let wide = if halo_on { Some(blur_source(radius)) } else { None };
     let ring_part = 1.0 - diffusion;
-    let narrow = if halo_on && ring_part > 0.0 { Some(gaussian_blur_wide(&source, radius * 0.45)) } else { None };
+    let narrow = if halo_on && ring_part > 0.0 { Some(blur_source(radius * 0.45)) } else { None };
     let tint = {
         let c = hue_rgb(hue);
         [1.0 + (c[0] - 1.0) * saturation, 1.0 + (c[1] - 1.0) * saturation, 1.0 + (c[2] - 1.0) * saturation]
     };
-    let bloomed = if bloom > 0.0 { Some(gaussian_blur_wide(&source, bloom_radius)) } else { None };
+    let bloomed = if bloom > 0.0 { Some(blur_source(bloom_radius)) } else { None };
     let mut out = ImageBuf::new(w, h);
     out.data
         .par_chunks_mut(4)

@@ -786,3 +786,79 @@ fn a_banded_export_writes_the_whole_frames_file() {
         }
     }
 }
+
+/// Decoder samples are only part of a RAW row source: sharpening has
+/// fixed-size runs and retained carries even for one-row render bands.
+#[test]
+fn lazy_capture_sharpening_admission_covers_its_live_heap() {
+    use heeler_engine::banded::{self, CaptureSharpenRows, SourceRows};
+    struct RawRows {
+        samples: Vec<u16>,
+        w: usize,
+        h: usize,
+        sharp: CaptureSharpenRows,
+    }
+    fn pre(samples: &[u16], w: usize, a: usize, b: usize) -> Result<ImageBuf, heeler_engine::EngineError> {
+        let mut img = ImageBuf::try_new(w, b - a)?;
+        for (i, px) in img.data.chunks_exact_mut(4).enumerate() {
+            for c in 0..3 { px[c] = samples[(a * w + i) * 3 + c] as f32 / 65535.0; }
+            px[3] = 1.0;
+        }
+        Ok(img)
+    }
+    impl SourceRows for RawRows {
+        fn size(&self) -> (usize, usize) { (self.w, self.h) }
+        fn bytes(&self) -> usize { self.samples.len() * 2 }
+        fn workspace(&self) -> Result<usize, heeler_engine::EngineError> { self.sharp.workspace() }
+        fn rows(&self, a: usize, b: usize) -> Result<ImageBuf, heeler_engine::EngineError> {
+            self.sharp.rows(a, b, &|a, b| pre(&self.samples, self.w, a, b))
+        }
+    }
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let (w, h) = (512, 513);
+    let samples: Vec<u16> = (0..w * h * 3).map(|i| (i as u32).wrapping_mul(7919) as u16).collect();
+    let sharp = CaptureSharpenRows::new(0.6, 0.8, w, h, &|a, b| pre(&samples, w, a, b)).unwrap();
+    let raw = Arc::new(RawRows { samples, w, h, sharp });
+    let mut graph = Graph::new("RAW rows");
+    let registry = Registry::builtin();
+    for id in ["src", "alias"] {
+        graph.add_node(registry.instantiate("heeler.image_source", id, Section::Creative).unwrap()).unwrap();
+    }
+    let rows = HashMap::from([
+        ("src".to_string(), raw.clone() as Arc<dyn SourceRows>),
+        ("alias".to_string(), raw.clone() as Arc<dyn SourceRows>),
+    ]);
+    banded::with_row_sources(rows, || {
+        let sources = HashMap::new();
+        // Aliases share both the samples and the sharpening state.
+        assert_eq!(banded::source_bytes(&graph, &["src", "alias"], &sources).unwrap(), raw.bytes() + raw.workspace().unwrap());
+        for step in [1, 17, h] {
+            let estimate = banded::estimate_banded(&graph, &["src", "alias"], &sources, step).unwrap();
+            let (peak, ()) = peak_of(|| heeler_engine::memory::with_budget(estimate, || {
+                banded::render_banded(&graph, &["src", "alias"], &sources, step, &mut |_, _, _| Ok(())).unwrap();
+            }));
+            assert!(estimate >= raw.bytes() + peak, "bands of {step}: estimate {estimate}, live heap {}", raw.bytes() + peak);
+        }
+    });
+}
+
+/// Encoder scratch and output grow beside the sink and source, including
+/// an incompressible PNG whose render alone fits a much smaller ceiling.
+#[test]
+fn streamed_encoding_admission_covers_its_live_heap() {
+    use heeler_io::band_sink::{self, Encoding};
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let (w, h) = (512, 512);
+    let image = noise(w, h);
+    let mut graph = Graph::new("streamed noise");
+    graph.add_node(Registry::builtin().instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+    let sources = HashMap::from([("src".to_string(), SourceImage { image: image.clone(), version: 1, measured: false })]);
+    // Initialize the render and encoder before measuring their live buffers.
+    for encoding in [Encoding::Jpeg(100), Encoding::Png8, Encoding::Png16, Encoding::Webp(100), Encoding::Tiff16(Default::default()), Encoding::Dng { exif: None, xmp: None }] {
+        let ceiling = w * h * 16 + encoding.format().encoding_bytes(w, h).unwrap();
+        drop(band_sink::export_in_bands(&graph, "src", &sources, ceiling, encoding).unwrap().unwrap());
+        let (peak, bytes) = peak_of(|| band_sink::export_in_bands(&graph, "src", &sources, ceiling, encoding).unwrap().unwrap().0);
+        assert!(!bytes.is_empty());
+        assert!(w * h * 16 + peak <= ceiling, "{:?}: ceiling {ceiling}, live heap {}", encoding.format(), w * h * 16 + peak);
+    }
+}

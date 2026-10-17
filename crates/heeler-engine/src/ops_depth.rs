@@ -16,7 +16,6 @@ use heeler_graph::Node;
 use crate::buffers::{ImageBuf, Value};
 use crate::executor::EngineError;
 use crate::ops::{hue_rgb, image_input, p, p_bool, to_scene};
-use crate::ops_detail::gaussian_blur_wide;
 
 /// The injected farness plane, resampled to the render size. Persisted
 /// as a gray image; R carries the value. Since 26.3 Phase 10.3 the
@@ -1591,6 +1590,15 @@ pub(crate) const FRINGE_STRETCH: f32 = 0.35;
 pub(crate) const SWIRL_STRETCH: f32 = 1.4;
 pub(crate) const HALO_SIGMA: f32 = 0.015;
 
+/// The rows the aperture composite loses at a slab edge, before its halo.
+pub(crate) fn dof_band_input_reach(short: f32, aperture: f32, fringe: f32, swirl: f32) -> usize {
+    let max_r = aperture * short * DISC_MAX;
+    let taps = (max_r * (1.0 + fringe.abs() * FRINGE_STRETCH)).max(0.6)
+        * 1.8 * (1.0 + swirl.max(0.0) * SWIRL_STRETCH) + 1.0;
+    taps.ceil() as usize + 2
+}
+
+
 /// How far past any pixel the op reaches for its neighbors, as a
 /// fraction of the frame's short side, from the node's raw dials
 /// (0..100 as the panel writes them). The desktop's 1:1 patch grows its
@@ -2109,7 +2117,8 @@ fn dof_layered(
             });
         // A fraction of the frame, so the reduced path (see Halation):
         // sigma 60 on a 24 MP export was 1.5 s of direct kernel.
-        let halo = gaussian_blur_wide(&bright, (short * HALO_SIGMA).max(2.0));
+        let input_reach = dof_band_input_reach(short, aperture, fringe, shape.swirl);
+        let halo = crate::ops_detail::gaussian_blur_wide_after(&bright, (short * HALO_SIGMA).max(2.0), input_reach);
         out.data
             .par_chunks_mut(4)
             .zip(halo.data.par_chunks(4))

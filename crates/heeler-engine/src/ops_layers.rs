@@ -336,10 +336,14 @@ pub(crate) fn blur(node: &Node, inputs: &[(String, Value)]) -> Result<Value, Eng
 /// the threshold the alpha rides in a buffer of its own and is blurred
 /// the same way; an opaque frame sees no difference.
 fn gaussian_blur_rgba_any_sigma(pre: &ImageBuf, sigma: f32) -> ImageBuf {
+    gaussian_blur_rgba_after(pre, sigma, 0)
+}
+
+fn gaussian_blur_rgba_after(pre: &ImageBuf, sigma: f32, input_reach: usize) -> ImageBuf {
     if sigma <= crate::ops_detail::WIDE_BLUR_SIGMA {
         return crate::ops_detail::gaussian_blur_rgba(pre, sigma);
     }
-    let mut out = crate::ops_detail::gaussian_blur_wide(pre, sigma);
+    let mut out = crate::ops_detail::gaussian_blur_wide_after(pre, sigma, input_reach);
     let alpha_plane = map_rgb(pre, |_| 0.0);
     let mut alpha_as_rgb = alpha_plane;
     for px in alpha_as_rgb.data.chunks_mut(4) {
@@ -348,7 +352,7 @@ fn gaussian_blur_rgba_any_sigma(pre: &ImageBuf, sigma: f32) -> ImageBuf {
         px[1] = a;
         px[2] = a;
     }
-    let alpha_blurred = crate::ops_detail::gaussian_blur_wide(&alpha_as_rgb, sigma);
+    let alpha_blurred = crate::ops_detail::gaussian_blur_wide_after(&alpha_as_rgb, sigma, input_reach);
     for (o, a) in out.data.chunks_mut(4).zip(alpha_blurred.data.chunks(4)) {
         o[3] = a[0];
     }
@@ -503,7 +507,12 @@ pub(crate) fn skin_soften(node: &Node, inputs: &[(String, Value)]) -> Result<Val
     let display = map_rgb(&src, encode);
     let inverted = invert_buf(&display, 1.0);
     let passed = high_pass_buf(&inverted, softening);
-    let blurred = gaussian_like_blur_node(&passed, detail_back);
+    let (fw, fh, _) = crate::band::placed(src.width, src.height);
+    let input_reach = crate::ops_detail::wide_blur_input_reach(sigma_for_radius(softening), fw, fh);
+    let blurred = if detail_back <= 0.0 { passed.clone() } else {
+        let pre = premultiply(&passed);
+        unpremultiply(&gaussian_blur_rgba_after(&pre, sigma_for_radius(detail_back), input_reach))
+    };
     let vivid = blend_opaque(&display, &blurred, BlendMode::VividLight, 1.0);
     let over = blend_opaque(&display, &vivid, BlendMode::Normal, strength);
     Ok(Value::Image(Arc::new(decode_keeping_highlights(&over, &src))))

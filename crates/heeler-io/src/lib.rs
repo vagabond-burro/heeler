@@ -835,6 +835,11 @@ impl KeptDevelop {
     /// file's rendering.
     fn sharpened_rows(&self, y0: usize, y1: usize) -> Result<ImageBuf, heeler_engine::EngineError> {
         let pre = |a: usize, b: usize| self.develop_rows(a, b);
+        let _job = heeler_engine::memory::Job::admit(heeler_engine::memory::sum([
+            heeler_engine::banded::SourceRows::bytes(self),
+            heeler_engine::banded::SourceRows::workspace(self)?,
+            heeler_engine::memory::bytes(self.w, y1 - y0, 4, 4)?,
+        ])?, "RAW develop rows")?;
         match &self.sharpen {
             Some(s) => s.rows(y0, y1, &pre),
             None => pre(y0, y1),
@@ -884,6 +889,9 @@ impl heeler_engine::banded::SourceRows for KeptDevelop {
             KeptSamples16::One { rgb, .. } => rgb.len() * 2,
             KeptSamples16::Blend { clip, blend, weight, .. } => clip.len() * 2 + blend.len() * 2 + weight.len(),
         }
+    }
+    fn workspace(&self) -> Result<usize, heeler_engine::EngineError> {
+        self.sharpen.as_ref().map_or(Ok(0), |s| s.workspace())
     }
     fn rows(&self, y0: usize, y1: usize) -> Result<ImageBuf, heeler_engine::EngineError> {
         let mut img = self.sharpened_rows(y0, y1)?;
@@ -946,8 +954,12 @@ fn keep_develop(path: &Path, bytes: &[u8], opts: RawSourceOpts) -> Result<Option
     let mut kept = KeptDevelop { w, h, develop, sharpen: None, rendering: dng_gain::file_rendering(bytes), gain: 1.0 };
     if sensor_data && opts.capture_sharpen != 0 {
         let pre = |a: usize, b: usize| kept.develop_rows(a, b);
-        let sharpen = heeler_engine::banded::CaptureSharpenRows::new(opts.capture_sharpen as f32 / 100.0, heeler_engine::CAPTURE_SHARPEN_RADIUS, w, h, &pre)
-            .map_err(|e| IoError::Unsupported(e.to_string()))?;
+        let sharpen = heeler_engine::memory::with_retained(heeler_engine::banded::SourceRows::bytes(&kept), ||
+            heeler_engine::banded::CaptureSharpenRows::new(opts.capture_sharpen as f32 / 100.0, heeler_engine::CAPTURE_SHARPEN_RADIUS, w, h, &pre))
+            .map_err(|e| match e {
+                heeler_engine::EngineError::Memory(m) => IoError::Memory(m),
+                e => IoError::Unsupported(e.to_string()),
+            })?;
         kept.sharpen = Some(sharpen);
     }
     // The develop is the photograph, as the decode judges it, or the

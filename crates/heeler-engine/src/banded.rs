@@ -56,6 +56,9 @@ pub trait SourceRows: Send + Sync {
     fn size(&self) -> (usize, usize);
     /// The bytes it keeps, for admission.
     fn bytes(&self) -> usize;
+    /// Peak workspace and retained row state beside the samples and the
+    /// returned RGBA rows. Stateless sample conversions need none.
+    fn workspace(&self) -> Result<usize, EngineError> { Ok(0) }
     /// Rows `y0..y1` of the frame, f32 RGBA.
     fn rows(&self, y0: usize, y1: usize) -> Result<ImageBuf, EngineError>;
 }
@@ -90,6 +93,7 @@ struct SharpenState {
 /// The rows a CaptureSharpenRows run makes; a multiple of the gate's
 /// 16-row blocks, so each block falls in one run.
 const SHARPEN_RUN: usize = 64;
+const SHARPEN_KEEP: usize = 4 * SHARPEN_RUN;
 
 /// Unsharpened rows `y0..y1` of a frame, f32 RGBA.
 pub type PreRows<'a> = &'a dyn Fn(usize, usize) -> Result<ImageBuf, EngineError>;
@@ -113,6 +117,7 @@ impl CaptureSharpenRows {
             s.gate = Some(crate::ops_detail::CAPTURE_SHARPEN_GATE);
             return Ok(s);
         }
+        let _job = crate::memory::Job::admit(crate::memory::sum([s.workspace()?, crate::memory::bytes(bw, bh, 1, 4)?])?, "capture sharpening gate")?;
         let mut rms = vec![0.0f32; bw * bh];
         let mut carry = Carry::default();
         for k in 0..h.div_ceil(SHARPEN_RUN) {
@@ -149,13 +154,13 @@ impl CaptureSharpenRows {
         let (w, h) = (self.w, self.h);
         let from = k * SHARPEN_RUN;
         let to = (from + SHARPEN_RUN).min(h);
-        let b0 = if k == 0 { 0 } else { from - self.margin };
+        let b0 = from.saturating_sub(self.margin);
         let b1 = (to + self.margin).min(h);
         let img = pre(b0, b1)?;
         let luma = |px: &[f32]| (0.2126 * px[0] + 0.7152 * px[1] + 0.0722 * px[2]).max(0.0);
         let plane: Vec<f32> = img.data.par_chunks(4).map(|px| crate::ops::to_display(luma(px))).collect();
         let mut c = std::mem::take(carry);
-        c.next_b0 = (to < h).then(|| to - self.margin);
+        c.next_b0 = (to < h).then(|| to.saturating_sub(self.margin));
         let frame = BandFrame { full_w: w, full_h: h, y0: b0, rows: b1 - b0, layers_whole: false, planes_whole: false };
         let (base, c) = with_carry(c, || with_frame(frame, || crate::ops_detail::guided_base(&plane, w, b1 - b0, self.radius, crate::ops_detail::SHARPEN_EPS)));
         if let Some(e) = &c.error {
@@ -165,18 +170,45 @@ impl CaptureSharpenRows {
         Ok((b0, img, plane, base))
     }
 
+    /// A bound for a run's image, guided planes and eight carried
+    /// passes (old and new rows together), plus the bounded row window.
+    /// The returned image is charged separately by the caller.
+    pub fn workspace(&self) -> Result<usize, EngineError> {
+        if self.gate.is_none() && (self.amount <= 0.0 || self.radius <= 0.0 || self.w < 3 || self.h < 3) {
+            return Ok(0);
+        }
+        let run = SHARPEN_RUN.saturating_add(2 * self.margin).min(self.h);
+        Ok(crate::memory::sum([
+            crate::memory::bytes(self.w, run, 1, 128)?,
+            crate::memory::bytes(self.w, (SHARPEN_KEEP + SHARPEN_RUN).min(self.h), 4, 4)?,
+            crate::memory::bytes(self.w, 1, 8, 4)?,
+            4096,
+        ])?)
+    }
+
     /// Sharpened rows `y0..y1`, from the unsharpened rows `pre` makes.
     /// Asked for top to bottom each run is made once; asked again from
     /// higher up, the runs start over from the frame's first row.
     pub fn rows(&self, y0: usize, y1: usize, pre: PreRows<'_>) -> Result<ImageBuf, EngineError> {
         let Some(gate) = self.gate else { return pre(y0, y1) };
         let w = self.w;
+        let _job = crate::memory::Job::admit(crate::memory::sum([
+            self.workspace()?, crate::memory::bytes(w, y1 - y0, 4, 4)?,
+        ])?, "capture sharpening rows")?;
+        let mut out = ImageBuf::try_new(w, y1 - y0)?;
         let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if y0 < st.y0 {
             *st = SharpenState::default();
         }
+        // Copy what is already held before advancing. Even a whole-frame
+        // request keeps only a few runs here, never a second whole frame.
+        let held_end = st.y0 + st.rows.len() / (w * 4);
+        let end = held_end.min(y1);
+        if y0 < end {
+            out.data[..(end - y0) * w * 4].copy_from_slice(&st.rows[(y0 - st.y0) * w * 4..(end - st.y0) * w * 4]);
+        }
         let gate2 = gate * gate;
-        while st.y0 + st.rows.len() / (w * 4) < y1 {
+        while st.next * SHARPEN_RUN < y1 {
             let k = st.next;
             let mut carry = std::mem::take(&mut st.carry);
             let (b0, mut img, plane, base) = self.run(k, &mut carry, pre)?;
@@ -199,20 +231,26 @@ impl CaptureSharpenRows {
                     *c *= ratio;
                 }
             }
-            if st.rows.is_empty() {
+            let a = from.max(y0);
+            let b = to.min(y1);
+            if a < b {
+                out.data[(a - y0) * w * 4..(b - y0) * w * 4].copy_from_slice(&img.data[(a - b0) * w * 4..(b - b0) * w * 4]);
+            }
+            let keep = from.saturating_sub(SHARPEN_KEEP).max(st.y0);
+            let gone = (keep - st.y0) * w * 4;
+            st.rows.drain(..gone);
+            st.y0 = keep;
+            if st.rows.capacity() == 0 {
+                st.rows = crate::memory::vector(w * (SHARPEN_KEEP + SHARPEN_RUN).min(self.h) * 4, 0.0, "capture sharpening kept rows")?;
+                st.rows.clear();
                 st.y0 = from;
             }
             st.rows.extend_from_slice(&img.data[(from - b0) * w * 4..(to - b0) * w * 4]);
         }
-        let at = (y0 - st.y0) * w * 4;
-        let out = ImageBuf { width: w, height: y1 - y0, data: st.rows[at..at + (y1 - y0) * w * 4].to_vec() };
-        // A few runs above the rows asked stay for another reader of the
-        // same photograph a little behind (a source and the group that
-        // stands in for it); above those, nothing is asked again.
-        let keep = y0.saturating_sub(4 * SHARPEN_RUN).max(st.y0);
-        let gone = (keep - st.y0) * w * 4;
-        st.rows.drain(..gone);
-        st.y0 = keep;
+        // The window stays at the foot too: another reader of the same
+        // photograph a little behind (a source and the group that stands
+        // in for it) reads the last rows from it rather than sharpening
+        // the whole frame again. It is bounded and counted in workspace.
         Ok(out)
     }
 }
@@ -671,12 +709,11 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
                     return both(0);
                 }
                 let short = w.min(h) as f32;
-                let max_r = aperture * short * crate::ops_depth::DISC_MAX;
                 let fringe = (p("fringe", 0.0) / 100.0).abs();
                 let swirl = (p("swirl", 0.0) / 100.0).max(0.0);
-                let taps = (max_r * (1.0 + fringe * crate::ops_depth::FRINGE_STRETCH)).max(0.6) * 1.8 * (1.0 + swirl * crate::ops_depth::SWIRL_STRETCH) + 1.0;
+                let taps = crate::ops_depth::dof_band_input_reach(short, aperture, fringe, swirl);
                 let halo = if p("glow", 0.0) > 0.0 { crate::ops_detail::wide_blur_band_reach((short * crate::ops_depth::HALO_SIGMA).max(2.0), w, h) } else { 0 };
-                both(taps.ceil() as usize + 2 + halo)
+                both(taps + halo)
             }
             "heeler.grain" | "heeler.noise" => {
                 if node.node_type == "heeler.grain" && p("intensity", 0.0) == 0.0 {
@@ -1363,6 +1400,27 @@ thread_local! {
     static CUTS_IN_TESTS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
+/// Resident source samples and row-generation workspace, counted once
+/// per shared source. Also held while an export's sink is encoded.
+pub fn source_bytes(graph: &Graph, terminals: &[&str], sources: &HashMap<String, SourceImage>) -> Result<usize, EngineError> {
+    let mut total = 0;
+    let mut seen = HashSet::new();
+    for (id, s) in sources {
+        if row_source(id).is_none() && seen.insert(Arc::as_ptr(&s.image) as usize) {
+            total = crate::memory::sum([total, crate::memory::bytes(s.image.width, s.image.height, 4, 4)?])?;
+        }
+    }
+    let mut kept = HashSet::new();
+    for id in reached(graph, terminals)? {
+        if let Some(r) = row_source(&id) {
+            if kept.insert(Arc::as_ptr(&r) as *const () as usize) {
+                total = crate::memory::sum([total, r.bytes(), r.workspace()?])?;
+            }
+        }
+    }
+    Ok(total)
+}
+
 /// estimate_banded with the nodes in `cut` made whole.
 fn estimate_cut(
     graph: &Graph,
@@ -1377,24 +1435,13 @@ fn estimate_cut(
     if heights.len() != 1 {
         return Err(EngineError::Band("terminals of different heights".into()));
     }
-    let mut seen = HashSet::new();
-    let mut source_bytes = 0usize;
-    for (id, s) in sources {
-        if row_source(id).is_none() && seen.insert(Arc::as_ptr(&s.image) as usize) {
-            source_bytes = sum([source_bytes, crate::memory::bytes(s.image.width, s.image.height, 4, 4)?])?;
-        }
-    }
-    // What a photograph making its rows on demand keeps, and its whole
-    // frame where a node reads all of it.
-    let mut kept_rows = HashSet::new();
+    let mut source_bytes = source_bytes(graph, terminals, sources)?;
     for id in &plan.order {
-        let Some(r) = row_source(id) else { continue };
-        if kept_rows.insert(Arc::as_ptr(&r) as *const () as usize) {
-            source_bytes = sum([source_bytes, r.bytes()])?;
-        }
         if plan.mode[id] == Mode::Resident {
-            let (w, h) = r.size();
-            source_bytes = sum([source_bytes, crate::memory::bytes(w, h, 4, 4)?])?;
+            if let Some(r) = row_source(id) {
+                let (w, h) = r.size();
+                source_bytes = sum([source_bytes, crate::memory::bytes(w, h, 4, 4)?])?;
+            }
         }
     }
     let band_rows = band_rows.max(1);
@@ -1565,7 +1612,19 @@ fn pass_cost(graph: &Graph, plan: &Plan, terminals: &[&str], band_rows: usize) -
         let node = graph.node(id).unwrap();
         carries = sum([carries, crate::memory::bytes(w, *rows, carry_slots(node), 4)?])?;
     }
-    Ok((band_peak, carries))
+    // run_pass retains the schedule while rendering. Charge its three
+    // row maps and owned ids per step, plus the walk and render maps.
+    // This matters for a source-only graph, whose pixel estimate can
+    // otherwise fill the ceiling exactly before any bookkeeping fits.
+    let walk = Walk::new(plan, terminals, band_rows);
+    let steps = walk.frame_h.div_ceil(walk.step) + walk.t.saturating_neg().max(0) as usize / walk.step + 1;
+    let ids = plan.order.iter().try_fold(0usize, |n, id| sum([n, id.len()]))?;
+    let per_step = sum([256, crate::memory::bytes(plan.order.len(), 1, 1, 1024)?, crate::memory::bytes(ids, 1, 1, 6)?])?;
+    let control = sum([
+        crate::memory::bytes(steps, per_step, 1, 1)?,
+        crate::memory::bytes(plan.order.len() + 1, 1, 1, 4096)?,
+    ])?;
+    Ok((sum([band_peak, control])?, carries))
 }
 
 /// A terminal's whole-frame size and channels (4 for an image, 1 for a

@@ -893,3 +893,64 @@ fn capture_sharpening_row_by_row_is_the_whole_frames() {
         }
     }
 }
+
+/// A direct background blur loses rows at a slab edge before the reduced
+/// Bloom prepass reads it. Those rows must never become permanent blocks.
+#[test]
+fn a_wide_prepass_keeps_only_exact_input_rows() {
+    let registry = Registry::builtin();
+    for (ty, params) in [
+        ("heeler.halation", vec![("bloom".into(), ParamValue::Number(50.0))]),
+        ("heeler.skin_soften", vec![("softening".into(), ParamValue::Number(4.0)), ("detail_back".into(), ParamValue::Number(20.0))]),
+    ] {
+        let g = one_node(&registry, ty, &params);
+        let sources = sources_with(frame(100, 300));
+        for rows in [1, 7, 17] {
+            let report = assert_same(&g, &["n"], &sources, rows, ty);
+            assert!(!report.whole.iter().any(|id| id == "n"), "{report:?}");
+        }
+    }
+}
+
+/// A whole decode, a skipped run and a reader coming back from above
+/// all share the same bounded sharpening window, never a second frame.
+#[test]
+fn capture_sharpening_keeps_a_bounded_window_for_whole_and_reordered_reads() {
+    let (w, h) = (37, 1031);
+    let image = frame(w, h);
+    let pre = |a: usize, b: usize| Ok(ImageBuf { width: w, height: b - a, data: image.data[a * w * 4..b * w * 4].to_vec() });
+    let sharp = CaptureSharpenRows::new(0.6, 0.8, w, h, &pre).unwrap();
+    let mut whole = (*image).clone();
+    crate::ops_detail::capture_sharpen(&mut whole, 0.6, 0.8);
+    for (a, b) in [(0, h), (700, 760), (510, 520), (0, 1), (65, 410), (450, 455), (h - 1, h)] {
+        let got = sharp.rows(a, b, &pre).unwrap();
+        assert_eq!(got.data.iter().map(|v| v.to_bits()).collect::<Vec<_>>(), whole.data[a * w * 4..b * w * 4].iter().map(|v| v.to_bits()).collect::<Vec<_>>(), "rows {a}..{b}");
+        let state = sharp.state.lock().unwrap();
+        assert!(state.rows.capacity() <= w * (SHARPEN_KEEP + SHARPEN_RUN) * 4);
+    }
+}
+
+/// Two readers of one photograph, the second a band behind, sharpen each
+/// run once, the last band included.
+#[test]
+fn capture_sharpening_makes_each_run_once_for_two_readers() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let (w, h) = (37, 1031);
+    let image = frame(w, h);
+    let made = AtomicUsize::new(0);
+    let pre = |a: usize, b: usize| {
+        made.fetch_add(b - a, Ordering::Relaxed);
+        Ok(ImageBuf { width: w, height: b - a, data: image.data[a * w * 4..b * w * 4].to_vec() })
+    };
+    let read = |readers: usize| {
+        let sharp = CaptureSharpenRows::new(0.6, 0.8, w, h, &pre).unwrap();
+        made.store(0, Ordering::Relaxed);
+        for y in (0..h).step_by(64) {
+            for _ in 0..readers {
+                sharp.rows(y, (y + 64).min(h), &pre).unwrap();
+            }
+        }
+        made.load(Ordering::Relaxed)
+    };
+    assert_eq!(read(2), read(1));
+}

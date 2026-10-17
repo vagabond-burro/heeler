@@ -176,6 +176,13 @@ const WIDE_BLUR_TARGET_SIGMA: f32 = 6.0;
 /// reduced path is what makes Halation, and any other op that blurs at
 /// a fraction of the frame, interactive.
 pub(crate) fn gaussian_blur_wide(src: &ImageBuf, sigma: f32) -> ImageBuf {
+    gaussian_blur_wide_after(src, sigma, 0)
+}
+
+/// The same blur of an input made by a direct neighborhood pass. Rows
+/// within `input_reach` of a slab edge are not exact, so a prepass must
+/// wait for another slab before keeping their blocks.
+pub(crate) fn gaussian_blur_wide_after(src: &ImageBuf, sigma: f32, input_reach: usize) -> ImageBuf {
     let (w, h) = (src.width, src.height);
     // In a banded render the buffer is rows `y0..` of a frame `fh` tall,
     // and the path, the block grid and the draw-up are the frame's: the
@@ -193,7 +200,7 @@ pub(crate) fn gaussian_blur_wide(src: &ImageBuf, sigma: f32) -> ImageBuf {
     let (sw, sh) = (w.div_ceil(factor), fh.div_ceil(factor));
     // With a prepass (band::Wide), the whole frame's small image is built
     // once and every band draws up from it.
-    if let Some(out) = crate::band::wide_slot(|slot, fill| wide_from_slot(src, sigma, factor, fh, y0, slot, fill)) {
+    if let Some(out) = crate::band::wide_slot(|slot, fill| wide_from_slot(src, sigma, factor, fh, y0, input_reach, slot, fill)) {
         return out;
     }
     // The frame's block rows this buffer holds whole.
@@ -280,7 +287,8 @@ pub(crate) fn gaussian_blur_wide(src: &ImageBuf, sigma: f32) -> ImageBuf {
 /// in, each the mean of its block as the whole frame takes it (the frame's
 /// partial last block included), and once every row is in, the small
 /// image blurred; otherwise nothing yet (zeros, which a prepass discards).
-fn wide_from_slot(src: &ImageBuf, sigma: f32, factor: usize, fh: usize, y0: usize, slot: &mut crate::band::WideSlot, fill: Option<bool>) -> ImageBuf {
+#[allow(clippy::too_many_arguments)]
+fn wide_from_slot(src: &ImageBuf, sigma: f32, factor: usize, fh: usize, y0: usize, input_reach: usize, slot: &mut crate::band::WideSlot, fill: Option<bool>) -> ImageBuf {
     use rayon::prelude::*;
     let (w, h) = (src.width, src.height);
     let (sw, sh) = (w.div_ceil(factor), fh.div_ceil(factor));
@@ -320,8 +328,10 @@ fn wide_from_slot(src: &ImageBuf, sigma: f32, factor: usize, fh: usize, y0: usiz
     if fill == Some(true) {
         let small = slot.small.as_mut().unwrap();
         let have = &mut slot.have;
-        let s0 = y0.div_ceil(factor);
-        let s1 = if y0 + h == fh { sh } else { (y0 + h) / factor };
+        let exact0 = if y0 == 0 { 0 } else { (y0 + input_reach).min(y0 + h) };
+        let exact1 = if y0 + h == fh { fh } else { (y0 + h).saturating_sub(input_reach).max(exact0) };
+        let s0 = exact0.div_ceil(factor);
+        let s1 = if exact1 == fh { sh } else { exact1 / factor };
         for sy in s0..s1.max(s0) {
             if have[sy] {
                 continue;
@@ -367,6 +377,11 @@ pub(crate) fn wide_blur_band_reach(sigma: f32, w: usize, h: usize) -> usize {
         None if sigma > 0.0 => (2.5 * sigma).ceil() as usize,
         None => 0,
     }
+}
+
+/// Rows lost at a slab edge by a blur before another wide blur reads it.
+pub(crate) fn wide_blur_input_reach(sigma: f32, w: usize, h: usize) -> usize {
+    if wide_blur_factor(sigma, w, h).is_some() { 0 } else { wide_blur_band_reach(sigma, w, h) }
 }
 
 /// The block factor gaussian_blur_wide reduces a frame `w` by `h` by at

@@ -186,3 +186,33 @@ fn a_camera_raws_rows_made_on_demand_are_its_decode() {
         println!("highlight {} sharpen {}: {} by {}, keeps {} MiB against {} MiB", o.highlight, o.capture_sharpen, whole.width, whole.height, rows.bytes() >> 20, (whole.data.len() * 4) >> 20);
     }
 }
+
+/// The kept RAW's sharpening state participates in admission before a
+/// one-row render starts, and the refusal stays a memory error.
+#[test]
+fn a_kept_raw_admits_capture_sharpening_beside_its_samples() {
+    use heeler_engine::banded;
+    use heeler_graph::{Graph, Registry, Section};
+    use std::collections::HashMap;
+    let dir = tempfile::tempdir().unwrap();
+    let path = mosaic_file(dir.path(), "rows-memory.dng");
+    let rows = decode_rows_with(&path, RawSourceOpts::default()).unwrap().unwrap();
+    assert!(rows.workspace().unwrap() > 0, "the sensor develop must sharpen");
+    let (w, h) = rows.size();
+    let mut graph = Graph::new("RAW admission");
+    graph.add_node(Registry::builtin().instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+    banded::with_row_sources(HashMap::from([("src".into(), rows.clone())]), || {
+        let sources = HashMap::new();
+        let ceiling = rows.bytes() + w * 16 * 2;
+        heeler_engine::memory::with_budget(ceiling, || {
+            assert!(matches!(banded::render_banded(&graph, &["src"], &sources, 1, &mut |_, _, _| Ok(())), Err(heeler_engine::EngineError::Memory(_))));
+        });
+        let estimate = banded::estimate_banded(&graph, &["src"], &sources, 1).unwrap();
+        heeler_engine::memory::with_budget(estimate, || {
+            banded::render_banded(&graph, &["src"], &sources, 1, &mut |_, _, _| Ok(())).unwrap();
+        });
+    });
+    let whole = decode_any_with(&path, RawSourceOpts::default()).unwrap();
+    let made = rows.rows(0, h).unwrap();
+    assert!(made.data.iter().zip(&whole.data).all(|(a, b)| a.to_bits() == b.to_bits()));
+}
