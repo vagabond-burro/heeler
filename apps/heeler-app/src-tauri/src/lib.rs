@@ -18147,7 +18147,10 @@ fn render_preview_attempt(
         // graph never pays for the probe.
         let gpu = if gpu_tail.is_some() { gpu_engine() } else { None };
         if let (Some((prefix, tail)), Some(gpu)) = (&gpu_tail, gpu) {
-            if let Ok(prefix_val) = exec.render(&g, prefix, &sources) {
+            let prefix_t0 = std::time::Instant::now();
+            let prefix_render = exec.render(&g, prefix, &sources);
+            let prefix_ms = prefix_t0.elapsed().as_millis();
+            if let Ok(prefix_val) = prefix_render {
                 if let Some(prefix_img) = prefix_val.as_image() {
                     let nodes: Vec<&heeler_graph::Node> = tail
                         .iter()
@@ -18182,11 +18185,17 @@ fn render_preview_attempt(
                     // keys and admission reasons to establish it.
                     match Job::admit(memory::bytes(frame_bytes, gpu_frames, 1, 1).map_err(|e| e.to_string())?, "GPU source, working buffers and readback") {
                         Ok(_gpu_job) => {
+                            let tail_t0 = std::time::Instant::now();
                             let gpu_result = gpu.run_chain_keyed(src_key, &nodes, prefix_img);
+                            let tail_ms = tail_t0.elapsed().as_millis();
                             memory::budget().set_external("preview GPU", gpu.cached_bytes());
                             match gpu_result {
                                 Ok(out) => {
-                                    backend = format!("gpu:{}", nodes.len());
+                                    // The time a GPU render took on the CPU ahead of the
+                                    // tail and on the tail itself: a slow gpu:N frame is
+                                    // nearly always its CPU part (a 2-node tail at
+                                    // 2048 px is 2 to 8 ms; the CPU same nodes 11).
+                                    backend = format!("gpu:{} (cpu {prefix_ms} ms, gpu {tail_ms} ms)", nodes.len());
                                     result = Some(Ok(Value::Image(Arc::new(out))));
                                 }
                                 Err(e) => {
