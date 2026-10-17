@@ -1,5 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+/// mimalloc gives freed pages back where the system allocator kept them:
+/// a banded 48 MP export's footprint was 1.77 GB under it against 2.90.
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 /// Release builds are GUI-subsystem binaries, which Windows starts with
 /// no console: println from `heeler serve` would vanish. Attaching to
 /// the parent's console makes the subcommand behave like a normal CLI

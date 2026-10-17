@@ -32,6 +32,13 @@ heeler-gpu = { path = "../../../crates/heeler-gpu" }
 # not travel to users. See the ledger entry for 2026-08-25.
 heeler-io = { path = "../../../crates/heeler-io", features = ["libraw"] }
 heeler-catalog = { path = "../../../crates/heeler-catalog" }
+# The process's allocator (src/main.rs).
+# Microsoft's mimalloc, MIT, built from C by libmimalloc-sys (MIT). The
+# system allocator on macOS kept about 1.3 GB of pages past the live
+# peak of a 48 MP banded export that malloc_zone_pressure_relief did not
+# return (footprint 2.90 GB against a live peak of 1.63); mimalloc kept
+# about 0.1 GB (1.77 GB).
+mimalloc = "0.1.52"
 tauri-plugin-window-state = "2.4.1"
 # USB for the tether camera transport: pure Rust, Apache-2.0 OR MIT
 # (crates.io, verified 2026-08-26), no C library and no GPL anywhere
