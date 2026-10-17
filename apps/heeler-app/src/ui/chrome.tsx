@@ -13,7 +13,7 @@ import { layerActionHint, layerActions, maskToggleItem } from "../layeractions";
 import { bakeMaskRaster, entryFromRow } from "../bridge";
 import { reportToolError } from "./hints";
 import { catalogSaves } from "../savebarrier";
-import { watchOp } from "./opprogress";
+import { watchExport, watchOp } from "./opprogress";
 import { publishBusy } from "./statusbar";
 import { removeObjectSource, runCommand } from "../commands";
 import { MergedIcon, RIBBON_ICON_CHIP, RibbonControls, RibbonExpandButton } from "./ribbontable";
@@ -2825,14 +2825,17 @@ function ExportButton({ state, dispatch }: { state: State; dispatch: D }) {
       return;
     }
     try {
-      const path = await exportImage(state, {
+      // Under the export dialog, which shows once the export has run
+      // half a second after its save dialog closes; Cancel answers null.
+      const name = state.images.find((i) => i.id === state.activeImage)?.name ?? "the photograph";
+      const path = await watchExport(`Exporting ${name}`, () => exportImage(state, {
         format: png ? "png" : "jpeg",
         quality: p.quickQuality,
         maxEdge: p.quickResize === "edge" ? p.quickEdge : null,
         scalePercent: p.quickResize === "percent" ? p.quickPercent : null,
         keepMetadata: p.exportKeepMetadata ?? true,
         dpi: exportDpi(p.quickDpi),
-      });
+      }));
       if (path) logMsg("info", `Exported ${path}`);
     } catch (e) {
       logMsg("error", `Quick Export failed: ${String(e)}`);

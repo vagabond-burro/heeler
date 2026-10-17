@@ -1001,3 +1001,26 @@ fn grain_and_noise_on_a_zoomed_patch_render_the_same() {
         }
     }
 }
+
+/// A banded render tells its progress hook the frame's rows done after
+/// each band, up to the whole frame, and stops when the hook says so.
+#[test]
+fn a_banded_render_reports_its_rows_and_stops_when_asked() {
+    let registry = Registry::builtin();
+    let g = one_node(&registry, "heeler.exposure", &[]);
+    let sources = sources_with(frame(40, 100));
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = seen.clone();
+    with_band_progress(Box::new(move |done, total| {
+        log.lock().unwrap().push((done, total));
+        true
+    }), || render_banded(&g, &["n"], &sources, 17, &mut |_, _, _| Ok(())).unwrap());
+    let seen = seen.lock().unwrap().clone();
+    assert_eq!(seen.last(), Some(&(100, 100)));
+    assert!(seen.windows(2).all(|w| w[0].0 < w[1].0), "{seen:?}");
+    assert_eq!(seen.len(), 100usize.div_ceil(17));
+    let stopped = with_band_progress(Box::new(|done, _| done < 40), || render_banded(&g, &["n"], &sources, 17, &mut |_, _, _| Ok(())));
+    assert!(matches!(stopped, Err(EngineError::Cancelled)), "{stopped:?}");
+    // Outside the hook nothing is told and nothing stops.
+    render_banded(&g, &["n"], &sources, 17, &mut |_, _, _| Ok(())).unwrap();
+}

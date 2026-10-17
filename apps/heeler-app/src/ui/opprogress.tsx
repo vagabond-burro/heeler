@@ -25,7 +25,7 @@ const open = new Set<string>();
 // progress bar if this is a slow process otherwise the user will think
 // something is wrong."): a bake reads the picture the user is working
 // on, so nothing else should be done to it while it runs.
-const MODAL_OPS = new Set(["bake"]);
+const MODAL_OPS = new Set(["bake", "export"]);
 // When each open operation began and what its dialog says it is doing,
 // and the operations whose Cancel has been pressed this run.
 const started = new Map<string, number>();
@@ -34,9 +34,14 @@ const titles = new Map<string, string>();
 // the picture costs each recovery bundle, bakedbackups.ts).
 const notes = new Map<string, string>();
 const canceled = new Set<string>();
+// When each open operation's first report arrived. A dialog's delay
+// counts from here: an export's first report comes once its save dialog
+// has closed, and the time spent there is not the export's.
+const firstHeard = new Map<string, number>();
 
 function heard(p: OpProgress) {
   if (!open.has(p.op)) return;
+  if (!firstHeard.has(p.op)) firstHeard.set(p.op, Date.now());
   current = current.some((r) => r.id === p.id)
     ? current.map((r) => (r.id === p.id ? p : r))
     : [...current, p];
@@ -63,6 +68,7 @@ function snapshot(): OpProgress[] {
 export function beginOp(op: string, title?: string, note?: string): void {
   open.add(op);
   started.set(op, Date.now());
+  firstHeard.delete(op);
   canceled.delete(op);
   if (title) titles.set(op, title);
   if (note) notes.set(op, note);
@@ -83,6 +89,7 @@ function cancelRow(p: OpProgress): void {
 export function clearOp(op: string): void {
   open.delete(op);
   started.delete(op);
+  firstHeard.delete(op);
   titles.delete(op);
   notes.delete(op);
   if (!current.some((r) => r.op === op)) return;
@@ -128,10 +135,46 @@ export async function watchBake<T>(title: string, job: () => Promise<T>, note?: 
   }
 }
 
+/** The exports' op and the desktop's answer to a canceled one (lib.rs
+ * EXPORT_OP, EXPORT_CANCELED). */
+export const EXPORT_OP = "export";
+export const EXPORT_CANCELED = "Export canceled";
+
+/** What an open operation's dialog says it is doing, changed while it
+ * runs (a batch names the photograph it has reached). */
+export function retitleOp(op: string, title: string): void {
+  if (!open.has(op)) return;
+  titles.set(op, title);
+  listeners.forEach((fn) => fn());
+}
+
+/** Whether the user pressed Cancel on this operation's dialog this run. */
+export function opCanceled(op: string): boolean {
+  return canceled.has(op);
+}
+
+/** An export, or a batch of them, under the progress dialog (2026-10-17:
+ * "a progress dialog for exports (whether batch or quick export) similar
+ * to the stacking dialog would help"): `title` is the dialog's line.
+ * Resolves to the job's answer, or null when the user canceled it. */
+export async function watchExport<T>(title: string, job: () => Promise<T>): Promise<T | null> {
+  beginOp(EXPORT_OP, title);
+  try {
+    const out = await job();
+    return canceled.has(EXPORT_OP) ? null : out;
+  } catch (e) {
+    if (canceled.has(EXPORT_OP) || String(e).includes(EXPORT_CANCELED)) return null;
+    throw e;
+  } finally {
+    clearOp(EXPORT_OP);
+  }
+}
+
 /** Test reset: every row gone and no operation open. */
 export function clearAllOps(): void {
   current = [];
   open.clear();
+  firstHeard.clear();
   started.clear();
   titles.clear();
   notes.clear();
@@ -214,7 +257,7 @@ export function OpProgressOverlay() {
 export function BakeProgressDialog({ merge = null }: { merge?: StackMerge | null } = {}) {
   const rows = useSyncExternalStore(subscribe, snapshot).filter((p) => MODAL_OPS.has(p.op));
   const p = rows[rows.length - 1];
-  const since = p ? started.get(p.op) : undefined;
+  const since = p ? firstHeard.get(p.op) ?? started.get(p.op) : undefined;
   const [, wake] = useState(0);
   const wait = since === undefined ? 0 : since + BAKE_DIALOG_DELAY_MS - Date.now();
   const waiting = wait > 0;

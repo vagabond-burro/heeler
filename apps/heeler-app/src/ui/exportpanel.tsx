@@ -6,6 +6,7 @@
 // thin bar rather than removing it, the same way the graph pop-out
 // leaves a bar behind, so the way back is where it was.
 
+import { EXPORT_OP, beginOp, clearOp, opCanceled } from "./opprogress";
 import React, { useEffect, useState } from "react";
 import type { Command, ImageEntry, State } from "../state";
 import {
@@ -148,21 +149,27 @@ export function ExportPanel({ state, dispatch }: { state: State; dispatch: D }) 
     stop.current = false;
     setReport(null);
     setRunning({ done: 0, total: targets.length, current: "" });
-    const result = await runExport(
-      state,
-      targets,
-      out,
-      settings,
-      (p) => setRunning(p),
-      () => stop.current
-    );
+    // The batch runs under the export dialog: each photograph's stages
+    // and bands on its bar, Cancel stopping the batch where it is. What
+    // was written before a Cancel is still reported.
+    beginOp(EXPORT_OP, `Exporting ${targets.length} photograph${targets.length === 1 ? "" : "s"}`);
+    let result: Awaited<ReturnType<typeof runExport>>;
+    let canceled = false;
+    try {
+      result = await runExport(state, targets, out, settings, (p) => setRunning(p), () => stop.current);
+    } finally {
+      canceled = opCanceled(EXPORT_OP);
+      clearOp(EXPORT_OP);
+    }
     setRunning(null);
     const failed = result.failed.length;
     // Reasons first, then the summary: the console reads bottom-up.
     logExportFailures(result.failed);
-    const msg =
-      failed === 0
-        ? `Exported ${result.written.length} image${result.written.length === 1 ? "" : "s"} to ${out}`
+    const written = `${result.written.length} image${result.written.length === 1 ? "" : "s"}`;
+    const msg = canceled
+      ? `Export canceled: exported ${written} of ${targets.length} to ${out}`
+      : failed === 0
+        ? `Exported ${written} to ${out}`
         : `Exported ${result.written.length}, ${failed} failed: ${result.failed
             .map((f) => f.name)
             .join(", ")}`;

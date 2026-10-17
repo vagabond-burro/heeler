@@ -1031,6 +1031,25 @@ fn plan(
     Ok(Plan { order, dims, mode, inputs, crops, carried, wide, plants })
 }
 
+thread_local! {
+    static BAND_PROGRESS: std::cell::RefCell<Option<Box<dyn FnMut(usize, usize) -> bool>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f` with `progress` told, as each band of a banded render on
+/// this thread reaches its caller, the frame's rows done and its rows in
+/// all (the first terminal's); answering false stops the render with
+/// EngineError::Cancelled. For an export's progress bar and its Cancel.
+pub fn with_band_progress<T>(progress: Box<dyn FnMut(usize, usize) -> bool>, f: impl FnOnce() -> T) -> T {
+    struct Reset(Option<Box<dyn FnMut(usize, usize) -> bool>>);
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            BAND_PROGRESS.with(|p| *p.borrow_mut() = self.0.take());
+        }
+    }
+    let _reset = Reset(BAND_PROGRESS.with(|p| p.borrow_mut().replace(progress)));
+    f()
+}
+
 /// Renders `terminals` band by band, `band_rows` output rows at a time,
 /// handing each terminal's rows to `sink` as (terminal's index, its first
 /// frame row, the rows). The terminals must share a height. Bit for bit
@@ -1107,7 +1126,21 @@ pub fn render_banded(
         banded: plan.order.iter().filter(|id| plan.mode[*id] != Mode::Resident).cloned().collect(),
         bands: 0,
     };
-    report.bands = run_pass(graph, &plan, &resident, sources, terminals, band_rows, &mut wides, sink)?;
+    // Each band of the first terminal, once the caller has it, tells a
+    // progress hook (with_band_progress) the frame's rows done.
+    let frame_h = plan.dims[terminals[0]].1;
+    let mut told = |t: usize, y0: usize, v: Value| -> Result<(), EngineError> {
+        let rows = match &v {
+            Value::Image(i) => i.height,
+            Value::Mask(m) => m.height,
+        };
+        sink(t, y0, v)?;
+        if t == 0 && !BAND_PROGRESS.with(|p| p.borrow_mut().as_mut().is_none_or(|f| f(y0 + rows, frame_h))) {
+            return Err(EngineError::Cancelled);
+        }
+        Ok(())
+    };
+    report.bands = run_pass(graph, &plan, &resident, sources, terminals, band_rows, &mut wides, &mut told)?;
     Ok(report)
 }
 

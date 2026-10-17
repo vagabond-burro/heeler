@@ -9,6 +9,7 @@
 import type { ExportSettings, ImageEntry, State } from "./state";
 import { exportTo, loadGraph, pickExportFolder, serializeFreshGraph, serializeGraph, serializeLoadedGraph } from "./bridge";
 import { logDebug, logMsg } from "./log";
+import { EXPORT_CANCELED, EXPORT_OP, opCanceled, retitleOp } from "./ui/opprogress";
 
 // The settings shape lives in state.ts now, beside the batch-group
 // queue that stores one per tab; re-exported so nothing downstream
@@ -243,7 +244,7 @@ export async function runExport(
   logDebug(() => `export batch: ${images.length} images to ${dir}`);
   let attempted = 0;
   for (let i = 0; i < images.length; i++) {
-    if (shouldStop()) {
+    if (shouldStop() || opCanceled(EXPORT_OP)) {
       logDebug(() => `export batch: stopped early at ${i}/${images.length}`);
       break;
     }
@@ -255,6 +256,7 @@ export async function runExport(
     // extension (tho it still exports as an EXR)").
     const dest = destinationFor(dir, settings, img, i, images.length, taken);
     onProgress({ done: i, total: images.length, current: destinationName(dest) });
+    retitleOp(EXPORT_OP, images.length === 1 ? `Exporting ${destinationName(dest)}` : `Exporting ${destinationName(dest)}, ${i + 1} of ${images.length}`);
     try {
       // A saved graph is the editor's shape and must be serialized the
       // same way the live one is; raw, the engine rejects it unread.
@@ -279,6 +281,9 @@ export async function runExport(
       const written = await exportTo(graph, img.id, dest, settings);
       if (written) result.written.push(written);
     } catch (e) {
+      // Cancel on the dialog stops the batch; the photograph it stopped
+      // is not a failure.
+      if (String(e).includes(EXPORT_CANCELED) || opCanceled(EXPORT_OP)) break;
       result.failed.push({ name: img.name, error: String(e) });
     }
   }

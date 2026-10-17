@@ -122,15 +122,17 @@ This makes it possible to queue the same photographs as full-size TIFFs in one g
 
 Click the solid **Export** button. The progress bar advances through the targets, the line under it names the file being written, and the report lists written and failed files. **Stop** abandons the remaining work but leaves files already written in the destination.
 
+An export that takes longer than half a second shows a progress dialog: which photograph it is on (2 of 5, say), what it is doing (reading the photograph, refining the depth map, rendering and writing the file), and a bar that moves as the picture renders. **Cancel** stops it at the next step it reaches, between stages or between strips of the picture; the photographs already written stay, and the report says how many made it. A photograph rendered in one piece may still finish writing first. `Escape` cancels too.
+
 The Export button is disabled until there is at least one target and a usable destination. Check the queue or thumbnail selection and Folder when it is unavailable.
 
 ## Quick Export
 
-Use **Photo > Quick Export…**, a thumbnail's context menu, or the title-bar Export button for an immediate export without adding to the queue. The title-bar button exports JPEG by default; hold `Option` (`Alt` on Windows) for PNG. Right-click it to set shared quick-export quality, output size and DPI. The app asks for a destination and reports completion in the log.
+Use **Photo > Quick Export…**, a thumbnail's context menu, or the title-bar Export button for an immediate export without adding to the queue. The title-bar button exports JPEG by default; hold `Option` (`Alt` on Windows) for PNG. Right-click it to set shared quick-export quality, output size and DPI. The app asks for a destination, shows the same progress dialog while a long export runs, and reports completion in the log.
 
 ## Memory and large exports
 
-Before allocating whole-frame buffers, Heeler checks the image dimensions and estimates the render, resize, encoding and known intermediate buffers against the machine's physical memory. Cached images and other work in progress count against the same allowance. A large image can run when it fits; there is no fixed megapixel ceiling. A full-resolution panorama is capped at 8000 pixels on its long side, a 40 inch print at 200 dpi.
+An export that would need a lot of memory at once renders the picture in horizontal strips and writes each strip into the file as it goes, so a large photograph with heavy edits fits in far less memory, with exactly the same pixels as rendering it whole. One that fits comfortably renders whole, which is quicker. Before allocating whole-frame buffers, Heeler checks the image dimensions and estimates the render, resize, encoding and known intermediate buffers against the machine's physical memory. Cached images and other work in progress count against the same allowance. A large image can run when it fits; there is no fixed megapixel ceiling. A full-resolution panorama is capped at 8000 pixels on its long side, a 40 inch print at 200 dpi.
 
 An export that cannot fit stops with a message naming the source file, the work that needs memory and the approximate shortfall. Memory pressure does not silently reduce the exported image or panorama canvas. Only your output-size settings change its size. Close other images, or choose a smaller output or a simpler edit. The original photograph remains untouched.
 

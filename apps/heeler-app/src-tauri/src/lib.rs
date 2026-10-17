@@ -11691,6 +11691,14 @@ thread_local! {
     static LOCK_WAITED: std::cell::Cell<std::time::Duration> = const { std::cell::Cell::new(std::time::Duration::ZERO) };
 }
 
+impl Drop for ExportStages {
+    fn drop(&mut self) {
+        if let Some((id, _)) = &self.watch {
+            progress::finish(id);
+        }
+    }
+}
+
 /// The graph with every Export Layer switched off, for an export asked to
 /// write the picture alone (2026-10-17: "there should be an option in the
 /// export panel to ignore any render layers that might be turned on").
@@ -11713,18 +11721,99 @@ struct ExportStages {
     lap: std::time::Instant,
     stages: Vec<(&'static str, std::time::Duration)>,
     waited: std::time::Duration,
+    /// The progress dialog's operation (EXPORT_OP): its id, polled for
+    /// Cancel, and where each stage is reported; None in a test.
+    watch: Option<(String, ExportReport)>,
 }
+
+/// Where an export's progress goes: progress::emit under EXPORT_OP in the
+/// app, a closure so the stages run with no window in a test.
+type ExportReport = std::sync::Arc<dyn Fn(&str, u64, u64, &str) + Send + Sync>;
+
+/// The progress op an export reports under, one id per export; the
+/// frontend shows it as a dialog once the export has run half a second
+/// (opprogress.tsx, 2026-10-17: "a progress dialog for exports (whether
+/// batch or quick export) similar to the stacking dialog would help").
+const EXPORT_OP: &str = "export";
+
+/// What a canceled export answers; the frontend says nothing for it.
+const EXPORT_CANCELED: &str = "Export canceled";
+
+/// An export's stages in the order they run, each named as the dialog
+/// says it while it runs. A stage an export has no use for passes in no
+/// time; the bar counts every one.
+const EXPORT_STAGES: [(&str, &str); 8] = [
+    ("decode", "Reading the photograph"),
+    ("planted rasters", "Gathering the masks"),
+    ("depth refinement", "Refining the depth map"),
+    ("mattes", "Gathering the mattes"),
+    ("normals", "Gathering the surface normals"),
+    ("denoise", "Reducing noise"),
+    ("export layers", "Rendering the export layers"),
+    ("render and write", "Rendering and writing the file"),
+];
+
+/// The bar's steps for one stage, so the render's bands move it smoothly.
+const EXPORT_STAGE_STEPS: u64 = 1000;
 
 impl ExportStages {
     fn start() -> Self {
         EXPORT_PATH.with(|p| p.set(None));
         let now = std::time::Instant::now();
-        ExportStages { t0: now, lap: now, stages: Vec::new(), waited: LOCK_WAITED.with(|w| w.get()) }
+        ExportStages { t0: now, lap: now, stages: Vec::new(), waited: LOCK_WAITED.with(|w| w.get()), watch: None }
     }
 
-    fn mark(&mut self, what: &'static str) {
+    /// start, reported to the progress dialog, which can cancel it.
+    fn watched(app: &tauri::AppHandle) -> Self {
+        let app = app.clone();
+        Self::reporting(std::sync::Arc::new(move |id, done, total, message| progress::emit(&app, EXPORT_OP, id, done, total, message)))
+    }
+
+    fn reporting(report: ExportReport) -> Self {
+        let mut stages = Self::start();
+        let id = progress::begin(EXPORT_OP);
+        report(&id, 0, EXPORT_STAGES.len() as u64 * EXPORT_STAGE_STEPS, EXPORT_STAGES[0].1);
+        stages.watch = Some((id, report));
+        stages
+    }
+
+    fn canceled(&self) -> bool {
+        self.watch.as_ref().is_some_and(|(id, _)| progress::is_cancelled(id))
+    }
+
+    /// The stage `what` is done: its time kept, the next stage reported,
+    /// and refused once Cancel has been pressed, so nothing after runs.
+    fn mark(&mut self, what: &'static str) -> Result<(), String> {
         self.stages.push((what, self.lap.elapsed()));
         self.lap = std::time::Instant::now();
+        if self.canceled() {
+            return Err(EXPORT_CANCELED.into());
+        }
+        if let Some((id, report)) = &self.watch {
+            let at = EXPORT_STAGES.iter().position(|(name, _)| *name == what).map_or(0, |i| i + 1);
+            if let Some((_, next)) = EXPORT_STAGES.get(at) {
+                report(id, at as u64 * EXPORT_STAGE_STEPS, EXPORT_STAGES.len() as u64 * EXPORT_STAGE_STEPS, next);
+            }
+        }
+        Ok(())
+    }
+
+    /// Runs the render and write with its bands moving the bar and
+    /// Cancel stopping it between bands (banded::with_band_progress).
+    fn render<T>(&self, f: impl FnOnce() -> T) -> T {
+        let Some((id, report)) = self.watch.clone() else { return f() };
+        let last = EXPORT_STAGES.len() as u64 - 1;
+        heeler_engine::banded::with_band_progress(Box::new(move |done, total| {
+            let share = EXPORT_STAGE_STEPS * done as u64 / total.max(1) as u64;
+            report(&id, last * EXPORT_STAGE_STEPS + share, EXPORT_STAGES.len() as u64 * EXPORT_STAGE_STEPS, EXPORT_STAGES[last as usize].1);
+            !progress::is_cancelled(&id)
+        }), f)
+    }
+
+    /// An export's error as it answers it: a canceled one's is the
+    /// Cancel button's, whatever the render said.
+    fn answer(&self, e: String) -> String {
+        if self.canceled() { EXPORT_CANCELED.into() } else { e }
     }
 
     /// The line for an export past three seconds, else None.
@@ -11966,7 +12055,7 @@ async fn export_image(
             ));
         }
         // From here, the export's own time: the dialog's is the user's.
-        let mut stages = ExportStages::start();
+        let mut stages = ExportStages::watched(&app);
         let opts = source_opts_of(&graph);
         let denoise_fingerprint = source_version_key(&app, &image_id, opts);
         // An export that streams keeps the photograph as its decoder's
@@ -11983,22 +12072,22 @@ async fn export_image(
             // Sample session images have no source file; use the preview decode.
             None => ExportPhoto::decoded(preview_source(&app, &image_id, opts)?),
         };
-        stages.mark("decode");
+        stages.mark("decode")?;
         let mut smart = export_sources_for(&app, &graph, &image_id)?;
-        stages.mark("planted rasters");
+        stages.mark("planted rasters")?;
         // The Depth Map's refinement, again at the export's own size; and
         // the noise model's full-frame answer, computed now if it must be.
         if let Some(base) = export_vision_base(vision_base(&app), &graph)? {
             let depth_input = with_session(&app, |s| Ok(depth_input_key_in_session(s, &graph, &image_id))).unwrap_or(None);
             refine_depth_for_export(&base, &graph, &image_id, &photo, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input, &denoise_fingerprint, ContainerHolds::of(&export_container(&dest, &format)).layers);
-            stages.mark("depth refinement");
+            stages.mark("depth refinement")?;
             let file_path = with_session(&app, |s| Ok(s.paths.get(&image_id).cloned()))?;
             mattes_for_export(&graph, &image_id, file_path.as_deref(), photo.shape(), &mut smart);
-            stages.mark("mattes");
+            stages.mark("mattes")?;
             normals_for_export(&graph, &image_id, file_path.as_deref(), photo.shape(), &mut smart);
-            stages.mark("normals");
+            stages.mark("normals")?;
             denoise_for_export(&app, &base, &graph, &image_id, &denoise_fingerprint, &photo, &mut smart)?;
-            stages.mark("denoise");
+            stages.mark("denoise")?;
         }
         let (source, rows) = photo.for_render();
         let keywords = if keep_metadata.unwrap_or(true) {
@@ -12017,8 +12106,8 @@ async fn export_image(
         let (alpha, layers, beauty) = render_export_layers_and_beauty_for(&graph, source.clone(), &smart, &dest, &format, |level, msg| {
             emit_log(&app, level, format!("{image_id}: {msg}"));
         })?;
-        stages.mark("export layers");
-        let out = finish_export(
+        stages.mark("export layers")?;
+        let out = stages.render(|| finish_export(
             crate::ExportInput {
                 graph: &graph,
                 source_path: source_path.as_ref(),
@@ -12046,12 +12135,14 @@ async fn export_image(
                 dpi: dpi.unwrap_or(heeler_io::DEFAULT_DPI),
             },
             |level, msg| emit_log(&app, level, format!("{image_id}: {msg}")),
-        );
-        stages.mark("render and write");
+        ))
+        .map_err(|e| stages.answer(e))?;
+        // The file is written: a Cancel pressed now has nothing to stop.
+        let _ = stages.mark("render and write");
         if let Some(line) = stages.slow_line() {
             emit_log(&app, "info", format!("{image_id}: {line}"));
         }
-        out.map(Some)
+        Ok(Some(out))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -18476,8 +18567,7 @@ async fn export_to(
         // Each stage's time, logged when the export is slow, so a slow one
         // names the stage that made it so (2026-10-10: EXR and 16-bit TIFF
         // exports "upwards of 30 seconds each").
-        let mut stages = ExportStages::start();
-        let mut mark = |what: &'static str| stages.mark(what);
+        let mut stages = ExportStages::watched(&app);
         let denoise_fingerprint = source_version_key(&app, &image_id, opts);
         // An export that streams keeps the photograph as its decoder's
         // samples (ExportPhoto), unless the session holds its decode already.
@@ -18486,22 +18576,22 @@ async fn export_to(
             Some(p) => export_photo(Some(p), opts, lazy, || full_source(&app, &image_id, opts))?,
             None => ExportPhoto::decoded(preview_source(&app, &image_id, opts)?),
         };
-        mark("decode");
+        stages.mark("decode")?;
         let mut smart = export_sources_for(&app, &graph, &image_id)?;
-        mark("planted rasters");
+        stages.mark("planted rasters")?;
         // The Depth Map's refinement, again at the export's own size; and
         // the noise model's full-frame answer, computed now if it must be.
         if let Some(base) = export_vision_base(vision_base(&app), &graph)? {
             let depth_input = with_session(&app, |s| Ok(depth_input_key_in_session(s, &graph, &image_id))).unwrap_or(None);
             refine_depth_for_export(&base, &graph, &image_id, &photo, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input, &denoise_fingerprint, ContainerHolds::of(&export_container(Path::new(&dest), &format)).layers);
-            mark("depth refinement");
+            stages.mark("depth refinement")?;
             let file_path = with_session(&app, |s| Ok(s.paths.get(&image_id).cloned()))?;
             mattes_for_export(&graph, &image_id, file_path.as_deref(), photo.shape(), &mut smart);
-            mark("mattes");
+            stages.mark("mattes")?;
             normals_for_export(&graph, &image_id, file_path.as_deref(), photo.shape(), &mut smart);
-            mark("normals");
+            stages.mark("normals")?;
             denoise_for_export(&app, &base, &graph, &image_id, &denoise_fingerprint, &photo, &mut smart)?;
-            mark("denoise");
+            stages.mark("denoise")?;
         }
         let (source, rows) = photo.for_render();
         let keywords = if keep_metadata.unwrap_or(true) {
@@ -18513,8 +18603,8 @@ async fn export_to(
         let (alpha, layers, beauty) = render_export_layers_and_beauty_for(&graph, source.clone(), &smart, Path::new(&dest), &format, |level, msg| {
             emit_log(&app, level, format!("{image_id}: {msg}"));
         })?;
-        mark("export layers");
-        let out = finish_export(
+        stages.mark("export layers")?;
+        let out = stages.render(|| finish_export(
             crate::ExportInput {
                 graph: &graph,
                 source_path: source_path.as_ref(),
@@ -18542,8 +18632,10 @@ async fn export_to(
                 dpi: dpi.unwrap_or(heeler_io::DEFAULT_DPI),
             },
             |level, msg| emit_log(&app, level, format!("{image_id}: {msg}")),
-        );
-        mark("render and write");
+        ))
+        .map_err(|e| stages.answer(e));
+        // Written or not, a Cancel pressed now has nothing left to stop.
+        let _ = stages.mark("render and write");
         if let Some(line) = stages.slow_line() {
             emit_log(&app, "info", format!("{image_id}: {line}"));
         }
@@ -28255,6 +28347,49 @@ mod tests {
             "the plane was refined in the input's frame and the seat's crop was not applied twice"
         );
         assert!((sources["depthmap@depth"].image.pixel(0, 0)[0] - 0.4).abs() < 0.05, "a constant plane survives refinement: {}", sources["depthmap@depth"].image.pixel(0, 0)[0]);
+    }
+
+    /// An export watched by the progress dialog reports each stage as it
+    /// starts, moves the bar through the render's bands, and stops at the
+    /// next stage or band once Cancel is pressed.
+    #[test]
+    fn a_watched_export_reports_its_stages_and_bands_and_stops_on_cancel() {
+        let seen = Arc::new(Mutex::new(Vec::<(u64, u64, String)>::new()));
+        let log = seen.clone();
+        let mut stages = ExportStages::reporting(Arc::new(move |_, done, total, message| log.lock().unwrap().push((done, total, message.to_string()))));
+        stages.mark("decode").unwrap();
+        stages.mark("planted rasters").unwrap();
+        stages.mark("export layers").unwrap();
+        let ui = serde_json::from_value::<UiGraph>(serde_json::json!({
+            "graph_id": "g", "nodes": [
+                {"id":"src","type":"heeler.image_source","enabled":true,"params":{}},
+                {"id":"exp","type":"heeler.exposure","enabled":true,"params":{"exposure":0.5}},
+                {"id":"output","type":"heeler.output","enabled":true,"params":{}}
+            ], "connections": [
+                {"from":["src","out"],"to":["exp","in"]},
+                {"from":["exp","out"],"to":["output","in"]}
+            ]
+        })).unwrap();
+        let photo = Arc::new(ImageBuf::filled(16, 40, [0.2, 0.3, 0.4, 1.0]));
+        EXPORT_BAND_ROWS.with(|r| r.set(10));
+        stages.render(|| render_export(&ui, photo.clone(), &HashMap::new()).unwrap());
+        EXPORT_BAND_ROWS.with(|r| r.set(0));
+        let got = seen.lock().unwrap().clone();
+        let total = EXPORT_STAGES.len() as u64 * EXPORT_STAGE_STEPS;
+        assert_eq!(got[0], (0, total, "Reading the photograph".to_string()));
+        assert_eq!(got[1].2, "Gathering the masks");
+        assert_eq!(got[3].2, "Rendering and writing the file");
+        assert!(got.windows(2).all(|w| w[0].0 <= w[1].0), "the bar only moves on: {got:?}");
+        assert_eq!(got.last().unwrap().0, total, "the last band fills the bar");
+        assert_eq!(got.iter().filter(|(_, _, m)| m == "Rendering and writing the file").count(), 1 + 4, "a report a band");
+        // Cancel: the next stage refuses, and a render stops between bands.
+        progress::cancel(&stages.watch.as_ref().unwrap().0);
+        assert_eq!(stages.mark("mattes"), Err(EXPORT_CANCELED.to_string()));
+        EXPORT_BAND_ROWS.with(|r| r.set(10));
+        let stopped = stages.render(|| render_export(&ui, photo.clone(), &HashMap::new()));
+        EXPORT_BAND_ROWS.with(|r| r.set(0));
+        assert!(stopped.is_err());
+        assert_eq!(stages.answer(stopped.unwrap_err()), EXPORT_CANCELED);
     }
 
     /// The Export panel's Layers switch off: a TIFF of a graph with an

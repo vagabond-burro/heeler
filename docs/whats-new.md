@@ -4,6 +4,7 @@
 
 ### New
 
+- **A progress dialog for exports.** A Quick Export or an Export panel run that takes more than half a second shows what it is doing and how far along it is, photograph by photograph, with a **Cancel** that stops it where it is and keeps what was already written. [Exporting](user-guide/export.md#run-and-stop).
 - **Export a TIFF or EXR without its layers.** The Export panel has a **Layers** switch when the edit carries export layers: **Left out** writes the picture alone, without unticking each layer in the edit. Presets remember it. [Exporting](user-guide/export.md#export-layers).
 - **Big exports fit in less memory.** A full-size export renders the photograph in horizontal strips and writes each strip into the file as it goes, so even a 48 MP photograph with heavy edits exports within a phone's memory, with the same pixels as before. Heeler also hands memory back to the system sooner, which keeps large exports lighter on any computer. [Exporting](user-guide/export.md).
 
