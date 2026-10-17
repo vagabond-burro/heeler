@@ -954,3 +954,50 @@ fn capture_sharpening_makes_each_run_once_for_two_readers() {
     };
     assert_eq!(read(2), read(1));
 }
+
+/// A swirled or squeezed disc reaches past the plain disc's radius. A
+/// slice's region must hold all of it, or a band, whose slice box is
+/// narrower than the frame's, drops a fringe the whole frame keeps.
+#[test]
+fn a_shaped_depth_of_field_disc_bands_with_its_whole_reach() {
+    let registry = Registry::builtin();
+    let n = |v: f64| ParamValue::Number(v);
+    for shape in [vec![("swirl", 73.0)], vec![("squeeze", 46.0)], vec![("squeeze", -46.0), ("swirl", 30.0), ("fringe", 73.0), ("glow", 73.0)]] {
+        let mut params: Vec<(String, ParamValue)> = vec![("aperture".into(), n(73.0)), ("field_curve".into(), n(46.0))];
+        params.extend(shape.iter().map(|(k, v)| (k.to_string(), n(*v))));
+        let g = one_node(&registry, "heeler.dof", &params);
+        let sources = sources_with(frame(100, 300));
+        for rows in [1, 7, 17] {
+            let report = assert_same(&g, &["n"], &sources, rows, &format!("dof {shape:?}"));
+            assert!(!report.whole.iter().any(|id| id == "n"), "{report:?}");
+        }
+    }
+}
+
+/// Grain and Noise on a zoomed patch hash at the patch's place in the
+/// frame, so they render whole there and match the whole frame's.
+#[test]
+fn grain_and_noise_on_a_zoomed_patch_render_the_same() {
+    let registry = Registry::builtin();
+    let n = |v: f64| ParamValue::Number(v);
+    let roi = [("roi_x", 0.25), ("roi_y", 0.25), ("roi_w", 0.5), ("roi_h", 0.5)];
+    for (ty, extra) in [
+        ("heeler.grain", vec![("intensity".to_string(), n(60.0)), ("size".to_string(), n(100.0)), ("by_frame".to_string(), ParamValue::Bool(true))]),
+        ("heeler.grain", vec![("intensity".to_string(), n(60.0)), ("size".to_string(), n(100.0))]),
+        ("heeler.noise", vec![("by_frame".to_string(), ParamValue::Bool(true))]),
+    ] {
+        // The desktop writes a patch's roi straight into the params
+        // (apply_ui_params); the registry has no dial for it.
+        let mut g = Graph::new("patch");
+        g.add_node(registry.instantiate("heeler.image_source", "src", Section::Creative).unwrap()).unwrap();
+        let mut node = registry.instantiate(ty, "n", Section::Creative).unwrap();
+        node.params.extend(extra.iter().cloned());
+        node.params.extend(roi.iter().map(|(k, v)| (k.to_string(), n(*v))));
+        g.add_node(node).unwrap();
+        g.connect("src", "out", "n", "in").unwrap();
+        let sources = sources_with(frame(100, 300));
+        for rows in [7, 17] {
+            assert_same(&g, &["n"], &sources, rows, &format!("{ty} {extra:?} on a patch"));
+        }
+    }
+}

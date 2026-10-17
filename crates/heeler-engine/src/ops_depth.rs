@@ -1381,6 +1381,28 @@ impl DiscShape {
 const SWIRL_SECTORS: usize = 12;
 const SWIRL_RINGS: usize = 3;
 
+/// The furthest tap of aperture_kernel_shaped at `radius` over every
+/// swirl variant (the outermost ring stretches most); 0 for the plain
+/// shape, whose kernel is aperture_kernel's.
+fn shaped_kernel_reach(radius: f32, shape: DiscShape) -> usize {
+    if shape.is_plain() {
+        return 0;
+    }
+    let r = radius.max(0.6);
+    let (sx, sy) = if shape.squeeze < 0.0 {
+        (1.0, 1.0 - shape.squeeze * 0.8)
+    } else {
+        (1.0 + shape.squeeze * 0.8, 1.0)
+    };
+    let elong = if shape.swirl > 0.0 {
+        let r_norm = (SWIRL_RINGS as f32 - 0.5) / SWIRL_RINGS as f32;
+        1.0 + shape.swirl * SWIRL_STRETCH * r_norm
+    } else {
+        1.0
+    };
+    (r * sx.max(sy) * elong.max(1.0) + 1.0).ceil() as usize
+}
+
 /// The aperture kernel with its shape applied. `elong` and `angle` are
 /// the swirl's tangential stretch and its direction for one variant;
 /// 1 and 0 for none. The plain shape hands back aperture_kernel's own
@@ -2012,10 +2034,15 @@ fn dof_layered(
             if radii.iter().all(|&rr| rr < 0.5) {
                 return Some(DofSlice { x0, y0, buf: premult });
             }
-            // The blur spreads content at most ceil(radius) + 1 taps
-            // past the bbox; composite over exactly that reach. Taps
-            // of the strided kernel never exceed the kernel radius.
-            let pad = radii.iter().fold(0.0f32, |a, &b| a.max(b)).ceil() as usize + 1;
+            // The blur spreads content at most its kernel's reach past
+            // the bbox; composite over exactly that reach. The plain
+            // disc reaches ceil(radius) + 1 taps; a squeezed or swirled
+            // one reaches further along its long axis, and a region
+            // short of that would drop the fringe where the box is
+            // narrower, as a band's box can be. Taps of the strided
+            // kernel never exceed the kernel's reach.
+            let r_max = radii.iter().fold(0.0f32, |a, &b| a.max(b));
+            let pad = (r_max.ceil() as usize + 1).max(shaped_kernel_reach(r_max, shape));
             let region = (
                 x0.saturating_sub(pad),
                 y0.saturating_sub(pad),

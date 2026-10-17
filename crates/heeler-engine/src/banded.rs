@@ -719,6 +719,12 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
                 if node.node_type == "heeler.grain" && p("intensity", 0.0) == 0.0 {
                     return both(0);
                 }
+                // A zoomed patch's grain hashes at the patch's place in
+                // the frame and sizes to the frame's short side, which a
+                // band does not know; such a node renders whole.
+                if has_roi(node) {
+                    return None;
+                }
                 let pattern = node.params.get("pattern").and_then(|v| v.as_str()).unwrap_or("standard");
                 let by_frame = node.params.get("by_frame").is_some_and(|v| matches!(v, heeler_graph::ParamValue::Bool(true)) || v.as_f64().is_some_and(|x| x != 0.0));
                 let format = node.params.get("format").and_then(|v| v.as_str()).unwrap_or("35mm");
@@ -1552,7 +1558,10 @@ fn pass_cost(graph: &Graph, plan: &Plan, terminals: &[&str], band_rows: usize) -
                 }
             }
             let (made, scratch) = match plan.mode[id] {
-                Mode::Crop => (0, 0),
+                // Its rows are copied from the whole input, then stacked
+                // under the rows it kept: the copy and the old rows' slice
+                // stand beside the stacked slab for that instant.
+                Mode::Crop => (rows_bytes(fw, rhi - rlo, fc)?, 0),
                 _ => {
                     let made = rows_bytes(fw, rhi - rlo, fc)?;
                     let scratch = if !node.enabled || plan.mode[id] == Mode::Lazy {

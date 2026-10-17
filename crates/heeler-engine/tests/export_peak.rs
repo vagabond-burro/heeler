@@ -663,6 +663,39 @@ fn the_banded_estimate_covers_what_each_edit_allocates() {
     }
 }
 
+/// A crop's rows are copied from its whole input and stacked under the
+/// rows it kept, so for that instant the copy, the old rows' slice and
+/// the stacked slab stand together. The estimate covers it, under a
+/// blur that keeps the crop's rows and under a pointwise terminal.
+#[test]
+fn the_banded_estimate_covers_a_crop_keeping_its_rows() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let (w, h) = (640, 480);
+    fn crop_then(after: &'static str, params: &'static [(&'static str, f64)]) -> Graph {
+        graph_with(|b, at| {
+            b.node("heeler.crop_rotate", "crop", &[("crop_y", num(0.25)), ("crop_h", num(0.5)), ("angle", num(3.0))]);
+            let params: Vec<_> = params.iter().map(|(k, v)| (*k, num(*v))).collect();
+            b.node(after, "after", &params);
+            b.wire(at, "crop", "in");
+            b.wire("crop", "after", "in");
+            "after".into()
+        })
+    }
+    let graphs = [crop_then("heeler.blur", &[("radius", 12.0)]), crop_then("heeler.tone_eq", &[("ev_m2", 0.6)])];
+    for graph in graphs {
+        for rows in [7, 17, 64] {
+            let (peak, est) = peak_of(|| {
+                let mut sources = HashMap::new();
+                sources.insert("src".to_string(), SourceImage { image: photo(w, h), version: 1, measured: false });
+                let est = heeler_engine::banded::estimate_banded(&graph, &["out"], &sources, rows).unwrap();
+                render_in_bands(&graph, &sources, rows);
+                est
+            });
+            assert!(est >= peak, "a crop in bands of {rows}: estimate {est} under the measured peak {peak}");
+        }
+    }
+}
+
 /// The owner's table, banded: for each edit at 24 and 48 MP, the band
 /// height that fits 2.5 GiB, what the banded estimate asks at it, and the
 /// heap's real high-water mark rendering it.
