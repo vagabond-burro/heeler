@@ -526,7 +526,7 @@ pub const CAPTURE_SHARPEN_RADIUS: f32 = 0.8;
 /// luminance difference much smaller than the gate is left as it was.
 /// Half an 8-bit level; the gate itself follows the picture's noise
 /// (capture_sharpen_gate).
-const CAPTURE_SHARPEN_GATE: f32 = 0.5 / 255.0;
+pub(crate) const CAPTURE_SHARPEN_GATE: f32 = 0.5 / 255.0;
 
 /// The noise gate for this picture, from its flattest places: the
 /// fine-band difference is measured as an RMS in 16 pixel blocks, and

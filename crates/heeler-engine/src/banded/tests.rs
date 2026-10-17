@@ -79,7 +79,35 @@ fn banded(graph: &Graph, terminals: &[&str], sources: &HashMap<String, SourceIma
     (frames, report)
 }
 
+/// A photograph that makes its rows on demand by cutting them from a
+/// whole frame, as a decoder's kept samples would make them.
+struct CutRows(Arc<ImageBuf>);
+
+impl SourceRows for CutRows {
+    fn size(&self) -> (usize, usize) {
+        (self.0.width, self.0.height)
+    }
+    fn bytes(&self) -> usize {
+        self.0.data.len() * 4
+    }
+    fn rows(&self, y0: usize, y1: usize) -> Result<ImageBuf, EngineError> {
+        let w = self.0.width;
+        Ok(ImageBuf { width: w, height: y1 - y0, data: self.0.data[y0 * w * 4..y1 * w * 4].to_vec() })
+    }
+}
+
+/// The banded render the same with the photograph "src" making its rows
+/// on demand: every band test is a test of that too.
 fn assert_same(graph: &Graph, terminals: &[&str], sources: &HashMap<String, SourceImage>, rows: usize, what: &str) -> BandedReport {
+    let report = assert_same_with(graph, terminals, sources, rows, what);
+    if let Some(src) = sources.get("src").filter(|_| graph.node("src").is_some()) {
+        let lazy = RowSources::from([("src".to_string(), Arc::new(CutRows(src.image.clone())) as Arc<dyn SourceRows>)]);
+        with_row_sources(lazy, || assert_same_with(graph, terminals, sources, rows, &format!("{what}, its rows on demand")));
+    }
+    report
+}
+
+fn assert_same_with(graph: &Graph, terminals: &[&str], sources: &HashMap<String, SourceImage>, rows: usize, what: &str) -> BandedReport {
     let (frames, report) = banded(graph, terminals, sources, rows);
     for (t, got) in terminals.iter().zip(&frames) {
         let want = Executor::new().render(graph, t, sources).unwrap();
@@ -840,5 +868,28 @@ fn inpaint_and_the_model_denoise_band_with_their_rasters() {
         let what = format!("{ty}, raster {}x{}", raster.width, raster.height);
         let report = assert_same(&g, &["n"], &sources, BAND, &what);
         assert!(report.banded.iter().any(|n| n == "n") && report.whole.is_empty(), "{what}: {report:?}");
+    }
+}
+
+/// Capture sharpening made a run of rows at a time is the whole frame's
+/// to the bit, read in short runs, read whole, and read again from the
+/// top; on a frame with blocks for its gate and on one too short to have
+/// any.
+#[test]
+fn capture_sharpening_row_by_row_is_the_whole_frames() {
+    for (w, h) in [(97, 203), (61, 15), (130, 64)] {
+        let src = frame(w, h);
+        let mut want = (*src).clone();
+        crate::ops_detail::capture_sharpen(&mut want, 0.6, crate::ops_detail::CAPTURE_SHARPEN_RADIUS);
+        assert_ne!(want.data, src.data, "{w} by {h}: the sharpening does something");
+        let pre = |y0: usize, y1: usize| -> Result<ImageBuf, EngineError> { Ok(ImageBuf { width: w, height: y1 - y0, data: src.data[y0 * w * 4..y1 * w * 4].to_vec() }) };
+        let rows = CaptureSharpenRows::new(0.6, crate::ops_detail::CAPTURE_SHARPEN_RADIUS, w, h, &pre).unwrap();
+        for step in [13, h, 7] {
+            let mut got = Vec::new();
+            for y in (0..h).step_by(step) {
+                got.extend(rows.rows(y, (y + step).min(h), &pre).unwrap().data);
+            }
+            assert!(got.len() == want.data.len() && got.iter().zip(&want.data).all(|(a, b)| a.to_bits() == b.to_bits()), "{w} by {h} in runs of {step}");
+        }
     }
 }

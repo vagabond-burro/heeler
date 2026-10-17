@@ -241,6 +241,30 @@ fn decode_samples(bytes: &[u8], linearize: bool, orientation: u16) -> Result<Ima
     if exr_passes::is_exr(bytes) {
         return exr_passes::decode_beauty(bytes);
     }
+    let kept = keep_samples(bytes, linearize, orientation, true)?;
+    let (_, h) = kept.size();
+    kept.make_rows(0, h)
+}
+
+/// A frame's samples as its decoder hands them over, the file's turn and
+/// the conversion to the working space read once, from which any run of
+/// the frame's rows is made: a pixel at a time, so each run is the whole
+/// frame's decode to the bit (decode_samples is all its rows). Kept, a
+/// JPEG holds 3 bytes a pixel where its decode holds 16.
+pub(crate) struct KeptSamples {
+    decoded: Vec<u8>,
+    w: usize,
+    h: usize,
+    channels: usize,
+    sample_bytes: usize,
+    orientation: u16,
+    conversion: Option<input_color::Conversion>,
+    gain: f32,
+}
+
+/// `bytes`' samples kept (see KeptSamples); `whole` asks admission for
+/// the f32 frame they become as well, for a decode of all its rows.
+fn keep_samples(bytes: &[u8], linearize: bool, orientation: u16, whole: bool) -> Result<KeptSamples, IoError> {
     let mut reader = ImageReader::new(Cursor::new(bytes)).with_guessed_format()
         .map_err(|_| IoError::UnsupportedFormat)?;
     let mut limits = image::Limits::no_limits();
@@ -265,7 +289,8 @@ fn decode_samples(bytes: &[u8], linearize: bool, orientation: u16) -> Result<Ima
     // 48 was asked of every format, which at 48 MP was 2234 MiB for a
     // decode that holds about 900.
     let room = count.max(memory::bytes(w as usize, h as usize, 1, 8)?);
-    let needed = memory::sum([bytes.len(), count, memory::bytes(w as usize, h as usize, 4, 4)?, room])?;
+    let frame = if whole { memory::bytes(w as usize, h as usize, 4, 4)? } else { 0 };
+    let needed = memory::sum([bytes.len(), count, frame, room])?;
     let _job = Job::admit(needed, "image decode, conversion and orientation")?;
     limits.max_alloc = Some(needed as u64);
     decoder.set_limits(limits)?;
@@ -284,45 +309,83 @@ fn decode_samples(bytes: &[u8], linearize: bool, orientation: u16) -> Result<Ima
     let (w, h) = (w as usize, h as usize);
     // apply_orientation's turn: 5 to 8 swap the sides.
     let orientation = if (1..=8).contains(&orientation) { orientation } else { 1 };
-    let swaps = matches!(orientation, 5 | 6 | 7 | 8);
-    let mut out = if swaps { ImageBuf::try_new(h, w)? } else { ImageBuf::try_new(w, h)? };
-    let convert = |dest: &mut [f32], pixel: &[u8]| {
-        let sample = |c: usize| -> f32 {
-            let at = c * sample_bytes;
-            match sample_bytes {
-                1 => pixel[at] as f32 / 255.0,
-                2 => u16::from_ne_bytes(pixel[at..at + 2].try_into().unwrap()) as f32 / 65535.0,
-                4 => f32::from_ne_bytes(pixel[at..at + 4].try_into().unwrap()),
-                _ => unreachable!("image crate sample type"),
-            }
-        };
-        if channels < 3 { dest[..3].fill(sample(0)); }
-        else { for c in 0..3 { dest[c] = sample(c); } }
-        dest[3] = if channels == 2 || channels == 4 { sample(channels - 1) } else { 1.0 };
-    };
-    if orientation == 1 {
-        for (dest, pixel) in out.data.chunks_exact_mut(4).zip(decoded.chunks_exact(channels * sample_bytes)) {
-            convert(dest, pixel);
-        }
-    } else {
-        let ow = out.width;
-        for (i, pixel) in decoded.chunks_exact(channels * sample_bytes).enumerate() {
-            let (x, y) = (i % w, i / w);
-            let (nx, ny) = oriented(orientation, x, y, w, h);
-            let at = (ny * ow + nx) * 4;
-            convert(&mut out.data[at..at + 4], pixel);
-        }
-    }
-    drop(decoded);
     // Float samples are scene-linear by convention in every tool that
     // writes them, Heeler's own 32-bit TIFF included; sending them
     // through the sRGB decode turned 0.5 into 0.21 and 2.0 into 4.95 on
     // the way back in (review, 2026-09-20). An integer file keeps its
     // transfer.
-    if linearize && sample_bytes != 4 {
-        input_color::ingest(&mut out, profile.as_ref().map(|p| p.as_deref()).map_err(|e| *e));
+    let conversion = (linearize && sample_bytes != 4).then(|| input_color::ingest_plan(profile.as_ref().map(|p| p.as_deref()).map_err(|e| *e)));
+    Ok(KeptSamples { decoded, w, h, channels, sample_bytes, orientation, conversion, gain: 1.0 })
+}
+
+impl KeptSamples {
+    /// The frame's width and height, turned.
+    pub(crate) fn size(&self) -> (usize, usize) {
+        if matches!(self.orientation, 5 | 6 | 7 | 8) { (self.h, self.w) } else { (self.w, self.h) }
     }
-    Ok(out)
+
+    /// The bytes it keeps.
+    pub(crate) fn bytes(&self) -> usize {
+        self.decoded.len()
+    }
+
+    /// Rows `y0..y1` of the turned frame, f32 RGBA in the working space.
+    pub(crate) fn make_rows(&self, y0: usize, y1: usize) -> Result<ImageBuf, IoError> {
+        use rayon::prelude::*;
+        let (ow, _) = self.size();
+        let (w, h, channels, sample_bytes) = (self.w, self.h, self.channels, self.sample_bytes);
+        let stride = channels * sample_bytes;
+        let mut out = ImageBuf::try_new(ow, y1 - y0)?;
+        let convert = |dest: &mut [f32], pixel: &[u8]| {
+            let sample = |c: usize| -> f32 {
+                let at = c * sample_bytes;
+                match sample_bytes {
+                    1 => pixel[at] as f32 / 255.0,
+                    2 => u16::from_ne_bytes(pixel[at..at + 2].try_into().unwrap()) as f32 / 65535.0,
+                    4 => f32::from_ne_bytes(pixel[at..at + 4].try_into().unwrap()),
+                    _ => unreachable!("image crate sample type"),
+                }
+            };
+            if channels < 3 { dest[..3].fill(sample(0)); }
+            else { for c in 0..3 { dest[c] = sample(c); } }
+            dest[3] = if channels == 2 || channels == 4 { sample(channels - 1) } else { 1.0 };
+        };
+        // Each turned pixel from the sample the turn put there.
+        out.data.par_chunks_mut(ow * 4).enumerate().for_each(|(r, row)| {
+            let ny = y0 + r;
+            for (nx, dest) in row.chunks_exact_mut(4).enumerate() {
+                let (x, y) = unoriented(self.orientation, nx, ny, w, h);
+                let at = (y * w + x) * stride;
+                convert(dest, &self.decoded[at..at + stride]);
+            }
+        });
+        if let Some(c) = &self.conversion {
+            c.apply(&mut out);
+        }
+        if self.gain != 1.0 {
+            for px in out.data.chunks_exact_mut(4) {
+                px[0] *= self.gain;
+                px[1] *= self.gain;
+                px[2] *= self.gain;
+            }
+        }
+        Ok(out)
+    }
+}
+
+/// Where turned pixel (nx, ny) of a `w` by `h` frame's samples came
+/// from: oriented's inverse.
+fn unoriented(orientation: u16, nx: usize, ny: usize, w: usize, h: usize) -> (usize, usize) {
+    match orientation {
+        2 => (w - 1 - nx, ny),
+        3 => (w - 1 - nx, h - 1 - ny),
+        4 => (nx, h - 1 - ny),
+        5 => (ny, nx),
+        6 => (ny, h - 1 - nx),
+        7 => (w - 1 - ny, h - 1 - nx),
+        8 => (w - 1 - ny, nx),
+        _ => (nx, ny),
+    }
 }
 
 /// Fallible file read with admission before reserving from the file length.
@@ -667,6 +730,269 @@ fn rawler_selected() -> bool {
 /// Export-quality decode honoring the source node's develop toggles.
 pub fn decode_any_with(path: &Path, opts: RawSourceOpts) -> Result<ImageBuf, IoError> {
     at_boundary(path, || decode_any_inner(path, opts, Pixels::AsTheFileRenders))
+}
+
+/// decode_any_with's photograph kept as its decoder's samples, its rows
+/// made on demand (heeler_engine::banded::SourceRows) as the decode
+/// makes them, to the bit: a JPEG, PNG, TIFF or WebP as the codes it
+/// stores (3 bytes a pixel for an 8-bit JPEG, against the decode's 16),
+/// a HEIF on macOS as the bitmap ImageIO draws, a raw file LibRaw
+/// develops as its 16-bit develop (KeptDevelop). None for a file the
+/// decode reads another way (a float or EXR frame, a HEIF with no OS
+/// codec, a JPEG XL DNG, a develop turned away, a file whose own decode
+/// fails and falls back to a preview): the caller decodes it whole, as
+/// before.
+pub fn decode_rows_with(path: &Path, opts: RawSourceOpts) -> Result<Option<std::sync::Arc<dyn heeler_engine::banded::SourceRows>>, IoError> {
+    #[cfg(not(feature = "libraw"))]
+    let _ = opts;
+    at_boundary(path, || {
+        let bytes = read_image(path)?;
+        if heic::is_heif(&bytes) {
+            #[cfg(target_os = "macos")]
+            return Ok(heic::keep_heif(&bytes).map(|k| std::sync::Arc::new(k) as std::sync::Arc<dyn heeler_engine::banded::SourceRows>));
+            #[cfg(not(target_os = "macos"))]
+            return Ok(None);
+        }
+        if is_raw_file(path, &bytes) {
+            #[cfg(feature = "libraw")]
+            return keep_develop(path, &bytes, opts);
+            #[cfg(not(feature = "libraw"))]
+            return Ok(None);
+        }
+        if exr_passes::is_exr(&bytes) {
+            return Ok(None);
+        }
+        let mut kept = match keep_samples(&bytes, true, media_orientation(&bytes), false) {
+            Ok(k) => k,
+            Err(e) if memory::is_refusal(&e.to_string()) => return Err(e),
+            Err(_) => return Ok(None),
+        };
+        if kept.sample_bytes == 4 {
+            return Ok(None);
+        }
+        // unbake's gain, after the conversion as unbake runs after it.
+        if let Some(stops) = bake::baked_exposure(&bytes).filter(|s| s.abs() >= 1e-4) {
+            kept.gain = stops.exp2();
+        }
+        Ok(Some(std::sync::Arc::new(kept) as std::sync::Arc<dyn heeler_engine::banded::SourceRows>))
+    })
+}
+
+/// A raw file's LibRaw develop kept as its 16-bit samples, its rows made
+/// on demand as decode_any_with makes them: the develop's samples scaled
+/// (and under Blend, the Clip develop mixed toward the Blend develop by
+/// the clipped areas' weight), capture sharpened run by run
+/// (CaptureSharpenRows), rendered by the file's own instructions
+/// (dng_gain, each pixel at its place in the frame) and unbaked. It
+/// keeps 6 bytes a pixel, 13 under Blend, where the decode keeps 16.
+#[cfg(feature = "libraw")]
+struct KeptDevelop {
+    w: usize,
+    h: usize,
+    develop: KeptSamples16,
+    sharpen: Option<heeler_engine::banded::CaptureSharpenRows>,
+    rendering: Option<dng_gain::FileRendering>,
+    gain: f32,
+}
+
+/// A develop's samples: one develop and its scale, or the Clip and Blend
+/// develops, the weight between them a byte a pixel, and Blend's scale.
+#[cfg(feature = "libraw")]
+enum KeptSamples16 {
+    One { rgb: Vec<u16>, gain: f32 },
+    Blend { clip: Vec<u16>, blend: Vec<u16>, weight: Vec<u8>, gain: f32 },
+}
+
+#[cfg(feature = "libraw")]
+impl KeptDevelop {
+    /// The develop's rows `y0..y1`, unsharpened: sensor_to_imagebuf's and
+    /// develop_full's arithmetic, pixel by pixel.
+    fn develop_rows(&self, y0: usize, y1: usize) -> Result<ImageBuf, heeler_engine::EngineError> {
+        let w = self.w;
+        let mut out = ImageBuf::try_new(w, y1 - y0)?;
+        for (j, o) in out.data.chunks_exact_mut(4).enumerate() {
+            let i = (y0 * w + j) * 3;
+            match &self.develop {
+                KeptSamples16::One { rgb, gain } => {
+                    o[0] = rgb[i] as f32 / 65535.0 * gain;
+                    o[1] = rgb[i + 1] as f32 / 65535.0 * gain;
+                    o[2] = rgb[i + 2] as f32 / 65535.0 * gain;
+                }
+                KeptSamples16::Blend { clip, blend, weight, gain } => {
+                    let wt = weight[y0 * w + j] as f32 / 255.0;
+                    for c in 0..3 {
+                        let kept = clip[i + c] as f32 / 65535.0;
+                        o[c] = if wt == 0.0 { kept } else { kept + (blend[i + c] as f32 / 65535.0 * gain - kept) * wt };
+                    }
+                }
+            }
+            o[3] = 1.0;
+        }
+        Ok(out)
+    }
+
+    /// The develop's rows sharpened, as the decode hands them to the
+    /// file's rendering.
+    fn sharpened_rows(&self, y0: usize, y1: usize) -> Result<ImageBuf, heeler_engine::EngineError> {
+        let pre = |a: usize, b: usize| self.develop_rows(a, b);
+        match &self.sharpen {
+            Some(s) => s.rows(y0, y1, &pre),
+            None => pre(y0, y1),
+        }
+    }
+
+    /// develop_looks_sane over the sharpened develop, its rows made a run
+    /// at a time: the same pixels in the same order.
+    fn looks_sane(&self) -> Result<bool, heeler_engine::EngineError> {
+        let (w, h) = (self.w, self.h);
+        if w < 8 || h < 8 {
+            return Ok(true);
+        }
+        let (x0, y0) = (w / 4, h / 4);
+        let (x1, y1) = (w * 3 / 4, h * 3 / 4);
+        let mut diff = 0.0f64;
+        let mut n = 0u64;
+        let step = (((x1 - x0) * (y1 - y0)) / 20_000).max(1);
+        let mut i = 0usize;
+        let mut y = y0;
+        while y < y1 {
+            let end = (y + 64).min(y1);
+            let rows = self.sharpened_rows(y, end)?;
+            for yy in y..end {
+                for x in x0..x1 - 1 {
+                    i += 1;
+                    if i % step != 0 {
+                        continue;
+                    }
+                    diff += (rows.pixel(x, yy - y)[1] - rows.pixel(x + 1, yy - y)[1]).abs() as f64;
+                    n += 1;
+                }
+            }
+            y = end;
+        }
+        Ok(n == 0 || (diff / n as f64) < 0.15)
+    }
+}
+
+#[cfg(feature = "libraw")]
+impl heeler_engine::banded::SourceRows for KeptDevelop {
+    fn size(&self) -> (usize, usize) {
+        (self.w, self.h)
+    }
+    fn bytes(&self) -> usize {
+        match &self.develop {
+            KeptSamples16::One { rgb, .. } => rgb.len() * 2,
+            KeptSamples16::Blend { clip, blend, weight, .. } => clip.len() * 2 + blend.len() * 2 + weight.len(),
+        }
+    }
+    fn rows(&self, y0: usize, y1: usize) -> Result<ImageBuf, heeler_engine::EngineError> {
+        let mut img = self.sharpened_rows(y0, y1)?;
+        if let Some(r) = &self.rendering {
+            dng_gain::render_rows(&mut img, r, self.h, y0);
+        }
+        if self.gain != 1.0 {
+            for px in img.data.chunks_exact_mut(4) {
+                px[0] *= self.gain;
+                px[1] *= self.gain;
+                px[2] *= self.gain;
+            }
+        }
+        Ok(img)
+    }
+}
+
+/// decode_any_with's LibRaw branch, kept (KeptDevelop): None wherever
+/// that branch hands the file on to another reader.
+#[cfg(feature = "libraw")]
+fn keep_develop(path: &Path, bytes: &[u8], opts: RawSourceOpts) -> Result<Option<std::sync::Arc<dyn heeler_engine::banded::SourceRows>>, IoError> {
+    let _ = path;
+    #[cfg(feature = "rawler")]
+    if rawler_selected() {
+        return Ok(None);
+    }
+    if is_jxl_dng(bytes) {
+        return Ok(None);
+    }
+    let dev = heeler_raw::DevelopOpts {
+        half_size: false,
+        fixed_white: false,
+        camera_wb: opts.camera_wb,
+        camera_matrix: opts.camera_matrix,
+        highlight: opts.highlight,
+        demosaic: opts.demosaic,
+    };
+    let decoded = (|| -> Result<(KeptSamples16, usize, usize, bool), heeler_raw::RawError> {
+        if dev.highlight != 2 {
+            let s = heeler_raw::decode_sensor_with(bytes, dev)?;
+            return Ok((KeptSamples16::One { gain: s.headroom.max(1.0), rgb: s.rgb }, s.width, s.height, s.sensor_data));
+        }
+        let clip = heeler_raw::decode_sensor_with(bytes, heeler_raw::DevelopOpts { highlight: 0, ..dev })?;
+        let sensor_data = clip.sensor_data;
+        let (w, h) = (clip.width, clip.height);
+        let Some(weight) = clipped_weight(&clip) else {
+            return Ok((KeptSamples16::One { gain: clip.headroom.max(1.0), rgb: clip.rgb }, w, h, sensor_data));
+        };
+        let blend = heeler_raw::decode_sensor_with(bytes, dev)?;
+        if (blend.width, blend.height) != (w, h) {
+            return Ok((KeptSamples16::One { gain: clip.headroom.max(1.0), rgb: clip.rgb }, w, h, sensor_data));
+        }
+        Ok((KeptSamples16::Blend { gain: blend.headroom.max(1.0), clip: clip.rgb, blend: blend.rgb, weight }, w, h, sensor_data))
+    })();
+    let (develop, w, h, sensor_data) = match decoded {
+        Ok(d) => d,
+        Err(heeler_raw::RawError::Memory(e)) => return Err(e.into()),
+        Err(_) => return Ok(None),
+    };
+    let mut kept = KeptDevelop { w, h, develop, sharpen: None, rendering: dng_gain::file_rendering(bytes), gain: 1.0 };
+    if sensor_data && opts.capture_sharpen != 0 {
+        let pre = |a: usize, b: usize| kept.develop_rows(a, b);
+        let sharpen = heeler_engine::banded::CaptureSharpenRows::new(opts.capture_sharpen as f32 / 100.0, heeler_engine::CAPTURE_SHARPEN_RADIUS, w, h, &pre)
+            .map_err(|e| IoError::Unsupported(e.to_string()))?;
+        kept.sharpen = Some(sharpen);
+    }
+    // The develop is the photograph, as the decode judges it, or the
+    // decode reads the file another way.
+    let shape = ImageBuf { width: w, height: h, data: Vec::new() };
+    let sane = bake::baked_exposure(bytes).is_some() || kept.looks_sane().map_err(|e| IoError::Unsupported(e.to_string()))?;
+    if !sane || reduced_copy_of(&shape, bytes).is_some() {
+        return Ok(None);
+    }
+    if let Some(stops) = bake::baked_exposure(bytes).filter(|s| s.abs() >= 1e-4) {
+        kept.gain = stops.exp2();
+    }
+    Ok(Some(std::sync::Arc::new(kept) as std::sync::Arc<dyn heeler_engine::banded::SourceRows>))
+}
+
+/// A row source's error as the engine's: a refusal stays a refusal./// A row source's error as the engine's: a refusal stays a refusal.
+fn rows_error(e: IoError) -> heeler_engine::EngineError {
+    match e {
+        IoError::Memory(m) => heeler_engine::EngineError::Memory(m),
+        e => heeler_engine::EngineError::Memory(MemoryError::Allocation(e.to_string())),
+    }
+}
+
+impl heeler_engine::banded::SourceRows for KeptSamples {
+    fn size(&self) -> (usize, usize) {
+        KeptSamples::size(self)
+    }
+    fn bytes(&self) -> usize {
+        KeptSamples::bytes(self)
+    }
+    fn rows(&self, y0: usize, y1: usize) -> Result<ImageBuf, heeler_engine::EngineError> {
+        self.make_rows(y0, y1).map_err(rows_error)
+    }
+}
+
+impl heeler_engine::banded::SourceRows for heic::KeptRgba8 {
+    fn size(&self) -> (usize, usize) {
+        heic::KeptRgba8::size(self)
+    }
+    fn bytes(&self) -> usize {
+        heic::KeptRgba8::bytes(self)
+    }
+    fn rows(&self, y0: usize, y1: usize) -> Result<ImageBuf, heeler_engine::EngineError> {
+        self.make_rows(y0, y1).map_err(rows_error)
+    }
 }
 
 /// The same decode, with a phone DNG left scene-linear: the sensor
@@ -2528,6 +2854,52 @@ mod tests {
             let got = decode_any_scene_linear(&path, RawSourceOpts::default()).unwrap();
             assert_eq!((got.width, got.height), (want.width, want.height));
             for (a, b) in got.data.iter().zip(&want.data) { assert!((a - b).abs() < 0.015, "orientation {orientation}: {a} != {b}"); }
+        }
+    }
+
+    /// decode_rows_with's photograph, made a few rows at a time, is
+    /// decode_any_with's to the bit: JPEGs in every EXIF turn, CMYK, gray
+    /// and progressive; 8 and 16-bit PNGs and TIFFs with an alpha; WebPs;
+    /// and on macOS a HEIC.
+    #[test]
+    fn a_photographs_rows_made_on_demand_are_its_decode() {
+        let dir = tempfile::tempdir().unwrap();
+        let fixture = |name: &str| std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(name)).unwrap();
+        let mut files: Vec<(String, Vec<u8>)> = (2..=8).map(|o| (format!("o{o}.jpg"), fixture(&format!("stack-orientation-{o}.jpg")))).collect();
+        for name in ["stack-cmyk.jpg", "stack-gray.jpg", "stack-progressive.jpg", "dpi-alpha.webp"] {
+            files.push((name.to_string(), fixture(name)));
+        }
+        let mut img = ImageBuf::new(37, 23);
+        for (i, px) in img.data.chunks_exact_mut(4).enumerate() {
+            let (x, y) = ((i % 37) as f32 / 37.0, (i / 37) as f32 / 23.0);
+            px.copy_from_slice(&[x, 0.5 * y + 0.2, 1.0 - x * y, 0.4 + 0.6 * y]);
+        }
+        files.push(("a.png".into(), encode_png(&img).unwrap()));
+        files.push(("b.png".into(), encode_png16(&img).unwrap()));
+        files.push(("a.tif".into(), encode_tiff16_export(&img, Default::default()).unwrap()));
+        files.push(("a.webp".into(), encode_webp(&img, 80).unwrap()));
+        #[cfg(target_os = "macos")]
+        {
+            let png = dir.path().join("for-heic.png");
+            std::fs::write(&png, encode_png(&img).unwrap()).unwrap();
+            let heic = dir.path().join("a.heic");
+            let made = std::process::Command::new("sips").args(["-s", "format", "heic"]).arg(&png).arg("--out").arg(&heic).output();
+            if made.is_ok_and(|o| o.status.success()) {
+                files.push(("a.heic".into(), std::fs::read(&heic).unwrap()));
+            }
+        }
+        for (name, bytes) in files {
+            let path = dir.path().join(&name);
+            std::fs::write(&path, &bytes).unwrap();
+            let whole = decode_any_with(&path, RawSourceOpts::default()).unwrap();
+            let rows = decode_rows_with(&path, RawSourceOpts::default()).unwrap().unwrap_or_else(|| panic!("{name}: no rows on demand"));
+            assert_eq!(rows.size(), (whole.width, whole.height), "{name}: size");
+            let mut made = Vec::new();
+            for y in (0..whole.height).step_by(5) {
+                made.extend(rows.rows(y, (y + 5).min(whole.height)).unwrap().data);
+            }
+            assert!(made.iter().zip(&whole.data).all(|(a, b)| a.to_bits() == b.to_bits()) && made.len() == whole.data.len(), "{name}: rows differ from the decode");
+            assert!(rows.bytes() < whole.data.len() * 4, "{name}: keeps less than the decode");
         }
     }
 

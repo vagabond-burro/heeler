@@ -92,6 +92,31 @@ fn a_streamed_export_writes_the_whole_exports_file() {
     }
 }
 
+/// The photograph kept as a JPEG's codes, making its rows as the bands
+/// read them, streams the file the photograph decoded whole streams, on
+/// the dumped Finish graph as sent and with every node on.
+#[test]
+fn a_photograph_kept_as_its_codes_streams_the_same_file() {
+    let graph: UiGraph = serde_json::from_str(include_str!("../tests/fixtures/finish_object_mask.json")).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("photo.jpg");
+    std::fs::write(&path, heeler_io::encode_jpeg(&photograph(237, 163), 90).unwrap()).unwrap();
+    let whole = Arc::new(heeler_io::decode_any_with(&path, heeler_io::RawSourceOpts::default()).unwrap());
+    let mut on = graph.clone();
+    for n in on.nodes.iter_mut() {
+        n.enabled = true;
+    }
+    for (what, ui) in [("as sent", &graph), ("every node on", &on)] {
+        EXPORT_BAND_ROWS.with(|r| r.set(13));
+        let file = |source: Arc<ImageBuf>, rows| render_export_streamed(ui, source, &HashMap::new(), heeler_io::band_sink::SinkFormat::Png16, 0, rows).unwrap().expect("streams").png16().unwrap();
+        let want = file(whole.clone(), None);
+        let kept = heeler_io::decode_rows_with(&path, heeler_io::RawSourceOpts::default()).unwrap().expect("kept");
+        let got = file(Arc::new(ImageBuf { width: whole.width, height: whole.height, data: Vec::new() }), Some(kept));
+        EXPORT_BAND_ROWS.with(|r| r.set(0));
+        assert!(got == want, "{what}: the file differs");
+    }
+}
+
 #[test]
 fn the_reducers_finish_layer_graphs_export_the_same_in_bands() {
     let dir = tempfile::tempdir().unwrap();
@@ -115,7 +140,9 @@ fn the_reducers_finish_layer_graphs_export_the_same_in_bands() {
 ///   HEELER_EXPORT_MODE=banded /usr/bin/time -l cargo test --release -p heeler-desktop measure_a_heavy_48_mp_export -- --ignored --nocapture
 ///
 /// HEELER_EXPORT_ROWS sets the band height instead of the export's choice;
-/// HEELER_EXPORT_MODE=streamed renders into the JPEG's samples.
+/// HEELER_EXPORT_MODE=streamed renders into the JPEG's samples, and
+/// from-jpeg does from the photograph kept as the codes of the JPEG
+/// HEELER_EXPORT_JPEG names (written first when missing).
 #[test]
 #[ignore = "renders a 48 MP frame; run by hand in release under /usr/bin/time"]
 fn measure_a_heavy_48_mp_export() {
@@ -136,16 +163,36 @@ fn measure_a_heavy_48_mp_export() {
             }
         }
     }
-    let photo = photograph(8064, 6048);
+    let photo = || photograph(8064, 6048);
     // HEELER_EXPORT_ROWS asks for bands of that many rows (when bands fit).
     let rows = std::env::var("HEELER_EXPORT_ROWS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     EXPORT_BAND_ROWS.with(|r| r.set(if mode == "whole" { usize::MAX } else { rows }));
     let started = std::time::Instant::now();
     // HEELER_EXPORT_MODE=streamed renders into the JPEG's samples, as an
     // export with nothing after the render does (finish_export).
-    if mode == "streamed" {
+    // HEELER_EXPORT_MODE=from-jpeg streams the same way from the photograph
+    // written as a JPEG and kept as its codes (decode_rows_with), never
+    // decoded whole.
+    if mode == "streamed" || mode == "from-jpeg" {
         EXPORT_BAND_ROWS.with(|r| r.set(rows));
-        let sink = render_export_streamed(&graph, photo, &HashMap::new(), heeler_io::band_sink::SinkFormat::Jpeg, 0).unwrap().expect("streams");
+        let (photo, kept) = if mode == "from-jpeg" {
+            // HEELER_EXPORT_JPEG names the JPEG, written by the run before
+            // when it is not there, so the run measured never holds the
+            // f32 photograph.
+            let path = std::path::PathBuf::from(std::env::var("HEELER_EXPORT_JPEG").expect("HEELER_EXPORT_JPEG names the JPEG to stream from"));
+            if !path.exists() {
+                std::fs::write(&path, heeler_io::encode_jpeg(&photo(), 92).unwrap()).unwrap();
+                println!("wrote {}; run again to measure", path.display());
+                return;
+            }
+            let kept = heeler_io::decode_rows_with(&path, heeler_io::RawSourceOpts::default()).unwrap().expect("a JPEG keeps its codes");
+            let (w, h) = kept.size();
+            (Arc::new(ImageBuf { width: w, height: h, data: Vec::new() }), Some(kept))
+        } else {
+            (photo(), None)
+        };
+        let started = std::time::Instant::now();
+        let sink = render_export_streamed(&graph, photo, &HashMap::new(), heeler_io::band_sink::SinkFormat::Jpeg, 0, kept).unwrap().expect("streams");
         let rendered = started.elapsed();
         let bands = EXPORT_BANDS_MADE.with(|b| b.get());
         let (w, h) = sink.size();
@@ -153,7 +200,7 @@ fn measure_a_heavy_48_mp_export() {
         println!("{mode}: {w}x{h} in {bands} bands, render {:.1} s, encode to {} MiB in {:.1} s", rendered.as_secs_f64(), jpeg.len() >> 20, (started.elapsed() - rendered).as_secs_f64());
         return;
     }
-    let image = render_export(&graph, photo, &HashMap::new()).unwrap();
+    let image = render_export(&graph, photo(), &HashMap::new()).unwrap();
     let rendered = started.elapsed();
     let bands = EXPORT_BANDS_MADE.with(|b| b.get());
     let jpeg = heeler_io::encode_jpeg(&image, 90).unwrap();

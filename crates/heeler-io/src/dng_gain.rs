@@ -354,8 +354,15 @@ fn curve_at(curve: &[(f32, f32)], x: f32) -> f32 {
 /// one keeps its place between them, which holds the hue where a curve
 /// per channel would bend it (the DNG reference renderer's rule).
 pub fn render(img: &mut ImageBuf, r: &FileRendering) {
-    let (w, h) = (img.width, img.height);
-    if w == 0 || h == 0 {
+    let h = img.height;
+    render_rows(img, r, h, 0);
+}
+
+/// render over rows `y0..` of a frame `h` tall, `img` holding them: each
+/// pixel at its place in the frame, as the whole frame renders it.
+pub(crate) fn render_rows(img: &mut ImageBuf, r: &FileRendering, h: usize, y0: usize) {
+    let w = img.width;
+    if w == 0 || h == 0 || img.height == 0 {
         return;
     }
     let map = &r.map;
@@ -363,7 +370,7 @@ pub fn render(img: &mut ImageBuf, r: &FileRendering) {
     // The SDK scales by the table length, then holds the final entry.
     let table_size = map.points_n as f32;
     img.data.par_chunks_exact_mut(w * 4).enumerate().for_each(|(y, row)| {
-        let fy = (y as f64 + 0.5) / h as f64;
+        let fy = ((y + y0) as f64 + 0.5) / h as f64;
         for (x, px) in row.chunks_exact_mut(4).enumerate() {
             let fx = (x as f64 + 0.5) / w as f64;
             let (sx, sy) = sensor_position(r.orientation, fx, fy);

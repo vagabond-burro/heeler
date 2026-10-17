@@ -118,3 +118,71 @@ fn a_linear_dng_is_never_capture_sharpened() {
     let b = decode_any_with(&path, off()).unwrap();
     assert_eq!(a.data, b.data, "a linear DNG was capture sharpened");
 }
+
+/// A raw file's rows made on demand (decode_rows_with) are its decode to
+/// the bit: a mosaic develop sharpened at each level, under Clip, Blend
+/// (a clipped patch big enough to blend) and Rebuild, and a bake with
+/// its exposure put back; read a few rows at a time.
+#[test]
+fn a_raw_files_rows_made_on_demand_are_its_decode() {
+    let dir = tempfile::tempdir().unwrap();
+    let plain = mosaic_file(dir.path(), "plain.dng");
+    // The same scene with a patch at white, for Blend.
+    let (w, h) = (192usize, 160usize);
+    let mut m = vec![0u16; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            let v = if (60..90).contains(&x) && (40..70).contains(&y) { 1.0 } else { scene(x, y) };
+            m[y * w + x] = (v.clamp(0.0, 1.0) * 65535.0).round() as u16;
+        }
+    }
+    let bright = dir.path().join("bright.dng");
+    std::fs::write(&bright, crate::bake::encode_cfa_dng(&m, w, h)).unwrap();
+    // A bake past white, which records the exposure it divided down by.
+    let mut hot = ImageBuf::new(53, 41);
+    for (i, px) in hot.data.chunks_exact_mut(4).enumerate() {
+        let v = 0.2 + 2.5 * (i % 53) as f32 / 53.0;
+        px.copy_from_slice(&[v, 0.6 * v, 0.3, 1.0]);
+    }
+    let baked = dir.path().join("baked.dng");
+    std::fs::write(&baked, crate::encode_dng_with_xmp(&hot, None, None).unwrap()).unwrap();
+    let opts = |highlight: i32, capture_sharpen: u8| RawSourceOpts { highlight, capture_sharpen, ..RawSourceOpts::default() };
+    let mut cases = Vec::new();
+    for file in [&plain, &bright] {
+        for (highlight, sharpen) in [(2, 60), (2, 0), (2, 100), (0, 60), (5, 30)] {
+            cases.push((file.clone(), opts(highlight, sharpen)));
+        }
+    }
+    cases.push((baked.clone(), RawSourceOpts::default()));
+    for (path, o) in cases {
+        let what = format!("{} highlight {} sharpen {}", path.file_name().unwrap().to_string_lossy(), o.highlight, o.capture_sharpen);
+        let whole = decode_any_with(&path, o).unwrap();
+        let rows = decode_rows_with(&path, o).unwrap().unwrap_or_else(|| panic!("{what}: no rows on demand"));
+        assert_eq!(rows.size(), (whole.width, whole.height), "{what}: size");
+        let mut made = Vec::new();
+        for y in (0..whole.height).step_by(7) {
+            made.extend(rows.rows(y, (y + 7).min(whole.height)).unwrap().data);
+        }
+        assert!(made.len() == whole.data.len() && made.iter().zip(&whole.data).all(|(a, b)| a.to_bits() == b.to_bits()), "{what}: rows differ from the decode");
+        assert!(rows.bytes() < whole.data.len() * 4, "{what}: keeps less than the decode");
+    }
+}
+
+/// The repository's camera RAW (heeler-raw's CR2 fixture), its rows made
+/// on demand against its decode, by hand in release:
+///   cargo test --release -p heeler-io --features libraw --lib a_camera_raws_rows -- --ignored
+#[test]
+#[ignore = "develops a camera RAW three ways; run by hand in release"]
+fn a_camera_raws_rows_made_on_demand_are_its_decode() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../heeler-raw/tests/fixtures/IMG_3310.CR2");
+    for o in [RawSourceOpts::default(), RawSourceOpts { capture_sharpen: 0, ..RawSourceOpts::default() }, RawSourceOpts { highlight: 0, ..RawSourceOpts::default() }] {
+        let whole = decode_any_with(&path, o).unwrap();
+        let rows = decode_rows_with(&path, o).unwrap().expect("rows on demand");
+        let mut made = Vec::new();
+        for y in (0..whole.height).step_by(256) {
+            made.extend(rows.rows(y, (y + 256).min(whole.height)).unwrap().data);
+        }
+        assert!(made.len() == whole.data.len() && made.iter().zip(&whole.data).all(|(a, b)| a.to_bits() == b.to_bits()), "highlight {} sharpen {}", o.highlight, o.capture_sharpen);
+        println!("highlight {} sharpen {}: {} by {}, keeps {} MiB against {} MiB", o.highlight, o.capture_sharpen, whole.width, whole.height, rows.bytes() >> 20, (whole.data.len() * 4) >> 20);
+    }
+}

@@ -349,6 +349,22 @@ pub fn export_in_bands(
     Ok(Some((sink.encode(encoding)?, w, h)))
 }
 
+/// export_in_bands with the photographs in `rows` making their rows on
+/// demand from what their decoders kept (heeler_io::decode_rows_with,
+/// or a caller's own codec through heic::KeptRgba8), never decoded
+/// whole: their entries in `sources` may be left out. None as
+/// export_in_bands answers; the caller then decodes them whole.
+pub fn export_in_bands_from(
+    graph: &Graph,
+    terminal: &str,
+    sources: &HashMap<String, SourceImage>,
+    rows: banded::RowSources,
+    ceiling: usize,
+    encoding: Encoding<'_>,
+) -> Result<Option<(Vec<u8>, usize, usize)>, IoError> {
+    banded::with_row_sources(rows, || export_in_bands(graph, terminal, sources, ceiling, encoding))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

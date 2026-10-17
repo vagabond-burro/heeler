@@ -18422,6 +18422,29 @@ fn render_export_streamed(
     extra: &HashMap<String, SourceImage>,
     format: heeler_io::band_sink::SinkFormat,
     max_edge: usize,
+    rows: Option<Arc<dyn heeler_engine::banded::SourceRows>>,
+) -> Result<Option<heeler_io::band_sink::BandSink>, String> {
+    // The photograph making its rows on demand under every node it is
+    // planted under, the sources and the groups that stand in for them
+    // (build_graph); `source` then gives only its size.
+    let lazy: heeler_engine::banded::RowSources = match &rows {
+        Some(r) => ui
+            .nodes
+            .iter()
+            .filter(|n| n.node_type == "heeler.image_source" || n.node_type == "heeler.group")
+            .map(|n| (n.id.clone(), r.clone()))
+            .collect(),
+        None => HashMap::new(),
+    };
+    heeler_engine::banded::with_row_sources(lazy, || render_export_streamed_with(ui, source, extra, format, max_edge))
+}
+
+fn render_export_streamed_with(
+    ui: &UiGraph,
+    source: Arc<ImageBuf>,
+    extra: &HashMap<String, SourceImage>,
+    format: heeler_io::band_sink::SinkFormat,
+    max_edge: usize,
 ) -> Result<Option<heeler_io::band_sink::BandSink>, String> {
     memory::catch(|| {
         EXPORT_BANDS_MADE.with(|b| b.set(0));
@@ -18545,7 +18568,7 @@ fn finish_export_admitted(
     // samples: the f32 frame is never held, the file is the same.
     let streamed = if beauty.is_none() && alpha.is_none() && !(matte && holds_alpha) && layers.is_empty() && !scale_percent.is_some_and(|p| p > 0.0 && p < 100.0) {
         match streamed_encoding(&ext, format) {
-            Some(sink) => render_export_streamed(graph, source.clone(), smart, sink, max_edge.unwrap_or(0) as usize)?,
+            Some(sink) => render_export_streamed(graph, source.clone(), smart, sink, max_edge.unwrap_or(0) as usize, None)?,
             None => None,
         }
     } else {

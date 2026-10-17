@@ -35,6 +35,63 @@ pub fn decode_heif(bytes: &[u8]) -> Option<ImageBuf> {
     macos::decode_at(bytes, None)
 }
 
+/// The HEIF's full-size bitmap kept as the OS codec draws it, from which
+/// its rows are made on demand (KeptRgba8); decode_heif is all of them.
+#[cfg(target_os = "macos")]
+pub(crate) fn keep_heif(bytes: &[u8]) -> Option<KeptRgba8> {
+    macos::keep_at(bytes, None)
+}
+
+/// A frame's premultiplied 8-bit RGBA bitmap, as an OS codec draws it,
+/// with the conversion its ICC profile asks for, read once: each run of
+/// rows is made a pixel at a time (straight color from premultiplied,
+/// then into the working space), so the runs are the whole decode's to
+/// the bit. Kept, it holds 4 bytes a pixel where the decode holds 16.
+pub struct KeptRgba8 {
+    rgba: Vec<u8>,
+    w: usize,
+    h: usize,
+    conversion: crate::input_color::Conversion,
+}
+
+impl KeptRgba8 {
+    /// `rgba` (premultiplied, `w` by `h`, top row first) and its ICC
+    /// profile: Ok(None) for none, Err(reason) for one that cannot be
+    /// read. The same conversion a HEIF decode makes, for a caller with
+    /// its own codec (the iOS port's ImageIO).
+    pub fn new(rgba: Vec<u8>, w: usize, h: usize, icc: Result<Option<&[u8]>, &str>) -> Option<KeptRgba8> {
+        (rgba.len() == w * h * 4).then(|| KeptRgba8 { rgba, w, h, conversion: crate::input_color::ingest_plan(icc) })
+    }
+
+    /// The frame's width and height.
+    pub fn size(&self) -> (usize, usize) {
+        (self.w, self.h)
+    }
+
+    /// The bytes it keeps.
+    pub fn bytes(&self) -> usize {
+        self.rgba.len()
+    }
+
+    /// Rows `y0..y1`, f32 RGBA in the working space.
+    pub fn make_rows(&self, y0: usize, y1: usize) -> Result<ImageBuf, crate::IoError> {
+        let w = self.w;
+        let mut out = ImageBuf::try_new(w, y1 - y0)?;
+        let rgba = &self.rgba[y0 * w * 4..y1 * w * 4];
+        for p in 0..w * (y1 - y0) {
+            out.data[p * 4 + 3] = rgba[p * 4 + 3] as f32 / 255.0;
+            for c in 0..3 { out.data[p * 4 + c] = rgba[p * 4 + c] as f32 / 255.0; }
+        }
+        // The bitmap context gives premultiplied samples; ICC operates on
+        // straight RGB. Transparent pixels remain transparent black.
+        for px in out.data.chunks_exact_mut(4) {
+            if px[3] > 0.0 { for c in 0..3 { px[c] /= px[3]; } }
+        }
+        self.conversion.apply(&mut out);
+        Ok(out)
+    }
+}
+
 /// Native reduced decode where the platform supports it. Admission happens
 /// before ImageIO creates pixels, so a smaller tier does not first decode full.
 #[cfg(target_os = "macos")]
@@ -135,6 +192,15 @@ mod macos {
     const BITMAP_RGBA8: u32 = 1;
 
     pub(super) fn decode_at(bytes: &[u8], edge: Option<usize>) -> Option<ImageBuf> {
+        let kept = keep_at(bytes, edge)?;
+        let (_, h) = kept.size();
+        Some(heeler_engine::memory::or_unwind(kept.make_rows(0, h).map_err(|e| match e {
+            crate::IoError::Memory(m) => m,
+            other => heeler_engine::memory::MemoryError::Allocation(other.to_string()),
+        })))
+    }
+
+    pub(super) fn keep_at(bytes: &[u8], edge: Option<usize>) -> Option<super::KeptRgba8> {
         unsafe {
             let _input_job = heeler_engine::memory::or_unwind(heeler_engine::memory::Job::admit(
                 heeler_engine::memory::or_unwind(heeler_engine::memory::bytes(bytes.len(), 2, 1, 1)), "native image input"));
@@ -246,18 +312,7 @@ mod macos {
             CGColorSpaceRelease(space);
             CGImageRelease(image);
 
-            let mut out = ImageBuf::new(w, h);
-            for p in 0..w * h {
-                out.data[p * 4 + 3] = rgba[p * 4 + 3] as f32 / 255.0;
-                for c in 0..3 { out.data[p * 4 + c] = rgba[p * 4 + c] as f32 / 255.0; }
-            }
-            // The bitmap context gives premultiplied samples; ICC operates on
-            // straight RGB. Transparent pixels remain transparent black.
-            for px in out.data.chunks_exact_mut(4) {
-                if px[3] > 0.0 { for c in 0..3 { px[c] /= px[3]; } }
-            }
-            crate::input_color::ingest(&mut out, profile.as_ref().map(|p| p.as_deref()).map_err(|e| *e));
-            Some(out)
+            super::KeptRgba8::new(rgba, w, h, profile.as_ref().map(|p| p.as_deref()).map_err(|e| *e))
         }
     }
 }

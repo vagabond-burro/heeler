@@ -371,8 +371,22 @@ pub fn convert(
     image: &mut ImageBuf,
     embedded: Result<Option<&[u8]>, &str>,
     working: WorkingSpace,
-    mut log: impl FnMut(&str),
+    log: impl FnMut(&str),
 ) {
+    plan(embedded, working, log).apply(image);
+}
+
+/// A conversion read once and applied to as many runs of a frame's pixels
+/// as it takes (a frame's rows band by band): every pixel converted alone,
+/// so the runs are the whole frame's conversion to the bit.
+pub(crate) struct Conversion {
+    profile: Option<Profile>,
+    working: WorkingSpace,
+}
+
+/// The conversion `embedded` asks for into `working`, saying once when a
+/// profile falls back.
+pub(crate) fn plan(embedded: Result<Option<&[u8]>, &str>, working: WorkingSpace, mut log: impl FnMut(&str)) -> Conversion {
     let parsed = match embedded {
         Ok(Some(b)) => parse(b).map(Some),
         Ok(None) => Ok(None),
@@ -390,34 +404,42 @@ pub fn convert(
             None
         }
     };
-    if let Some(p) = profile {
-        let transform = matrix(working.xyz_d65_to_rgb, matrix(D50_TO_D65, p.xyz));
-        for px in image.data.chunks_exact_mut(4) {
-            let linear = std::array::from_fn(|c| p.trc[c].value(px[c] as f64));
-            let rgb = mul(transform, linear);
-            for c in 0..3 {
-                px[c] = rgb[c] as f32;
-            }
-        }
-    } else {
-        // Keep the established untagged path bit exact. This is also the
-        // explicit fallback for malformed, gray and LUT input profiles.
-        for px in image.data.chunks_exact_mut(4) {
-            for c in 0..3 {
-                px[c] = crate::srgb_to_linear(px[c]);
-            }
-        }
-        if working.name != "linear-srgb" {
-            let srgb_to_xyz = [
-                [0.4124564, 0.3575761, 0.1804375],
-                [0.2126729, 0.7151522, 0.0721750],
-                [0.0193339, 0.1191920, 0.9503041],
-            ];
-            let transform = matrix(working.xyz_d65_to_rgb, srgb_to_xyz);
+    Conversion { profile, working }
+}
+
+impl Conversion {
+    /// Converts `image`'s pixels.
+    pub(crate) fn apply(&self, image: &mut ImageBuf) {
+        let working = self.working;
+        if let Some(p) = &self.profile {
+            let transform = matrix(working.xyz_d65_to_rgb, matrix(D50_TO_D65, p.xyz));
             for px in image.data.chunks_exact_mut(4) {
-                let rgb = mul(transform, [px[0] as f64, px[1] as f64, px[2] as f64]);
+                let linear = std::array::from_fn(|c| p.trc[c].value(px[c] as f64));
+                let rgb = mul(transform, linear);
                 for c in 0..3 {
                     px[c] = rgb[c] as f32;
+                }
+            }
+        } else {
+            // Keep the established untagged path bit exact. This is also the
+            // explicit fallback for malformed, gray and LUT input profiles.
+            for px in image.data.chunks_exact_mut(4) {
+                for c in 0..3 {
+                    px[c] = crate::srgb_to_linear(px[c]);
+                }
+            }
+            if working.name != "linear-srgb" {
+                let srgb_to_xyz = [
+                    [0.4124564, 0.3575761, 0.1804375],
+                    [0.2126729, 0.7151522, 0.0721750],
+                    [0.0193339, 0.1191920, 0.9503041],
+                ];
+                let transform = matrix(working.xyz_d65_to_rgb, srgb_to_xyz);
+                for px in image.data.chunks_exact_mut(4) {
+                    let rgb = mul(transform, [px[0] as f64, px[1] as f64, px[2] as f64]);
+                    for c in 0..3 {
+                        px[c] = rgb[c] as f32;
+                    }
                 }
             }
         }
@@ -438,12 +460,12 @@ fn log_diagnostic(line: &str) {
     }
 }
 pub(crate) fn ingest(image: &mut ImageBuf, embedded: Result<Option<&[u8]>, &str>) {
-    convert(
-        image,
-        if legacy_raw() { Ok(None) } else { embedded },
-        WORKING_SPACE,
-        log_diagnostic,
-    );
+    ingest_plan(embedded).apply(image);
+}
+
+/// ingest's conversion, read once.
+pub(crate) fn ingest_plan(embedded: Result<Option<&[u8]>, &str>) -> Conversion {
+    plan(if legacy_raw() { Ok(None) } else { embedded }, WORKING_SPACE, log_diagnostic)
 }
 fn hash(bytes: &[u8]) -> u64 {
     bytes.iter().fold(0xcbf29ce484222325, |h, b| {

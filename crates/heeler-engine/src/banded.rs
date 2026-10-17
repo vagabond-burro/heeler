@@ -43,6 +43,207 @@ enum Mode {
     /// layer, clip and mask resident and whole, of which it places the
     /// band's rows (band::BandFrame's `layers_whole`).
     Layer,
+    /// A photograph that makes its rows as a band reads them, from what
+    /// its decoder kept (SourceRows), never held whole.
+    Lazy,
+}
+
+/// A source that makes its rows on demand: the decoder's own samples
+/// kept, and each band's rows made from them as the whole decode makes
+/// every row, to the bit (heeler_io keeps a JPEG's codes, a HEIC's).
+pub trait SourceRows: Send + Sync {
+    /// The frame's width and height.
+    fn size(&self) -> (usize, usize);
+    /// The bytes it keeps, for admission.
+    fn bytes(&self) -> usize;
+    /// Rows `y0..y1` of the frame, f32 RGBA.
+    fn rows(&self, y0: usize, y1: usize) -> Result<ImageBuf, EngineError>;
+}
+
+/// Capture sharpening (ops_detail::capture_sharpen) made a run of a
+/// frame's rows at a time, top to bottom, from the unsharpened rows
+/// `pre` makes, each run the whole frame's to the bit: for a photograph
+/// that makes its rows on demand from a RAW develop. The noise gate is
+/// the whole frame's, gathered by a first pass over the frame's rows; the
+/// guided base's running sums carry from run to run (band::Carry) as a
+/// banded render carries them, the runs a fixed height apart.
+pub struct CaptureSharpenRows {
+    amount: f32,
+    radius: f32,
+    w: usize,
+    h: usize,
+    margin: usize,
+    gate: Option<f32>,
+    state: std::sync::Mutex<SharpenState>,
+}
+
+/// Where a CaptureSharpenRows has got to: the next run to make, its
+/// carried sums, and the sharpened rows made and not yet handed on.
+#[derive(Default)]
+struct SharpenState {
+    next: usize,
+    carry: Carry,
+    y0: usize,
+    rows: Vec<f32>,
+}
+
+/// The rows a CaptureSharpenRows run makes; a multiple of the gate's
+/// 16-row blocks, so each block falls in one run.
+const SHARPEN_RUN: usize = 64;
+
+/// Unsharpened rows `y0..y1` of a frame, f32 RGBA.
+pub type PreRows<'a> = &'a dyn Fn(usize, usize) -> Result<ImageBuf, EngineError>;
+
+impl CaptureSharpenRows {
+    /// Capture sharpening at `amount` and `radius` for a `w` by `h` frame
+    /// whose unsharpened rows `pre` makes; reads them all once for the
+    /// gate.
+    pub fn new(amount: f32, radius: f32, w: usize, h: usize, pre: PreRows<'_>) -> Result<CaptureSharpenRows, EngineError> {
+        let f = radius.max(0.0) * 3f32.sqrt();
+        let margin = 2 * (f.floor() as usize + 1) + 2;
+        let mut s = CaptureSharpenRows { amount, radius, w, h, margin, gate: None, state: Default::default() };
+        if amount <= 0.0 || radius <= 0.0 || w < 3 || h < 3 {
+            return Ok(s);
+        }
+        // The gate: capture_sharpen_gate's block RMS of the plane against
+        // its base, each 16 by 16 block from the run holding its rows.
+        const B: usize = 16;
+        let (bw, bh) = (w / B, h / B);
+        if bw == 0 || bh == 0 {
+            s.gate = Some(crate::ops_detail::CAPTURE_SHARPEN_GATE);
+            return Ok(s);
+        }
+        let mut rms = vec![0.0f32; bw * bh];
+        let mut carry = Carry::default();
+        for k in 0..h.div_ceil(SHARPEN_RUN) {
+            let (from, to) = (k * SHARPEN_RUN, ((k + 1) * SHARPEN_RUN).min(h));
+            if from >= bh * B {
+                break;
+            }
+            let (b0, _, plane, base) = s.run(k, &mut carry, pre)?;
+            for by in from / B..(to / B).min(bh) {
+                for bx in 0..bw {
+                    let mut sum = 0.0f32;
+                    for y in by * B..by * B + B {
+                        for x in bx * B..bx * B + B {
+                            let i = (y - b0) * w + x;
+                            let d = plane[i] - base[i];
+                            sum += d * d;
+                        }
+                    }
+                    rms[by * bw + bx] = (sum / (B * B) as f32).sqrt();
+                }
+            }
+        }
+        let at = rms.len() / 10;
+        let (_, noise, _) = rms.select_nth_unstable_by(at, |a, b| a.total_cmp(b));
+        s.gate = Some((2.0 * *noise).max(crate::ops_detail::CAPTURE_SHARPEN_GATE));
+        Ok(s)
+    }
+
+    /// Run `k`: its buffer's first row, the unsharpened buffer, its luma
+    /// plane in display encoding and the plane's guided base, exact over
+    /// the run's own rows.
+    fn run(&self, k: usize, carry: &mut Carry, pre: PreRows<'_>) -> Result<(usize, ImageBuf, Vec<f32>, Vec<f32>), EngineError> {
+        use rayon::prelude::*;
+        let (w, h) = (self.w, self.h);
+        let from = k * SHARPEN_RUN;
+        let to = (from + SHARPEN_RUN).min(h);
+        let b0 = if k == 0 { 0 } else { from - self.margin };
+        let b1 = (to + self.margin).min(h);
+        let img = pre(b0, b1)?;
+        let luma = |px: &[f32]| (0.2126 * px[0] + 0.7152 * px[1] + 0.0722 * px[2]).max(0.0);
+        let plane: Vec<f32> = img.data.par_chunks(4).map(|px| crate::ops::to_display(luma(px))).collect();
+        let mut c = std::mem::take(carry);
+        c.next_b0 = (to < h).then(|| to - self.margin);
+        let frame = BandFrame { full_w: w, full_h: h, y0: b0, rows: b1 - b0, layers_whole: false, planes_whole: false };
+        let (base, c) = with_carry(c, || with_frame(frame, || crate::ops_detail::guided_base(&plane, w, b1 - b0, self.radius, crate::ops_detail::SHARPEN_EPS)));
+        if let Some(e) = &c.error {
+            return Err(EngineError::Band(format!("capture sharpening: {e}")));
+        }
+        *carry = c;
+        Ok((b0, img, plane, base))
+    }
+
+    /// Sharpened rows `y0..y1`, from the unsharpened rows `pre` makes.
+    /// Asked for top to bottom each run is made once; asked again from
+    /// higher up, the runs start over from the frame's first row.
+    pub fn rows(&self, y0: usize, y1: usize, pre: PreRows<'_>) -> Result<ImageBuf, EngineError> {
+        let Some(gate) = self.gate else { return pre(y0, y1) };
+        let w = self.w;
+        let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if y0 < st.y0 {
+            *st = SharpenState::default();
+        }
+        let gate2 = gate * gate;
+        while st.y0 + st.rows.len() / (w * 4) < y1 {
+            let k = st.next;
+            let mut carry = std::mem::take(&mut st.carry);
+            let (b0, mut img, plane, base) = self.run(k, &mut carry, pre)?;
+            st.carry = carry;
+            st.next += 1;
+            let (from, to) = (k * SHARPEN_RUN, ((k + 1) * SHARPEN_RUN).min(self.h));
+            let luma = |px: &[f32]| (0.2126 * px[0] + 0.7152 * px[1] + 0.0722 * px[2]).max(0.0);
+            for (j, px) in img.data[(from - b0) * w * 4..(to - b0) * w * 4].chunks_exact_mut(4).enumerate() {
+                let i = (from - b0) * w + j;
+                let (l, b) = (plane[i], base[i]);
+                let y = luma(px);
+                if y <= 1e-6 {
+                    continue;
+                }
+                let d = l - b;
+                let d = d * (d * d) / (d * d + gate2);
+                let target = crate::ops::to_scene((l + self.amount * d).max(0.0));
+                let ratio = (target / y).clamp(0.5, 2.0);
+                for c in px.iter_mut().take(3) {
+                    *c *= ratio;
+                }
+            }
+            if st.rows.is_empty() {
+                st.y0 = from;
+            }
+            st.rows.extend_from_slice(&img.data[(from - b0) * w * 4..(to - b0) * w * 4]);
+        }
+        let at = (y0 - st.y0) * w * 4;
+        let out = ImageBuf { width: w, height: y1 - y0, data: st.rows[at..at + (y1 - y0) * w * 4].to_vec() };
+        // A few runs above the rows asked stay for another reader of the
+        // same photograph a little behind (a source and the group that
+        // stands in for it); above those, nothing is asked again.
+        let keep = y0.saturating_sub(4 * SHARPEN_RUN).max(st.y0);
+        let gone = (keep - st.y0) * w * 4;
+        st.rows.drain(..gone);
+        st.y0 = keep;
+        Ok(out)
+    }
+}
+
+/// Source nodes that make their rows on demand, by node id./// Source nodes that make their rows on demand, by node id.
+pub type RowSources = HashMap<String, Arc<dyn SourceRows>>;
+
+thread_local! {
+    static ROW_SOURCES: std::cell::RefCell<RowSources> = std::cell::RefCell::new(HashMap::new());
+}
+
+/// Runs `f` (a banded render, its estimate, its band height) with the
+/// source nodes in `rows` making their rows on demand: their entries in
+/// the sources map give only their size, and a node that must read all
+/// of one makes it whole once. Restores what was there after.
+pub fn with_row_sources<T>(rows: RowSources, f: impl FnOnce() -> T) -> T {
+    struct Reset(Option<RowSources>);
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            if let Some(r) = self.0.take() {
+                ROW_SOURCES.with(|s| *s.borrow_mut() = r);
+            }
+        }
+    }
+    let _reset = Reset(Some(ROW_SOURCES.with(|s| std::mem::replace(&mut *s.borrow_mut(), rows))));
+    f()
+}
+
+/// The row source of source node `id`, when it makes its rows on demand.
+fn row_source(id: &str) -> Option<Arc<dyn SourceRows>> {
+    ROW_SOURCES.with(|s| s.borrow().get(id).cloned())
 }
 
 /// What a banded render did, for the caller's log and the tests.
@@ -607,6 +808,13 @@ fn plan(
     for id in &order {
         let node = graph.node(id).ok_or_else(|| EngineError::NodeNotFound(id.clone()))?;
         if is_source(&node.node_type) {
+            if let Some(r) = row_source(id) {
+                let (w, h) = r.size();
+                dims.insert(id.clone(), (w, h, 4));
+                mode.insert(id.clone(), Mode::Lazy);
+                inputs.insert(id.clone(), Vec::new());
+                continue;
+            }
             let src = sources.get(id).ok_or_else(|| EngineError::SourceMissing(id.clone()))?;
             dims.insert(id.clone(), (src.image.width, src.image.height, 4));
             mode.insert(id.clone(), Mode::Resident);
@@ -682,7 +890,7 @@ fn plan(
                 || (node.node_type == "heeler.layer_warp" && crate::ops_warp::layer_warp_gathers(node)))
             && wired.len() == 1
             && wired[0].0 == "in"
-            && mode.get(&wired[0].1) == Some(&Mode::Resident)
+            && matches!(mode.get(&wired[0].1), Some(Mode::Resident | Mode::Lazy))
             && node.params.get(crate::executor::MASK_WEIGHT_PARAM).and_then(|v| v.as_f64()).is_none_or(|w| w >= 1.0);
         // A blend placing, warping or fitting its layer, or clipped to a
         // placed one: its base in bands, the rest whole.
@@ -726,6 +934,17 @@ fn plan(
         if mode[id] == Mode::Crop {
             if let Some((_, from)) = inputs[id].first() {
                 if crops[id].input_rows(0, 1).is_none() && mode[from] != Mode::Resident {
+                    mode.insert(from.clone(), Mode::Resident);
+                }
+            }
+        }
+    }
+    // A gather reads all of its input: a photograph making its rows on
+    // demand is made whole for it, once.
+    for id in &order {
+        if mode[id] == Mode::Gather {
+            for (_, from) in &inputs[id] {
+                if mode[from] == Mode::Lazy {
                     mode.insert(from.clone(), Mode::Resident);
                 }
             }
@@ -787,7 +1006,7 @@ pub fn render_banded(
     let band_rows = band_rows.max(1);
     let mut resident: HashMap<String, Value> = HashMap::new();
     for (id, src) in sources {
-        if graph.node(id).is_some_and(|n| is_source(&n.node_type)) {
+        if graph.node(id).is_some_and(|n| is_source(&n.node_type)) && row_source(id).is_none() {
             resident.insert(id.clone(), Value::Image(src.image.clone()));
         }
     }
@@ -807,7 +1026,16 @@ pub fn render_banded(
             if plan.wide.contains(id) && !wides.contains_key(id) {
                 prepass(graph, &plan, &resident, sources, id, band_rows, &mut wides)?;
             }
-            if plan.mode[id] != Mode::Resident || is_source(&node.node_type) || resident.contains_key(id) {
+            if plan.mode[id] != Mode::Resident || resident.contains_key(id) {
+                continue;
+            }
+            // A photograph making its rows on demand that a node must read
+            // whole: all its rows, once.
+            if is_source(&node.node_type) {
+                if let Some(r) = row_source(id) {
+                    let (_, h) = r.size();
+                    resident.insert(id.clone(), Value::Image(Arc::new(r.rows(0, h)?)));
+                }
                 continue;
             }
             let v = make_whole(graph, &plan, &resident, sources, id, band_rows, &mut wides)?;
@@ -1151,9 +1379,22 @@ fn estimate_cut(
     }
     let mut seen = HashSet::new();
     let mut source_bytes = 0usize;
-    for s in sources.values() {
-        if seen.insert(Arc::as_ptr(&s.image) as usize) {
+    for (id, s) in sources {
+        if row_source(id).is_none() && seen.insert(Arc::as_ptr(&s.image) as usize) {
             source_bytes = sum([source_bytes, crate::memory::bytes(s.image.width, s.image.height, 4, 4)?])?;
+        }
+    }
+    // What a photograph making its rows on demand keeps, and its whole
+    // frame where a node reads all of it.
+    let mut kept_rows = HashSet::new();
+    for id in &plan.order {
+        let Some(r) = row_source(id) else { continue };
+        if kept_rows.insert(Arc::as_ptr(&r) as *const () as usize) {
+            source_bytes = sum([source_bytes, r.bytes()])?;
+        }
+        if plan.mode[id] == Mode::Resident {
+            let (w, h) = r.size();
+            source_bytes = sum([source_bytes, crate::memory::bytes(w, h, 4, 4)?])?;
         }
     }
     let band_rows = band_rows.max(1);
@@ -1267,7 +1508,7 @@ fn pass_cost(graph: &Graph, plan: &Plan, terminals: &[&str], band_rows: usize) -
                 Mode::Crop => (0, 0),
                 _ => {
                     let made = rows_bytes(fw, rhi - rlo, fc)?;
-                    let scratch = if !node.enabled {
+                    let scratch = if !node.enabled || plan.mode[id] == Mode::Lazy {
                         0
                     } else if plan.mode[id] == Mode::Layer {
                         // The band's rows of the layer, its clip and mask,
@@ -1537,7 +1778,7 @@ fn band_needs(plan: &Plan, terminals: &[&str], walk: &mut Walk, a: usize, b: usi
         let floor = walk.readers.get(id).into_iter().flatten().filter_map(|c| {
             let made = walk.made.get(c).copied();
             match (plan.mode[c], made) {
-                (Mode::Resident | Mode::Gather, _) => None,
+                (Mode::Resident | Mode::Gather | Mode::Lazy, _) => None,
                 (_, Some(m)) if m >= plan.dims[c].1 => None,
                 (Mode::Rows { .. }, None) if plan.carried.contains(c) => Some(0),
                 (_, None) => Some(0),
@@ -1588,8 +1829,9 @@ fn band_needs(plan: &Plan, terminals: &[&str], walk: &mut Walk, a: usize, b: usi
                 let g = &plan.crops[id];
                 g.input_rows(from, hi).unwrap_or((0, g.in_h))
             }
-            // Its input is resident and read whole; it makes its own rows.
-            Mode::Gather => {
+            // Its input is resident and read whole, or it has none (a
+            // photograph making its rows): it makes its own rows.
+            Mode::Gather | Mode::Lazy => {
                 reads.insert(id.clone(), (from, hi));
                 continue;
             }
@@ -1769,6 +2011,10 @@ fn render_band(
                 } else {
                     return Err(EngineError::Band(format!("'{id}' gathered {mw} by {mh} for a {fw} wide band of {} rows", hi_new - lo_new)));
                 }
+            }
+            Mode::Lazy => {
+                let r = row_source(id).ok_or_else(|| EngineError::Band(format!("'{id}' has no rows to make")))?;
+                Value::Image(Arc::new(r.rows(lo_new, hi_new)?))
             }
             Mode::Resident => unreachable!(),
         };
