@@ -154,7 +154,7 @@ pub fn encode_jpeg_fast(buf: &ImageBuf, quality: u8) -> Result<Vec<u8>, IoError>
 /// Packed 8-bit RGB rows to a JPEG. A libjpeg error (it raises them
 /// through error_exit, which would otherwise exit the process) unwinds
 /// to the catch here and comes back as an IoError.
-fn compress(rgb: &[u8], w: usize, h: usize, quality: u8) -> Result<Vec<u8>, IoError> {
+pub(crate) fn compress(rgb: &[u8], w: usize, h: usize, quality: u8) -> Result<Vec<u8>, IoError> {
     assert!(rgb.len() >= w * h * 3, "fewer rows than the frame");
     let icc = icc_segment(icc::srgb_profile());
     let quality = quality.clamp(1, 100) as c_int;
@@ -394,11 +394,38 @@ mod tests {
         image::load_from_memory(bytes).unwrap().to_rgb8()
     }
 
+    /// The image crate's encoder, which encode_jpeg used before 2026.6.
+    fn old_encoder(img: &ImageBuf, quality: u8) -> Vec<u8> {
+        let data = crate::to_srgb_u8(img, false).unwrap();
+        crate::jpeg_from_rgb8_scalar(&data, img.width, img.height, quality).unwrap()
+    }
+
+    #[test]
+    fn exports_take_the_fast_encoder_at_the_old_ones_size() {
+        // An export's JPEG is the fast one now. Up to 92 it is within a
+        // few percent of the old file's size and error. Above that the
+        // old encoder's integer DCT gained almost nothing (its 99 and 100
+        // were the same file), where libjpeg keeps the detail each step
+        // asks for: a larger file, never a less faithful one.
+        let img = frame(683, 1024);
+        assert_eq!(crate::encode_jpeg(&img, 92).unwrap(), encode_jpeg_fast(&img, 92).unwrap());
+        let src: Vec<u8> = img.data.chunks_exact(4).flat_map(|p| [srgb_u8(p[0]), srgb_u8(p[1]), srgb_u8(p[2])]).collect();
+        let err = |bytes: &[u8]| rgb8(bytes).as_raw().iter().zip(&src).map(|(a, b)| a.abs_diff(*b) as f64).sum::<f64>() / src.len() as f64;
+        for q in [60, 80, 92, 95, 98, 100] {
+            let (fast, old) = (encode_jpeg_fast(&img, q).unwrap(), old_encoder(&img, q));
+            if q <= 92 {
+                let ratio = fast.len() as f64 / old.len() as f64;
+                assert!((ratio - 1.0).abs() < 0.05, "quality {q}: {} bytes against {}", fast.len(), old.len());
+            }
+            assert!(err(&fast) <= err(&old) * 1.02 + 0.01, "quality {q}: error {} against {}", err(&fast), err(&old));
+        }
+    }
+
     #[test]
     fn the_fast_frame_decodes_to_the_same_size_and_pixels_as_the_old_encoder() {
         let img = frame(683, 1024);
         let fast = encode_jpeg_fast(&img, 94).unwrap();
-        let old = crate::encode_jpeg(&img, 94).unwrap();
+        let old = old_encoder(&img, 94);
         assert_eq!(&fast[..2], &[0xFF, 0xD8]);
         let (a, b) = (rgb8(&fast), rgb8(&old));
         assert_eq!(a.dimensions(), (683, 1024));
@@ -425,7 +452,7 @@ mod tests {
             d.as_raw().iter().zip(&src).map(|(a, b)| a.abs_diff(*b) as f64).sum::<f64>() / src.len() as f64
         };
         let fast = err(&encode_jpeg_fast(&img, 94).unwrap());
-        let old = err(&crate::encode_jpeg(&img, 94).unwrap());
+        let old = err(&old_encoder(&img, 94));
         assert!(fast <= old * 1.05 + 0.05, "fast {fast} against old {old}");
     }
 

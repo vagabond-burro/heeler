@@ -1883,8 +1883,22 @@ pub fn encode_jpeg(buf: &ImageBuf, quality: u8) -> Result<Vec<u8>, IoError> {
 }
 
 /// The JPEG of 8-bit sRGB RGB samples, `width` by `height`: what
-/// encode_jpeg and a band sink's JPEG (band_sink.rs) both write.
+/// encode_jpeg and a band sink's JPEG (band_sink.rs) both write. Since
+/// 2026.6 it is the viewer's SIMD encoder (fast_jpeg.rs), the same
+/// baseline 4:4:4 JPEG at the same quality as the image crate's, which
+/// took about three times as long (219 ms for a 24 MP export); the image
+/// crate's stays for a frame libjpeg refuses.
 pub(crate) fn jpeg_from_rgb8(data: &[u8], width: usize, height: usize, quality: u8) -> Result<Vec<u8>, IoError> {
+    if width > 0 && height > 0 && width <= 65_500 && height <= 65_500 && data.len() >= width * height * 3 {
+        if let Ok(bytes) = fast_jpeg::compress(data, width, height, quality) {
+            return Ok(bytes);
+        }
+    }
+    jpeg_from_rgb8_scalar(data, width, height, quality)
+}
+
+/// The image crate's JPEG of the same samples.
+pub(crate) fn jpeg_from_rgb8_scalar(data: &[u8], width: usize, height: usize, quality: u8) -> Result<Vec<u8>, IoError> {
     let mut bytes = Encoded::default();
     let mut enc = JpegEncoder::new_with_quality(&mut bytes, quality.clamp(1, 100));
     enc.set_icc_profile(icc::srgb_profile().to_vec())

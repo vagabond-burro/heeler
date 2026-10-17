@@ -9,7 +9,8 @@
 ### Faster
 
 - **Exports of light edits take about half the time.** An export that fits in memory now renders in one piece instead of in strips, and choosing how to split a heavy one no longer costs a tenth of a second before it starts. [Exporting](user-guide/export.md).
-- **Exporting the same edit again skips the depth refinement.** An edit that uses the Depth Map keeps its full-size refined depth after the first export, so the next one starts straight away instead of refining it again for several seconds. [Depth Map](user-guide/adjustments/depth-map.md).
+- **JPEG exports encode about three times faster.** Exports now use the same fast encoder as the canvas's frames: a 24 MP JPEG encodes in under a tenth of a second. At the default quality of 92 the files are the same size as before; at 95 and above they are larger, because the old encoder stopped adding detail there and its 100 was really about 95, where the new one keeps what each step of quality asks for. [Exporting](user-guide/export.md).
+- **Depth refinement for an export takes half the time, and none the second time.** An edit that uses the Depth Map refines its depth at full size for the export, now across all of the computer's cores, and keeps the result, so the next export of the same edit starts straight away. [Depth Map](user-guide/adjustments/depth-map.md).
 - **RAW files with blown highlights open faster.** With Highlights on **Blend**, Heeler develops a clipped RAW twice and mixes the two; it now runs both at once. A Fujifilm RAF opens in about half the time, and GoPro and phone DNG files in about two thirds. [Source](user-guide/adjustments/source.md).
 
 ### Fixes
