@@ -10083,6 +10083,7 @@ fn with_timed_lock<T, R>(
 ) -> Result<R, String> {
     let t0 = std::time::Instant::now();
     let mut guard = lock.lock().map_err(|_| poisoned.to_string())?;
+    LOCK_WAITED.with(|w| w.set(w.get() + t0.elapsed()));
     let waited = t0.elapsed().as_millis();
     if waited > LOCK_TIMING_MS {
         sink(format!("lock: {kind} waited {waited}ms at {caller}"));
@@ -11680,6 +11681,61 @@ fn export_render_setup(
 }
 
 thread_local! {
+    /// How the last export render on this thread made its frame: banded
+    /// or streamed, in how many bands of how many rows; None when it
+    /// rendered whole. For the slow export's log line (ExportStages).
+    static EXPORT_PATH: std::cell::Cell<Option<(&'static str, usize, usize)>> = const { std::cell::Cell::new(None) };
+    /// The time this thread has waited for the app's locks (the session,
+    /// the catalog), so a slow export can say how much of it was waiting
+    /// rather than work (with_timed_lock).
+    static LOCK_WAITED: std::cell::Cell<std::time::Duration> = const { std::cell::Cell::new(std::time::Duration::ZERO) };
+}
+
+/// An export's stages and how long each took, for the line a slow export
+/// logs (2026-10-10: EXR and 16-bit TIFF exports "upwards of 30 seconds
+/// each"): the stages, how the frame was rendered, and the time spent
+/// waiting on the app's locks. Every export path keeps one.
+struct ExportStages {
+    t0: std::time::Instant,
+    lap: std::time::Instant,
+    stages: Vec<(&'static str, std::time::Duration)>,
+    waited: std::time::Duration,
+}
+
+impl ExportStages {
+    fn start() -> Self {
+        EXPORT_PATH.with(|p| p.set(None));
+        let now = std::time::Instant::now();
+        ExportStages { t0: now, lap: now, stages: Vec::new(), waited: LOCK_WAITED.with(|w| w.get()) }
+    }
+
+    fn mark(&mut self, what: &'static str) {
+        self.stages.push((what, self.lap.elapsed()));
+        self.lap = std::time::Instant::now();
+    }
+
+    /// The line for an export past three seconds, else None.
+    fn slow_line(&self) -> Option<String> {
+        (self.t0.elapsed().as_secs_f32() > 3.0).then(|| self.line())
+    }
+
+    /// What the export spent its time on, as the log says it.
+    fn line(&self) -> String {
+        let total = self.t0.elapsed();
+        let mut parts: Vec<String> = self.stages.iter().filter(|(_, d)| d.as_millis() >= 50).map(|(what, d)| format!("{what} {:.1} s", d.as_secs_f32())).collect();
+        parts.push(match EXPORT_PATH.with(|p| p.get()) {
+            None => "rendered whole".into(),
+            Some((how, bands, rows)) => format!("{how} in {bands} bands of {rows} rows"),
+        });
+        let waited = LOCK_WAITED.with(|w| w.get()).saturating_sub(self.waited);
+        if waited.as_millis() >= 50 {
+            parts.push(format!("{:.1} s of it waiting on the app's locks", waited.as_secs_f32()));
+        }
+        format!("exported in {:.1} s ({})", total.as_secs_f32(), parts.join(", "))
+    }
+}
+
+thread_local! {
     /// The band height an export renders in when a test sets it (0, the
     /// rule: memory chooses; usize::MAX: the whole frame, the reference
     /// the tests compare the bands against). Nothing else sets it.
@@ -11786,6 +11842,7 @@ pub(crate) fn render_frames_banded(g: &Graph, terminals: &[&str], sources: &Hash
     match rendered {
         Ok(report) => {
             EXPORT_BANDS_MADE.with(|b| b.set(report.bands));
+            EXPORT_PATH.with(|p| p.set(Some(("banded", report.bands, rows))));
             let mut frames = HashMap::new();
             for (i, t) in terminals.iter().enumerate() {
                 let v = match (images[i].take(), masks[i].take()) {
@@ -11895,6 +11952,8 @@ async fn export_image(
                 dest.display()
             ));
         }
+        // From here, the export's own time: the dialog's is the user's.
+        let mut stages = ExportStages::start();
         let opts = source_opts_of(&graph);
         let denoise_fingerprint = source_version_key(&app, &image_id, opts);
         // An export that streams keeps the photograph as its decoder's
@@ -11911,16 +11970,22 @@ async fn export_image(
             // Sample session images have no source file; use the preview decode.
             None => ExportPhoto::decoded(preview_source(&app, &image_id, opts)?),
         };
+        stages.mark("decode");
         let mut smart = export_sources_for(&app, &graph, &image_id)?;
+        stages.mark("planted rasters");
         // The Depth Map's refinement, again at the export's own size; and
         // the noise model's full-frame answer, computed now if it must be.
         if let Some(base) = export_vision_base(vision_base(&app), &graph)? {
             let depth_input = with_session(&app, |s| Ok(depth_input_key_in_session(s, &graph, &image_id))).unwrap_or(None);
             refine_depth_for_export(&base, &graph, &image_id, &photo, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input, &denoise_fingerprint, ContainerHolds::of(&export_container(&dest, &format)).layers);
+            stages.mark("depth refinement");
             let file_path = with_session(&app, |s| Ok(s.paths.get(&image_id).cloned()))?;
             mattes_for_export(&graph, &image_id, file_path.as_deref(), photo.shape(), &mut smart);
+            stages.mark("mattes");
             normals_for_export(&graph, &image_id, file_path.as_deref(), photo.shape(), &mut smart);
+            stages.mark("normals");
             denoise_for_export(&app, &base, &graph, &image_id, &denoise_fingerprint, &photo, &mut smart)?;
+            stages.mark("denoise");
         }
         let (source, rows) = photo.for_render();
         let keywords = if keep_metadata.unwrap_or(true) {
@@ -11939,7 +12004,8 @@ async fn export_image(
         let (alpha, layers, beauty) = render_export_layers_and_beauty_for(&graph, source.clone(), &smart, &dest, &format, |level, msg| {
             emit_log(&app, level, format!("{image_id}: {msg}"));
         })?;
-        finish_export(
+        stages.mark("export layers");
+        let out = finish_export(
             crate::ExportInput {
                 graph: &graph,
                 source_path: source_path.as_ref(),
@@ -11967,8 +12033,12 @@ async fn export_image(
                 dpi: dpi.unwrap_or(heeler_io::DEFAULT_DPI),
             },
             |level, msg| emit_log(&app, level, format!("{image_id}: {msg}")),
-        )
-        .map(Some)
+        );
+        stages.mark("render and write");
+        if let Some(line) = stages.slow_line() {
+            emit_log(&app, "info", format!("{image_id}: {line}"));
+        }
+        out.map(Some)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -18389,12 +18459,8 @@ async fn export_to(
         // Each stage's time, logged when the export is slow, so a slow one
         // names the stage that made it so (2026-10-10: EXR and 16-bit TIFF
         // exports "upwards of 30 seconds each").
-        let mut stages: Vec<(&'static str, u128)> = Vec::new();
-        let mut lap = std::time::Instant::now();
-        let mut mark = |what: &'static str| {
-            stages.push((what, lap.elapsed().as_millis()));
-            lap = std::time::Instant::now();
-        };
+        let mut stages = ExportStages::start();
+        let mut mark = |what: &'static str| stages.mark(what);
         let denoise_fingerprint = source_version_key(&app, &image_id, opts);
         // An export that streams keeps the photograph as its decoder's
         // samples (ExportPhoto), unless the session holds its decode already.
@@ -18461,9 +18527,8 @@ async fn export_to(
             |level, msg| emit_log(&app, level, format!("{image_id}: {msg}")),
         );
         mark("render and write");
-        if export_t0.elapsed().as_secs_f32() > 3.0 {
-            let parts: Vec<String> = stages.iter().filter(|(_, ms)| *ms >= 50).map(|(what, ms)| format!("{what} {:.1} s", *ms as f32 / 1000.0)).collect();
-            emit_log(&app, "info", format!("{image_id}: exported in {:.1} s ({})", export_t0.elapsed().as_secs_f32(), parts.join(", ")));
+        if let Some(line) = stages.slow_line() {
+            emit_log(&app, "info", format!("{image_id}: {line}"));
         }
         match &out {
             Ok(path) => debug_log!(&app, "export done: {image_id} -> {path} in {}ms", export_t0.elapsed().as_millis()),
@@ -18584,6 +18649,7 @@ fn render_export_streamed_with(
         match heeler_io::band_sink::render_into_sink(&g, &terminal, &sources, rows, format).map_err(|e| e.to_string())? {
             Some((sink, report)) => {
                 EXPORT_BANDS_MADE.with(|b| b.set(report.bands));
+                EXPORT_PATH.with(|p| p.set(Some(("streamed", report.bands, rows))));
                 Ok(Some(sink))
             }
             None => Ok(None),
@@ -28172,6 +28238,28 @@ mod tests {
             "the plane was refined in the input's frame and the seat's crop was not applied twice"
         );
         assert!((sources["depthmap@depth"].image.pixel(0, 0)[0] - 0.4).abs() < 0.05, "a constant plane survives refinement: {}", sources["depthmap@depth"].image.pixel(0, 0)[0]);
+    }
+
+    /// A slow export's line names its stages over 50 ms, how its frame was
+    /// rendered, and the time it waited on the app's locks.
+    #[test]
+    fn a_slow_exports_line_says_where_its_time_went() {
+        let mut stages = ExportStages::start();
+        stages.stages.push(("decode", std::time::Duration::from_millis(2100)));
+        stages.stages.push(("planted rasters", std::time::Duration::from_millis(3)));
+        LOCK_WAITED.with(|w| w.set(w.get() + std::time::Duration::from_millis(7900)));
+        let line = stages.line();
+        assert!(line.contains("decode 2.1 s"), "{line}");
+        assert!(!line.contains("planted rasters"), "{line}");
+        assert!(line.contains("rendered whole"), "{line}");
+        assert!(line.contains("7.9 s of it waiting on the app's locks"), "{line}");
+        EXPORT_PATH.with(|p| p.set(Some(("streamed", 25, 256))));
+        assert!(stages.line().contains("streamed in 25 bands of 256 rows"));
+        assert_eq!(stages.slow_line(), None, "a quick export logs nothing");
+        // A new export starts from what this thread had waited already.
+        let next = ExportStages::start();
+        assert!(!next.line().contains("waiting"));
+        assert!(next.line().contains("rendered whole"));
     }
 
     /// A second export of the same edit reads
