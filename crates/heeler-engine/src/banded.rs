@@ -1642,6 +1642,70 @@ pub fn output_size(graph: &Graph, terminal: &str, sources: &HashMap<String, Sour
     Ok(plan(graph, &[terminal], sources, &HashMap::new(), &HashSet::new())?.dims[terminal])
 }
 
+/// How an export chooses its band height: bands as tall as fit `target`
+/// bytes of working memory beside what the caller keeps of the frame (or
+/// what memory allows, if less), and never shorter than `floor` rows
+/// while memory holds those. Short bands keep less but make the reaches'
+/// margins again more often (the every-effect 48 MP graph: 36 s in bands
+/// of 29 rows, 17 s in bands of 256); bands as tall as memory allows hold
+/// about what the whole render does. The desktop takes 3 GiB and 256
+/// rows; a phone takes a smaller target.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BandPolicy {
+    pub target: usize,
+    pub floor: usize,
+}
+
+/// The band height an export of `terminals` renders in under `policy`,
+/// beside `kept` bytes the caller keeps of the frame (the f32 frames put
+/// together, or an encoder's samples), with memory::available_to_job()
+/// the most it may take. When nodes the bands do not follow must be made
+/// whole and that alone is past the target, bands as tall as memory
+/// allows would only fill the room up again (measured: a 48 MP export of
+/// the dumped Finish graph held 10.2 GB in one band against 6.9 whole),
+/// so bands of the floor, if those still ask less than the whole render.
+/// None when the bands cannot follow the graph or the whole render asks
+/// less, and the caller renders whole.
+pub fn export_band_rows(
+    graph: &Graph,
+    terminals: &[&str],
+    sources: &HashMap<String, SourceImage>,
+    kept: usize,
+    policy: BandPolicy,
+) -> Result<Option<usize>, EngineError> {
+    let Some(first) = terminals.first() else { return Ok(None) };
+    let h = match output_size(graph, first, sources) {
+        Ok((_, h, _)) => h,
+        Err(EngineError::Band(_)) => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    let available = crate::memory::available_to_job();
+    let ceiling = available.min(policy.target.saturating_add(kept));
+    let floor = policy.floor.clamp(1, h.max(1));
+    match band_rows_for(graph, terminals, sources, ceiling, kept) {
+        Ok(Some(rows)) if rows < floor => match estimate_banded(graph, terminals, sources, floor) {
+            Ok(est) if crate::memory::sum([est, kept])? <= available => Ok(Some(floor)),
+            _ => Ok(Some(rows)),
+        },
+        Ok(Some(rows)) => Ok(Some(rows)),
+        Ok(None) => {
+            let mut exec = crate::executor::Executor::new();
+            exec.trim_bytes(1);
+            let mut whole = 0usize;
+            for t in terminals {
+                whole = whole.max(exec.estimate(graph, t, sources)?);
+            }
+            match estimate_banded(graph, terminals, sources, floor) {
+                Ok(est) if crate::memory::sum([est, kept])? < whole => Ok(Some(floor)),
+                Ok(_) | Err(EngineError::Band(_)) => Ok(None),
+                Err(e) => Err(e),
+            }
+        }
+        Err(EngineError::Band(_)) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
 /// The tallest band, up to the frame's height, whose banded render of
 /// `terminals` fits `ceiling` bytes (estimate_banded, plus `sink` bytes
 /// for what the caller keeps of the frame); None when not even a band of

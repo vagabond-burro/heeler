@@ -663,6 +663,38 @@ fn the_banded_estimate_covers_what_each_edit_allocates() {
     }
 }
 
+/// The export's band rule, shared by the desktop and the phone: bands as
+/// tall as fit the target, never under the floor while memory holds it,
+/// a taller target never giving shorter bands, and a floor past the
+/// frame's height held to it.
+#[test]
+fn the_export_band_policy_fits_its_target_and_keeps_its_floor() {
+    use heeler_engine::banded::{self, BandPolicy};
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let (w, h) = (640, 480);
+    let mut sources = HashMap::new();
+    sources.insert("src".to_string(), SourceImage { image: photo(w, h), version: 1, measured: false });
+    for edit in edits() {
+        let graph = (edit.graph)();
+        let kept = w * h * 3;
+        let est = |rows: usize| banded::estimate_banded(&graph, &["out"], &sources, rows).unwrap();
+        let mut last = 0;
+        for target in [est(8), est(32), est(128), usize::MAX / 4] {
+            for floor in [1, 16, 64] {
+                let rows = banded::export_band_rows(&graph, &["out"], &sources, kept, BandPolicy { target, floor }).unwrap().unwrap();
+                assert!(rows <= h, "{}: {rows} rows", edit.name);
+                assert!(rows >= floor.min(h), "{}: {rows} rows under the floor {floor}", edit.name);
+                assert!(rows == floor.min(h) || est(rows) <= target, "{}: {rows} rows past the target {target}", edit.name);
+            }
+            let rows = banded::export_band_rows(&graph, &["out"], &sources, kept, BandPolicy { target, floor: 1 }).unwrap().unwrap();
+            assert!(rows >= last, "{}: a taller target gave shorter bands", edit.name);
+            last = rows;
+        }
+        let rows = banded::export_band_rows(&graph, &["out"], &sources, kept, BandPolicy { target: usize::MAX / 4, floor: 10 * h }).unwrap().unwrap();
+        assert_eq!(rows, h, "{}", edit.name);
+    }
+}
+
 /// A crop's rows are copied from its whole input and stacked under the
 /// rows it kept, so for that instant the copy, the old rows' slice and
 /// the stacked slab stand together. The estimate covers it, under a

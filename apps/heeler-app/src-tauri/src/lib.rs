@@ -11696,17 +11696,14 @@ thread_local! {
     static EXPORT_PHOTO_KEPT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
-/// The working memory an export's bands are sized to, beside the frame
-/// they are gathered into: tall enough bands that the margins they grow
+/// The desktop's bands: working memory of EXPORT_BAND_TARGET beside the
+/// frame they are gathered into, tall enough that the margins they grow
 /// by cost little, and far under what a whole-frame render of a heavy
-/// 48 MP edit held (around 11 GB, which made a 16 GB Mac page).
+/// 48 MP edit held (around 11 GB, which made a 16 GB Mac page); and
+/// never shorter than EXPORT_BAND_FLOOR rows while memory holds them.
 const EXPORT_BAND_TARGET: usize = 3 << 30;
-
-/// The shortest band an export takes while memory holds it, and the one
-/// it falls back to when nodes made whole keep it past
-/// EXPORT_BAND_TARGET: tall enough that margins cost little, short enough
-/// that the bands add little to what the whole nodes hold.
 const EXPORT_BAND_FLOOR: usize = 256;
+const DESKTOP_BANDS: heeler_engine::banded::BandPolicy = heeler_engine::banded::BandPolicy { target: EXPORT_BAND_TARGET, floor: EXPORT_BAND_FLOOR };
 
 /// The export's frame rendered band by band (heeler_engine::banded), the
 /// same picture to the bit as the whole-frame render, gathered into the
@@ -11725,51 +11722,16 @@ fn render_export_banded(g: &Graph, terminal: &str, sources: &HashMap<String, Sou
     }))
 }
 
-/// The band height an export of `terminals` (`h` rows tall) renders in,
-/// beside `kept` bytes the caller keeps of the frame (the f32 frames put
-/// together, or an encoder's samples): as tall as fit the smaller of
-/// EXPORT_BAND_TARGET and what memory allows, never shorter than
-/// EXPORT_BAND_FLOOR while memory holds that. None when the bands cannot
-/// follow the graph or no band fits, and the caller renders whole.
-fn export_band_rows(g: &Graph, terminals: &[&str], sources: &HashMap<String, SourceImage>, kept: usize, h: usize) -> Result<Option<usize>, String> {
-    use heeler_engine::banded;
+/// The band height an export of `terminals` renders in, beside `kept`
+/// bytes the caller keeps of the frame (the f32 frames put together, or
+/// an encoder's samples): the engine's rule (banded::export_band_rows)
+/// under DESKTOP_BANDS, or the height a test forces where that finds
+/// bands. None when the bands cannot follow the graph or the whole
+/// render asks less, and the caller renders whole.
+fn export_band_rows(g: &Graph, terminals: &[&str], sources: &HashMap<String, SourceImage>, kept: usize) -> Result<Option<usize>, String> {
     let forced = EXPORT_BAND_ROWS.with(|r| r.get());
-    // Bands as tall as fit the target. When nodes the bands do not follow
-    // must be made whole and that alone is past it, bands as tall as
-    // memory allows would only fill the room up again (measured: a 48 MP
-    // export of the dumped Finish graph held 10.2 GB in one band against
-    // 6.9 whole), so modest bands, EXPORT_BAND_FLOOR rows, if those still
-    // ask less than the whole render; else the whole render.
-    let ceiling = memory::available_to_job().min(EXPORT_BAND_TARGET.saturating_add(kept));
-    let floor = EXPORT_BAND_FLOOR.min(h);
-    let rows = match banded::band_rows_for(g, terminals, sources, ceiling, kept) {
-        Ok(Some(_)) if forced > 0 => forced,
-        // Short bands keep less but make the reaches' margins again more
-        // often (the every-effect 48 MP graph: 36 s in bands of 29 rows,
-        // 17 s in bands of 256), so on the desktop never shorter than the
-        // floor while memory holds those.
-        Ok(Some(rows)) if rows < floor => match banded::estimate_banded(g, terminals, sources, floor) {
-            Ok(est) if memory::sum([est, kept]).map_err(|e| e.to_string())? <= memory::available_to_job() => floor,
-            _ => rows,
-        },
-        Ok(Some(rows)) => rows,
-        Ok(None) => {
-            let mut exec = Executor::new();
-            exec.trim_bytes(1);
-            let mut whole = 0usize;
-            for t in terminals {
-                whole = whole.max(exec.estimate(g, t, sources).map_err(|e| e.to_string())?);
-            }
-            match banded::estimate_banded(g, terminals, sources, floor) {
-                Ok(est) if memory::sum([est, kept]).map_err(|e| e.to_string())? < whole => if forced > 0 { forced } else { floor },
-                Ok(_) | Err(heeler_engine::EngineError::Band(_)) => return Ok(None),
-                Err(e) => return Err(e.to_string()),
-            }
-        }
-        Err(heeler_engine::EngineError::Band(_)) => return Ok(None),
-        Err(e) => return Err(e.to_string()),
-    };
-    Ok(Some(rows))
+    let rows = heeler_engine::banded::export_band_rows(g, terminals, sources, kept, DESKTOP_BANDS).map_err(|e| e.to_string())?;
+    Ok(rows.map(|rows| if forced > 0 { forced } else { rows }))
 }
 
 /// Several nodes' whole frames rendered together band by band, in the
@@ -11796,9 +11758,8 @@ pub(crate) fn render_frames_banded(g: &Graph, terminals: &[&str], sources: &Hash
     if sizes.iter().any(|d| d.1 != sizes[0].1) {
         return Ok(None);
     }
-    let h = sizes[0].1;
     let frame_bytes = memory::sum(sizes.iter().map(|(w, h, c)| w * h * c * 4)).map_err(|e| e.to_string())?;
-    let Some(rows) = export_band_rows(g, terminals, sources, frame_bytes, h)? else { return Ok(None) };
+    let Some(rows) = export_band_rows(g, terminals, sources, frame_bytes)? else { return Ok(None) };
     let _frame_job = Job::admit(frame_bytes, "export frames").map_err(|e| e.to_string())?;
     let mut images: Vec<Option<ImageBuf>> = Vec::new();
     let mut masks: Vec<Option<MaskBuf>> = Vec::new();
@@ -18617,7 +18578,7 @@ fn render_export_streamed_with(
             return Ok(None);
         }
         let kept = memory::bytes(w, h, format.bytes_per_pixel(), 1).map_err(|e| e.to_string())?;
-        let Some(rows) = export_band_rows(&g, &[terminal.as_str()], &sources, kept, h)? else { return Ok(None) };
+        let Some(rows) = export_band_rows(&g, &[terminal.as_str()], &sources, kept)? else { return Ok(None) };
         match heeler_io::band_sink::render_into_sink(&g, &terminal, &sources, rows, format).map_err(|e| e.to_string())? {
             Some((sink, report)) => {
                 EXPORT_BANDS_MADE.with(|b| b.set(report.bands));

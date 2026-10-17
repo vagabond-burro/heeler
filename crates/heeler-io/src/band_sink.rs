@@ -316,6 +316,21 @@ pub fn sink_band_rows(
     }
 }
 
+/// The band height an export of `terminal` into a sink of `format`
+/// renders in under `policy` (heeler_engine::banded::export_band_rows),
+/// the sink's samples being what it keeps of the frame. None when the
+/// bands cannot follow the graph or the whole render asks less.
+pub fn policy_band_rows(
+    graph: &Graph,
+    terminal: &str,
+    sources: &HashMap<String, SourceImage>,
+    format: SinkFormat,
+    policy: banded::BandPolicy,
+) -> Result<Option<usize>, IoError> {
+    let Some((_, _, kept)) = sink_bytes(graph, terminal, sources, format)? else { return Ok(None) };
+    banded::export_band_rows(graph, &[terminal], sources, kept, policy).map_err(engine_error)
+}
+
 /// `terminal`'s frame rendered band by band, `band_rows` rows at a time,
 /// each band handed straight to a sink of `format`: the whole frame is
 /// never held as f32, only as the samples its encoder takes. The sink's
