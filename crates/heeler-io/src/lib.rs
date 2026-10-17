@@ -443,7 +443,13 @@ fn estimate_from(bytes: &[u8], file_len: usize, raw_ext: bool, prefix: bool) -> 
     let rewritten = if raw_ext && heeler_raw::is_gpr(bytes) { memory::bytes(w, h, 1, 2)? } else { 0 };
     #[cfg(not(feature = "libraw"))]
     let rewritten = 0;
-    Ok(Some(DecodeEstimate { width: w, height: h, encoded: file_len, retained: memory::bytes(w, h, 1, 16)?, workspace: memory::sum([memory::bytes(w, h, 1, 32)?, file_len, 64 << 10, rewritten])? }))
+    // A RAW's demosaic runs across the cores, a tile buffer a worker,
+    // which LibRaw's own admission counts too.
+    #[cfg(feature = "libraw")]
+    let workers = if raw.is_some() { heeler_raw::demosaic_extra_bytes(bytes) } else { 0 };
+    #[cfg(not(feature = "libraw"))]
+    let workers = 0;
+    Ok(Some(DecodeEstimate { width: w, height: h, encoded: file_len, retained: memory::bytes(w, h, 1, 16)?, workspace: memory::sum([memory::bytes(w, h, 1, 32)?, file_len, 64 << 10, rewritten, workers])? }))
 }
 
 /// Header-only sizing for admission. Reads a capped prefix rather than
@@ -2092,7 +2098,10 @@ mod tests {
         let g = estimate_from(&gpr, gpr.len(), true, false).unwrap().unwrap();
         assert_eq!((g.width, g.height), (64, 48));
         let base = memory::sum([memory::bytes(64, 48, 1, 32).unwrap(), gpr.len(), 64 << 10]).unwrap();
-        assert_eq!(g.workspace, base + 64 * 48 * 2);
+        // And a GPR is Bayer: its AHD's workers' tile buffers on top.
+        let workers = heeler_raw::demosaic_extra_bytes(&gpr);
+        assert!(workers > 0);
+        assert_eq!(g.workspace, base + 64 * 48 * 2 + workers);
     }
 
     /// One IFD shaped like a GPR's: w by h, 16 bits, compression 9

@@ -8,7 +8,18 @@
 //   (Panasonic S5 II files trip it on every decode). Route it to a no-op;
 //   real failures still surface through return codes.
 
+// The library build's declarations: LibRaw's internal member functions
+// (the AHD tile steps below) are declared only then. They add functions
+// and static tables to the class, no data members, so its layout is the
+// one the library was compiled with.
+#define LIBRAW_LIBRARY_BUILD
 #include "libraw/libraw.h"
+
+#include <atomic>
+#include <cstdlib>
+#include <exception>
+#include <thread>
+#include <vector>
 
 // LibRaw keeps its processing-step callbacks protected and offers no C
 // setter. A pointer to the member taken through a derived class reaches
@@ -25,9 +36,141 @@ void (*heeler_stage3_fn)(libraw_data_t *) = nullptr;
 void heeler_pre_rgb(void *ctx) {
     if (ctx && heeler_stage3_fn) heeler_stage3_fn(&static_cast<LibRaw *>(ctx)->imgdata);
 }
+// The Bayer develop's AHD demosaic across the machine's cores. LibRaw's
+// ahd_interpolate works in independent 512-pixel tiles, one buffer a
+// worker, and shares only the per-handle color tables (tls->ahd_data,
+// read-only once cielab has built them); its OpenMP build runs the tile
+// rows in parallel the same way. Heeler builds LibRaw without OpenMP,
+// so this runs LibRaw's own four tile steps from plain threads instead,
+// each worker with its own zeroed buffer as malloc_omp_buffers gives.
+struct AhdAccess : LibRaw {
+    using Rgb = ushort (*)[LIBRAW_AHD_TILE][LIBRAW_AHD_TILE][3];
+    using Lab = short (*)[LIBRAW_AHD_TILE][LIBRAW_AHD_TILE][3];
+    using Homo = char (*)[LIBRAW_AHD_TILE][2];
+    static void setup(LibRaw *r) {
+        (r->*(&AhdAccess::cielab))(nullptr, nullptr);
+        (r->*(&AhdAccess::border_interpolate))(5);
+    }
+    static void tile(LibRaw *r, int top, int left, Rgb rgb, Lab lab, Homo homo) {
+        (r->*(&AhdAccess::ahd_interpolate_green_h_and_v))(top, left, rgb);
+        (r->*(&AhdAccess::ahd_interpolate_r_and_b_and_convert_to_cielab))(top, left, rgb, lab);
+        (r->*(&AhdAccess::ahd_interpolate_build_homogeneity_map))(top, left, lab, homo);
+        (r->*(&AhdAccess::ahd_interpolate_combine_homogeneous_pixels))(top, left, rgb, homo);
+    }
+    static int fuji_width(LibRaw *r) { return (r->*(&AhdAccess::libraw_internal_data)).internal_output_params.fuji_width; }
+};
+
+std::atomic<int> heeler_ahd_threads_wanted(0);
+const size_t AHD_BUFFER = 26 * size_t(LIBRAW_AHD_TILE) * LIBRAW_AHD_TILE;
+
+void heeler_ahd_parallel(void *ctx) {
+    LibRaw *r = static_cast<LibRaw *>(ctx);
+    const int height = r->imgdata.sizes.height, width = r->imgdata.sizes.width;
+    AhdAccess::setup(r);
+    std::vector<int> tops;
+    for (int top = 2; top < height - 5; top += LIBRAW_AHD_TILE - 6) tops.push_back(top);
+    int wanted = heeler_ahd_threads_wanted;
+    unsigned cores = std::thread::hardware_concurrency();
+    size_t n = wanted > 0 ? size_t(wanted) : (cores == 0 ? 1 : cores);
+    n = n < tops.size() ? n : tops.size();
+    if (n == 0) return;
+    std::atomic<size_t> next(0);
+    // 0 running, 1 canceled by the progress callback, 2 out of memory,
+    // 3 a tile step threw.
+    std::atomic<int> stop(0);
+    libraw_callbacks_t &cb = CallbackAccess::of(r);
+    auto work = [&]() {
+        char *buffer = static_cast<char *>(calloc(AHD_BUFFER, 1));
+        if (!buffer) {
+            stop = 2;
+            return;
+        }
+        auto rgb = reinterpret_cast<AhdAccess::Rgb>(buffer);
+        auto lab = reinterpret_cast<AhdAccess::Lab>(buffer + 12 * LIBRAW_AHD_TILE * LIBRAW_AHD_TILE);
+        auto homo = reinterpret_cast<AhdAccess::Homo>(buffer + 24 * LIBRAW_AHD_TILE * LIBRAW_AHD_TILE);
+        try {
+            for (;;) {
+                size_t i = next++;
+                if (i >= tops.size() || stop) break;
+                int top = tops[i];
+                if (cb.progress_cb && (*cb.progress_cb)(cb.progresscb_data, LIBRAW_PROGRESS_INTERPOLATE, top - 2, height - 7)) {
+                    stop = 1;
+                    break;
+                }
+                for (int left = 2; left < width - 5; left += LIBRAW_AHD_TILE - 6) AhdAccess::tile(r, top, left, rgb, lab, homo);
+            }
+        } catch (...) {
+            stop = 3;
+        }
+        free(buffer);
+    };
+    std::vector<std::thread> workers;
+    for (size_t t = 1; t < n; t++) workers.emplace_back(work);
+    work();
+    for (auto &t : workers) t.join();
+    if (stop == 1) throw LIBRAW_EXCEPTION_CANCELLED_BY_CALLBACK;
+    if (stop == 2) throw LIBRAW_EXCEPTION_ALLOC;
+    if (stop == 3) throw LIBRAW_EXCEPTION_IO_CORRUPT;
+}
+
+// Run right before dcraw_process picks its demosaic, after pre_interpolate
+// has settled the filters and colors: the same test dcraw_process makes,
+// and the parallel AHD put in only where it would have run
+// ahd_interpolate (quality 3: the default for every camera but a
+// Fujifilm SuperCCD, or asked for). Everything else keeps LibRaw's path.
+void heeler_choose_demosaic(void *ctx) {
+    LibRaw *r = static_cast<LibRaw *>(ctx);
+    libraw_callbacks_t &cb = CallbackAccess::of(r);
+    cb.interpolate_bayer_cb = nullptr;
+    const unsigned filters = r->imgdata.idata.filters;
+    if (filters <= 1000 || r->imgdata.params.no_interpolation) return;
+    int quality = 2 + !AhdAccess::fuji_width(r);
+    if (r->imgdata.params.user_qual >= 0) quality = r->imgdata.params.user_qual;
+    int real_colors = r->imgdata.idata.colors;
+    int bad_bayer = 0;
+    for (int row = 0; row < 4; row++)
+        for (int col = 0; col < 8; col++) {
+            int c = r->COLOR(row, col) + 1;
+            real_colors = c > real_colors ? c : real_colors;
+            bad_bayer += (r->FC(row, col) == r->FC(row + 1, col));
+            bad_bayer += (r->FC(row, col) == r->FC(row, col + 1));
+        }
+    if (quality != 3 || r->imgdata.idata.colors > 3 || real_colors > 3 || bad_bayer) return;
+    cb.interpolate_bayer_cb = heeler_ahd_parallel;
+}
 } // namespace
 
 extern "C" {
+
+// How many workers share a full-size Bayer develop's AHD tiles: 0 for the
+// machine's cores, 1 for one after another (LibRaw's own path's order).
+void heeler_set_ahd_threads(int n) { heeler_ahd_threads_wanted = n < 0 ? 0 : n; }
+
+// Puts the parallel AHD in for this handle's develops where LibRaw would
+// run its AHD (heeler_choose_demosaic). Set after open, before processing.
+void heeler_use_parallel_ahd(libraw_data_t *d) {
+    if (!d || !d->parent_class) return;
+    CallbackAccess::of(static_cast<LibRaw *>(d->parent_class)).pre_interpolate_cb = heeler_choose_demosaic;
+}
+
+// A full-size Bayer develop's AHD workers' tile buffers at the thread
+// count set now, for a file LibRaw cannot open from its header (a GPR,
+// which is Bayer).
+size_t heeler_ahd_workers_bytes() {
+    int wanted = heeler_ahd_threads_wanted;
+    unsigned cores = std::thread::hardware_concurrency();
+    return (wanted > 0 ? size_t(wanted) : (cores == 0 ? 1 : cores)) * AHD_BUFFER;
+}
+
+// The tile buffers a parallel AHD holds beyond the usual workspace, one
+// a worker, for admission. Read after open, before processing.
+size_t heeler_ahd_extra(libraw_data_t *d) {
+    if (!d || d->idata.filters <= 1000 || d->params.half_size) return 0;
+    int wanted = heeler_ahd_threads_wanted;
+    unsigned cores = std::thread::hardware_concurrency();
+    size_t n = wanted > 0 ? size_t(wanted) : (cores == 0 ? 1 : cores);
+    return n * AHD_BUFFER;
+}
 
 // The finished image's size and layout, and the finished image copied
 // straight into the caller's buffer: dcraw_make_mem_image's two steps

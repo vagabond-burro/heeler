@@ -89,6 +89,10 @@ extern "C" {
     fn heeler_silence_data_errors(d: *mut c_void);
     fn heeler_is_sensor_data(d: *mut c_void) -> c_int;
     fn heeler_xtrans_extra(d: *mut c_void) -> usize;
+    fn heeler_set_ahd_threads(n: c_int);
+    fn heeler_use_parallel_ahd(d: *mut c_void);
+    fn heeler_ahd_extra(d: *mut c_void) -> usize;
+    fn heeler_ahd_workers_bytes() -> usize;
     fn heeler_mem_image_format(d: *mut c_void, width: *mut c_int, height: *mut c_int, colors: *mut c_int, bps: *mut c_int) -> c_int;
     fn heeler_copy_mem_image(d: *mut c_void, scan0: *mut c_void, stride: c_int) -> c_int;
     fn heeler_opcode_list2(d: *mut c_void, len: *mut usize) -> *const u8;
@@ -210,11 +214,70 @@ pub fn dimensions(bytes: &[u8]) -> Result<(usize, usize), RawError> {
     Ok(unsafe { (heeler_raw_width(handle.0) as usize, heeler_raw_height(handle.0) as usize) })
 }
 
+/// Whether full-size Bayer develops run the shim's parallel AHD (true,
+/// the default) or LibRaw's own ahd_interpolate, the reference the
+/// parallel one is held to the bit against.
+static PARALLEL_AHD: AtomicBool = AtomicBool::new(true);
+
+/// Turns the parallel AHD off (LibRaw's own path) or on. Process-wide.
+pub fn set_parallel_ahd(on: bool) {
+    PARALLEL_AHD.store(on, Ordering::Relaxed);
+}
+
+/// What a full-size develop of `bytes` holds beyond its 48 bytes a pixel
+/// for its demosaic: the X-Trans finished pixels and workers' tiles, or
+/// the parallel AHD's workers' tiles, at the thread counts in force, from
+/// the header (a front of the file will do). For a size estimate made
+/// before the develop (a stack member's probe).
+pub fn demosaic_extra_bytes(bytes: &[u8]) -> usize {
+    xtrans_default();
+    if gpr::dimensions(bytes).is_some() {
+        return unsafe { heeler_ahd_workers_bytes() };
+    }
+    let p = unsafe { libraw_init(0) };
+    if p.is_null() {
+        return 0;
+    }
+    let handle = Handle(p);
+    if check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) }).is_err() {
+        return 0;
+    }
+    unsafe { heeler_xtrans_extra(handle.0) + heeler_ahd_extra(handle.0) }
+}
+
+/// How many threads share one full-size Bayer develop's AHD tiles: 0 for
+/// the machine's cores (the default), 1 for one after another, as LibRaw
+/// alone runs them. Process-wide; the output is the same either way.
+pub fn set_ahd_threads(n: usize) {
+    unsafe { heeler_set_ahd_threads(n.min(c_int::MAX as usize) as c_int) }
+}
+
 /// How many threads share one full-size X-Trans develop's tile bands:
-/// 0 for the default (the machine's cores, up to four), 1 for one after
-/// another. Process-wide; the output is the same either way.
+/// 0 for the patched LibRaw's default (the machine's cores, up to four),
+/// 1 for one after another; untouched, heeler-raw takes up to eight
+/// (xtrans_default). Process-wide; the output is the same either way.
 pub fn set_xtrans_threads(n: usize) {
+    XTRANS_ASKED.store(true, Ordering::Relaxed);
     unsafe { heeler_set_xtrans_threads(n.min(c_int::MAX as usize) as c_int) }
+}
+
+/// Whether a caller has set the X-Trans thread count; if not, the first
+/// develop sets heeler-raw's own default, XTRANS_DEFAULT_THREADS or the
+/// machine's cores if fewer. The patched LibRaw's default stops at four,
+/// and eight measured twice as fast on a 16-core Mac (a 24 MP RAF 2.96 s
+/// to 1.86, a 16 MP one 1.75 to 0.96; sixteen no faster), the same to
+/// the bit (xtrans_tiles.rs).
+static XTRANS_ASKED: AtomicBool = AtomicBool::new(false);
+const XTRANS_DEFAULT_THREADS: usize = 8;
+
+fn xtrans_default() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        if !XTRANS_ASKED.load(Ordering::Relaxed) {
+            let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+            unsafe { heeler_set_xtrans_threads(cores.min(XTRANS_DEFAULT_THREADS) as c_int) }
+        }
+    });
 }
 
 /// The size of the picture a develop of this file hands back, upright,
@@ -318,6 +381,7 @@ pub fn decode_sensor_until(bytes: &[u8], opts: DevelopOpts, stop: &AtomicBool) -
 /// header alone (a GPR's from its VC-5 header, its converted DNG
 /// counted), for a caller that runs two develops at once.
 pub fn develop_bytes(bytes: &[u8], opts: DevelopOpts) -> Result<usize, RawError> {
+    xtrans_default();
     let per_pixel = if opts.half_size { 24 } else { 48 };
     if let Some((w, h)) = gpr::dimensions(bytes) {
         let converted = heeler_engine::memory::bytes(w, h, 1, 2)?;
@@ -342,6 +406,7 @@ unsafe extern "C" fn stop_requested(data: *mut c_void, _stage: c_int, _iteration
 }
 
 fn develop(bytes: &[u8], opts: DevelopOpts, stop: Option<&AtomicBool>) -> Result<SensorImage, RawError> {
+    xtrans_default();
     let stopped = || stop.is_some_and(|s| s.load(Ordering::Relaxed));
     if stopped() {
         return Err(RawError::Cancelled);
@@ -383,7 +448,7 @@ fn develop(bytes: &[u8], opts: DevelopOpts, stop: Option<&AtomicBool>) -> Result
     // The sensor workspace remains full size even for a half-size develop.
     // A full X-Trans develop also keeps its finished pixels apart and a
     // tile buffer per worker (the patched xtrans_interpolate).
-    let needed = heeler_engine::memory::sum([heeler_engine::memory::bytes(width, height, 1, if opts.half_size { 24 } else { 48 })?, bytes.len(), unsafe { heeler_xtrans_extra(handle.0) }])?;
+    let needed = heeler_engine::memory::sum([heeler_engine::memory::bytes(width, height, 1, if opts.half_size { 24 } else { 48 })?, bytes.len(), unsafe { heeler_xtrans_extra(handle.0) }, unsafe { heeler_ahd_extra(handle.0) }])?;
     let _job = heeler_engine::memory::Job::admit(needed, "RAW decode and demosaic")?;
     if let Some(stop) = stop {
         if stopped() {
@@ -393,6 +458,11 @@ fn develop(bytes: &[u8], opts: DevelopOpts, stop: Option<&AtomicBool>) -> Result
     }
     let cancelled = |code: c_int| if stopped() { Err(RawError::Cancelled) } else { check(code) };
     cancelled(unsafe { libraw_unpack(handle.0) })?;
+    // A full-size Bayer develop demosaics across the cores, LibRaw's own
+    // AHD tile by tile (the shim's heeler_ahd_parallel).
+    if PARALLEL_AHD.load(Ordering::Relaxed) {
+        unsafe { heeler_use_parallel_ahd(handle.0) };
+    }
     unsafe { apply_dng_gain_maps(handle.0) };
     unsafe { heeler_use_stage3_opcodes(handle.0, apply_stage3_opcodes) };
     cancelled(unsafe { libraw_dcraw_process(handle.0) })?;
