@@ -64,7 +64,7 @@ fn a_streamed_export_writes_the_whole_exports_file() {
         EXPORT_BAND_ROWS.with(|r| r.set(rows));
         let dest = dir.path().join(format!("{rows}-{name}"));
         let written = finish_export(
-            crate::ExportInput { graph: &graph, source_path: None, source: photo.clone(), smart: &HashMap::new(), keywords: &[], alpha: None, layers: Vec::new(), beauty: None },
+            crate::ExportInput { graph: &graph, source_path: None, source: photo.clone(), smart: &HashMap::new(), keywords: &[], alpha: None, layers: Vec::new(), beauty: None, rows: None },
             &dest,
             crate::ExportOptions { format, quality: 87, max_edge, keep_metadata: false, matte: false, scale_percent: None, allow_overwrite: false, dpi: heeler_io::DEFAULT_DPI },
             |_, _| {},

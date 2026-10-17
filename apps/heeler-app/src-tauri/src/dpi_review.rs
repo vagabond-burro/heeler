@@ -48,6 +48,7 @@ fn export_writer_keeps_resize_alpha_and_metadata_settings() {
                 alpha: None,
                 layers: Vec::new(),
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {
@@ -79,6 +80,7 @@ fn export_writer_keeps_resize_alpha_and_metadata_settings() {
             alpha: None,
             layers: Vec::new(),
             beauty: None,
+            rows: None,
         },
         &source_path,
         crate::ExportOptions {
@@ -117,6 +119,7 @@ fn tiff_siblings_share_the_beautys_print_resolution() {
                 alpha: None,
                 layers,
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {

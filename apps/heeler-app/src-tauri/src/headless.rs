@@ -208,7 +208,7 @@ fn snapshot(
         // recipe when the model is installed here, empty otherwise.
         let mut smart = vision
             .as_deref()
-            .map(|base| crate::smart_sources_offline(base, &ui, &rec.id, &source, Some(std::path::Path::new(&rec.path))))
+            .map(|base| crate::smart_sources_offline(base, &ui, &rec.id, &crate::ExportPhoto::decoded(source.clone()), Some(std::path::Path::new(&rec.path))))
             .unwrap_or_default();
         // A Catalog node's other photograph, rendered the same offline way.
         let path_of = |id: &str| catalog.image(id).ok().map(|r| std::path::PathBuf::from(r.path));

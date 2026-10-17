@@ -128,6 +128,15 @@ fn renders_node(g: &Graph, conn: &heeler_graph::Connection) -> bool {
             && g.node(&conn.from.0).is_some_and(|n| n.node_type == "heeler.export_layer"))
 }
 
+/// Whether render_export_layers_for(…, holds) renders anything, and so
+/// reads the photograph: an alpha port the container holds, or an Export
+/// Layer it writes.
+pub(crate) fn reads_the_photo(ui: &UiGraph, holds: ContainerHolds) -> bool {
+    let output = ui.nodes.iter().find(|n| n.node_type == "heeler.output");
+    let alpha_wired = output.is_some_and(|o| ui.connections.iter().any(|c| c.to.0 == o.id && c.to.1 == "alpha"));
+    (alpha_wired && holds.alpha) || (holds.layers && ui.nodes.iter().any(|n| n.node_type == "heeler.export_layer" && n.enabled))
+}
+
 fn render_export_layers_holding(
     ui: &UiGraph,
     source: Arc<ImageBuf>,
@@ -890,6 +899,7 @@ pub(crate) mod tests {
                 alpha,
                 layers,
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1026,7 +1036,7 @@ pub(crate) mod tests {
                 render_export_layers_for(&ui, export_layer_source(), &smart, &dest, "jpeg", |l, m| log.push(format!("{l}: {m}"))).unwrap()
             };
             finish_export(
-                crate::ExportInput { graph: &ui, source_path: None, source: export_layer_source(), smart: &smart, keywords: &[], alpha, layers, beauty: None },
+                crate::ExportInput { graph: &ui, source_path: None, source: export_layer_source(), smart: &smart, keywords: &[], alpha, layers, beauty: None, rows: None },
                 &dest,
                 crate::ExportOptions {
                     format: "jpeg",
@@ -1062,7 +1072,7 @@ pub(crate) mod tests {
         let (alpha, layers) =
             render_export_layers_for(&ui, export_layer_source(), &smart, &dest, "jpeg", |l, m| log.push(format!("{l}: {m}"))).unwrap();
         let written = finish_export(
-            crate::ExportInput { graph: &ui, source_path: None, source: export_layer_source(), smart: &smart, keywords: &[], alpha, layers, beauty: None },
+            crate::ExportInput { graph: &ui, source_path: None, source: export_layer_source(), smart: &smart, keywords: &[], alpha, layers, beauty: None, rows: None },
             &dest,
             crate::ExportOptions {
                 format: "jpeg",
@@ -1108,6 +1118,7 @@ pub(crate) mod tests {
                 alpha,
                 layers,
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1150,6 +1161,7 @@ pub(crate) mod tests {
                 alpha,
                 layers,
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1318,6 +1330,7 @@ pub(crate) mod tests {
                     alpha,
                     layers,
                     beauty: None,
+                    rows: None,
                 },
                 &dest,
                 crate::ExportOptions {
@@ -1369,6 +1382,7 @@ pub(crate) mod tests {
                 alpha,
                 layers,
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1405,6 +1419,7 @@ pub(crate) mod tests {
                 alpha,
                 layers,
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1448,6 +1463,7 @@ pub(crate) mod tests {
                 alpha,
                 layers,
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1563,6 +1579,7 @@ pub(crate) mod tests {
                 alpha,
                 layers,
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1629,6 +1646,7 @@ pub(crate) mod tests {
                 alpha,
                 layers,
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1670,6 +1688,7 @@ pub(crate) mod tests {
                 alpha,
                 layers,
                 beauty: None,
+                rows: None,
             },
             &dest32,
             crate::ExportOptions {
@@ -1716,6 +1735,7 @@ pub(crate) mod tests {
                 alpha,
                 layers,
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1762,6 +1782,7 @@ pub(crate) mod tests {
                 alpha,
                 layers,
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {
@@ -1797,6 +1818,7 @@ pub(crate) mod tests {
                 alpha,
                 layers,
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {

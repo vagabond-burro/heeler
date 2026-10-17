@@ -253,23 +253,28 @@ fn export_one(
     if !source_path.exists() {
         return Err(format!("the original is missing or moved: {path}"));
     }
-    let source = Arc::new(
-        heeler_io::decode_any_with(&source_path, crate::source_opts_of(&ui))
-            .map_err(|e| e.to_string())?,
-    );
+    let dest = export_destination(dir, ext, template, &name, index, total, stars, flag, taken);
+    // An export that streams keeps the photograph as its decoder's
+    // samples (crate::ExportPhoto), its frame made only if a Smart mask
+    // has to be computed from it.
+    let opts = crate::source_opts_of(&ui);
+    let lazy = crate::streams_photo(&ui, &dest, format, matte, None);
+    let photo = crate::export_photo(Some(&source_path), opts, lazy, || {
+        heeler_io::decode_any_with(&source_path, opts).map(Arc::new).map_err(|e| e.to_string())
+    })?;
     let smart = {
         let catalog = state.catalog().ok();
         crate::headless::appdata_dir()
             .map(|d| crate::vision_base_offline(d.join("vision"), catalog.as_deref()))
-            .map(|base| crate::smart_sources_offline(&base, &ui, id, &source, Some(&source_path)))
+            .map(|base| crate::smart_sources_offline(&base, &ui, id, &photo, Some(&source_path)))
             .unwrap_or_default()
     };
+    let (source, rows) = photo.for_render();
     let keywords = if keep_metadata {
         state.catalog()?.keywords_of(id).unwrap_or_default()
     } else {
         Vec::new()
     };
-    let dest = export_destination(dir, ext, template, &name, index, total, stars, flag, taken);
     // The Output node's alpha port and the graph's Export Layer nodes
     // (26.3 Phase 8), rendered through one executor before the beauty's
     // own, so a shared mask subtree computes once.
@@ -286,6 +291,7 @@ fn export_one(
             alpha,
             layers,
             beauty,
+            rows,
         },
         &dest,
         crate::ExportOptions {
@@ -650,7 +656,7 @@ pub fn handle(state: &BatchState, method: &str, params: serde_json::Value) -> Re
                 let catalog = state.catalog().ok();
                 crate::headless::appdata_dir()
                     .map(|d| crate::vision_base_offline(d.join("vision"), catalog.as_deref()))
-                    .map(|base| crate::smart_sources_offline(&base, &ui, &cur.id, &source, Some(std::path::Path::new(&cur.path))))
+                    .map(|base| crate::smart_sources_offline(&base, &ui, &cur.id, &crate::ExportPhoto::decoded(source.clone()), Some(std::path::Path::new(&cur.path))))
                     .unwrap_or_default()
             };
             // A Catalog node's other photograph, rendered the same offline way.
@@ -1305,6 +1311,49 @@ mod tests {
             let bytes = std::fs::read(out["written"][0].as_str().unwrap()).unwrap();
             let at = bytes.windows(5).position(|w| w == b"JFIF\0").unwrap();
             assert_eq!(u16::from_be_bytes([bytes[at + 8], bytes[at + 9]]), expected, "case {i}");
+        }
+    }
+
+    /// A batch export whose photograph is kept as its decoder's samples
+    /// writes the file the same export writes from the photograph decoded
+    /// whole: a turned phone JPEG and a 16-bit TIFF with an alpha, to a
+    /// JPEG, a 16-bit PNG and a 16-bit TIFF, and reduced to a smaller
+    /// edge, which makes the whole frame from the samples.
+    #[test]
+    fn a_batch_export_from_the_kept_samples_writes_the_same_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let catalog = heeler_catalog::Catalog::open(&tmp.path().join("catalog.sqlite")).unwrap();
+        let folder = catalog.add_folder(tmp.path()).unwrap();
+        let turned = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../crates/heeler-io/tests/fixtures/stack-orientation-6.jpg")).unwrap();
+        std::fs::write(tmp.path().join("phone.jpg"), turned).unwrap();
+        let mut img = heeler_engine::ImageBuf::new(41, 29);
+        for (i, px) in img.data.chunks_exact_mut(4).enumerate() {
+            let (x, y) = ((i % 41) as f32 / 41.0, (i / 41) as f32 / 29.0);
+            px.copy_from_slice(&[x, 0.4 + 0.5 * y, 1.0 - x * y, 0.5 + 0.5 * x]);
+        }
+        std::fs::write(tmp.path().join("deep.tif"), heeler_io::encode_tiff16_export(&img, Default::default()).unwrap()).unwrap();
+        catalog.add_image("phone", &tmp.path().join("phone.jpg"), Some(folder)).unwrap();
+        catalog.add_image("deep", &tmp.path().join("deep.tif"), Some(folder)).unwrap();
+        let state = Arc::new(BatchState { catalog: Mutex::new(catalog), graphs_dir: tmp.path().join("graphs"), current: Mutex::new(None) });
+        for id in ["phone", "deep"] {
+            for (format, max_edge) in [("jpeg", None), ("png16", None), ("tiff", None), ("jpeg", Some(20))] {
+                let write = |whole: bool, dir: &str| -> (Vec<u8>, bool) {
+                    crate::EXPORT_PHOTO_WHOLE.with(|w| w.set(whole));
+                    let mut params = serde_json::json!({ "ids": [id], "dir": tmp.path().join(dir).to_string_lossy(), "format": format, "keepMetadata": false });
+                    if let Some(e) = max_edge {
+                        params["maxEdge"] = serde_json::json!(e);
+                    }
+                    let out = handle(&state, "export.run", params).unwrap();
+                    crate::EXPORT_PHOTO_WHOLE.with(|w| w.set(false));
+                    let kept = crate::EXPORT_PHOTO_KEPT.with(|k| k.get());
+                    (std::fs::read(out["written"][0].as_str().unwrap_or_else(|| panic!("{id} {format}: {out}"))).unwrap(), kept)
+                };
+                let tag = format!("{id}-{format}-{}", max_edge.unwrap_or(0));
+                let (want, _) = write(true, &format!("whole-{tag}"));
+                let (got, kept) = write(false, &format!("kept-{tag}"));
+                assert!(kept, "{tag}: the photograph was kept as its samples");
+                assert!(got == want, "{tag}: the file differs from the whole decode's");
+            }
         }
     }
 

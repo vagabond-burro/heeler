@@ -3617,7 +3617,7 @@ pub(crate) fn smart_sources_offline(
     vision_base: &Path,
     ui: &UiGraph,
     image_id: &str,
-    source: &Arc<ImageBuf>,
+    photo: &ExportPhoto,
     source_path: Option<&Path>,
 ) -> HashMap<String, SourceImage> {
     let mut out = HashMap::new();
@@ -3682,8 +3682,10 @@ pub(crate) fn smart_sources_offline(
         let use_matte = mode == "subject"
             && heeler_vision::installed(vision_base, &heeler_vision::BIREFNET_LITE);
         if use_matte {
+            // The photograph's pixels, made now if it was kept as samples.
+            let Ok(source) = photo.pixels() else { return out };
             let small = if source.width.max(source.height) > 1600 {
-                Arc::new(downscale(source, 1600))
+                Arc::new(downscale(&source, 1600))
             } else {
                 source.clone()
             };
@@ -3734,8 +3736,10 @@ pub(crate) fn smart_sources_offline(
         if emb.is_none() {
             // Embed at roughly the preview tier: the clicks are
             // normalized, so resolution only buys encoder time.
+            // The photograph's pixels, made now if it was kept as samples.
+            let Ok(source) = photo.pixels() else { return out };
             let small = if source.width.max(source.height) > 1600 {
-                Arc::new(downscale(source, 1600))
+                Arc::new(downscale(&source, 1600))
             } else {
                 source.clone()
             };
@@ -5483,7 +5487,7 @@ fn refine_depth_for_export(
     base: &Path,
     graph: &UiGraph,
     image_id: &str,
-    full: &Arc<ImageBuf>,
+    photo: &ExportPhoto,
     sources: &mut HashMap<String, SourceImage>,
     file_depth: Option<&FileDepth>,
     depth_input: Option<u64>,
@@ -5507,6 +5511,8 @@ fn refine_depth_for_export(
     if keys.is_empty() {
         return;
     }
+    let Ok(full) = photo.pixels() else { return };
+    let full = &full;
     // The guide: a file's own pass is refined against the photograph as
     // always; the model's plane is refined against the node's rendered
     // input, the pixels the map was computed from.
@@ -6443,13 +6449,13 @@ fn denoise_for_export(
     graph: &UiGraph,
     image_id: &str,
     source_fingerprint: &str,
-    full: &ImageBuf,
+    photo: &ExportPhoto,
     sources: &mut HashMap<String, SourceImage>,
 ) -> Result<(), String> {
     let Some(node) = graph.nodes.iter().find(|n| n.node_type == "heeler.model_denoise" && n.enabled) else {
         return Ok(());
     };
-    let (w, h) = (full.width, full.height);
+    let (w, h) = (photo.shape().width, photo.shape().height);
     let revision = with_session(app, |s| Ok(session_denoise_revision(s, Some(base))))?;
     let want = denoise_version(revision, source_fingerprint, w, h);
     if sources.get(&node.id).is_some_and(|s| s.version == want) {
@@ -6457,7 +6463,10 @@ fn denoise_for_export(
     }
     let raster = match read_denoise_raster_checked(base, want, w, h)? {
         Some(img) => img,
-        None => compute_denoise_raster(app, base, image_id, full, want, true)?.0,
+        None => {
+            let full = photo.pixels()?;
+            compute_denoise_raster(app, base, image_id, &full, want, true)?.0
+        }
     };
     persist_denoise_full_record(base, revision, source_fingerprint, w, h)?;
     note_denoise_raster(app, denoise_key(revision, source_fingerprint), w, h, want);
@@ -9835,20 +9844,24 @@ fn fast_preview_source(
 
 /// Full-resolution source for 1:1 zoom: the export-quality decode, cached
 /// very shallowly (these buffers are enormous).
+/// The full-resolution decode full_source keeps, when it has one.
+fn full_source_cached(app: &tauri::AppHandle, image_id: &str, opts: heeler_io::RawSourceOpts) -> Result<Option<Arc<ImageBuf>>, String> {
+    let key = managed_source_key(app, image_id, opts);
+    let state = app.state::<SessionState>();
+    let mut session = state.lock().map_err(|_| "session lock poisoned")?;
+    let Session { decoded_full, decoded_full_lru, .. } = &mut *session;
+    Ok(decoded_cache_get(decoded_full, decoded_full_lru, &key))
+}
+
 fn full_source(
     app: &tauri::AppHandle,
     image_id: &str,
     opts: heeler_io::RawSourceOpts,
 ) -> Result<Arc<ImageBuf>, String> {
     let key = managed_source_key(app, image_id, opts);
-    {
-        let state = app.state::<SessionState>();
-        let mut session = state.lock().map_err(|_| "session lock poisoned")?;
-        let Session { decoded_full, decoded_full_lru, .. } = &mut *session;
-        if let Some(cached) = decoded_cache_get(decoded_full, decoded_full_lru, &key) {
-            debug_log!(app, "decoded cache HIT full {image_id}");
-            return Ok(cached);
-        }
+    if let Some(cached) = full_source_cached(app, image_id, opts)? {
+        debug_log!(app, "decoded cache HIT full {image_id}");
+        return Ok(cached);
     }
     debug_log!(app, "decoded cache MISS full {image_id}: full-resolution decode starts");
     let path = with_session(app, |s| Ok(s.paths.get(image_id).cloned()))?;
@@ -11549,6 +11562,13 @@ thread_local! {
     /// How many bands the last export on this thread was made in (0:
     /// rendered whole), for the tests to see the bands were used.
     static EXPORT_BANDS_MADE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Whether exports on this thread decode their photograph whole even
+    /// when they could keep its samples, which a test sets for the
+    /// reference to compare against. Nothing else sets it.
+    static EXPORT_PHOTO_WHOLE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Whether the last export photograph on this thread was kept as its
+    /// samples, for the tests to see it was.
+    static EXPORT_PHOTO_KEPT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// The working memory an export's bands are sized to, beside the frame
@@ -11789,27 +11809,32 @@ async fn export_image(
         }
         let opts = source_opts_of(&graph);
         let denoise_fingerprint = source_version_key(&app, &image_id, opts);
-        let source = match &source_path {
+        // An export that streams keeps the photograph as its decoder's
+        // samples, its frame made only if a refinement below reads all
+        // of it (ExportPhoto), unless the session holds its decode already.
+        let lazy = streams_photo(&graph, &dest, &format, matte.unwrap_or(false), scale_percent) && full_source_cached(&app, &image_id, opts)?.is_none();
+        let photo = match &source_path {
             // Through the full-resolution tier, the same one export_to uses: it
             // renders a stack or panorama from its members, where handing the .pano
             // manifest straight to the decoder failed with "the image format could not
             // be determined" (the owner's Quick Export report). Ordinary files decode
             // the same as before.
-            Some(_) => full_source(&app, &image_id, opts)?,
+            Some(p) => export_photo(Some(p), opts, lazy, || full_source(&app, &image_id, opts))?,
             // Sample session images have no source file; use the preview decode.
-            None => preview_source(&app, &image_id, opts)?,
+            None => ExportPhoto::decoded(preview_source(&app, &image_id, opts)?),
         };
         let mut smart = export_sources_for(&app, &graph, &image_id)?;
         // The Depth Map's refinement, again at the export's own size; and
         // the noise model's full-frame answer, computed now if it must be.
         if let Some(base) = export_vision_base(vision_base(&app), &graph)? {
             let depth_input = with_session(&app, |s| Ok(depth_input_key_in_session(s, &graph, &image_id))).unwrap_or(None);
-            refine_depth_for_export(&base, &graph, &image_id, &source, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input);
+            refine_depth_for_export(&base, &graph, &image_id, &photo, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input);
             let file_path = with_session(&app, |s| Ok(s.paths.get(&image_id).cloned()))?;
-            mattes_for_export(&graph, &image_id, file_path.as_deref(), &source, &mut smart);
-            normals_for_export(&graph, &image_id, file_path.as_deref(), &source, &mut smart);
-            denoise_for_export(&app, &base, &graph, &image_id, &denoise_fingerprint, &source, &mut smart)?;
+            mattes_for_export(&graph, &image_id, file_path.as_deref(), photo.shape(), &mut smart);
+            normals_for_export(&graph, &image_id, file_path.as_deref(), photo.shape(), &mut smart);
+            denoise_for_export(&app, &base, &graph, &image_id, &denoise_fingerprint, &photo, &mut smart)?;
         }
+        let (source, rows) = photo.for_render();
         let keywords = if keep_metadata.unwrap_or(true) {
             with_catalog(&app, |c| c.keywords_of(&image_id).map_err(|e| e.to_string()))
                 .unwrap_or_default()
@@ -11836,6 +11861,7 @@ async fn export_image(
                 alpha,
                 layers,
                 beauty,
+                rows,
             },
             &dest,
             crate::ExportOptions {
@@ -18282,9 +18308,12 @@ async fn export_to(
             lap = std::time::Instant::now();
         };
         let denoise_fingerprint = source_version_key(&app, &image_id, opts);
-        let source = match &source_path {
-            Some(_) => full_source(&app, &image_id, opts)?,
-            None => preview_source(&app, &image_id, opts)?,
+        // An export that streams keeps the photograph as its decoder's
+        // samples (ExportPhoto), unless the session holds its decode already.
+        let lazy = streams_photo(&graph, Path::new(&dest), &format, matte.unwrap_or(false), None) && full_source_cached(&app, &image_id, opts)?.is_none();
+        let photo = match &source_path {
+            Some(p) => export_photo(Some(p), opts, lazy, || full_source(&app, &image_id, opts))?,
+            None => ExportPhoto::decoded(preview_source(&app, &image_id, opts)?),
         };
         mark("decode");
         let mut smart = export_sources_for(&app, &graph, &image_id)?;
@@ -18293,16 +18322,17 @@ async fn export_to(
         // the noise model's full-frame answer, computed now if it must be.
         if let Some(base) = export_vision_base(vision_base(&app), &graph)? {
             let depth_input = with_session(&app, |s| Ok(depth_input_key_in_session(s, &graph, &image_id))).unwrap_or(None);
-            refine_depth_for_export(&base, &graph, &image_id, &source, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input);
+            refine_depth_for_export(&base, &graph, &image_id, &photo, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input);
             mark("depth refinement");
             let file_path = with_session(&app, |s| Ok(s.paths.get(&image_id).cloned()))?;
-            mattes_for_export(&graph, &image_id, file_path.as_deref(), &source, &mut smart);
+            mattes_for_export(&graph, &image_id, file_path.as_deref(), photo.shape(), &mut smart);
             mark("mattes");
-            normals_for_export(&graph, &image_id, file_path.as_deref(), &source, &mut smart);
+            normals_for_export(&graph, &image_id, file_path.as_deref(), photo.shape(), &mut smart);
             mark("normals");
-            denoise_for_export(&app, &base, &graph, &image_id, &denoise_fingerprint, &source, &mut smart)?;
+            denoise_for_export(&app, &base, &graph, &image_id, &denoise_fingerprint, &photo, &mut smart)?;
             mark("denoise");
         }
+        let (source, rows) = photo.for_render();
         let keywords = if keep_metadata.unwrap_or(true) {
             with_catalog(&app, |c| c.keywords_of(&image_id).map_err(|e| e.to_string()))
                 .unwrap_or_default()
@@ -18323,6 +18353,7 @@ async fn export_to(
                 alpha,
                 layers,
                 beauty,
+                rows,
             },
             &dest,
             crate::ExportOptions {
@@ -18473,7 +18504,87 @@ fn render_export_streamed_with(
     .map_err(|e| e.to_string())?
 }
 
-/// All export entry points use named settings and the same admitted writer.
+/// The photograph an export renders from: decoded whole, or kept as its
+/// decoder's samples (heeler_io::decode_rows_with), whose whole frame is
+/// made only when something reads all of it, once, the decode to the bit.
+pub(crate) struct ExportPhoto {
+    size_only: Arc<ImageBuf>,
+    rows: Option<Arc<dyn heeler_engine::banded::SourceRows>>,
+    whole: std::sync::OnceLock<Arc<ImageBuf>>,
+}
+
+impl ExportPhoto {
+    /// A photograph decoded whole.
+    pub(crate) fn decoded(image: Arc<ImageBuf>) -> ExportPhoto {
+        let whole = std::sync::OnceLock::new();
+        let _ = whole.set(image.clone());
+        ExportPhoto { size_only: image, rows: None, whole }
+    }
+
+    /// A photograph kept as its decoder's samples.
+    pub(crate) fn kept(rows: Arc<dyn heeler_engine::banded::SourceRows>) -> ExportPhoto {
+        let (width, height) = rows.size();
+        ExportPhoto { size_only: Arc::new(ImageBuf { width, height, data: Vec::new() }), rows: Some(rows), whole: std::sync::OnceLock::new() }
+    }
+
+    /// The photograph's size, as a frame with no pixels when it is kept,
+    /// for what reads only that.
+    pub(crate) fn shape(&self) -> &ImageBuf {
+        &self.size_only
+    }
+
+    /// The whole frame, made from the kept samples the first time asked.
+    pub(crate) fn pixels(&self) -> Result<Arc<ImageBuf>, String> {
+        if let Some(w) = self.whole.get() {
+            return Ok(w.clone());
+        }
+        let r = self.rows.as_ref().ok_or("an export photograph with neither pixels nor rows")?;
+        let (_, h) = r.size();
+        let made = Arc::new(r.rows(0, h).map_err(|e| e.to_string())?);
+        Ok(self.whole.get_or_init(|| made).clone())
+    }
+
+    /// What the render takes (ExportInput's source and rows): the whole
+    /// frame once something has made it, else the size and the samples.
+    pub(crate) fn for_render(&self) -> (Arc<ImageBuf>, Option<Arc<dyn heeler_engine::banded::SourceRows>>) {
+        match self.whole.get() {
+            Some(w) => (w.clone(), None),
+            None => (self.size_only.clone(), self.rows.clone()),
+        }
+    }
+}
+
+/// Whether an export to `dest` in `format` streams its bands into the
+/// encoder (finish_export's rule): no alpha port or export layer the
+/// container writes, no matte it holds, no percent reduction, a container
+/// the band sink writes. Such an export never reads the whole photograph
+/// for its render, so it can take one kept as its samples. A reduction to
+/// a long edge is answered once the photograph's size is known.
+pub(crate) fn streams_photo(ui: &UiGraph, dest: &Path, format: &str, matte: bool, scale_percent: Option<f32>) -> bool {
+    let ext = export_container(dest, format);
+    let holds = ContainerHolds::of(&ext);
+    streamed_encoding(&ext, format).is_some()
+        && !(matte && holds.alpha)
+        && !scale_percent.is_some_and(|p| p > 0.0 && p < 100.0)
+        && !export_layers::reads_the_photo(ui, holds)
+}
+
+/// An export's photograph: kept as its decoder's samples when the export
+/// streams (`lazy`) and the decode can keep this file, else decoded whole
+/// through `whole` (the full-resolution tier, a stack's merge, a
+/// panorama's stitch).
+pub(crate) fn export_photo(path: Option<&Path>, opts: heeler_io::RawSourceOpts, lazy: bool, whole: impl FnOnce() -> Result<Arc<ImageBuf>, String>) -> Result<ExportPhoto, String> {
+    EXPORT_PHOTO_KEPT.with(|k| k.set(false));
+    if let (true, Some(p), false) = (lazy, path, EXPORT_PHOTO_WHOLE.with(|w| w.get())) {
+        if let Some(rows) = heeler_io::decode_rows_with(p, opts).map_err(|e| e.to_string())? {
+            EXPORT_PHOTO_KEPT.with(|k| k.set(true));
+            return Ok(ExportPhoto::kept(rows));
+        }
+    }
+    Ok(ExportPhoto::decoded(whole()?))
+}
+
+/// All export entry points use named settings and the same admitted writer./// All export entry points use named settings and the same admitted writer.
 pub(crate) fn finish_export(
     input: ExportInput<'_>,
     dest: &Path,
@@ -18490,7 +18601,7 @@ fn finish_export_admitted(
     input: ExportInput<'_>, dest: &Path, options: ExportOptions<'_>,
     mut log: impl FnMut(&str, &str),
 ) -> Result<String, String> {
-    let ExportInput { graph, source_path, source, smart, keywords, alpha, layers, beauty } = input;
+    let ExportInput { graph, source_path, source, smart, keywords, alpha, layers, beauty, rows } = input;
     let ExportOptions { format, quality, max_edge, keep_metadata, matte, scale_percent, allow_overwrite, dpi } = options;
     let _job = Job::admit(memory::bytes(source.width, source.height, 1, 64).map_err(|e| e.to_string())?, "export render, resize and encoding").map_err(|e| e.to_string())?;
     // NEVER over the photograph being exported. No flag reaches this,
@@ -18568,7 +18679,7 @@ fn finish_export_admitted(
     // samples: the f32 frame is never held, the file is the same.
     let streamed = if beauty.is_none() && alpha.is_none() && !(matte && holds_alpha) && layers.is_empty() && !scale_percent.is_some_and(|p| p > 0.0 && p < 100.0) {
         match streamed_encoding(&ext, format) {
-            Some(sink) => render_export_streamed(graph, source.clone(), smart, sink, max_edge.unwrap_or(0) as usize, None)?,
+            Some(sink) => render_export_streamed(graph, source.clone(), smart, sink, max_edge.unwrap_or(0) as usize, rows.clone())?,
             None => None,
         }
     } else {
@@ -18593,6 +18704,15 @@ fn finish_export_admitted(
             (sink.encode(encoding).map_err(|e| e.to_string())?, size)
         }
         None => {
+            // A photograph kept as its samples makes its whole frame here,
+            // the decode to the bit, for an export that needs all of it.
+            let source = match &rows {
+                Some(r) if source.data.is_empty() => {
+                    let (_, h) = r.size();
+                    Arc::new(r.rows(0, h).map_err(|e| e.to_string())?)
+                }
+                _ => source,
+            };
             // The beauty rendered with the alpha and the layers, when it was;
             // else rendered here.
             let mut image = match beauty {
@@ -21009,15 +21129,17 @@ async fn bake_composite(
         let opts = source_opts_of(&graph);
         let denoise_fingerprint = source_version_key(&app, &image_id, opts);
         let source = full_source(&app, &image_id, opts).map_err(|e| watch.answer(e))?;
+        let photo = ExportPhoto::decoded(source.clone());
         let mut smart = export_sources_for(&app, &graph, &image_id)?;
         if let Some(base) = export_vision_base(vision_base(&app), &graph)? {
             let depth_input = with_session(&app, |s| Ok(depth_input_key_in_session(s, &graph, &image_id))).unwrap_or(None);
-            refine_depth_for_export(&base, &graph, &image_id, &source, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input);
+            refine_depth_for_export(&base, &graph, &image_id, &photo, &mut smart, file_depth_source(&app, &image_id).as_ref(), depth_input);
             let file_path = with_session(&app, |s| Ok(s.paths.get(&image_id).cloned()))?;
             mattes_for_export(&graph, &image_id, file_path.as_deref(), &source, &mut smart);
             normals_for_export(&graph, &image_id, file_path.as_deref(), &source, &mut smart);
-            denoise_for_export(&app, &base, &graph, &image_id, &denoise_fingerprint, &source, &mut smart)?;
+            denoise_for_export(&app, &base, &graph, &image_id, &denoise_fingerprint, &photo, &mut smart)?;
         }
+        drop(photo);
         // The catalog is asked per candidate name under its own short
         // lock; the render itself runs outside it.
         let taken = |p: &Path| with_catalog(&app, |c| Ok(c.image_id_by_path(p).ok().flatten().is_some())).unwrap_or(false);
@@ -22695,6 +22817,7 @@ mod tests {
                     alpha: None,
                     layers: Vec::new(),
                     beauty: None,
+                    rows: None,
                 },
                 &dest,
                 crate::ExportOptions {
@@ -27702,7 +27825,7 @@ mod tests {
         // Cropped: the plane is refined in the node's input frame (the
         // crop's 8x6), and the seat's crop is not applied a second time.
         let mut cut = HashMap::from([("depthmap@depth".to_string(), planted.clone())]);
-        refine_depth_for_export(dir.path(), &graph, "img", &full, &mut cut, None, key);
+        refine_depth_for_export(dir.path(), &graph, "img", &ExportPhoto::decoded(full.clone()), &mut cut, None, key);
         assert_eq!((cut["depthmap@depth"].image.width, cut["depthmap@depth"].image.height), (8, 6));
         // A constant plane survives edge refinement. A second Levels
         // application would move 0.223.. to a very different depth.
@@ -27715,7 +27838,7 @@ mod tests {
         let upath = smart_raster_path(dir.path(), depth_version("img", depth_raw_recipe(recipe), ukey));
         std::fs::write(upath, heeler_io::encode_png_raw(&raw).unwrap()).unwrap();
         let mut whole = HashMap::from([("depthmap@depth".to_string(), planted)]);
-        refine_depth_for_export(dir.path(), &uncropped, "img", &full, &mut whole, None, ukey);
+        refine_depth_for_export(dir.path(), &uncropped, "img", &ExportPhoto::decoded(full.clone()), &mut whole, None, ukey);
         assert_eq!((whole["depthmap@depth"].image.width, whole["depthmap@depth"].image.height), (16, 12));
         assert!((whole["depthmap@depth"].image.pixel(0, 0)[0] - levelled_depth_sample(&graph, 0.4)).abs() < 1e-5);
     }
@@ -27950,7 +28073,7 @@ mod tests {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, heeler_io::encode_png_raw(&raw).unwrap()).unwrap();
         let mut sources = HashMap::from([("depthmap@depth".to_string(), SourceImage { image: raw.clone(), version: 0, measured: false })]);
-        refine_depth_for_export(dir.path(), &graph, "img", &full, &mut sources, None, key);
+        refine_depth_for_export(dir.path(), &graph, "img", &ExportPhoto::decoded(full.clone()), &mut sources, None, key);
         assert_eq!(
             (sources["depthmap@depth"].image.width, sources["depthmap@depth"].image.height),
             (8, 6),
@@ -30390,7 +30513,7 @@ mod tests {
         assert!(smart_model_missing(empty.path(), "click"));
         assert!(smart_model_missing(empty.path(), "subject"));
         assert!(
-            smart_sources_offline(empty.path(), &ui, "img", &source, None).is_empty(),
+            smart_sources_offline(empty.path(), &ui, "img", &ExportPhoto::decoded(source.clone()), None).is_empty(),
             "a Sky node never detected plants nothing: the empty mask"
         );
 
@@ -30434,7 +30557,7 @@ mod tests {
         let mut detected = node.clone();
         detected.params.insert("model".into(), serde_json::json!(heeler_vision::MOBILE_SAM.id));
         let ui = UiGraph { graph_id: "g".into(), nodes: vec![detected], connections: vec![] };
-        let planted = smart_sources_offline(rasters.path(), &ui, "img", &source, None);
+        let planted = smart_sources_offline(rasters.path(), &ui, "img", &ExportPhoto::decoded(source.clone()), None);
         let got = planted.get("smart_mask_g1").expect("the detected raster plants for the graph's node");
         let (pw, ph) = (got.image.width, got.image.height);
         let at = |x: usize, y: usize| got.image.data[(y * pw + x) * 4];
@@ -30467,14 +30590,14 @@ mod tests {
         };
         let source = Arc::new(ImageBuf::filled(8, 8, [0.4, 0.4, 0.4, 1.0]));
         // No cache, no model: nothing planted, nothing exploded.
-        assert!(smart_sources_offline(dir.path(), &ui, "img", &source, None).is_empty());
+        assert!(smart_sources_offline(dir.path(), &ui, "img", &ExportPhoto::decoded(source.clone()), None).is_empty());
         // Persist the recipe's raster and it plants.
         let want = smart_want("img", &ui.nodes[0], DepthRecipe::default(), None);
         let raster = ImageBuf::filled(2, 2, [0.6, 0.6, 0.6, 1.0]);
         let path = smart_raster_path(dir.path(), want);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, heeler_io::encode_png_raw(&raster).unwrap()).unwrap();
-        let out = smart_sources_offline(dir.path(), &ui, "img", &source, None);
+        let out = smart_sources_offline(dir.path(), &ui, "img", &ExportPhoto::decoded(source.clone()), None);
         assert_eq!(out.get("sm").map(|s| s.version), Some(want));
     }
 
@@ -32429,6 +32552,7 @@ mod tests {
                         alpha: None,
                         layers: Vec::new(),
                         beauty: None,
+                        rows: None,
                     },
                     &dest,
                     crate::ExportOptions {
@@ -32460,6 +32584,7 @@ mod tests {
                 alpha: None,
                 layers: Vec::new(),
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {
@@ -32513,6 +32638,7 @@ mod tests {
                 alpha: None,
                 layers: Vec::new(),
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {
@@ -32548,6 +32674,7 @@ mod tests {
                 alpha: None,
                 layers: Vec::new(),
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {
@@ -32639,6 +32766,7 @@ mod tests {
                     alpha: None,
                     layers: Vec::new(),
                     beauty: None,
+                    rows: None,
                 },
                 &source_file,
                 crate::ExportOptions {
@@ -32675,6 +32803,7 @@ mod tests {
                 alpha: None,
                 layers: Vec::new(),
                 beauty: None,
+                rows: None,
             },
             &beside,
             crate::ExportOptions {
@@ -32716,6 +32845,7 @@ mod tests {
                 alpha: None,
                 layers: Vec::new(),
                 beauty: None,
+                rows: None,
             },
             &round_about,
             crate::ExportOptions {
@@ -32773,6 +32903,7 @@ mod tests {
                     alpha: None,
                     layers: Vec::new(),
                     beauty: None,
+                    rows: None,
                 },
                 &dest,
                 crate::ExportOptions {
@@ -32842,6 +32973,7 @@ mod tests {
                 alpha: None,
                 layers: Vec::new(),
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {
@@ -35121,7 +35253,7 @@ mod file_depth_tests {
             std::fs::create_dir_all(raw_path.parent().unwrap()).unwrap();
             std::fs::write(&raw_path, heeler_io::encode_png_raw(&raw).unwrap()).unwrap();
             let mut sources = HashMap::from([("depthmap@depth".to_string(), SourceImage { image: raw.clone(), version: depth_version("img", recipe, input), measured: false })]);
-            refine_depth_for_export(dir.path(), &graph, "img", &full, &mut sources, from_file.then_some(&file_depth), input);
+            refine_depth_for_export(dir.path(), &graph, "img", &ExportPhoto::decoded(full.clone()), &mut sources, from_file.then_some(&file_depth), input);
             let plant = &sources["depthmap@depth"];
             assert_eq!(plant.measured, expect, "from file {from_file} at edges {edges}");
             if from_file {
@@ -35315,6 +35447,7 @@ mod file_depth_tests {
                 alpha,
                 layers,
                 beauty: None,
+                rows: None,
             },
             &dest,
             crate::ExportOptions {

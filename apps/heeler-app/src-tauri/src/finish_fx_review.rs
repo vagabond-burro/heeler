@@ -93,6 +93,7 @@ fn every_adjustment_mask_writes_to_exr_and_tiff_without_an_adjustment_picture() 
                     alpha,
                     layers,
                     beauty: None,
+                    rows: None,
                 },
                 &path,
                 crate::ExportOptions {
@@ -161,6 +162,7 @@ fn every_effect_writes_its_alpha_to_exr_and_tiff() {
                     alpha,
                     layers,
                     beauty: None,
+                    rows: None,
                 },
                 &path,
                 crate::ExportOptions {

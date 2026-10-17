@@ -16,6 +16,12 @@ pub(crate) struct ExportInput<'a> {
     /// the same banded passes (render_export_layers_and_beauty_for);
     /// None renders it here.
     pub beauty: Option<ImageBuf>,
+    /// The photograph kept as its decoder's samples, making its rows as
+    /// the bands read them (heeler_io::decode_rows_with): `source` then
+    /// gives only its size, and an export that needs the whole frame
+    /// makes it from these, the decode to the bit. None: `source` is the
+    /// photograph.
+    pub rows: Option<Arc<dyn heeler_engine::banded::SourceRows>>,
 }
 
 /// A new export setting adds a named field instead of another positional argument.

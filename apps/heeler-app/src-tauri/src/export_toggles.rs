@@ -40,6 +40,7 @@ fn export_exr(ui: &UiGraph, photo: &Arc<ImageBuf>, extra: &HashMap<String, Sourc
             alpha,
             layers,
             beauty: None,
+            rows: None,
         },
         dest,
         crate::ExportOptions {
