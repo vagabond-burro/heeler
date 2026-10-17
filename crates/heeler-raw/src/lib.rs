@@ -61,18 +61,6 @@ pub enum RawError {
     Gpr(String),
 }
 
-/// Mirrors libraw_processed_image_t.
-#[repr(C)]
-struct ProcessedImage {
-    image_type: c_int, // 1 = JPEG, 2 = bitmap
-    height: u16,
-    width: u16,
-    colors: u16,
-    bits: u16,
-    data_size: c_uint,
-    data: [u8; 1],
-}
-
 extern "C" {
     fn libraw_init(flags: c_uint) -> *mut c_void;
     fn libraw_close(d: *mut c_void);
@@ -83,8 +71,6 @@ extern "C" {
     fn libraw_unpack(d: *mut c_void) -> c_int;
     fn libraw_dcraw_process(d: *mut c_void) -> c_int;
     fn libraw_set_progress_handler(d: *mut c_void, cb: Option<unsafe extern "C" fn(*mut c_void, c_int, c_int, c_int) -> c_int>, data: *mut c_void);
-    fn libraw_dcraw_make_mem_image(d: *mut c_void, errc: *mut c_int) -> *mut ProcessedImage;
-    fn libraw_dcraw_clear_mem(p: *mut ProcessedImage);
     fn libraw_strerror(err: c_int) -> *const c_char;
     fn libraw_set_output_bps(d: *mut c_void, value: c_int);
     fn libraw_set_output_color(d: *mut c_void, value: c_int);
@@ -103,6 +89,8 @@ extern "C" {
     fn heeler_silence_data_errors(d: *mut c_void);
     fn heeler_is_sensor_data(d: *mut c_void) -> c_int;
     fn heeler_xtrans_extra(d: *mut c_void) -> usize;
+    fn heeler_mem_image_format(d: *mut c_void, width: *mut c_int, height: *mut c_int, colors: *mut c_int, bps: *mut c_int) -> c_int;
+    fn heeler_copy_mem_image(d: *mut c_void, scan0: *mut c_void, stride: c_int) -> c_int;
     fn heeler_opcode_list2(d: *mut c_void, len: *mut usize) -> *const u8;
     fn heeler_cfa_image(d: *mut c_void) -> *mut u16;
     fn heeler_raw_pitch(d: *mut c_void) -> c_uint;
@@ -410,48 +398,35 @@ fn develop(bytes: &[u8], opts: DevelopOpts, stop: Option<&AtomicBool>) -> Result
     cancelled(unsafe { libraw_dcraw_process(handle.0) })?;
     let headroom = if opts.highlight >= 2 { unsafe { heeler_wb_headroom(handle.0) } } else { 1.0 };
 
-    let mut errc: c_int = 0;
-    let img = unsafe { libraw_dcraw_make_mem_image(handle.0, &mut errc) };
-    if img.is_null() {
-        check(errc)?;
+    // The finished image straight into our samples: the image
+    // dcraw_make_mem_image would hand back, without its own whole-frame
+    // copy in between.
+    let (mut w, mut h, mut colors, mut bps): (c_int, c_int, c_int, c_int) = (0, 0, 0, 0);
+    check(unsafe { heeler_mem_image_format(handle.0, &mut w, &mut h, &mut colors, &mut bps) })?;
+    // Monochrome sensors (Leica M Monochrom, Pentax K-3 III Monochrome)
+    // and grayscale scanner DNGs come back with one channel, not three;
+    // LibRaw has no switch to widen them. Before 2026-09-08 that was
+    // rejected as Unexpected, and the app then showed the file's
+    // preview or, with none, the 320-pixel thumbnail the TIFF reader
+    // found in IFD0. Widening here keeps every caller on RGB.
+    if bps != 16 || !(colors == 3 || colors == 1) || w <= 0 || h <= 0 {
         return Err(RawError::Unexpected);
     }
-    let result = (|| unsafe {
-        let r = &*img;
-        // Monochrome sensors (Leica M Monochrom, Pentax K-3 III Monochrome)
-        // and grayscale scanner DNGs come back with one channel, not three;
-        // LibRaw has no switch to widen them. Before 2026-09-08 that was
-        // rejected as Unexpected, and the app then showed the file's
-        // preview or, with none, the 320-pixel thumbnail the TIFF reader
-        // found in IFD0. Widening here keeps every caller on RGB.
-        if r.image_type != 2 || r.bits != 16 || !(r.colors == 3 || r.colors == 1) {
-            Err(RawError::Unexpected)
-        } else {
-            let (w, h) = (r.width as usize, r.height as usize);
-            let channels = r.colors as usize;
-            let samples = heeler_engine::memory::bytes(w, h, channels, 2)? / 2;
-            if samples.checked_mul(2) != Some(r.data_size as usize) { return Err(RawError::Unexpected); }
-            let data = std::slice::from_raw_parts(r.data.as_ptr() as *const u16, samples);
-            let expected = heeler_engine::memory::bytes(w, h, 3, 2)? / 2;
-            let mut rgb = heeler_engine::memory::vector(expected, 0u16, "RAW samples")?;
-            if channels == 3 {
-                rgb.copy_from_slice(data);
-            } else {
-                for (px, v) in rgb.chunks_exact_mut(3).zip(data) {
-                    px.fill(*v);
-                }
-            }
-            Ok(SensorImage {
-                width: w,
-                height: h,
-                rgb,
-                headroom,
-                sensor_data,
-            })
+    let (w, h) = (w as usize, h as usize);
+    let expected = heeler_engine::memory::bytes(w, h, 3, 2)? / 2;
+    let mut rgb = heeler_engine::memory::vector(expected, 0u16, "RAW samples")?;
+    if colors == 3 {
+        let stride = c_int::try_from(w * 3 * 2).map_err(|_| RawError::Unexpected)?;
+        check(unsafe { heeler_copy_mem_image(handle.0, rgb.as_mut_ptr() as *mut c_void, stride) })?;
+    } else {
+        let mut gray = heeler_engine::memory::vector(heeler_engine::memory::bytes(w, h, 1, 2)? / 2, 0u16, "RAW samples")?;
+        let stride = c_int::try_from(w * 2).map_err(|_| RawError::Unexpected)?;
+        check(unsafe { heeler_copy_mem_image(handle.0, gray.as_mut_ptr() as *mut c_void, stride) })?;
+        for (px, v) in rgb.chunks_exact_mut(3).zip(&gray) {
+            px.fill(*v);
         }
-    })();
-    unsafe { libraw_dcraw_clear_mem(img) };
-    result
+    }
+    Ok(SensorImage { width: w, height: h, rgb, headroom, sensor_data })
 }
 
 #[cfg(test)]

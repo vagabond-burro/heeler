@@ -847,7 +847,47 @@ struct KeptDevelop {
 #[cfg(feature = "libraw")]
 enum KeptSamples16 {
     One { rgb: Vec<u16>, gain: f32 },
-    Blend { clip: Vec<u16>, blend: Vec<u16>, weight: Vec<u8>, gain: f32 },
+    Blend { clip: Vec<u16>, blend: BlendRows, weight: Vec<u8>, gain: f32 },
+}
+
+/// The Blend develop's rows that any weight reaches, packed: a row whose
+/// weight is zero across it never reads the Blend develop, and clipping
+/// is usually a sky or a lamp, so most rows are left out (a 48 MP ProRAW
+/// kept 604 MiB under Blend, its whole second develop among them).
+#[cfg(feature = "libraw")]
+struct BlendRows {
+    /// Each frame row's place in `rows`, or u32::MAX for a row left out.
+    at: Vec<u32>,
+    rows: Vec<u16>,
+    w: usize,
+}
+
+#[cfg(feature = "libraw")]
+impl BlendRows {
+    fn keep(full: Vec<u16>, weight: &[u8], w: usize, h: usize) -> Result<Self, heeler_raw::RawError> {
+        let wanted: Vec<bool> = (0..h).map(|y| weight[y * w..(y + 1) * w].iter().any(|&v| v != 0)).collect();
+        let n = wanted.iter().filter(|k| **k).count();
+        let mut rows = heeler_engine::memory::vector(n * w * 3, 0u16, "Blend develop rows")?;
+        let mut at = vec![u32::MAX; h];
+        let mut next = 0usize;
+        for y in (0..h).filter(|&y| wanted[y]) {
+            rows[next * w * 3..(next + 1) * w * 3].copy_from_slice(&full[y * w * 3..(y + 1) * w * 3]);
+            at[y] = next as u32;
+            next += 1;
+        }
+        Ok(BlendRows { at, rows, w })
+    }
+
+    /// Channel `c` of pixel `p` (frame order); only asked where the
+    /// pixel's weight is not zero, so its row is kept.
+    fn get(&self, p: usize, c: usize) -> u16 {
+        let (y, x) = (p / self.w, p % self.w);
+        self.rows[(self.at[y] as usize * self.w + x) * 3 + c]
+    }
+
+    fn bytes(&self) -> usize {
+        self.rows.len() * 2 + self.at.len() * 4
+    }
 }
 
 #[cfg(feature = "libraw")]
@@ -869,7 +909,7 @@ impl KeptDevelop {
                     let wt = weight[y0 * w + j] as f32 / 255.0;
                     for c in 0..3 {
                         let kept = clip[i + c] as f32 / 65535.0;
-                        o[c] = if wt == 0.0 { kept } else { kept + (blend[i + c] as f32 / 65535.0 * gain - kept) * wt };
+                        o[c] = if wt == 0.0 { kept } else { kept + (blend.get(y0 * w + j, c) as f32 / 65535.0 * gain - kept) * wt };
                     }
                 }
             }
@@ -934,7 +974,7 @@ impl heeler_engine::banded::SourceRows for KeptDevelop {
     fn bytes(&self) -> usize {
         match &self.develop {
             KeptSamples16::One { rgb, .. } => rgb.len() * 2,
-            KeptSamples16::Blend { clip, blend, weight, .. } => clip.len() * 2 + blend.len() * 2 + weight.len(),
+            KeptSamples16::Blend { clip, blend, weight, .. } => clip.len() * 2 + blend.bytes() + weight.len(),
         }
     }
     fn workspace(&self) -> Result<usize, heeler_engine::EngineError> {
@@ -990,7 +1030,8 @@ fn keep_develop(path: &Path, bytes: &[u8], opts: RawSourceOpts) -> Result<Option
         if (blend.width, blend.height) != (w, h) {
             return Ok((KeptSamples16::One { gain: clip.headroom.max(1.0), rgb: clip.rgb }, w, h, sensor_data));
         }
-        Ok((KeptSamples16::Blend { gain: blend.headroom.max(1.0), clip: clip.rgb, blend: blend.rgb, weight }, w, h, sensor_data))
+        let kept = BlendRows::keep(blend.rgb, &weight, w, h)?;
+        Ok((KeptSamples16::Blend { gain: blend.headroom.max(1.0), clip: clip.rgb, blend: kept, weight }, w, h, sensor_data))
     })();
     let (develop, w, h, sensor_data) = match decoded {
         Ok(d) => d,

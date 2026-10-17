@@ -29,6 +29,20 @@ void heeler_pre_rgb(void *ctx) {
 
 extern "C" {
 
+// The finished image's size and layout, and the finished image copied
+// straight into the caller's buffer: dcraw_make_mem_image's two steps
+// without the whole-frame copy it mallocs between them (290 MB at
+// 48 MP, held beside LibRaw's own image while the caller copied it out).
+int heeler_mem_image_format(libraw_data_t *d, int *width, int *height, int *colors, int *bps) {
+    if (!d || !d->parent_class) return LIBRAW_OUT_OF_ORDER_CALL;
+    static_cast<LibRaw *>(d->parent_class)->get_mem_image_format(width, height, colors, bps);
+    return LIBRAW_SUCCESS;
+}
+int heeler_copy_mem_image(libraw_data_t *d, void *scan0, int stride) {
+    if (!d || !d->parent_class) return LIBRAW_OUT_OF_ORDER_CALL;
+    return static_cast<LibRaw *>(d->parent_class)->copy_mem_image(scan0, stride, 0);
+}
+
 unsigned heeler_raw_width(libraw_data_t *d) { return d ? d->sizes.raw_width : 0; }
 unsigned heeler_raw_height(libraw_data_t *d) { return d ? d->sizes.raw_height : 0; }
 
