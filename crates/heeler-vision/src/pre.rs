@@ -154,7 +154,9 @@ pub fn resize_exact_rgb(rgb: &[f32], w: usize, h: usize, nw: usize, nh: usize) -
 pub fn resize_plane(plane: &[f32], w: usize, h: usize, nw: usize, nh: usize) -> Vec<f32> {
     assert_eq!(plane.len(), w * h, "single plane expected");
     let mut out = vec![0.0f32; nw * nh];
-    for y in 0..nh {
+    // Rows side by side; each pixel is computed as it always was.
+    use rayon::prelude::*;
+    out.par_chunks_mut(nw.max(1)).enumerate().for_each(|(y, row)| {
         let sy = ((y as f32 + 0.5) * h as f32 / nh as f32 - 0.5).clamp(0.0, (h - 1) as f32);
         let y0 = sy.floor() as usize;
         let y1 = (y0 + 1).min(h - 1);
@@ -166,9 +168,9 @@ pub fn resize_plane(plane: &[f32], w: usize, h: usize, nw: usize, nh: usize) -> 
             let fx = sx - x0 as f32;
             let top = plane[y0 * w + x0] + (plane[y0 * w + x1] - plane[y0 * w + x0]) * fx;
             let bot = plane[y1 * w + x0] + (plane[y1 * w + x1] - plane[y1 * w + x0]) * fx;
-            out[y * nw + x] = top + (bot - top) * fy;
+            row[x] = top + (bot - top) * fy;
         }
-    }
+    });
     out
 }
 

@@ -18,4 +18,9 @@ fn main() {
     let t = std::time::Instant::now();
     let out = heeler_vision::refine_depth(&far, &rgb, w, h, 0.5, 0.25);
     println!("refine_depth: {:.0} ms ({})", t.elapsed().as_secs_f64() * 1000.0, out.len());
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for v in out.iter().chain(&far) {
+        hash = (hash ^ v.to_bits() as u64).wrapping_mul(0x100000001b3);
+    }
+    println!("hash {hash:016x}");
 }

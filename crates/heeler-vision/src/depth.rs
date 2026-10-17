@@ -115,59 +115,88 @@ impl DepthEstimator {
 
 /// A box mean over a (2r+1)^2 window, border-aware (the window shrinks
 /// at the frame edge rather than reading outside it). Two running-sum
-/// passes: O(N) whatever the radius.
+/// passes: O(N) whatever the radius. The rows run side by side for the
+/// first pass and strips of columns for the second; each sum adds the
+/// same values in the same order as one pass over the frame did, so the
+/// mean is the same to the bit.
 fn box_mean(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
+    box_mean_of(|i| src[i], w, h, r)
+}
+
+/// box_mean of the plane whose pixel `i` is `value(i)`, read as the
+/// first pass slides along each row: a product of planes is averaged
+/// without being written out as a plane of its own first, the same
+/// values to the bit.
+fn box_mean_of(value: impl Fn(usize) -> f32 + Sync, w: usize, h: usize, r: usize) -> Vec<f32> {
+    if w == 0 || h == 0 {
+        return Vec::new();
+    }
     let mut tmp = vec![0.0f32; w * h];
-    for y in 0..h {
-        let row = &src[y * w..(y + 1) * w];
+    tmp.par_chunks_mut(w).enumerate().for_each(|(y, out)| {
+        let row = |x: usize| value(y * w + x);
         let mut sum = 0.0f32;
         let mut n = 0usize;
         let reach = r.min(w.saturating_sub(1));
         for x in 0..=reach {
-            sum += row[x];
+            sum += row(x);
             n += 1;
         }
         for x in 0..w {
-            tmp[y * w + x] = sum / n as f32;
+            out[x] = sum / n as f32;
             // slide: drop x - r, take x + r + 1
             if x >= r {
-                sum -= row[x - r];
+                sum -= row(x - r);
                 n -= 1;
             }
             if x + r + 1 < w {
-                sum += row[x + r + 1];
+                sum += row(x + r + 1);
                 n += 1;
             }
         }
-    }
+    });
+    // The column sums slide down the frame, a strip of columns to a task:
+    // each row is cut into its strips, and each task takes its strip of
+    // every row.
+    const STRIP: usize = 256;
     let mut out = vec![0.0f32; w * h];
-    let mut sum = vec![0.0f32; w];
-    let mut n = 0usize;
-    let reach = r.min(h.saturating_sub(1));
-    for y in 0..=reach {
-        for x in 0..w {
-            sum[x] += tmp[y * w + x];
+    let strips = w.div_ceil(STRIP);
+    let mut columns: Vec<Vec<&mut [f32]>> = (0..strips).map(|_| Vec::with_capacity(h)).collect();
+    for row in out.chunks_mut(w) {
+        for (s, piece) in row.chunks_mut(STRIP).enumerate() {
+            columns[s].push(piece);
         }
-        n += 1;
     }
-    for y in 0..h {
-        let inv = 1.0 / n as f32;
-        for x in 0..w {
-            out[y * w + x] = sum[x] * inv;
-        }
-        if y >= r {
-            for x in 0..w {
-                sum[x] -= tmp[(y - r) * w + x];
-            }
-            n -= 1;
-        }
-        if y + r + 1 < h {
-            for x in 0..w {
-                sum[x] += tmp[(y + r + 1) * w + x];
+    columns.into_par_iter().enumerate().for_each(|(s, mut rows)| {
+        let x0 = s * STRIP;
+        let bw = rows[0].len();
+        let mut sum = vec![0.0f32; bw];
+        let mut n = 0usize;
+        let reach = r.min(h.saturating_sub(1));
+        for y in 0..=reach {
+            for (i, v) in sum.iter_mut().enumerate() {
+                *v += tmp[y * w + x0 + i];
             }
             n += 1;
         }
-    }
+        for y in 0..h {
+            let inv = 1.0 / n as f32;
+            for (o, v) in rows[y].iter_mut().zip(&sum) {
+                *o = *v * inv;
+            }
+            if y >= r {
+                for (i, v) in sum.iter_mut().enumerate() {
+                    *v -= tmp[(y - r) * w + x0 + i];
+                }
+                n -= 1;
+            }
+            if y + r + 1 < h {
+                for (i, v) in sum.iter_mut().enumerate() {
+                    *v += tmp[(y + r + 1) * w + x0 + i];
+                }
+                n += 1;
+            }
+        }
+    });
     out
 }
 
@@ -222,10 +251,7 @@ fn guide_moments(guide: &[Vec<f32>; 3], w: usize, h: usize, r: usize) -> GuideMo
         || {
             let corr: Vec<Vec<f32>> = pairs
                 .into_par_iter()
-                .map(|(c, d)| {
-                    let prod: Vec<f32> = guide[c].par_iter().zip(&guide[d]).map(|(x, y)| x * y).collect();
-                    box_mean(&prod, w, h, r)
-                })
+                .map(|(c, d)| box_mean_of(|i| guide[c][i] * guide[d][i], w, h, r))
                 .collect();
             corr.try_into().expect("six moments")
         },
@@ -267,8 +293,8 @@ fn guided_lab(p: &[f32], guide: &[Vec<f32>; 3], gm: &GuideMoments, w: usize, h: 
         .into_par_iter()
         .map(|k| match k {
             0 => box_mean(p, w, h, r),
-            1 => box_mean(&p.par_iter().map(|v| v * v).collect::<Vec<f32>>(), w, h, r),
-            c => box_mean(&guide[c - 2].par_iter().zip(p).map(|(x, y)| x * y).collect::<Vec<f32>>(), w, h, r),
+            1 => box_mean_of(|i| p[i] * p[i], w, h, r),
+            c => box_mean_of(|i| guide[c - 2][i] * p[i], w, h, r),
         })
         .collect();
     let (mean_p, corr_pp, corr_gp) = (&moments[0], &moments[1], [&moments[2], &moments[3], &moments[4]]);
@@ -322,7 +348,7 @@ fn guided_lab(p: &[f32], guide: &[Vec<f32>; 3], gm: &GuideMoments, w: usize, h: 
     // Five more side by side: the weighted coefficients and the weight.
     let blurred: Vec<Vec<f32>> = (0..5usize)
         .into_par_iter()
-        .map(|k| box_mean(&fits.par_iter().map(|f| f[k]).collect::<Vec<f32>>(), w, h, r))
+        .map(|k| box_mean_of(|i| fits[i][k], w, h, r))
         .collect();
     let (mean_a, mean_b, support) = ([&blurred[0], &blurred[1], &blurred[2]], &blurred[3], blurred[4].clone());
     let q = (0..n)
@@ -445,6 +471,76 @@ pub fn refine_depth(far: &[f32], rgb: &[f32], w: usize, h: usize, edges: f32, fl
 
 #[cfg(test)]
 mod tests {
+    /// The box mean as one pass over the frame computed it, before the
+    /// rows and column strips ran side by side: the reference the
+    /// parallel mean must match to the bit.
+    fn box_mean_one_pass(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
+        let mut tmp = vec![0.0f32; w * h];
+        for y in 0..h {
+            let row = &src[y * w..(y + 1) * w];
+            let mut sum = 0.0f32;
+            let mut n = 0usize;
+            let reach = r.min(w.saturating_sub(1));
+            for x in 0..=reach {
+                sum += row[x];
+                n += 1;
+            }
+            for x in 0..w {
+                tmp[y * w + x] = sum / n as f32;
+                // slide: drop x - r, take x + r + 1
+                if x >= r {
+                    sum -= row[x - r];
+                    n -= 1;
+                }
+                if x + r + 1 < w {
+                    sum += row[x + r + 1];
+                    n += 1;
+                }
+            }
+        }
+        let mut out = vec![0.0f32; w * h];
+        let mut sum = vec![0.0f32; w];
+        let mut n = 0usize;
+        let reach = r.min(h.saturating_sub(1));
+        for y in 0..=reach {
+            for x in 0..w {
+                sum[x] += tmp[y * w + x];
+            }
+            n += 1;
+        }
+        for y in 0..h {
+            let inv = 1.0 / n as f32;
+            for x in 0..w {
+                out[y * w + x] = sum[x] * inv;
+            }
+            if y >= r {
+                for x in 0..w {
+                    sum[x] -= tmp[(y - r) * w + x];
+                }
+                n -= 1;
+            }
+            if y + r + 1 < h {
+                for x in 0..w {
+                    sum[x] += tmp[(y + r + 1) * w + x];
+                }
+                n += 1;
+            }
+        }
+        out
+    }
+    
+    #[test]
+    fn the_box_mean_side_by_side_is_the_one_pass_mean_to_the_bit() {
+        for (w, h) in [(1, 1), (7, 3), (255, 9), (256, 40), (257, 31), (900, 77), (1031, 513)] {
+            let src: Vec<f32> = (0..w * h).map(|i| ((i as u32).wrapping_mul(2_654_435_761) >> 8) as f32 / 16_777_216.0).collect();
+            for r in [0, 1, 4, 37, 600] {
+                let a = box_mean(&src, w, h, r);
+                let b = box_mean_one_pass(&src, w, h, r);
+                assert!(a.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits()), "{w}x{h} r {r}");
+            }
+        }
+    }
+
     use super::*;
 
     /// Gated like the other model tests: the contract, not the

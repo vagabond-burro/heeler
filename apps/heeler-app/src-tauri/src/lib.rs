@@ -2970,14 +2970,15 @@ fn depth_levels(graph: &UiGraph) -> Option<DepthLevels> {
 /// same map the engine's depth_weight_mask applies, knees included.
 fn levelled_plane(img: &ImageBuf, (black, white, gamma, soft_b, soft_w): DepthLevels) -> ImageBuf {
     let levels = Some(heeler_engine::DepthLevels { black, white, gamma, soft_b, soft_w });
+    use rayon::prelude::*;
     let mut out = img.clone();
-    for px in out.data.chunks_mut(4) {
+    out.data.par_chunks_mut(4).for_each(|px| {
         let near = (1.0 - px[0]).clamp(0.0, 1.0);
         let far = 1.0 - heeler_engine::plane_levels(levels, near);
         px[0] = far;
         px[1] = far;
         px[2] = far;
-    }
+    });
     out
 }
 
@@ -5422,13 +5423,9 @@ async fn depth_forget(app: tauri::AppHandle, graph: UiGraph, image_id: String) -
 
 /// A plane as the gray raster the render plants.
 fn plane_raster(far: &[f32], w: usize, h: usize) -> ImageBuf {
+    use rayon::prelude::*;
     let mut raster = ImageBuf::new(w, h);
-    for (i, v) in far.iter().enumerate() {
-        raster.data[i * 4] = *v;
-        raster.data[i * 4 + 1] = *v;
-        raster.data[i * 4 + 2] = *v;
-        raster.data[i * 4 + 3] = 1.0;
-    }
+    raster.data.par_chunks_mut(4).zip(far.par_iter()).for_each(|(px, v)| px.copy_from_slice(&[*v, *v, *v, 1.0]));
     raster
 }
 
@@ -5673,10 +5670,13 @@ fn refine_export_plane(
         }
     };
     let mut rgb = vec![0.0f32; w * h * 3];
-    for (i, px) in guide.data.chunks(4).enumerate() {
-        for c in 0..3 {
-            rgb[i * 3 + c] = heeler_engine::ops::to_display(px[c].max(0.0)).min(1.0) * 255.0;
-        }
+    {
+        use rayon::prelude::*;
+        rgb.par_chunks_mut(3).zip(guide.data.par_chunks(4)).for_each(|(out, px)| {
+            for c in 0..3 {
+                out[c] = heeler_engine::ops::to_display(px[c].max(0.0)).min(1.0) * 255.0;
+            }
+        });
     }
     let refined = plane_raster(&refine_plane(&stretched, &rgb, w, h, recipe), w, h);
     Some((match levels {
