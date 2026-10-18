@@ -10,7 +10,7 @@
 // binning and the coordinate systems can be tested against known inputs
 // rather than eyeballed against a photograph.
 
-export type SpectrumKind = "histogram" | "parade" | "waveform" | "vector" | "chroma" | "harmony";
+export type SpectrumKind = "histogram" | "parade" | "waveform" | "vector" | "chroma" | "harmony" | "profile";
 
 /** The picker's six kinds.
  *
@@ -64,7 +64,84 @@ export const SPECTRUM_KINDS: {
     short: "Harm",
     blurb: "The harmony family's spokes against the photograph's own hues",
   },
+  {
+    id: "profile",
+    label: "Line Profile",
+    short: "Line",
+    blurb: "Brightness along a line you draw on the photograph",
+  },
 ];
+
+/** A line drawn on the frame, its ends in 0..1 of the frame. */
+export interface ProfileLine {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/** The frame's levels along a line, 0..1 as displayed, one entry per
+ * sample from the line's start to its end: each channel and the
+ * luminance (Rec. 709 weights over the displayed values, the
+ * waveform's own). A sample on a transparent pixel (a warp's empty
+ * edge) is NaN, a gap in the plot rather than a dive to black. */
+export interface Profile {
+  r: number[];
+  g: number[];
+  b: number[];
+  luma: number[];
+}
+
+export function lineProfile(
+  frame: { pixels: Uint8ClampedArray; w: number; h: number },
+  line: ProfileLine,
+  samples: number,
+): Profile {
+  const n = Math.max(2, Math.round(samples));
+  const out: Profile = { r: [], g: [], b: [], luma: [] };
+  const { pixels, w, h } = frame;
+  const at = (x: number, y: number, c: number) => pixels[(y * w + x) * 4 + c];
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1);
+    // Pixel centers: 0..1 of the frame is 0..w of its pixels.
+    const fx = Math.min(w - 1, Math.max(0, (line.x0 + (line.x1 - line.x0) * t) * w - 0.5));
+    const fy = Math.min(h - 1, Math.max(0, (line.y0 + (line.y1 - line.y0) * t) * h - 0.5));
+    const x0 = Math.floor(fx);
+    const y0 = Math.floor(fy);
+    const x1 = Math.min(w - 1, x0 + 1);
+    const y1 = Math.min(h - 1, y0 + 1);
+    const ax = fx - x0;
+    const ay = fy - y0;
+    const bil = (c: number) =>
+      (at(x0, y0, c) * (1 - ax) + at(x1, y0, c) * ax) * (1 - ay) + (at(x0, y1, c) * (1 - ax) + at(x1, y1, c) * ax) * ay;
+    if (bil(3) < 128) {
+      out.r.push(NaN);
+      out.g.push(NaN);
+      out.b.push(NaN);
+      out.luma.push(NaN);
+      continue;
+    }
+    const [r, g, b] = [bil(0) / 255, bil(1) / 255, bil(2) / 255];
+    out.r.push(r);
+    out.g.push(g);
+    out.b.push(b);
+    out.luma.push(0.2126 * r + 0.7152 * g + 0.0722 * b);
+  }
+  return out;
+}
+
+/** Where on a line a point of the frame falls, 0 at its start and 1 at
+ * its end, and how far from the line it is in frame units; for the
+ * viewer's hover on the drawn line. */
+export function alongLine(line: ProfileLine, x: number, y: number): { t: number; dist: number } {
+  const dx = line.x1 - line.x0;
+  const dy = line.y1 - line.y0;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 > 0 ? Math.min(1, Math.max(0, ((x - line.x0) * dx + (y - line.y0) * dy) / len2)) : 0;
+  const px = line.x0 + dx * t;
+  const py = line.y0 + dy * t;
+  return { t, dist: Math.hypot(x - px, y - py) };
+}
 
 /** How many hue bins the harmony wheel plots. */
 export const HUE_BINS = 72;

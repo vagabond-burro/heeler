@@ -388,6 +388,15 @@ export function SpectrumIcon({ kind, size = 13 }: { kind: SpectrumKind; size?: n
           <path d="M8 8V2.4M8 8l4.8 2.8M8 8L3.2 10.8" />
         </svg>
       );
+    // A line across a frame with its brightness traced above it: what
+    // the profile reads, and from where.
+    case "profile":
+      return (
+        <svg {...line} data-testid="icon-spectrum-profile">
+          <path d="M2 13.5L14 9.5" strokeDasharray="1.6 1.6" />
+          <path d="M2 9l2.6-4 2.6 3 2.6-5.5L12.4 6 14 4.5" />
+        </svg>
+      );
   }
 }
 

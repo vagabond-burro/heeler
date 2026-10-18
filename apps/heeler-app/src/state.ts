@@ -3,6 +3,7 @@ import exportResolution from "../../../crates/heeler-io/export-resolution.json";
 // (heeler-graph / heeler-commands). Every mutation goes through dispatch of
 // a Command, giving undo/redo one shared path, same as the Rust side.
 
+import type { ProfileLine } from "./spectrums";
 import { convertLegacyFit, fitNeedsOrderFix, type FitOrderFields } from "./checkerfit";
 import { dayInRange } from "./datefilter";
 import { isNameFormat, type NameFormat } from "./consolebands";
@@ -1492,6 +1493,7 @@ const PICKER_RESET = {
   chartPlace: false,
   inspectPick: false,
   recolorPairPick: null,
+  profileDraw: false,
 };
 
 /** Whether any picker is waiting on a click. */
@@ -1512,7 +1514,8 @@ export function anyPickerArmed(s: State): boolean {
     s.keyLightPick ||
     s.chartPlace ||
     s.inspectPick ||
-    s.recolorPairPick !== null
+    s.recolorPairPick !== null ||
+    s.profileDraw
   );
 }
 
@@ -3771,6 +3774,17 @@ export interface State {
    * cleared on photo switch; the scopes follow automatically because
    * they read the frame on screen.*/
   probeNode: string | null;
+  /** The Line Profile scope's line is being drawn: a drag on the frame
+   * lays it down. */
+  profileDraw: boolean;
+  /** The line the Line Profile scope reads, in 0..1 of the frame, or
+   * null. A view setting: never part of an edit, a Take, the history or
+   * an export, and it stays as photographs change, so two can be read
+   * along the same line. */
+  profileLine: ProfileLine | null;
+  /** The point along the line under the cursor, 0 at its start and 1 at
+   * its end, from the scope or the viewer, so each marks it in the other. */
+  profileHover: number | null;
   /** Influence Mapping's Inspect picker is armed: a click on the frame
    * traces that pixel through the graph. */
   inspectPick: boolean;
@@ -5132,6 +5146,12 @@ export type Command =
   | { type: "toggle_recolor_pair_pick"; id: string }
   /** The pair picker's first color is in; it waits on the second. */
   | { type: "recolor_pair_first"; end: RecolorPairEnd }
+  /** Arm or put away the Line Profile's line drawing. */
+  | { type: "toggle_profile_draw" }
+  /** Lay down the Line Profile's line, or clear it with null. */
+  | { type: "set_profile_line"; line: ProfileLine | null }
+  /** The point along the line under the cursor, or null. */
+  | { type: "set_profile_hover"; t: number | null }
   /** Arm or put away the Inspect picker. */
   | { type: "toggle_inspect_pick" }
   /** Trace the pixel at this point of the frame (0..1). */
@@ -13556,7 +13576,7 @@ const PICK_GRAPH_REPLACEMENTS = new Set<string>([
 /** The pickers whose disarm cancels a pending answer aimed through them. */
 const PICK_ARMS = [
   "curvePick", "wbPick", "toneEqPick", "recolorPick", "recolorMatch", "bwSeparate", "bwPick", "zonePlace",
-  "csetDropper", "consolePick", "dofPick", "keyLightPick", "chartPlace", "inspectPick", "recolorPairPick",
+  "csetDropper", "consolePick", "dofPick", "keyLightPick", "chartPlace", "inspectPick", "recolorPairPick", "profileDraw",
 ] as const;
 /** A dropper a pick session can name as the arm it answers through. Typed
  * from the list so a misspelt arm is a compile error, not a session that
@@ -18903,6 +18923,20 @@ function reduceInner(s: State, cmd: Command): State {
         : { ...s, ...PICKER_RESET, recolorPairPick: { id: cmd.id, first: null } };
     case "recolor_pair_first":
       return s.recolorPairPick ? { ...s, recolorPairPick: { ...s.recolorPairPick, first: cmd.end } } : s;
+    case "toggle_profile_draw":
+      return s.profileDraw ? { ...s, profileDraw: false } : { ...s, ...PICKER_RESET, profileDraw: true };
+    case "set_profile_line": {
+      const l = cmd.line;
+      const clamp = (v: number) => Math.min(1, Math.max(0, v));
+      return {
+        ...s,
+        profileDraw: false,
+        profileHover: null,
+        profileLine: l && (l.x0 !== l.x1 || l.y0 !== l.y1) ? { x0: clamp(l.x0), y0: clamp(l.y0), x1: clamp(l.x1), y1: clamp(l.y1) } : null,
+      };
+    }
+    case "set_profile_hover":
+      return s.profileHover === cmd.t ? s : { ...s, profileHover: cmd.t === null ? null : Math.min(1, Math.max(0, cmd.t)) };
     case "toggle_inspect_pick":
       return s.inspectPick ? { ...s, inspectPick: false } : { ...s, ...PICKER_RESET, inspectPick: true };
     case "inspect_at":

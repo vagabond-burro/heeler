@@ -1,6 +1,7 @@
 import { isPrimaryPress } from "./pointerguard";
 import { InspectLayer, InspectPanel } from "./inspect";
 import { RecolorPairLayer } from "./recolorpairs";
+import { ProfileLineLayer } from "./profileline";
 import { usePickSessions } from "../picksession";
 // The image viewer: toolbar + image with live preview filter (mock bridge)
 // or engine-rendered data URL (Tauri).
@@ -3034,6 +3035,7 @@ INPUT, the color the curve keys on; the pin marks the first click
 until the second lands or Escape drops it.*/}
             <InspectLayer state={state} dispatch={dispatch} view={view} />
             <RecolorPairLayer state={state} dispatch={dispatch} view={view} />
+            <ProfileLineLayer state={state} dispatch={dispatch} view={view} />
             {state.bwSeparate && (
               <div
                 data-testid="bw-separate-overlay"

@@ -64,9 +64,17 @@ When the open photograph is [linked](../menus.md#photo) to others, right-click a
 
 ## Scopes
 
-The panel above the sections shows the scopes: histogram, RGB parade, waveform, vectorscope, chromaticity, and the harmony wheel, with a channel row for the histogram and a pop-out button for a larger window. The readout under the plot names what is under the cursor, and the arrows at the right report the share of the frame clipped to pure black and pure white.
+The panel above the sections shows the scopes: histogram, RGB parade, waveform, vectorscope, chromaticity, the harmony wheel and the line profile, with a channel row for the histogram and a pop-out button for a larger window. The readout under the plot names what is under the cursor, and the arrows at the right report the share of the frame clipped to pure black and pure white.
 
 The button at the readout's left, a small histogram wrapped in a marquee rectangle, scopes them to the current selection: with it on, every scope reads the selected region only, and the readout says so. It waits disabled until a selection exists; any selection works, drawn or smart. Turn it off to read the whole frame again.
+
+### Line profile
+
+The line profile shows brightness along a line you draw. Choose it in the scopes, click **Draw**, and drag across the photograph: the plot runs from where the drag started on the left to where it ended on the right, with brightness up the side. The channel row picks what it traces: **LUM** for brightness alone, **RGB** for the red, green and blue traces with brightness over them, or a single channel. Drag across a sky to see how evenly it falls off, across a face to see the light wrap around it, or across an edge to see how sharp the step is.
+
+Point at the plot and a ring marks that place on the line in the viewer; point along the line in the viewer and the plot marks it, while the readout gives how far along it is and its levels. Where the line crosses the empty edge of a warp, the trace breaks rather than dropping to black. The line reads what the other scopes read, including a probed node's output and the selected region when the selection scope is on.
+
+The line is only a view: it is not part of the edit, so it never reaches a Take, the history or an export, and it stays put as you move between photographs so two can be read along the same line. **Clear** takes it away, and `Esc` puts down Draw.
 
 ### Reading the histogram as ink
 

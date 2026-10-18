@@ -40,6 +40,8 @@ import {
   type HistChannel,
   type Histogram,
   type SpectrumKind,
+  lineProfile,
+  type Profile,
 } from "../spectrums";
 import { HARMONY_MODES, HARMONY_REACH, harmonyHues, hueDelta, type Harmony } from "../harmony";
 import { TrackSlider } from "./track";
@@ -274,6 +276,62 @@ function drawWaveform(
     // continuous, so let it interpolate.
     ctx.drawImage(scratch, band * bandWidth, 0, bandWidth, h);
   });
+}
+
+/** The Line Profile: the frame's levels along the drawn line, start at
+ * the left and end at the right, as traces (the luminance, and the
+ * channels when RGB is picked), with the cursor's point marked. */
+function drawProfile(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  profile: Profile,
+  channel: HistChannel,
+  dpr: number,
+  hover: number | null,
+) {
+  const traces: [number[], string][] =
+    channel === "rgb"
+      ? [[profile.r, "rgba(220,90,90,.85)"], [profile.g, "rgba(110,210,110,.85)"], [profile.b, "rgba(90,140,230,.85)"], [profile.luma, "rgba(230,226,218,.95)"]]
+      : channel === "luma"
+        ? [[profile.luma, "rgba(230,226,218,.95)"]]
+        : [[profile[channel], channel === "r" ? "rgba(220,90,90,.95)" : channel === "g" ? "rgba(110,210,110,.95)" : "rgba(90,140,230,.95)"]];
+  const n = profile.luma.length;
+  ctx.lineWidth = 1.25 * dpr;
+  for (const [values, color] of traces) {
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    let pen = false;
+    values.forEach((v, i) => {
+      if (Number.isNaN(v)) {
+        pen = false;
+        return;
+      }
+      const x = (i / (n - 1)) * w;
+      const y = (1 - v) * (h - 2 * dpr) + dpr;
+      if (pen) ctx.lineTo(x, y);
+      else ctx.moveTo(x, y);
+      pen = true;
+    });
+    ctx.stroke();
+  }
+  if (hover !== null) {
+    ctx.strokeStyle = "rgba(255,255,255,.7)";
+    ctx.lineWidth = dpr;
+    ctx.beginPath();
+    ctx.moveTo(hover * w, 0);
+    ctx.lineTo(hover * w, h);
+    ctx.stroke();
+  }
+}
+
+/** The Line Profile's status line at a point along the line. */
+export function profileReadout(profile: Profile | null, t: number | null): string | null {
+  if (!profile || t === null) return null;
+  const i = Math.round(Math.min(1, Math.max(0, t)) * (profile.luma.length - 1));
+  if (Number.isNaN(profile.luma[i])) return `${Math.round(t * 100)}% along · off the photograph`;
+  const p = (v: number) => Math.round(v * 100);
+  return `${p(t)}% along · L ${p(profile.luma[i])} · R ${p(profile.r[i])} G ${p(profile.g[i])} B ${p(profile.b[i])}`;
 }
 
 function drawVector(
@@ -788,6 +846,36 @@ export function drawEvScale(
   ctx.restore();
 }
 
+/** Draw arms the line on the viewer; Clear takes the line away. */
+function ProfileChips({ state, dispatch, metrics = CHIP_SIZE }: { state: State; dispatch: D; metrics?: React.CSSProperties }) {
+  return (
+    <>
+      <button
+        className="chip"
+        data-testid="spectrum-profile-draw"
+        data-active={state.profileDraw}
+        aria-pressed={state.profileDraw}
+        data-hint="Drag across the photograph to draw the line the profile reads"
+        style={{ ...metrics, padding: "0 7px" }}
+        onClick={() => dispatch({ type: "toggle_profile_draw" })}
+      >
+        Draw
+      </button>
+      {state.profileLine && (
+        <button
+          className="chip"
+          data-testid="spectrum-profile-clear"
+          data-hint="Take the line off the photograph"
+          style={{ ...metrics, padding: "0 7px" }}
+          onClick={() => dispatch({ type: "set_profile_line", line: null })}
+        >
+          Clear
+        </button>
+      )}
+    </>
+  );
+}
+
 export function Spectrums({
   state,
   dispatch,
@@ -926,6 +1014,13 @@ export function Spectrums({
     [data, kind],
   );
 
+  // The Line Profile's samples: a few hundred along the line, at most
+  // one a pixel of the frame read.
+  const profile = useMemo<Profile | null>(
+    () => (kind === "profile" && data && state.profileLine ? lineProfile(data, state.profileLine, 400) : null),
+    [kind, data, state.profileLine],
+  );
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
@@ -957,14 +1052,22 @@ export function Spectrums({
       }
     }
 
-    if (kind === "histogram") drawHistogram(ctx, w, h, hist, channel, dpr, histInk);
+    if (kind === "profile") {
+      if (profile) drawProfile(ctx, w, h, profile, channel, dpr, state.profileHover);
+      else {
+        ctx.fillStyle = "#6f6a63";
+        ctx.font = `${11 * dpr}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillText("Draw a line on the photograph", w / 2, h / 2);
+      }
+    } else if (kind === "histogram") drawHistogram(ctx, w, h, hist, channel, dpr, histInk);
     else if (kind === "parade") drawWaveform(ctx, w, h, data, ["r", "g", "b"], paradeInk);
     else if (kind === "waveform") drawWaveform(ctx, w, h, data, ["luma"]);
     else if (kind === "chroma") drawChroma(ctx, w, h, data, dpr);
     else if (kind === "harmony") drawHarmony(ctx, w, h, data, dpr, state.harmony);
     else drawVector(ctx, w, h, data, dpr);
     if (waveformish && evLines) drawEvScale(ctx, w, h, dpr, kind === "parade" && paradeInk);
-  }, [data, hist, kind, channel, size, evLines, state.harmony, histInk, paradeInk]);
+  }, [data, hist, kind, channel, size, evLines, state.harmony, histInk, paradeInk, profile, state.profileHover]);
 
   const clip = hist ? clipping(hist) : null;
   const pct = clipPct;
@@ -983,7 +1086,10 @@ export function Spectrums({
           : "Drag a Color Wheel and its hue snaps toward the nearest spoke, as hard as Strength says. Typed values are never bent"
       : null;
 
-  const info = readout(kind, channel, data, hist, at, { inkHist: histInk, inkParade: paradeInk });
+  const info =
+    kind === "profile"
+      ? profileReadout(profile, state.profileHover)
+      : readout(kind, channel, data, hist, at, { inkHist: histInk, inkParade: paradeInk });
   // The clipping figures keep meaning shadows (▼, level 0) and
   // highlights (▲, the top level) in every face. They sit in the order
   // the histogram's axis runs, so on the CMY face, where black is 100%
@@ -1072,9 +1178,10 @@ pushed a picker's width to the right of everything else in the panel.
           <EvChip on={evLines} onToggle={() => setEvLines((v) => !v)} testid="spectrum-ev" metrics={box} />
         )}
         {fill && PARADE_INK_CHIP && kind === "parade" && <CmyChip on={paradeInk} onToggle={flipParade} metrics={box} />}
+        {fill && kind === "profile" && dispatch && <ProfileChips state={state} dispatch={dispatch} metrics={box} />}
         {fill && (
           <ChannelPicker
-            show={kind === "histogram"}
+            show={kind === "histogram" || kind === "profile"}
             channel={channel}
             onPick={setChannel}
             face={histInk ? "cmy" : "rgb"}
@@ -1106,8 +1213,9 @@ pushed a picker's width to the right of everything else in the panel.
             <EvChip on={evLines} onToggle={() => setEvLines((v) => !v)} />
           )}
           {PARADE_INK_CHIP && kind === "parade" && <CmyChip on={paradeInk} onToggle={flipParade} />}
+          {kind === "profile" && dispatch && <ProfileChips state={state} dispatch={dispatch} />}
           <ChannelPicker
-            show={kind === "histogram"}
+            show={kind === "histogram" || kind === "profile"}
             channel={channel}
             onPick={setChannel}
             face={histInk ? "cmy" : "rgb"}
@@ -1230,6 +1338,10 @@ the buttons got smaller.*/}
             // under the hand ("The wheel should update while
             // dragging in realtime").
             if (e.buttons === 1) anchorAt(e);
+            // The profile's point along the line, marked on the viewer too.
+            if (kind === "profile" && dispatch && state.profileLine) {
+              dispatch({ type: "set_profile_hover", t: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) });
+            }
           }}
           onMouseDown={(e) => {
             // The harmony anchor is set by pointing at the ring: the
@@ -1237,7 +1349,10 @@ the buttons got smaller.*/}
             // the drag that follows keeps setting it.
             if (e.button === 0) anchorAt(e);
           }}
-          onMouseLeave={() => setAt(null)}
+          onMouseLeave={() => {
+            setAt(null);
+            if (kind === "profile" && dispatch && state.profileHover !== null) dispatch({ type: "set_profile_hover", t: null });
+          }}
           style={{
             position: "absolute",
             inset: 0,
