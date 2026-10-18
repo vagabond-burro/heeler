@@ -68,23 +68,54 @@ export const SPECTRUM_KINDS: {
     id: "profile",
     label: "Line Profile",
     short: "Line",
-    blurb: "Brightness along a line you draw on the photograph",
+    blurb: "Brightness along a path you draw on the photograph",
   },
 ];
 
-/** A line drawn on the frame, its ends in 0..1 of the frame. */
+/** A path drawn on the frame: two or more points in 0..1 of the frame,
+ * read in the order they were placed. */
 export interface ProfileLine {
-  x0: number;
-  y0: number;
-  x1: number;
-  y1: number;
+  points: [number, number][];
 }
 
-/** The frame's levels along a line, 0..1 as displayed, one entry per
- * sample from the line's start to its end: each channel and the
- * luminance (Rec. 709 weights over the displayed values, the
- * waveform's own). A sample on a transparent pixel (a warp's empty
- * edge) is NaN, a gap in the plot rather than a dive to black. */
+/** How far along a path each of its points lies, as a share of its whole
+ * length, measured in the frame's pixels (`aspect` is width over height),
+ * so a stretch across a wide frame counts for what it covers. The first is
+ * 0 and the last 1; a path of no length spaces its points evenly. */
+export function pathStops(line: ProfileLine, aspect = 1): number[] {
+  const p = line.points;
+  const seg = p.slice(1).map((q, i) => Math.hypot((q[0] - p[i][0]) * aspect, q[1] - p[i][1]));
+  const total = seg.reduce((a, b) => a + b, 0);
+  const out = [0];
+  let acc = 0;
+  for (let i = 0; i < seg.length; i++) {
+    acc += seg[i];
+    out.push(total > 0 ? acc / total : (i + 1) / Math.max(1, seg.length));
+  }
+  return out;
+}
+
+/** The point a share `t` of the way along a path. */
+export function pointAlong(line: ProfileLine, t: number, aspect = 1): [number, number] {
+  const p = line.points;
+  const stops = pathStops(line, aspect);
+  const at = Math.min(1, Math.max(0, t));
+  for (let i = 1; i < p.length; i++) {
+    if (at <= stops[i] || i === p.length - 1) {
+      const span = stops[i] - stops[i - 1];
+      const f = span > 0 ? (at - stops[i - 1]) / span : 0;
+      return [p[i - 1][0] + (p[i][0] - p[i - 1][0]) * f, p[i - 1][1] + (p[i][1] - p[i - 1][1]) * f];
+    }
+  }
+  return p[0];
+}
+
+/** The frame's levels along a path, 0..1 as displayed, one entry per
+ * sample from its start to its end, evenly by distance along it: each
+ * channel and the luminance (Rec. 709 weights over the displayed values,
+ * the waveform's own). A sample on a transparent pixel (a warp's empty
+ * edge, outside a scoped selection) is NaN, a gap in the plot rather
+ * than a dive to black. */
 export interface Profile {
   r: number[];
   g: number[];
@@ -100,12 +131,13 @@ export function lineProfile(
   const n = Math.max(2, Math.round(samples));
   const out: Profile = { r: [], g: [], b: [], luma: [] };
   const { pixels, w, h } = frame;
+  const aspect = w / Math.max(1, h);
   const at = (x: number, y: number, c: number) => pixels[(y * w + x) * 4 + c];
   for (let i = 0; i < n; i++) {
-    const t = i / (n - 1);
+    const [px, py] = pointAlong(line, i / (n - 1), aspect);
     // Pixel centers: 0..1 of the frame is 0..w of its pixels.
-    const fx = Math.min(w - 1, Math.max(0, (line.x0 + (line.x1 - line.x0) * t) * w - 0.5));
-    const fy = Math.min(h - 1, Math.max(0, (line.y0 + (line.y1 - line.y0) * t) * h - 0.5));
+    const fx = Math.min(w - 1, Math.max(0, px * w - 0.5));
+    const fy = Math.min(h - 1, Math.max(0, py * h - 0.5));
     const x0 = Math.floor(fx);
     const y0 = Math.floor(fy);
     const x1 = Math.min(w - 1, x0 + 1);
@@ -130,17 +162,23 @@ export function lineProfile(
   return out;
 }
 
-/** Where on a line a point of the frame falls, 0 at its start and 1 at
- * its end, and how far from the line it is in frame units; for the
- * viewer's hover on the drawn line. */
-export function alongLine(line: ProfileLine, x: number, y: number): { t: number; dist: number } {
-  const dx = line.x1 - line.x0;
-  const dy = line.y1 - line.y0;
-  const len2 = dx * dx + dy * dy;
-  const t = len2 > 0 ? Math.min(1, Math.max(0, ((x - line.x0) * dx + (y - line.y0) * dy) / len2)) : 0;
-  const px = line.x0 + dx * t;
-  const py = line.y0 + dy * t;
-  return { t, dist: Math.hypot(x - px, y - py) };
+/** Where on a path a point of the frame falls, 0 at its start and 1 at
+ * its end, and how far from the path it is in frame units (the nearest of
+ * its segments); for the viewer's hover on the drawn path. */
+export function alongLine(line: ProfileLine, x: number, y: number, aspect = 1): { t: number; dist: number } {
+  const p = line.points;
+  const stops = pathStops(line, aspect);
+  let best = { t: 0, dist: Infinity };
+  for (let i = 1; i < p.length; i++) {
+    const [ax, ay] = p[i - 1];
+    const dx = p[i][0] - ax;
+    const dy = p[i][1] - ay;
+    const len2 = dx * dx + dy * dy;
+    const f = len2 > 0 ? Math.min(1, Math.max(0, ((x - ax) * dx + (y - ay) * dy) / len2)) : 0;
+    const dist = Math.hypot(x - (ax + dx * f), y - (ay + dy * f));
+    if (dist < best.dist) best = { t: stops[i - 1] + (stops[i] - stops[i - 1]) * f, dist };
+  }
+  return best;
 }
 
 /** How many hue bins the harmony wheel plots. */

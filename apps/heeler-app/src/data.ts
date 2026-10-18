@@ -985,6 +985,7 @@ export function initialState(): State {
     inspectPick: false,
     recolorPairPick: null,
     profileDraw: false,
+    profileEdit: false,
     profileLine: null,
     profileHover: null,
     inspectPoint: null,

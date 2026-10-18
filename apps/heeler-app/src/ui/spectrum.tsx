@@ -41,6 +41,7 @@ import {
   type Histogram,
   type SpectrumKind,
   lineProfile,
+  pathStops,
   type Profile,
 } from "../spectrums";
 import { HARMONY_MODES, HARMONY_REACH, harmonyHues, hueDelta, type Harmony } from "../harmony";
@@ -289,6 +290,8 @@ function drawProfile(
   channel: HistChannel,
   dpr: number,
   hover: number | null,
+  /** where the path's points fall along it, 0 to 1, ticked on the axis */
+  stops: number[] = [],
 ) {
   const traces: [number[], string][] =
     channel === "rgb"
@@ -313,6 +316,15 @@ function drawProfile(
       else ctx.moveTo(x, y);
       pen = true;
     });
+    ctx.stroke();
+  }
+  // The path's corners: a short tick at the foot of the plot for each.
+  ctx.strokeStyle = "rgba(255,255,255,.35)";
+  ctx.lineWidth = dpr;
+  for (const s of stops.slice(1, -1)) {
+    ctx.beginPath();
+    ctx.moveTo(s * w, h);
+    ctx.lineTo(s * w, h - 6 * dpr);
     ctx.stroke();
   }
   if (hover !== null) {
@@ -846,8 +858,12 @@ export function drawEvScale(
   ctx.restore();
 }
 
-/** Draw arms the line on the viewer; Clear takes the line away. */
+/** The Line Profile's three tools, as pictures with their names on hover:
+ * Draw places a new path, Edit moves, adds and removes its points, Clear
+ * takes it away. */
 function ProfileChips({ state, dispatch, metrics = CHIP_SIZE }: { state: State; dispatch: D; metrics?: React.CSSProperties }) {
+  const chip = { ...metrics, padding: "0 6px", display: "inline-flex", alignItems: "center", justifyContent: "center" };
+  const glyph = { width: 13, height: 13, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true, focusable: false };
   return (
     <>
       <button
@@ -855,23 +871,53 @@ function ProfileChips({ state, dispatch, metrics = CHIP_SIZE }: { state: State; 
         data-testid="spectrum-profile-draw"
         data-active={state.profileDraw}
         aria-pressed={state.profileDraw}
-        data-hint="Drag across the photograph to draw the line the profile reads"
-        style={{ ...metrics, padding: "0 7px" }}
+        aria-label="Draw a path"
+        data-tip="Draw a path"
+        data-hint="Click points across the photograph for the path the profile reads; double-click or Enter to finish, or drag for a straight line"
+        style={chip}
         onClick={() => dispatch({ type: "toggle_profile_draw" })}
       >
-        Draw
+        <svg {...glyph}>
+          <path d="M2 13l4-6 4 3 4-7" />
+          <circle cx="2" cy="13" r="1.3" fill="currentColor" stroke="none" />
+          <circle cx="6" cy="7" r="1.3" fill="currentColor" stroke="none" />
+          <circle cx="10" cy="10" r="1.3" fill="currentColor" stroke="none" />
+          <circle cx="14" cy="3" r="1.3" fill="currentColor" stroke="none" />
+        </svg>
       </button>
-      {state.profileLine && (
-        <button
-          className="chip"
-          data-testid="spectrum-profile-clear"
-          data-hint="Take the line off the photograph"
-          style={{ ...metrics, padding: "0 7px" }}
-          onClick={() => dispatch({ type: "set_profile_line", line: null })}
-        >
-          Clear
-        </button>
-      )}
+      <button
+        className="chip"
+        data-testid="spectrum-profile-edit"
+        data-active={state.profileEdit}
+        aria-pressed={state.profileEdit}
+        disabled={!state.profileLine}
+        aria-label="Edit the path"
+        data-tip="Edit the path"
+        data-hint={state.profileLine ? "Drag a point to move it, Option-click a point to take it out, click the path to put a point in" : "Draw a path first"}
+        style={chip}
+        onClick={() => dispatch({ type: "toggle_profile_edit" })}
+      >
+        <svg {...glyph}>
+          <path d="M3 12l5-7 5 5" />
+          <rect x="1.5" y="10.5" width="3" height="3" fill="none" />
+          <rect x="6.5" y="3.5" width="3" height="3" fill="currentColor" stroke="none" />
+          <rect x="11.5" y="8.5" width="3" height="3" fill="none" />
+        </svg>
+      </button>
+      <button
+        className="chip"
+        data-testid="spectrum-profile-clear"
+        disabled={!state.profileLine && !state.profileDraw}
+        aria-label="Clear the path"
+        data-tip="Clear the path"
+        data-hint="Take the path off the photograph"
+        style={chip}
+        onClick={() => dispatch({ type: "set_profile_line", line: null })}
+      >
+        <svg {...glyph}>
+          <path d="M4 4l8 8M12 4l-8 8" />
+        </svg>
+      </button>
     </>
   );
 }
@@ -1017,8 +1063,11 @@ export function Spectrums({
   // The Line Profile's samples: a few hundred along the line, at most
   // one a pixel of the frame read.
   const profile = useMemo<Profile | null>(
-    () => (kind === "profile" && data && state.profileLine ? lineProfile(data, state.profileLine, 400) : null),
-    [kind, data, state.profileLine],
+    // The whole frame, never the selection scope: this scope has no
+    // selection button, so a region it was told of nowhere must not cut
+    // its path.
+    () => (kind === "profile" && raw && state.profileLine ? lineProfile(raw, state.profileLine, 400) : null),
+    [kind, raw, state.profileLine],
   );
 
   useEffect(() => {
@@ -1053,12 +1102,12 @@ export function Spectrums({
     }
 
     if (kind === "profile") {
-      if (profile) drawProfile(ctx, w, h, profile, channel, dpr, state.profileHover);
+      if (profile) drawProfile(ctx, w, h, profile, channel, dpr, state.profileHover, raw && state.profileLine ? pathStops(state.profileLine, raw.w / Math.max(1, raw.h)) : []);
       else {
         ctx.fillStyle = "#6f6a63";
         ctx.font = `${11 * dpr}px sans-serif`;
         ctx.textAlign = "center";
-        ctx.fillText("Draw a line on the photograph", w / 2, h / 2);
+        ctx.fillText("Draw a path on the photograph", w / 2, h / 2);
       }
     } else if (kind === "histogram") drawHistogram(ctx, w, h, hist, channel, dpr, histInk);
     else if (kind === "parade") drawWaveform(ctx, w, h, data, ["r", "g", "b"], paradeInk);
@@ -1067,7 +1116,7 @@ export function Spectrums({
     else if (kind === "harmony") drawHarmony(ctx, w, h, data, dpr, state.harmony);
     else drawVector(ctx, w, h, data, dpr);
     if (waveformish && evLines) drawEvScale(ctx, w, h, dpr, kind === "parade" && paradeInk);
-  }, [data, hist, kind, channel, size, evLines, state.harmony, histInk, paradeInk, profile, state.profileHover]);
+  }, [data, raw, hist, kind, channel, size, evLines, state.harmony, histInk, paradeInk, profile, state.profileHover]);
 
   const clip = hist ? clipping(hist) : null;
   const pct = clipPct;
@@ -1178,7 +1227,6 @@ pushed a picker's width to the right of everything else in the panel.
           <EvChip on={evLines} onToggle={() => setEvLines((v) => !v)} testid="spectrum-ev" metrics={box} />
         )}
         {fill && PARADE_INK_CHIP && kind === "parade" && <CmyChip on={paradeInk} onToggle={flipParade} metrics={box} />}
-        {fill && kind === "profile" && dispatch && <ProfileChips state={state} dispatch={dispatch} metrics={box} />}
         {fill && (
           <ChannelPicker
             show={kind === "histogram" || kind === "profile"}
@@ -1213,7 +1261,6 @@ pushed a picker's width to the right of everything else in the panel.
             <EvChip on={evLines} onToggle={() => setEvLines((v) => !v)} />
           )}
           {PARADE_INK_CHIP && kind === "parade" && <CmyChip on={paradeInk} onToggle={flipParade} />}
-          {kind === "profile" && dispatch && <ProfileChips state={state} dispatch={dispatch} />}
           <ChannelPicker
             show={kind === "histogram" || kind === "profile"}
             channel={channel}
@@ -1383,8 +1430,15 @@ the buttons got smaller.*/}
         {/* The selection scope, bottom-left ("A button, maybe under the
 bottom left corner, to toggle off a selected region spectrum").
 Disabled rather than hidden with no selection to read, hint
-saying how to get one, per the menu rule.*/}
-        {dispatch && (
+saying how to get one, per the menu rule. The Line Profile reads a
+path, not a region: its seat holds the path's own tools instead, where
+a narrow panel still has room for them (the owner, 2026-10-17).*/}
+        {dispatch && kind === "profile" && (
+          <div style={{ display: "flex", gap: 4 }} data-testid="spectrum-profile-tools">
+            <ProfileChips state={state} dispatch={dispatch} metrics={fill ? box : undefined} />
+          </div>
+        )}
+        {dispatch && kind !== "profile" && (
           <span data-hint={
               !selSubstance
                 ? "Read the scopes from a selected region only · Draw a selection first, with a tool from Select > Interactive Selection"

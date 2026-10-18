@@ -1494,6 +1494,7 @@ const PICKER_RESET = {
   inspectPick: false,
   recolorPairPick: null,
   profileDraw: false,
+  profileEdit: false,
 };
 
 /** Whether any picker is waiting on a click. */
@@ -1515,7 +1516,8 @@ export function anyPickerArmed(s: State): boolean {
     s.chartPlace ||
     s.inspectPick ||
     s.recolorPairPick !== null ||
-    s.profileDraw
+    s.profileDraw ||
+    s.profileEdit
   );
 }
 
@@ -3777,8 +3779,11 @@ export interface State {
   /** The Line Profile scope's line is being drawn: a drag on the frame
    * lays it down. */
   profileDraw: boolean;
-  /** The line the Line Profile scope reads, in 0..1 of the frame, or
-   * null. A view setting: never part of an edit, a Take, the history or
+  /** The Line Profile's path is being edited: its points drag, an
+   * Option-click takes one out, a click on the path puts one in. */
+  profileEdit: boolean;
+  /** The path the Line Profile scope reads, its points in 0..1 of the
+   * frame, or null. A view setting: never part of an edit, a Take, the history or
    * an export, and it stays as photographs change, so two can be read
    * along the same line. */
   profileLine: ProfileLine | null;
@@ -5148,7 +5153,9 @@ export type Command =
   | { type: "recolor_pair_first"; end: RecolorPairEnd }
   /** Arm or put away the Line Profile's line drawing. */
   | { type: "toggle_profile_draw" }
-  /** Lay down the Line Profile's line, or clear it with null. */
+  /** Edit the Line Profile's path, or stop. */
+  | { type: "toggle_profile_edit" }
+  /** Lay down the Line Profile's path, or clear it with null. */
   | { type: "set_profile_line"; line: ProfileLine | null }
   /** The point along the line under the cursor, or null. */
   | { type: "set_profile_hover"; t: number | null }
@@ -13576,7 +13583,7 @@ const PICK_GRAPH_REPLACEMENTS = new Set<string>([
 /** The pickers whose disarm cancels a pending answer aimed through them. */
 const PICK_ARMS = [
   "curvePick", "wbPick", "toneEqPick", "recolorPick", "recolorMatch", "bwSeparate", "bwPick", "zonePlace",
-  "csetDropper", "consolePick", "dofPick", "keyLightPick", "chartPlace", "inspectPick", "recolorPairPick", "profileDraw",
+  "csetDropper", "consolePick", "dofPick", "keyLightPick", "chartPlace", "inspectPick", "recolorPairPick", "profileDraw", "profileEdit",
 ] as const;
 /** A dropper a pick session can name as the arm it answers through. Typed
  * from the list so a misspelt arm is a compile error, not a session that
@@ -18926,15 +18933,26 @@ function reduceInner(s: State, cmd: Command): State {
     case "toggle_profile_draw":
       return s.profileDraw ? { ...s, profileDraw: false } : { ...s, ...PICKER_RESET, profileDraw: true };
     case "set_profile_line": {
-      const l = cmd.line;
+      // Each point kept in the frame, a point on top of the one before it
+      // dropped; fewer than two left is no path.
       const clamp = (v: number) => Math.min(1, Math.max(0, v));
+      const points: [number, number][] = [];
+      for (const [x, y] of cmd.line?.points ?? []) {
+        const p: [number, number] = [clamp(x), clamp(y)];
+        const last = points[points.length - 1];
+        if (!last || Math.hypot(p[0] - last[0], p[1] - last[1]) > 1e-6) points.push(p);
+      }
+      const line = points.length >= 2 ? { points } : null;
       return {
         ...s,
         profileDraw: false,
+        profileEdit: line ? s.profileEdit : false,
         profileHover: null,
-        profileLine: l && (l.x0 !== l.x1 || l.y0 !== l.y1) ? { x0: clamp(l.x0), y0: clamp(l.y0), x1: clamp(l.x1), y1: clamp(l.y1) } : null,
+        profileLine: line,
       };
     }
+    case "toggle_profile_edit":
+      return s.profileEdit || !s.profileLine ? { ...s, profileEdit: false } : { ...s, ...PICKER_RESET, profileEdit: true };
     case "set_profile_hover":
       return s.profileHover === cmd.t ? s : { ...s, profileHover: cmd.t === null ? null : Math.min(1, Math.max(0, cmd.t)) };
     case "toggle_inspect_pick":
