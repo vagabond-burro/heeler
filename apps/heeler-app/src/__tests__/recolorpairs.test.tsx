@@ -189,6 +189,10 @@ describe("Recolor pairs", () => {
     expect(screen.getByTestId("recolor-pair-fold-1")).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByTestId("recolor-pair-sep-1")).toBeNull();
     expect(screen.getByTestId("recolor-pair-remove-1")).toBeInTheDocument();
+    // Remove is a picture with its name on hover, not a word.
+    expect(screen.getByTestId("recolor-pair-remove-1").textContent).toBe("");
+    expect(screen.getByTestId("recolor-pair-remove-1")).toHaveAttribute("aria-label", "Remove this pair");
+    expect(screen.getByTestId("recolor-pair-remove-1").querySelector("svg")).not.toBeNull();
     expect(screen.queryByTestId("recolor-pair-sep-0")).not.toBeNull();
     expect(screen.queryByTestId("recolor-pair-sep-2")).not.toBeNull();
     // Removing the first moves the folded pair up a place, folded still.

@@ -13,6 +13,7 @@ import { PICK_CURSOR } from "./cursors";
 import { norm, type ViewTransform } from "./overlays";
 import { isPrimaryPress } from "./pointerguard";
 import { TrackSlider } from "./track";
+import { TrashIcon } from "./takeicons";
 import { usePickSessions } from "../picksession";
 
 type D = (c: Command) => void;
@@ -363,15 +364,17 @@ export function RecolorPairs({ state, node, dispatch, width }: { state: State; n
                 <button
                   className="chip"
                   data-testid={`recolor-pair-remove-${i}`}
+                  aria-label="Remove this pair"
+                  data-tip="Remove"
                   data-hint="Remove this pair"
-                  style={{ fontSize: 11, padding: "1px 7px", marginLeft: "auto" }}
+                  style={{ padding: "1px 5px", marginLeft: "auto", display: "inline-flex", alignItems: "center" }}
                   onClick={() => {
                     write(pairs.filter((_, k) => k !== i));
                     // The pairs after it move up a place, and their folds with them.
                     setFolded((f) => f.filter((k) => k !== i).map((k) => (k > i ? k - 1 : k)));
                   }}
                 >
-                  Remove
+                  <TrashIcon size={12} />
                 </button>
               </div>
               {!folded.includes(i) && (
