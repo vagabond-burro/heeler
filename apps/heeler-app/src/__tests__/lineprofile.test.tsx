@@ -2,7 +2,8 @@
 // drawing it point by point, editing its points, and the hover shared by
 // the plot and the viewer.
 import { describe, expect, it, vi } from "vitest";
-import { act, render, screen, fireEvent } from "@testing-library/react";
+import { act, render, renderHook, screen, fireEvent } from "@testing-library/react";
+import { releaseHint, setHint, useHint, useStatusReadout } from "../ui/hints";
 import { initialState } from "../data";
 import { anyPickerArmed, reduce, type Command, type State } from "../state";
 import { alongLine, lineProfile, pathStops, pointAlong, SPECTRUM_KINDS, type ProfileLine } from "../spectrums";
@@ -190,7 +191,30 @@ describe("Line Profile", () => {
     fireEvent.mouseMove(window, { clientX: 130 });
     fireEvent.mouseUp(window);
     expect(dispatch).toHaveBeenCalledWith({ type: "set_profile_radius", radius: 3 });
+    // Beside five controls in a narrow panel the row's own words stay on
+    // one line, cut short, never a word a line.
+    expect(screen.getByTestId("spectrum-readout").style.whiteSpace).toBe("nowrap");
     setUiPref("spectrumKind", "histogram");
+  });
+
+  it("puts its reading in the window's status line while there is one, and takes only its own back", () => {
+    const { rerender, unmount } = renderHook(({ text }) => useStatusReadout(text), { initialProps: { text: null as string | null } });
+    const line = renderHook(() => useHint());
+    expect(line.result.current).toBeNull();
+    rerender({ text: "30% along · L 40" });
+    expect(line.result.current).toBe("30% along · L 40");
+    rerender({ text: "31% along · L 41" });
+    expect(line.result.current).toBe("31% along · L 41");
+    rerender({ text: null });
+    expect(line.result.current).toBeNull();
+    // The pointer moved on to a control with its own hint first: the
+    // reading going away leaves that hint where it is.
+    rerender({ text: "32% along · L 42" });
+    act(() => setHint("Draw a path"));
+    rerender({ text: null });
+    expect(line.result.current).toBe("Draw a path");
+    act(() => releaseHint("Draw a path"));
+    unmount();
   });
 
   it("averages a band either side of the path, by its radius", () => {

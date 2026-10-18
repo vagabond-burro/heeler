@@ -52,6 +52,7 @@ import { setUiPref, uiPref } from "../uiprefs";
 import { HarmonyIcon, SpectrumIcon } from "./panelicons";
 import { CHIP_METRICS, CHIP_METRICS_LARGE, ChannelChips } from "./channelchips";
 import { modLabel } from "../platform";
+import { useStatusReadout } from "./hints";
 
 type D = React.Dispatch<Command>;
 
@@ -1192,10 +1193,12 @@ export function Spectrums({
           : "Drag a Color Wheel and its hue snaps toward the nearest spoke, as hard as Strength says. Typed values are never bent"
       : null;
 
-  const info =
-    kind === "profile"
-      ? profileReadout(profile, state.profileHover)
-      : readout(kind, channel, data, hist, at, { inkHist: histInk, inkParade: paradeInk });
+  // The Line Profile's readout goes to the window's status line, the
+  // width of the window, while the cursor is on its plot or its path:
+  // beside its five tools in the panel it stood a word to a line.
+  const profileInfo = kind === "profile" ? profileReadout(profile, state.profileHover) : null;
+  useStatusReadout(profileInfo);
+  const info = kind === "profile" ? null : readout(kind, channel, data, hist, at, { inkHist: histInk, inkParade: paradeInk });
   // The clipping figures keep meaning shadows (▼, level 0) and
   // highlights (▲, the top level) in every face. They sit in the order
   // the histogram's axis runs, so on the CMY face, where black is 100%
@@ -1547,11 +1550,15 @@ beside it comes and goes with the cursor.*/}
         )}
         <div
           className="tnum"
+          data-testid="spectrum-readout"
           style={{
             fontSize: 9,
             color: "var(--text-faint)",
             flex: 1,
             minWidth: 0,
+            // Beside the profile's five tools a narrow panel has room for
+            // a few words at most: one line, cut short, never a word a line.
+            ...(kind === "profile" ? { whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" } : {}),
           }}
         >
           {/* The hover readout wins; then the honesty note, which is set

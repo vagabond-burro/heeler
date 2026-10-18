@@ -63,6 +63,22 @@ export function setHint(v: string | null) {
   if (!flash) publish();
 }
 
+/** Takes back a hint this caller set, and only that: a pointer that has
+ * moved on may already have put another in its place. */
+export function releaseHint(v: string) {
+  if (current === v) setHint(null);
+}
+
+/** Shows a live reading in the status row while there is one (a scope's
+ * place under the cursor), and takes it back when it goes. */
+export function useStatusReadout(text: string | null) {
+  useEffect(() => {
+    if (text === null) return;
+    setHint(text);
+    return () => releaseHint(text);
+  }, [text]);
+}
+
 /** Says something in the status row for a few seconds, over whatever the
  * pointer is hinting, then gets out of the way.
  *
