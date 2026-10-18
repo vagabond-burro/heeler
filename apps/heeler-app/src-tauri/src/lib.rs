@@ -2350,6 +2350,19 @@ fn conform_rasters_to_geometry(
         }
         let Some(entry) = sources.get_mut(key) else { continue };
         let mut image = entry.image.clone();
+        // The cut runs before the render, inside the preview's job, which
+        // opens at nothing: it pays for its own frames, the raster held
+        // and the one each step makes, with room for a warp's working
+        // copy. Bare, a crop's cut of the depth plane was refused at "0
+        // MiB available" and the plane was dropped, so a depth-masked
+        // layer covered its whole shape (the owner, 2026-10-17: a crop
+        // blew out a radial layer limited to the owl by depth).
+        // A plane on a smaller grid (the depth model's) is cut out at the
+        // frame's own pixel centers, so the frames are the larger of the two.
+        let (pw, ph) = frame.map_or((image.width, image.height), |(fw, fh)| (fw.max(image.width), fh.max(image.height)));
+        let _paid = memory::or_unwind(
+            memory::bytes(pw, ph, 4, 4 * 3).and_then(|need| Job::admit(need, "planted raster cut to the frame")),
+        );
         let mut stamp = format!("{}|geom|frame {frame:?}", entry.version);
         // The photograph's size as the pixels meet each crop: a raster
         // on another grid is cut at the photograph's pixel centers
@@ -25090,6 +25103,34 @@ mod tests {
         let crop = &steps[3];
         assert!(crop.moves && (crop.input.unwrap().r - 0.4).abs() < 0.02 && (crop.output.unwrap().r - 0.1).abs() < 0.02, "{crop:?}");
         assert!(!steps[4].moves && (steps[4].output.unwrap().r - 0.1).abs() < 0.02);
+    }
+
+    /// A planted plane is cut to the crop before the render starts, inside
+    /// the preview's job, which opens at nothing. The cut must take what
+    /// the machine has rather than refuse at "0 MiB available" (the
+    /// owner's report, 2026-10-17: a crop dropped the depth plane, and a
+    /// depth-masked radial layer brightened its whole ellipse).
+    #[test]
+    fn a_planted_plane_is_cut_to_the_crop_inside_the_previews_job() {
+        let node = |id: &str, ty: &str, params: HashMap<String, serde_json::Value>| UiNode { id: id.into(), node_type: ty.into(), enabled: true, params };
+        let wire = |a: &str, b: &str| UiConnection { from: (a.into(), "out".into()), to: (b.into(), "in".into()) };
+        let ui = UiGraph {
+            graph_id: "plane".into(),
+            nodes: vec![
+                node("src", "heeler.image_source", HashMap::new()),
+                node("crop", "heeler.crop_rotate", HashMap::from([("crop_x".to_string(), serde_json::json!(0.1)), ("crop_w".to_string(), serde_json::json!(0.8))])),
+                node("sel", "heeler.selection_mask", HashMap::new()),
+            ],
+            connections: vec![wire("src", "crop"), wire("crop", "sel")],
+        };
+        let plane = Arc::new(ImageBuf::new(400, 300));
+        memory::with_budget(64 << 20, || {
+            let _preview = Job::admit(0, "preview").unwrap();
+            let mut sources = HashMap::from([("sel".to_string(), SourceImage { image: plane.clone(), version: 1, measured: true })]);
+            let cut = memory::catch(|| conform_rasters_to_geometry(&ui, &mut sources, &["sel".to_string()], Some((400, 300)), &std::collections::HashSet::new()));
+            assert!(cut.is_ok(), "the cut was refused: {cut:?}");
+            assert_eq!((sources["sel"].image.width, sources["sel"].image.height), (320, 300));
+        });
     }
 
     /// Polish solves its matte on the frame the selection reads; put back
