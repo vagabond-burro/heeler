@@ -3281,24 +3281,18 @@ export interface TraceStep {
 }
 
 /** Influence Mapping's trace of the pixel at (x, y) of the frame: every
- * node on the picture's path, source first. Upstream of a crop or warp
- * the backend reads the photograph's own place, mapped back here. A
- * cache read against the frame on screen. Null in the browser build or
+ * node on the picture's path, source first. The backend maps the point
+ * through each geometry operation on its own grid. Null in the browser build or
  * on failure. */
 export async function tracePixel(state: State, x: number, y: number): Promise<TraceStep[] | null> {
   if (!isTauri()) return null;
   try {
     const graph = serializeGraph(state);
-    const meta = await imageMetadata(state, state.activeImage).catch(() => null);
-    const size: [number, number] = meta?.width && meta.height ? [meta.width, meta.height] : [1000, 1000];
-    const src = sourcePoint(graph, size, [x, y]) ?? [x, y];
     return await call<TraceStep[]>("trace_pixel", {
       graph,
       imageId: state.activeImage,
       x,
       y,
-      sx: src[0],
-      sy: src[1],
       previewEdge: previewEdgeFor(state),
     });
   } catch {

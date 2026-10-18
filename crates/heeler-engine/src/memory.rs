@@ -320,6 +320,15 @@ pub fn with_retained<T>(bytes: usize, f: impl FnOnce() -> T) -> T {
 /// charging the same working frame again at each function boundary.
 pub struct Job(std::marker::PhantomData<std::rc::Rc<()>>);
 impl Job {
+    /// Fund a buffer kept beside the work already admitted, such as a
+    /// diagnostic frame made after a graph render. Nested stages normally
+    /// share a high-water estimate; this buffer is additional to it.
+    pub fn admit_additional(needed: usize, purpose: &str) -> Result<Self, MemoryError> {
+        let current = ACTIVE.with(|a| a.borrow().last().map(|j| j.bytes()).unwrap_or(0));
+        let retained = RETAINED.with(|r| r.get());
+        Self::admit(sum([current.saturating_sub(retained), needed])?, purpose)
+    }
+
     pub fn admit(needed: usize, purpose: &str) -> Result<Self, MemoryError> {
         let needed = sum([needed, RETAINED.with(|r| r.get())])?;
         if let Some(limit) = WORKER_LIMIT.with(|l| l.get()) {
@@ -499,6 +508,20 @@ fn machine_memory() -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn additional_buffers_keep_the_previous_allowance_and_respect_worker_limits() {
+        with_budget(1000, || {
+            let parent = Job::admit(300, "render").unwrap();
+            with_retained(100, || {
+                let _extra = Job::admit_additional(200, "view").unwrap();
+                assert_eq!(budget().snapshot().reserved, 500);
+            });
+            parent.worker(500).run(|| assert!(Job::admit_additional(1, "worker view").is_err()));
+            assert_eq!(budget().snapshot().reserved, 500);
+            assert!(Job::admit_additional(501, "oversized view").is_err());
+        });
+    }
+
     #[test]
     fn a_workers_decoder_limits_see_only_its_paid_slice() {
         with_budget(1000, || {

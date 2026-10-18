@@ -13,6 +13,7 @@ import { PICK_CURSOR } from "./cursors";
 import { norm, type ViewTransform } from "./overlays";
 import { isPrimaryPress } from "./pointerguard";
 import { TrackSlider } from "./track";
+import { usePickSessions } from "../picksession";
 
 type D = (c: Command) => void;
 
@@ -47,7 +48,18 @@ export function parsePairs(text: string | undefined): RecolorPair[] {
   if (!text) return [];
   try {
     const v = JSON.parse(text);
-    return Array.isArray(v) ? (v as RecolorPair[]).filter((p) => p && p.a && p.b).slice(0, MAX_PAIRS) : [];
+    if (!Array.isArray(v)) return [];
+    const num = (o: Record<string, unknown>, k: string, d: number) => typeof o[k] === "number" && Number.isFinite(o[k]) ? o[k] as number : d;
+    const end = (o: Record<string, unknown>): RecolorPairEnd => ({
+      h: wrap(num(o, "h", 0)), c: Math.max(0, num(o, "c", 0.12)), ev: num(o, "ev", 0),
+      rgb: Array.isArray(o.rgb) && o.rgb.length === 3 && o.rgb.every((c) => typeof c === "number" && Number.isFinite(c))
+        ? o.rgb as [number, number, number] : [0.2, 0.2, 0.2],
+    });
+    return v.slice(0, MAX_PAIRS).flatMap((p) => {
+      if (!p || !p.a || !p.b || typeof p.a !== "object" || typeof p.b !== "object") return [];
+      const dial = (k: string) => Math.max(-100, Math.min(100, num(p, k, 0)));
+      return [{ a: end(p.a), b: end(p.b), width: Math.max(5, Math.min(90, num(p, "width", 30))), sep: dial("sep"), sat: dial("sat"), lum: dial("lum") }];
+    });
   } catch {
     return [];
   }
@@ -67,10 +79,15 @@ export function pairTurn(p: RecolorPair): number {
 export function pairAfter(p: RecolorPair): { a: { h: number; c: number }; b: { h: number; c: number } } {
   const t = pairTurn(p);
   const s = p.sat / 100;
-  return {
-    a: { h: wrap(p.a.h + t), c: p.a.c * (1 + 0.5 * s) },
-    b: { h: wrap(p.b.h - t), c: p.b.c * (1 - 0.5 * s) },
+  const belongs = (h: number, center: number) => {
+    const d = Math.abs(arc(h, center));
+    return d >= p.width ? 0 : 0.5 * (1 + Math.cos(Math.PI * d / p.width));
   };
+  const after = (end: RecolorPairEnd) => {
+    const wa = belongs(end.h, p.a.h), wb = belongs(end.h, p.b.h);
+    return { h: wrap(end.h + t * (wa - wb)), c: end.c * (1 + 0.5 * s * wa) * (1 - 0.5 * s * wb) };
+  };
+  return { a: after(p.a), b: after(p.b) };
 }
 
 /** One color read where the pair picker clicked: the hue and chroma the
@@ -87,8 +104,7 @@ async function readEnd(state: State, node: string, x: number, y: number): Promis
  * clicks: the first color, then the second, and the pair is added. */
 export function RecolorPairLayer({ state, dispatch, view }: { state: State; dispatch: D; view: ViewTransform }) {
   const arm = state.recolorPairPick;
-  const latest = useRef(state);
-  latest.current = state;
+  const picks = usePickSessions(state, dispatch);
   if (!arm) return null;
   return (
     <div
@@ -99,7 +115,7 @@ export function RecolorPairLayer({ state, dispatch, view }: { state: State; disp
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.stopPropagation();
-          dispatch({ type: "toggle_recolor_pair_pick", id: arm.id });
+          picks.sendNow({ type: "toggle_recolor_pair_pick", id: arm.id });
         }
       }}
       onMouseDown={(e) => {
@@ -108,21 +124,26 @@ export function RecolorPairLayer({ state, dispatch, view }: { state: State; disp
         e.preventDefault();
         e.currentTarget.focus();
         const [x, y] = norm(e, e.currentTarget, view);
-        const cur = latest.current;
-        void readEnd(cur, arm.id, x, y).then((end) => {
-          const now = latest.current;
+        const session = picks.start("pair", {
+          arm: "recolorPairPick",
+          aim: (s) => s.recolorPairPick,
+          settings: (s) => s.nodes.find((n) => n.id === arm.id)?.textParams?.pairs,
+        });
+        void readEnd(session.state(), arm.id, x, y).then((end) => {
+          if (!session.stillMine()) return;
+          const now = session.state();
           // A picker put away or moved to another node meanwhile: the
           // answer belongs to nobody.
           if (!end || now.recolorPairPick?.id !== arm.id || end.c < MIN_CHROMA) return;
           if (!now.recolorPairPick.first) {
-            dispatch({ type: "recolor_pair_first", end });
+            session.dispatch({ type: "recolor_pair_first", end });
             return;
           }
           const node = now.nodes.find((n) => n.id === arm.id);
           const pairs = parsePairs(node?.textParams?.pairs);
           const pair: RecolorPair = { a: now.recolorPairPick.first, b: end, width: 30, sep: 0, sat: 0, lum: 0 };
-          dispatch({ type: "set_text_param", id: arm.id, param: "pairs", value: JSON.stringify([...pairs, pair].slice(0, MAX_PAIRS)) });
-          dispatch({ type: "toggle_recolor_pair_pick", id: arm.id });
+          picks.sendNow({ type: "set_text_param", id: arm.id, param: "pairs", value: JSON.stringify([...pairs, pair].slice(0, MAX_PAIRS)) });
+          picks.sendNow({ type: "toggle_recolor_pair_pick", id: arm.id });
         });
       }}
     />
@@ -159,14 +180,22 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
     const dy = size / 2 - (e.clientY - box.top);
     const h = wrap((Math.atan2(dy, dx) * 180) / Math.PI);
     const c = (Math.hypot(dx, dy) / r) * SCOPE_C;
-    const delta = arc(pair.a.h, pair.b.h);
-    const dir = delta >= 0 ? 1 : -1;
-    const end = which === "a" ? pair.a : pair.b;
-    // The turn the pointer asks of this color, as A's signed turn.
-    const turn = which === "a" ? arc(h, end.h) : -arc(h, end.h);
-    const sep = Math.max(-100, Math.min(100, Math.round(((turn * dir) / PAIR_TURN) * 100)));
-    const ratio = c / Math.max(end.c, 1e-4);
-    const sat = Math.max(-100, Math.min(100, Math.round(((which === "a" ? ratio - 1 : 1 - ratio) / 0.5) * 100)));
+    // Invert the same windowed arithmetic the rings draw. Overlapping
+    // windows and the meeting limit make the old independent turns and
+    // chroma ratios ambiguous; keep the closest current dial on a tie.
+    const closest = (key: "sep" | "sat", error: (p: RecolorPair) => number) => {
+      let value = pair[key], best = error(pair);
+      for (let v = -100; v <= 100; v++) {
+        const e = error({ ...pair, [key]: v });
+        if (e < best - 1e-8 || (Math.abs(e - best) <= 1e-8 && Math.abs(v - pair[key]) < Math.abs(value - pair[key]))) {
+          value = v;
+          best = e;
+        }
+      }
+      return value;
+    };
+    const sep = closest("sep", (p) => Math.abs(arc(pairAfter(p)[which].h, h)));
+    const sat = closest("sat", (p) => Math.abs(pairAfter(p)[which].c - c));
     onChange({ sep, sat });
   };
   return (

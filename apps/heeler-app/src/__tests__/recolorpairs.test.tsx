@@ -1,7 +1,7 @@
 // Recolor's color pairs: the arithmetic the scope draws (the engine's
 // own), the two-click picker, and the fold's dials.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 
 vi.mock("../bridge", async (orig) => {
   const real = await orig<typeof import("../bridge")>();
@@ -28,7 +28,7 @@ describe("Recolor pairs", () => {
     // Nearly opposite already: they stop at opposite sides.
     expect(pairAfter(pair(250, 60, { sep: 100 })).a.h).toBeCloseTo(245, 5);
     // Pulled together, they meet in the middle.
-    const met = pairAfter(pair(100, 80, { sep: -100 }));
+    const met = pairAfter(pair(100, 80, { width: 10, sep: -100 }));
     expect(met.a.h).toBeCloseTo(90, 5);
     expect(met.b.h).toBeCloseTo(90, 5);
     const bal = pairAfter(pair(200, 100, { sat: 100 }));
@@ -36,6 +36,84 @@ describe("Recolor pairs", () => {
     expect(bal.b.c).toBeCloseTo(0.06, 5);
     expect(parsePairs("not json")).toEqual([]);
     expect(parsePairs(JSON.stringify([pair(1, 2), pair(3, 4), pair(5, 6), pair(7, 8)]))).toHaveLength(3);
+  });
+
+  it("normalizes incomplete pair records before opening the fold", () => {
+    const s = initialState();
+    const text = '[{"a":{"h":200,"ev":0},"b":{"h":100,"ev":0},"sep":100}]';
+    const node = { ...s.nodes[0], type: "heeler.recolor", textParams: { pairs: text } };
+    const pairs = parsePairs(text);
+    expect(pairs[0]).toMatchObject({ width: 30, sep: 100, sat: 0, lum: 0 });
+    expect(pairs[0].a.rgb).toHaveLength(3);
+    expect(parsePairs('[null,{"a":null,"b":{}},{"a":1,"b":2}]')).toEqual([]);
+    expect(parsePairs('[{"a":{},"b":{},"width":999,"sep":-999}]')[0]).toMatchObject({ width: 90, sep: -100 });
+    render(<RecolorPairs state={s} node={node} dispatch={() => {}} width={320} />);
+    fireEvent.click(screen.getByTestId("recolor-pairs-toggle"));
+    expect(screen.getByTestId("recolor-pair-0")).toBeInTheDocument();
+    expect(screen.getByTestId("recolor-pair-scope-0").innerHTML).not.toContain("NaN");
+  });
+
+  it("shows both windows' contributions when the picked hues overlap", () => {
+    const moved = pairAfter(pair(100, 80, { sep: -100, sat: 100 }));
+    // The opposite window has weight 0.25 at each picked hue. The
+    // engine's rendered reference is 92.49993 degrees for A.
+    expect(moved.a.h).toBeCloseTo(92.5, 4);
+    expect(moved.b.h).toBeCloseTo(87.5, 4);
+    expect(moved.a.c).toBeCloseTo(0.12 * 1.5 * 0.875, 5);
+    expect(moved.b.c).toBeCloseTo(0.12 * 1.125 * 0.5, 5);
+    const same = pairAfter(pair(100, 100, { sep: 100, sat: 100 }));
+    expect(same.a.h).toBe(100);
+    expect(same.a.c).toBeCloseTo(0.09, 5);
+  });
+
+  it("dragging an overlapping ring uses the same windowed result it draws", () => {
+    let s = run(initialState(), { type: "set_category", title: "Recolor", on: true });
+    const id = toolNode(s, "recolor")!.id;
+    s = run(s, { type: "set_text_param", id, param: "pairs", value: JSON.stringify([pair(100, 80, { sep: -100 })]) });
+    const dispatch = (c: Command) => {
+      s = reduce(s, c);
+      view.rerender(<RecolorPairs state={s} node={s.nodes.find((n) => n.id === id)!} dispatch={dispatch} width={320} />);
+    };
+    const view = render(<RecolorPairs state={s} node={s.nodes.find((n) => n.id === id)!} dispatch={dispatch} width={320} />);
+    fireEvent.click(screen.getByTestId("recolor-pairs-toggle"));
+    const svg = screen.getByTestId("recolor-pair-scope-0");
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 320 / 3, height: 320 / 3 } as DOMRect);
+    const handle = screen.getByTestId("recolor-pair-handle-0-a");
+    const x = Number(handle.getAttribute("cx")), y = Number(handle.getAttribute("cy"));
+    fireEvent(handle, new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    fireEvent(svg, new MouseEvent("pointermove", { bubbles: true, clientX: x, clientY: y }));
+    const stayed = parsePairs(s.nodes.find((n) => n.id === id)!.textParams?.pairs)[0];
+    expect(stayed.sep).toBe(-100);
+    expect(stayed.sat).toBe(0);
+    const size = 320 / 3, r = size / 2 - 6, rad = 95 * Math.PI / 180;
+    fireEvent(svg, new MouseEvent("pointermove", { bubbles: true, clientX: size / 2 + r * 0.4 * Math.cos(rad), clientY: size / 2 - r * 0.4 * Math.sin(rad) }));
+    const moved = pairAfter(parsePairs(s.nodes.find((n) => n.id === id)!.textParams?.pairs)[0]);
+    expect(Math.abs(moved.a.h - 95)).toBeLessThan(0.1);
+    expect(moved.a.c).toBeCloseTo(0.12, 5);
+    fireEvent(svg, new MouseEvent("pointerup", { bubbles: true }));
+  });
+
+  it.each(["rearm", "photo", "unmount"])("drops a delayed pick after %s", async (change) => {
+    let s = run(initialState(), { type: "toggle_recolor_pair_pick", id: "recolor" });
+    let answer!: (v: unknown) => void;
+    sampleMock.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+    const dispatch = (c: Command) => {
+      s = reduce(s, c);
+      view.rerender(<RecolorPairLayer state={s} dispatch={dispatch} view={IDENTITY_VIEW} />);
+    };
+    const view = render(<RecolorPairLayer state={s} dispatch={dispatch} view={IDENTITY_VIEW} />);
+    fireEvent.mouseDown(screen.getByTestId("recolor-pair-overlay"), { button: 0 });
+    act(() => {
+      if (change === "unmount") view.unmount();
+      else {
+        dispatch({ type: "toggle_recolor_pair_pick", id: "recolor" });
+        if (change === "photo") s = { ...s, activeImage: "another-photo" };
+        dispatch({ type: "toggle_recolor_pair_pick", id: "recolor" });
+      }
+    });
+    await act(async () => answer({ r: 0.8, g: 0.1, b: 0.05 }));
+    expect(s.recolorPairPick?.first).toBeNull();
+    expect(s.nodes.find((n) => n.id === "recolor")?.textParams?.pairs ?? "").toBe("");
   });
 
   it("the picker is one picker among the rest, and takes two colored clicks", async () => {

@@ -1048,6 +1048,16 @@ mod tests {
     }
 
     #[test]
+    fn overlapping_pair_windows_share_the_turn_and_balance() {
+        let node = pairs_node(r#"[{"a":{"h":100,"ev":0},"b":{"h":80,"ev":0},"width":30,"sep":-100,"sat":100}]"#);
+        let a = lch_of(run_on(&node, hue_px(100.0, 1.0)).unwrap().as_image().unwrap());
+        let b = lch_of(run_on(&node, hue_px(80.0, 1.0)).unwrap().as_image().unwrap());
+        assert!((a.0 - 92.5).abs() < 0.01 && (b.0 - 87.5).abs() < 0.01, "{a:?} {b:?}");
+        assert!((a.1 - 0.12 * 1.5 * 0.875).abs() < 1e-5);
+        assert!((b.1 - 0.12 * 1.125 * 0.5).abs() < 1e-5);
+    }
+
+    #[test]
     fn balance_and_contrast_move_the_two_colors_opposite_ways() {
         let node = pairs_node(&format!(r#"[{{"a":{SKY_SUNSET},"width":30,"sat":100}}]"#));
         let (sky0, sun0) = (lch_of(&hue_px(250.0, 0.7)), lch_of(&hue_px(60.0, 0.7)));

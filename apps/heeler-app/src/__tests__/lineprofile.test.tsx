@@ -2,7 +2,7 @@
 // drawing it point by point, editing its points, and the hover shared by
 // the plot and the viewer.
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { act, render, screen, fireEvent } from "@testing-library/react";
 import { initialState } from "../data";
 import { anyPickerArmed, reduce, type Command, type State } from "../state";
 import { alongLine, lineProfile, pathStops, pointAlong, SPECTRUM_KINDS, type ProfileLine } from "../spectrums";
@@ -40,6 +40,26 @@ function stage(state: State, dispatch: (c: Command) => void) {
 }
 
 describe("Line Profile", () => {
+  it("Escape during a point drag restores the path the scope samples", () => {
+    let s = run(initialState(), { type: "set_profile_line", line: line([0.1, 0.1], [0.9, 0.9]) }, { type: "toggle_profile_edit" });
+    const dispatch = (c: Command) => {
+      s = reduce(s, c);
+      view.rerender(<ProfileLineLayer state={s} dispatch={dispatch} view={IDENTITY_VIEW} />);
+    };
+    const view = render(<ProfileLineLayer state={s} dispatch={dispatch} view={IDENTITY_VIEW} />);
+    const overlay = screen.getByTestId("profile-edit-overlay");
+    overlay.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
+    fireEvent.mouseDown(screen.getByTestId("profile-handle-0"), { button: 0 });
+    fireEvent.mouseMove(overlay, { clientX: 40, clientY: 30 });
+    expect(screen.getByTestId("profile-line").querySelector("polyline")).toHaveAttribute("points", "0.4,0.3 0.9,0.9");
+    fireEvent.keyDown(overlay, { key: "Escape" });
+    expect(s.profileEdit).toBe(false);
+    expect(s.profileLine?.points[0]).toEqual([0.1, 0.1]);
+    expect(screen.getByTestId("profile-line").querySelector("polyline")).toHaveAttribute("points", "0.1,0.1 0.9,0.9");
+    act(() => dispatch({ type: "set_profile_line", line: null }));
+    expect(screen.queryByTestId("profile-line")).toBeNull();
+  });
+
   it("is one of the scopes", () => {
     expect(SPECTRUM_KINDS.map((k) => k.id)).toContain("profile");
   });

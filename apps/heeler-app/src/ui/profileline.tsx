@@ -72,6 +72,12 @@ export function ProfileLineLayer({ state, dispatch, view }: { state: State; disp
     }
   }, [state.profileDraw]);
 
+  // An edit put away (another photograph opened puts it away too) or the
+  // path cleared drops a drag in hand, so its points never come back.
+  useEffect(() => {
+    if (!state.profileEdit || !state.profileLine) setDragging(null);
+  }, [state.profileEdit, state.profileLine, state.activeImage]);
+
   const finish = (points: Pt[]) => {
     setDraft([]);
     setHover(null);
@@ -84,7 +90,7 @@ export function ProfileLineLayer({ state, dispatch, view }: { state: State; disp
   };
 
   const editing = state.profileEdit && !!state.profileLine;
-  const shown: ProfileLine | null = dragging
+  const shown: ProfileLine | null = editing && dragging
     ? { points: dragging.points }
     : state.profileDraw && draft.length
       ? { points: hover ? [...draft, hover] : draft }

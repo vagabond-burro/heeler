@@ -9124,6 +9124,15 @@ fn downscale_scratch_bytes(width: usize, height: usize, max_edge: usize) -> Resu
     ]).map_err(|e| e.to_string())
 }
 
+/// The influence composite stays beside the graph's admitted frames
+/// and encoding workspace, so it adds one frame to that allowance.
+fn influence_frame_admitted(input: &ImageBuf, output: &ImageBuf, mode: heeler_engine::influence::InfluenceMode) -> Result<Option<ImageBuf>, String> {
+    if (input.width, input.height) != (output.width, output.height) { return Ok(None); }
+    let _paid = memory::bytes(output.width, output.height, 4, 4)
+        .and_then(|need| Job::admit_additional(need, "influence view frame")).map_err(|e| e.to_string())?;
+    memory::catch(|| heeler_engine::influence::influence_frame(input, output, mode)).map_err(|e| e.to_string())
+}
+
 /// A rendered mask as the gray frame the preview sends, paying for its
 /// own four channels: the render admitted the mask, one channel, and
 /// the frame made after it inside the preview's job was capped at that,
@@ -13796,28 +13805,62 @@ fn trace_sample(img: &ImageBuf, x: f32, y: f32) -> TraceSample {
     TraceSample { r: s.r, g: s.g, b: s.b, luma: s.luma }
 }
 
-/// The trace's walk, pure over a render function so it can be tested
-/// without an app handle: the spine from the source to the output, each
-/// node's output at the point and its input as what feeds it there.
-/// Upstream of the last node that moves pixels the point is `source`
-/// (the photograph's own place, as the frontend maps it back), from it
-/// on `frame`.
+/// Map a point back through one geometry op on the op's own grid. The
+/// coordinate image takes the same kernel as the photograph, including
+/// flips, turns, lens distortion and warps. Only geometry is applied.
+fn trace_input_point(node: &UiNode, (w, h): (usize, usize), point: (f32, f32)) -> Option<(f32, f32)> {
+    let _paid = Job::admit(memory::bytes(w, h, 4, 4 * 3).ok()?, "pixel trace coordinates").ok()?;
+    let mut coords = ImageBuf::new(w, h);
+    for (i, px) in coords.data.chunks_mut(4).enumerate() {
+        px.copy_from_slice(&[(i % w) as f32 / w.saturating_sub(1).max(1) as f32,
+            (i / w) as f32 / h.saturating_sub(1).max(1) as f32, 0.0, 1.0]);
+    }
+    let mut geometry = if node.node_type == "heeler.lens_correct" { lens_geometry_node(node) } else { node.clone() };
+    geometry.id = "geometry".into();
+    let ui = UiGraph {
+        graph_id: "trace_coordinates".into(),
+        nodes: vec![UiNode { id: "src".into(), node_type: "heeler.image_source".into(), enabled: true, params: HashMap::new() }, geometry],
+        connections: vec![UiConnection { from: ("src".into(), "out".into()), to: ("geometry".into(), "in".into()) }],
+    };
+    let sources = HashMap::from([("src".to_string(), SourceImage { image: Arc::new(coords), version: 0, measured: false })]);
+    let graph = build_graph(&ui, &Registry::builtin()).ok()?;
+    let value = Executor::new().render(&graph, "geometry", &sources).ok()?;
+    let image = value.as_image()?;
+    let x = (point.0.clamp(0.0, 1.0) * image.width.saturating_sub(1) as f32) as usize;
+    let y = (point.1.clamp(0.0, 1.0) * image.height.saturating_sub(1) as f32) as usize;
+    let pixel = image.pixel(x, y);
+    (pixel[3] > 0.0 && pixel[0].is_finite() && pixel[1].is_finite()).then_some((pixel[0], pixel[1]))
+}
+
+/// Read each node on the picture's path at its own point. Walking back
+/// through every mover preserves the intermediate grids between crops
+/// and warps instead of reusing the photograph's coordinates there.
 fn trace_spine(
     graph: &UiGraph,
     frame: (f32, f32),
-    source: (f32, f32),
     mut render: impl FnMut(&str) -> Option<Value>,
 ) -> Vec<TraceStep> {
     let spine = image_spine(graph);
     let node = |id: &str| graph.nodes.iter().find(|n| n.id == id);
-    let last_mover = spine
-        .iter()
-        .rposition(|id| node(id).is_some_and(|n| n.enabled && TRACE_MOVERS.contains(&n.node_type.as_str())));
-    let at = |i: usize| if last_mover.is_some_and(|m| i < m) { source } else { frame };
-    let sample_of = |v: &Value, p: (f32, f32)| -> Option<TraceSample> {
+    let mut points = vec![None; spine.len()];
+    let mut point = Some(frame);
+    for i in (0..spine.len()).rev() {
+        points[i] = point;
+        if let Some(n) = node(&spine[i]).filter(|n| n.enabled && TRACE_MOVERS.contains(&n.node_type.as_str())) {
+            point = point.and_then(|p| {
+                let input = render(spine.get(i.checked_sub(1)?)?)?;
+                let image = input.as_image()?;
+                trace_input_point(n, (image.width, image.height), p)
+            });
+        }
+    }
+    let sample_of = |v: &Value, p: (f32, f32)| -> TraceSample {
         match v {
-            Value::Image(img) => Some(trace_sample(img, p.0, p.1)),
-            Value::Mask(m) => Some(trace_sample(&mask_to_image(m), p.0, p.1)),
+            Value::Image(img) => trace_sample(img, p.0, p.1),
+            Value::Mask(m) => {
+                let s = sample_mask_patch(m, p.0, p.1, TRACE_RADIUS);
+                TraceSample { r: s.r, g: s.g, b: s.b, luma: s.luma }
+            }
         }
     };
     let mut steps = Vec::with_capacity(spine.len());
@@ -13825,25 +13868,13 @@ fn trace_spine(
     for (i, id) in spine.iter().enumerate() {
         let Some(n) = node(id) else { continue };
         let out = render(id);
-        let p = at(i);
-        let moves = TRACE_MOVERS.contains(&n.node_type.as_str()) && n.enabled;
-        // A mover's input is read where the photograph was, before it.
-        let input_at = if moves { source } else { p };
-        let coverage = graph
-            .connections
-            .iter()
-            .find(|c| c.to.0 == *id && c.to.1 == "mask")
-            .and_then(|c| render(&c.from.0))
-            .and_then(|v| sample_of(&v, p))
-            .map(|s| s.r);
+        let coverage = graph.connections.iter().find(|c| c.to.0 == *id && c.to.1 == "mask")
+            .and_then(|c| render(&c.from.0)).zip(points[i]).map(|(v, p)| sample_of(&v, p).r);
         steps.push(TraceStep {
-            id: id.clone(),
-            node_type: n.node_type.clone(),
-            enabled: n.enabled,
-            input: previous.as_ref().and_then(|v| sample_of(v, input_at)),
-            output: out.as_ref().and_then(|v| sample_of(v, p)),
-            coverage,
-            moves,
+            id: id.clone(), node_type: n.node_type.clone(), enabled: n.enabled,
+            input: previous.as_ref().zip(i.checked_sub(1).and_then(|j| points[j])).map(|(v, p)| sample_of(v, p)),
+            output: out.as_ref().zip(points[i]).map(|(v, p)| sample_of(v, p)),
+            coverage, moves: TRACE_MOVERS.contains(&n.node_type.as_str()) && n.enabled,
         });
         previous = out;
     }
@@ -13853,8 +13884,7 @@ fn trace_spine(
 /// Influence Mapping's pixel trace: every node on the picture's path,
 /// source first, with its input and output at the clicked point. A
 /// session-executor cache read against the frame already on screen,
-/// at the preview's own size. `x`, `y` are the point on the frame;
-/// `sx`, `sy` the same point of the photograph before any crop or warp.
+/// at the preview's own size. `x`, `y` are the point on the frame.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 async fn trace_pixel(
@@ -13863,8 +13893,6 @@ async fn trace_pixel(
     image_id: String,
     x: f32,
     y: f32,
-    sx: f32,
-    sy: f32,
     preview_edge: Option<usize>,
 ) -> Result<Vec<TraceStep>, String> {
     let _guard = render_lock().lock().await;
@@ -13881,8 +13909,10 @@ async fn trace_pixel(
             );
         }
         let g = plant_and_build(&app, &image_id, &graph, &registry, &source, false, &mut sources)?;
-        let mut exec = PreviewExecutor::take(&app)?;
-        Ok(trace_spine(&graph, (x, y), (sx, sy), |id| exec.render(&g, id, &sources).ok()))
+        let vision = vision_base(&app).ok();
+        let mut exec = PreviewExecutor { app: &app, exec: Some(with_session(&app, |s|
+            Ok(sampling_executor(s, vision.as_deref(), &graph, &image_id, &mut sources)))?) };
+        Ok(trace_spine(&graph, (x, y), |id| exec.render(&g, id, &sources).ok()))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -18692,7 +18722,7 @@ fn render_preview_attempt(
     // and shows the node's output plainly.
     let influenced;
     let image = match (influence.as_ref(), influence_value.as_ref().and_then(|v| v.as_image())) {
-        (Some((mode, _, _)), Some(input)) => match heeler_engine::influence::influence_frame(input, image, *mode) {
+        (Some((mode, _, _)), Some(input)) => match influence_frame_admitted(input, image, *mode)? {
             Some(buf) => {
                 influenced = std::sync::Arc::new(buf);
                 &influenced
@@ -25161,7 +25191,10 @@ mod tests {
                 _ => ramp(51, 0.5),
             })
         };
-        let steps = trace_spine(&ui, (0.2, 0.5), (0.8, 0.5), render);
+        let mut ui = ui;
+        ui.nodes.iter_mut().find(|n| n.id == "crop").unwrap().params = HashMap::from([
+            ("crop_x".into(), serde_json::json!(0.75)), ("crop_w".into(), serde_json::json!(0.25))]);
+        let steps = trace_spine(&ui, (0.2, 0.5), render);
         let ids: Vec<&str> = steps.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(ids, ["src", "exp", "adj", "crop", "output"]);
         assert!(steps[0].input.is_none());
@@ -37645,3 +37678,6 @@ mod banded_export;
 
 #[cfg(test)]
 mod profile_edits;
+
+#[cfg(test)]
+mod trace_tests;
