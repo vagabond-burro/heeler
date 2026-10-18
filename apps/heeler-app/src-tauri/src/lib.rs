@@ -2680,6 +2680,119 @@ fn depth_plane_on_frame(graph: &UiGraph, terminal: &str, seat: &std::collections
 /// jumped and asked for slice after slice).
 /// Photo > Rotate's quarter turns on a UI crop node, read as the engine
 /// reads them (ops_geometry::crop_turn).
+/// A plane solved on the frame a node reads (Polish's matte, which the
+/// model reads off the picture as cropped, flipped and turned), put back
+/// on the whole photograph at `photo`'s size: the shape every planted
+/// raster has, which conform_rasters_to_geometry then takes through the
+/// crops again. Stored as it was solved, the crop was applied twice and
+/// the matte landed zoomed into the frame and off the subject (the
+/// owner, 2026-10-17: polishing a selection after a crop). Each pixel of
+/// the photograph is carried forward through the crops' flips, turns and
+/// windows and reads the plane where it lands; a pixel the crop cut
+/// away keeps `under` (the selection's raster before, on the
+/// photograph) or nothing. A rotated or stretched crop, a warp or a
+/// lens distortion moves pixels by more than whole steps and cannot be
+/// put back this way, and says so.
+fn frame_plane_to_photo(
+    graph: &UiGraph,
+    node_id: &str,
+    plane: &[f32],
+    (fw, fh): (usize, usize),
+    (pw, ph): (usize, usize),
+    under: Option<&ImageBuf>,
+) -> Result<Vec<f32>, String> {
+    let refuse = || "Refine edge cannot yet read a photograph whose crop is rotated or stretched, or that is warped or corrected for lens distortion".to_string();
+    let mut steps: Vec<(bool, bool, u8, [f32; 4])> = Vec::new();
+    for n in upstream_crops(graph, node_id) {
+        let num = |k: &str, d: f64| n.params.get(k).and_then(|v| v.as_f64()).unwrap_or(d) as f32;
+        match n.node_type.as_str() {
+            "heeler.crop_rotate" => {
+                if num("angle", 0.0) != 0.0 || num("aspect", 0.0) != 0.0 {
+                    return Err(refuse());
+                }
+                steps.push((
+                    num("flip_h", 0.0) >= 0.5,
+                    num("flip_v", 0.0) >= 0.5,
+                    crop_turn_of(n),
+                    [num("crop_x", 0.0), num("crop_y", 0.0), num("crop_w", 1.0), num("crop_h", 1.0)],
+                ));
+            }
+            // A lens node that moves nothing (no distortion, only its
+            // shading or fringes) is no geometry here.
+            "heeler.lens_correct" => {
+                let probe = Arc::new(ImageBuf::new(8, 8));
+                if !Arc::ptr_eq(&lens_geometry_buf(&probe, n), &probe) {
+                    return Err(refuse());
+                }
+            }
+            _ => return Err(refuse()),
+        }
+    }
+    if steps.is_empty() && (fw, fh) == (pw, ph) {
+        return Ok(plane.to_vec());
+    }
+    // The frame's size as the photograph's pixels meet each step, and the
+    // plane's own size against the last.
+    let mut dims = (pw, ph);
+    for (_, _, turn, crop) in &steps {
+        let (w, h) = heeler_engine::turned_dims(dims.0, dims.1, *turn);
+        let (w, h, _, _) = heeler_engine::frame_window(w, h, *crop);
+        dims = (w, h);
+    }
+    let (cw, ch) = dims;
+    let sample = |data: &dyn Fn(usize, usize) -> f32, w: usize, h: usize, u: f32, v: f32| -> f32 {
+        let x = (u - 0.5).clamp(0.0, (w - 1) as f32);
+        let y = (v - 0.5).clamp(0.0, (h - 1) as f32);
+        let (ix, iy) = (x.floor() as usize, y.floor() as usize);
+        let (ix1, iy1) = ((ix + 1).min(w - 1), (iy + 1).min(h - 1));
+        let (fx, fy) = (x - ix as f32, y - iy as f32);
+        let top = data(ix, iy) + (data(ix1, iy) - data(ix, iy)) * fx;
+        let bot = data(ix, iy1) + (data(ix1, iy1) - data(ix, iy1)) * fx;
+        top + (bot - top) * fy
+    };
+    use rayon::prelude::*;
+    let mut out = vec![0.0f32; pw * ph];
+    out.par_chunks_mut(pw).enumerate().for_each(|(y, row)| {
+        for (x, o) in row.iter_mut().enumerate() {
+            let (mut u, mut v) = (x as f32 + 0.5, y as f32 + 0.5);
+            let (mut w, mut h) = (pw as f32, ph as f32);
+            let mut inside = true;
+            for (flip_h, flip_v, turn, crop) in &steps {
+                if *flip_h {
+                    u = w - u;
+                }
+                if *flip_v {
+                    v = h - v;
+                }
+                // turn_buf's quarter turns, clockwise, as a point moves.
+                (u, v, w, h) = match turn % 4 {
+                    1 => (h - v, u, h, w),
+                    2 => (w - u, h - v, w, h),
+                    3 => (v, w - u, h, w),
+                    _ => (u, v, w, h),
+                };
+                let (ow, oh, x0, y0) = heeler_engine::frame_window(w as usize, h as usize, *crop);
+                u -= x0 as f32;
+                v -= y0 as f32;
+                (w, h) = (ow as f32, oh as f32);
+                if u < 0.0 || v < 0.0 || u > w || v > h {
+                    inside = false;
+                    break;
+                }
+            }
+            *o = if inside {
+                sample(&|i, j| plane[j * fw + i], fw, fh, u * fw as f32 / cw as f32, v * fh as f32 / ch as f32)
+            } else if let Some(b) = under {
+                let (bw, bh) = (b.width, b.height);
+                sample(&|i, j| b.data[(j * bw + i) * 4], bw, bh, (x as f32 + 0.5) * bw as f32 / pw as f32, (y as f32 + 0.5) * bh as f32 / ph as f32)
+            } else {
+                0.0
+            };
+        }
+    });
+    Ok(out)
+}
+
 fn crop_turn_of(n: &UiNode) -> u8 {
     let v = n.params.get("turn").and_then(|v| v.as_f64()).unwrap_or(0.0);
     (v.round() as i64).rem_euclid(4) as u8
@@ -7776,7 +7889,12 @@ async fn polish_matte(
             }
         }
 
-        let mut raster = ImageBuf::new(w, h);
+        // The answer is on the frame the selection reads; the raster is
+        // kept on the whole photograph, as every planted raster is.
+        let under = with_session(&app, |s| Ok(s.smart_rasters.get(&format!("{image_id}|{node_id}")).map(|(r, _)| r.clone())))?;
+        let (pw, ph) = (source.width, source.height);
+        let alpha = frame_plane_to_photo(&graph, &node_id, &alpha, (w, h), (pw, ph), under.as_deref())?;
+        let mut raster = ImageBuf::new(pw, ph);
         for (i, v) in alpha.iter().enumerate() {
             raster.data[i * 4] = *v;
             raster.data[i * 4 + 1] = *v;
@@ -24972,6 +25090,79 @@ mod tests {
         let crop = &steps[3];
         assert!(crop.moves && (crop.input.unwrap().r - 0.4).abs() < 0.02 && (crop.output.unwrap().r - 0.1).abs() < 0.02, "{crop:?}");
         assert!(!steps[4].moves && (steps[4].output.unwrap().r - 0.1).abs() < 0.02);
+    }
+
+    /// Polish solves its matte on the frame the selection reads; put back
+    /// on the photograph and cropped again by the planting, it lands on
+    /// the frame where it was solved, under a crop, a flip and a turn.
+    /// Stored as solved, the crop applied twice (the owner's report,
+    /// 2026-10-17: the matte zoomed in and off the owl after a crop).
+    #[test]
+    fn a_frame_matte_put_back_on_the_photograph_lands_where_it_was_solved() {
+        let (pw, ph) = (120usize, 80usize);
+        // A photograph-space pattern the frame is cut from.
+        let mut photo = ImageBuf::new(pw, ph);
+        for (i, px) in photo.data.chunks_mut(4).enumerate() {
+            let (x, y) = ((i % pw) as f32, (i / pw) as f32);
+            let v = ((x * 0.37).sin() * 0.5 + 0.5) * (y / ph as f32);
+            px.copy_from_slice(&[v, v, v, 1.0]);
+        }
+        let photo = Arc::new(photo);
+        for (flip, turn) in [(false, 0u8), (true, 1u8), (false, 3u8)] {
+            let crop = [0.2f32, 0.1, 0.5, 0.6];
+            let node = |id: &str, ty: &str, params: HashMap<String, serde_json::Value>| UiNode { id: id.into(), node_type: ty.into(), enabled: true, params };
+            let wire = |a: &str, b: &str| UiConnection { from: (a.into(), "out".into()), to: (b.into(), "in".into()) };
+            let ui = UiGraph {
+                graph_id: "matte".into(),
+                nodes: vec![
+                    node("src", "heeler.image_source", HashMap::new()),
+                    node("crop", "heeler.crop_rotate", HashMap::from([
+                        ("crop_x".to_string(), serde_json::json!(crop[0])),
+                        ("crop_y".to_string(), serde_json::json!(crop[1])),
+                        ("crop_w".to_string(), serde_json::json!(crop[2])),
+                        ("crop_h".to_string(), serde_json::json!(crop[3])),
+                        ("flip_h".to_string(), serde_json::json!(if flip { 1 } else { 0 })),
+                        ("turn".to_string(), serde_json::json!(turn)),
+                    ])),
+                    node("sel", "heeler.selection_mask", HashMap::new()),
+                ],
+                connections: vec![wire("src", "crop"), wire("crop", "sel")],
+            };
+            // What the planting does to a photograph-space raster.
+            let conform = |img: &Arc<ImageBuf>| {
+                let img = heeler_engine::mirror_buf(img, flip, false);
+                let img = heeler_engine::turn_buf(&img, turn);
+                let (tw, th) = heeler_engine::turned_dims(pw, ph, turn);
+                heeler_engine::crop_raster_to_frame(&img, tw, th, crop)
+            };
+            let frame = conform(&photo);
+            let plane: Vec<f32> = frame.data.chunks(4).map(|p| p[0]).collect();
+            let back = frame_plane_to_photo(&ui, "sel", &plane, (frame.width, frame.height), (pw, ph), None).unwrap();
+            let mut back_img = ImageBuf::new(pw, ph);
+            for (px, v) in back_img.data.chunks_mut(4).zip(&back) {
+                px.copy_from_slice(&[*v, *v, *v, 1.0]);
+            }
+            let again = conform(&Arc::new(back_img));
+            assert_eq!((again.width, again.height), (frame.width, frame.height));
+            let worst = again.data.chunks(4).zip(frame.data.chunks(4)).map(|(a, b)| (a[0] - b[0]).abs()).fold(0.0f32, f32::max);
+            assert!(worst < 1e-4, "flip {flip}, turn {turn}: off by {worst}");
+            // Outside the crop nothing was solved, and nothing is said.
+            assert_eq!(back[0], 0.0);
+        }
+        // A rotated crop cannot be put back pixel for pixel, and says so.
+        let ui = UiGraph {
+            graph_id: "rot".into(),
+            nodes: vec![
+                UiNode { id: "src".into(), node_type: "heeler.image_source".into(), enabled: true, params: HashMap::new() },
+                UiNode { id: "crop".into(), node_type: "heeler.crop_rotate".into(), enabled: true, params: HashMap::from([("angle".to_string(), serde_json::json!(3.0))]) },
+                UiNode { id: "sel".into(), node_type: "heeler.selection_mask".into(), enabled: true, params: HashMap::new() },
+            ],
+            connections: vec![
+                UiConnection { from: ("src".into(), "out".into()), to: ("crop".into(), "in".into()) },
+                UiConnection { from: ("crop".into(), "out".into()), to: ("sel".into(), "in".into()) },
+            ],
+        };
+        assert!(frame_plane_to_photo(&ui, "sel", &[0.0; 4], (2, 2), (2, 2), None).is_err());
     }
 
     #[test]

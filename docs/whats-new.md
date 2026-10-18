@@ -22,6 +22,7 @@
 
 ### Fixes
 
+- **Polishing a selection after a crop.** Refine edge and the matte brush solved the edge on the cropped picture but kept it as if it covered the whole photograph, so the crop was applied twice and the matte landed zoomed in and off the subject; a flip or a turn did the same. The matte now lands where it was solved, and Apply's full-resolution pass follows it. A matte made before this fix keeps its old place: undo it and polish again. Polishing a photograph whose crop is rotated, or that is warped or corrected for lens distortion, says it cannot yet rather than placing the matte wrong. [Masks and selections](user-guide/finish/masks-selections.md).
 - **Grain shows in the canvas.** Grain on a new edit is sized to the photograph, so on the fitted preview it is smaller than a screen pixel, and the preview faded it too much: it looked as if the grain was missing, though the thumbnail and the export had it. The preview now shows it as strong as the export looks at that size. [Grain](user-guide/adjustments/grain.md).
 - **Recolor's Neutral guard sits under the curve.** The guard and its strip now come after the routing grid and curve they act on, with Smoothing above. [Recolor](user-guide/adjustments/recolor.md).
 - **Click a layer again to fold it.** With **Expand settings on select** on, clicking the selected layer's row now folds its settings, and clicking again opens them. [Finish](user-guide/finish/README.md#settings-that-open-and-close).

@@ -730,6 +730,15 @@ pub(crate) fn run_full_matte(
                 let bytes = std::fs::read(smart_raster_lookup(&base, version))
                     .map_err(|_| "the preview matte this refines is missing".to_string())?;
                 let p = heeler_io::decode_png_raw(&bytes).map_err(|e| e.to_string())?;
+                // The preview matte is kept on the whole photograph; the
+                // pass reads the frame the selection reads, so the matte
+                // takes the crops the planting would give it.
+                let p = {
+                    let (pw, ph) = (p.width, p.height);
+                    let mut one = HashMap::from([(node_id.to_string(), SourceImage { image: Arc::new(p), version: 0, measured: false })]);
+                    conform_rasters_to_geometry(graph, &mut one, &[node_id.to_string()], Some((pw, ph)), &std::collections::HashSet::new());
+                    one.remove(node_id).expect("just inserted").image
+                };
                 let preview: Vec<f32> = p.data.chunks(4).map(|px| px[0]).collect();
                 let small = heeler_vision::area_downsample(&coarse, w, h, p.width, p.height);
                 let unknown = guided_unknown(&preview, &small, p.width, p.height, w, h);
@@ -773,6 +782,11 @@ pub(crate) fn run_full_matte(
     if progress::is_cancelled(job) {
         return Ok(MatteFullAnswer::said("canceled", "The full-resolution matte was canceled; the preview-resolution matte stays"));
     }
+    // Solved on the frame the selection reads; kept on the whole
+    // photograph, where the preview raster sits too.
+    let under = with_session(app, |s| Ok(s.smart_rasters.get(&format!("{image_id}|{node_id}")).map(|(r, _)| r.clone())))?;
+    let alpha = frame_plane_to_photo(graph, node_id, &alpha, (w, h), (source.width, source.height), under.as_deref())?;
+    let (w, h) = (source.width, source.height);
     let matte = FullMatte {
         width: w,
         height: h,
