@@ -983,6 +983,7 @@ export function initialState(): State {
     halationView: false,
     detailEqView: null,
     inspectPick: false,
+    recolorPairPick: null,
     inspectPoint: null,
     influenceView: null,
     keyLightPick: false,

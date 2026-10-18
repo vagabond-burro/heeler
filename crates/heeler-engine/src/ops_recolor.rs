@@ -179,6 +179,114 @@ impl Curves {
     }
 }
 
+/// Color pairs: two colors of the photograph, picked as samples, whose
+/// RELATIONSHIP is edited rather than either color alone. Each pair
+/// holds its two samples' OkLCh hue (degrees) and EV, a hue window
+/// that decides which pixels belong to each (raised cosine, `width`
+/// degrees to its edge, under the Neutral guard like every hue row),
+/// and three dials from -100 to 100:
+///
+/// - `sep`, hue separation: each color turns away from the other along
+///   the shorter arc between them, up to PAIR_TURN degrees each at
+///   +100 and never past opposite sides of the circle; negative turns
+///   them toward each other, never past meeting.
+/// - `sat`, saturation balance: +100 lifts A's chroma by half and
+///   lowers B's by half, -100 the other way.
+/// - `lum`, lightness contrast: the brighter of the two goes up and the
+///   darker down by up to PAIR_EV each at +100, widening the gap they
+///   were picked with; negative narrows it.
+///
+/// A pixel's terms from a pair fold in with the rest of the row terms,
+/// read from the original pixel, so a pair composes with the curves
+/// once and never feeds back.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Pair {
+    a_hue: f32,
+    b_hue: f32,
+    a_ev: f32,
+    b_ev: f32,
+    width: f32,
+    sep: f32,
+    sat: f32,
+    lum: f32,
+}
+
+/// The most each color of a pair turns at full separation, in degrees.
+const PAIR_TURN: f32 = 30.0;
+/// The most each color of a pair moves at full lightness contrast, EV.
+const PAIR_EV: f32 = 0.5;
+/// At most this many pairs on one node.
+pub const MAX_PAIRS: usize = 3;
+
+impl Pair {
+    fn parse_all(json: &str) -> Vec<Pair> {
+        let v: serde_json::Value = serde_json::from_str(json).unwrap_or(serde_json::Value::Null);
+        let Some(list) = v.as_array() else { return Vec::new() };
+        let num = |o: &serde_json::Value, k: &str, d: f32| o.get(k).and_then(|x| x.as_f64()).map(|x| x as f32).filter(|x| x.is_finite()).unwrap_or(d);
+        list.iter()
+            .take(MAX_PAIRS)
+            .filter_map(|o| {
+                let a = o.get("a")?;
+                let b = o.get("b")?;
+                Some(Pair {
+                    a_hue: num(a, "h", 0.0).rem_euclid(360.0),
+                    b_hue: num(b, "h", 0.0).rem_euclid(360.0),
+                    a_ev: num(a, "ev", 0.0),
+                    b_ev: num(b, "ev", 0.0),
+                    width: num(o, "width", 30.0).clamp(5.0, 90.0),
+                    sep: num(o, "sep", 0.0).clamp(-100.0, 100.0) / 100.0,
+                    sat: num(o, "sat", 0.0).clamp(-100.0, 100.0) / 100.0,
+                    lum: num(o, "lum", 0.0).clamp(-100.0, 100.0) / 100.0,
+                })
+            })
+            .collect()
+    }
+
+    fn active(&self) -> bool {
+        self.sep != 0.0 || self.sat != 0.0 || self.lum != 0.0
+    }
+
+    /// How much of the window around `center` a hue belongs to.
+    fn belongs(&self, hue: f32, center: f32) -> f32 {
+        let d = ((hue - center + 540.0).rem_euclid(360.0) - 180.0).abs();
+        if d >= self.width {
+            0.0
+        } else {
+            0.5 * (1.0 + (std::f32::consts::PI * d / self.width).cos())
+        }
+    }
+
+    /// The turn each color takes, in degrees, signed so A's moves away
+    /// from B at positive separation: A turns by +t, B by -t.
+    fn turn(&self) -> f32 {
+        // The signed shorter arc from B to A.
+        let delta = (self.a_hue - self.b_hue + 540.0).rem_euclid(360.0) - 180.0;
+        let dir = if delta >= 0.0 { 1.0 } else { -1.0 };
+        let mut t = self.sep * PAIR_TURN;
+        // Pulled together, they meet in the middle and stop there; pushed
+        // apart, they stop at opposite sides of the circle.
+        if t < 0.0 {
+            t = t.max(-delta.abs() / 2.0);
+        } else {
+            t = t.min((180.0 - delta.abs()) / 2.0);
+        }
+        dir * t
+    }
+
+    /// The EV each color moves: the brighter one by +e, the darker -e.
+    fn lift(&self) -> (f32, f32) {
+        let e = self.lum * PAIR_EV;
+        let e = if e < 0.0 { e.max(-(self.a_ev - self.b_ev).abs() / 2.0) } else { e };
+        if self.a_ev >= self.b_ev { (e, -e) } else { (-e, e) }
+    }
+}
+
+/// Whether a Recolor node's `pairs` text holds a pair that changes
+/// anything.
+pub fn recolor_pairs_active(pairs_json: &str) -> bool {
+    Pair::parse_all(pairs_json).iter().any(Pair::active)
+}
+
 /// Whether a Recolor node's `curves` text names an active depth cell.
 /// The desktop's planting rule reads this, so a Recolor with no depth
 /// curves never asks for the plane.
@@ -395,6 +503,25 @@ impl Terms {
         self.tint += ev(&row.tint, -100.0, 100.0) / 100.0;
         self.vib += ev(&row.vib, -100.0, 100.0) / 100.0;
     }
+    /// Folds the color pairs in at the pixel's hue, gated like the hue
+    /// row: a neutral has no hue to belong to either color.
+    fn fold_pairs(&mut self, pairs: &[Pair], hue: f32, gate: f32) {
+        if gate <= 0.0 {
+            return;
+        }
+        for pair in pairs {
+            let wa = pair.belongs(hue, pair.a_hue) * gate;
+            let wb = pair.belongs(hue, pair.b_hue) * gate;
+            if wa == 0.0 && wb == 0.0 {
+                continue;
+            }
+            let turn = pair.turn();
+            let (ea, eb) = pair.lift();
+            self.dh += turn * wa - turn * wb;
+            self.sat_scale *= (1.0 + 0.5 * pair.sat * wa) * (1.0 - 0.5 * pair.sat * wb);
+            self.ev += ea * wa + eb * wb;
+        }
+    }
     /// Folds the surfaces in at (hue, ev), gated like the hue row: a
     /// surface is hue-indexed on one of its two axes.
     fn fold_surfaces(&mut self, s: &Surfaces, hue: f32, ev: f32, gate: f32) {
@@ -572,7 +699,8 @@ pub fn recolor_around_lookup(
 pub(crate) fn recolor_reach(node: &Node, w: usize, h: usize) -> usize {
     let curves = Curves::parse(node.params.get("curves").and_then(|v| v.as_str()).unwrap_or(""));
     let surfaces = Surfaces::parse(node.params.get("surfaces").and_then(|v| v.as_str()).unwrap_or(""));
-    if !curves.any_active() && !surfaces.any() {
+    let pairs = recolor_pairs_active(node.params.get("pairs").and_then(|v| v.as_str()).unwrap_or(""));
+    if !curves.any_active() && !surfaces.any() && !pairs {
         return 0;
     }
     let short = crate::ops::frame_short_of(&node.params, w, h).round();
@@ -592,7 +720,8 @@ pub(crate) fn recolor(node: &Node, inputs: &[(String, Value)]) -> Result<Value, 
     let json = node.params.get("curves").and_then(|v| v.as_str()).unwrap_or("");
     let curves = Curves::parse(json);
     let surfaces = Surfaces::parse(node.params.get("surfaces").and_then(|v| v.as_str()).unwrap_or(""));
-    if !curves.any_active() && !surfaces.any() {
+    let pairs: Vec<Pair> = Pair::parse_all(node.params.get("pairs").and_then(|v| v.as_str()).unwrap_or("")).into_iter().filter(Pair::active).collect();
+    if !curves.any_active() && !surfaces.any() && pairs.is_empty() {
         return Ok(Value::Image(src.clone()));
     }
     let (w, h) = (src.width, src.height);
@@ -615,7 +744,8 @@ pub(crate) fn recolor(node: &Node, inputs: &[(String, Value)]) -> Result<Value, 
         || curves.around.any_active()
         || (curves.depth.any_active() && plane.is_some())
         || (curves.mask.any_active() && by_wired)
-        || surfaces.any();
+        || surfaces.any()
+        || !pairs.is_empty();
     if !live {
         return Ok(Value::Image(src.clone()));
     }
@@ -761,6 +891,9 @@ pub(crate) fn recolor(node: &Node, inputs: &[(String, Value)]) -> Result<Value, 
             if surfaces.any() {
                 t.fold_surfaces(&surfaces, hue_idx, ev_idx, hue_gate);
             }
+            if !pairs.is_empty() {
+                t.fold_pairs(&pairs, hue_idx, hue_gate);
+            }
             t.fold(&sat_row, sat_idx, 1.0);
             t.fold(&lum_row, ev_idx, 1.0);
             if let Some(pl) = plane.as_ref() {
@@ -850,6 +983,91 @@ mod tests {
         let mut img = ImageBuf::new(1, 1);
         img.data.copy_from_slice(&[r, g, b, 1.0]);
         img
+    }
+
+    /// A pixel's OkLCh hue (degrees), chroma and EV after the node.
+    fn lch_of(img: &ImageBuf) -> (f32, f32, f32) {
+        let p = img.pixel(0, 0);
+        let lab = linear_to_oklab(p[0], p[1], p[2]);
+        let h = lab[2].atan2(lab[1]).to_degrees().rem_euclid(360.0);
+        (h, (lab[1] * lab[1] + lab[2] * lab[2]).sqrt(), (luma(p[0], p[1], p[2]) / 0.18).log2())
+    }
+
+    /// A color of OkLCh hue `h` degrees and chroma 0.12 at lightness `l`.
+    fn hue_px(h: f32, l: f32) -> ImageBuf {
+        let (a, b) = (0.12 * h.to_radians().cos(), 0.12 * h.to_radians().sin());
+        let [r, g, bb] = oklab_to_linear([l, a, b]);
+        px(r.max(0.0), g.max(0.0), bb.max(0.0))
+    }
+
+    fn pairs_node(json: &str) -> Node {
+        let mut node = make_node("heeler.recolor");
+        node.params.insert("smoothing".into(), heeler_graph::ParamValue::Number(0.0));
+        set_text(&mut node, "pairs", json);
+        node
+    }
+
+    const SKY_SUNSET: &str = r#"{"h":250,"ev":0.5},"b":{"h":60,"ev":-0.5}"#;
+
+    #[test]
+    fn a_pair_at_rest_is_the_identity() {
+        let img = hue_px(250.0, 0.7);
+        let node = pairs_node(&format!(r#"[{{"a":{SKY_SUNSET},"width":30,"sep":0,"sat":0,"lum":0}}]"#));
+        assert_eq!(run_on(&node, img.clone()).unwrap().as_image().unwrap().data, img.data);
+        assert!(!recolor_pairs_active("[]") && !recolor_pairs_active("not json"));
+    }
+
+    #[test]
+    fn separation_turns_each_color_away_from_the_other() {
+        // A teal at 200 and a yellow-green at 100: the gap between them
+        // grows by a full turn each.
+        let node = pairs_node(r#"[{"a":{"h":200,"ev":0},"b":{"h":100,"ev":0},"width":30,"sep":100}]"#);
+        let gap = |a: f32, b: f32| ((a - b + 540.0).rem_euclid(360.0) - 180.0).abs();
+        let a = lch_of(run_on(&node, hue_px(200.0, 0.7)).unwrap().as_image().unwrap());
+        let b = lch_of(run_on(&node, hue_px(100.0, 0.7)).unwrap().as_image().unwrap());
+        assert!((a.0 - 230.0).abs() < 1.5 && (b.0 - 70.0).abs() < 1.5, "{a:?} {b:?}");
+        // Sky and sunset, nearly opposite already, stop at opposite sides.
+        let node = pairs_node(&format!(r#"[{{"a":{SKY_SUNSET},"width":30,"sep":100}}]"#));
+        let sky = lch_of(run_on(&node, hue_px(250.0, 0.7)).unwrap().as_image().unwrap());
+        let sun = lch_of(run_on(&node, hue_px(60.0, 0.7)).unwrap().as_image().unwrap());
+        assert!((gap(sky.0, sun.0) - 180.0).abs() < 1.5, "{sky:?} {sun:?}");
+        // Pulled together, they meet in the middle and no further (with
+        // windows narrow enough not to overlap: where they do, a pixel
+        // belongs partly to both and turns less).
+        let node = pairs_node(r#"[{"a":{"h":100,"ev":0},"b":{"h":80,"ev":0},"width":10,"sep":-100}]"#);
+        let a = lch_of(run_on(&node, hue_px(100.0, 0.7)).unwrap().as_image().unwrap());
+        let b = lch_of(run_on(&node, hue_px(80.0, 0.7)).unwrap().as_image().unwrap());
+        assert!((a.0 - 90.0).abs() < 1.5 && (b.0 - 90.0).abs() < 1.5, "{a:?} {b:?}");
+        // A color outside both windows keeps its color (to the round
+        // trip through OkLab every live Recolor makes).
+        let other = hue_px(150.0, 0.7);
+        let out = run_on(&node, other.clone()).unwrap();
+        for (a, b) in out.as_image().unwrap().data.iter().zip(&other.data) {
+            assert!((a - b).abs() < 1e-4, "{a} {b}");
+        }
+    }
+
+    #[test]
+    fn balance_and_contrast_move_the_two_colors_opposite_ways() {
+        let node = pairs_node(&format!(r#"[{{"a":{SKY_SUNSET},"width":30,"sat":100}}]"#));
+        let (sky0, sun0) = (lch_of(&hue_px(250.0, 0.7)), lch_of(&hue_px(60.0, 0.7)));
+        let sky = lch_of(run_on(&node, hue_px(250.0, 0.7)).unwrap().as_image().unwrap());
+        let sun = lch_of(run_on(&node, hue_px(60.0, 0.7)).unwrap().as_image().unwrap());
+        assert!((sky.1 / sky0.1 - 1.5).abs() < 0.02 && (sun.1 / sun0.1 - 0.5).abs() < 0.02, "{sky:?} {sun:?}");
+        let node = pairs_node(&format!(r#"[{{"a":{SKY_SUNSET},"width":30,"lum":100}}]"#));
+        let sky = lch_of(run_on(&node, hue_px(250.0, 0.7)).unwrap().as_image().unwrap());
+        let sun = lch_of(run_on(&node, hue_px(60.0, 0.7)).unwrap().as_image().unwrap());
+        // The sky was picked brighter: it goes up, the sunset down.
+        assert!((sky.2 - sky0.2 - PAIR_EV).abs() < 0.05 && (sun.2 - sun0.2 + PAIR_EV).abs() < 0.05, "{sky:?} {sun:?}");
+    }
+
+    #[test]
+    fn a_neutral_belongs_to_neither_color() {
+        let node = pairs_node(&format!(r#"[{{"a":{SKY_SUNSET},"width":90,"sep":100,"sat":100,"lum":100}}]"#));
+        let gray = px(0.18, 0.18, 0.18);
+        let out = run_on(&node, gray.clone()).unwrap();
+        let o = out.as_image().unwrap().pixel(0, 0);
+        assert!((o[0] - 0.18).abs() < 1e-4 && (o[1] - 0.18).abs() < 1e-4 && (o[2] - 0.18).abs() < 1e-4, "{o:?}");
     }
 
     #[test]

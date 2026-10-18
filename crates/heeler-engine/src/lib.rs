@@ -62,7 +62,7 @@ pub use ops_detail::{capture_sharpen, detail_reach, CAPTURE_SHARPEN_RADIUS};
 pub use ops_detail_eq::{detail_eq_reach, DETAIL_EQ_BANDS};
 pub use ops_warp::{grid_warp_buf, grid_warp_mask, layer_warp_applied, layer_warp_moves, layer_warp_uses_shapes, picture_warp_buf, room_px, shape_warp_buf, shape_warp_mask, unpadded_len, GridMesh, ShapeWarp, WarpField, WarpShape};
 pub use ops_geometry::{crop_flips, crop_raster_to_frame, crop_rotate_buf, crop_turn, frame_window, mirror_buf, turn_buf, turned_dims};
-pub use ops_recolor::{recolor_uses_smoothed_lookup, recolor_wants_depth};
+pub use ops_recolor::{recolor_pairs_active, recolor_uses_smoothed_lookup, recolor_wants_depth, MAX_PAIRS};
 pub use separation::{collision_overlay, GRAY_BIN_PERCENT, GRAY_NEAR_DEFAULT};
 pub use ops::{black_white_hue_gate, black_white_neutral_floor, black_white_saturation, black_white_wants_depth, BW_NEUTRAL_DEFAULT};
 pub use ops_flare::flare_wants_depth;

@@ -21,6 +21,21 @@ Cool Distance and Warm Subject read the photograph's depth map, the one the dept
 
 The menu steps aside while an adjustment layer is selected, and the Recolor node in the Graph inspector offers the same menu.
 
+## Color pairs
+
+Pairs edit how two colors sit against each other rather than either color alone: a blue sky against an orange sunset, foliage against stone. Open **PAIRS** under the Neutral guard and click **Add pair**, then click the first color on the photograph and then the second. A gray has no hue to pair, so a click on one is ignored. A Recolor holds up to three pairs.
+
+Each pair shows its two colors, a small color wheel, and four dials:
+
+- **Separation** turns the two hues apart along the shorter way around the wheel between them, up to 30 degrees each, and never past opposite sides of the wheel. Negative turns them toward each other until they meet.
+- **Balance** moves saturation between them: positive makes the first color richer and the second quieter, by up to half; negative the other way.
+- **Contrast** widens the brightness gap between them, the brighter one up and the darker one down by up to half a stop each. Negative narrows it until they match.
+- **Width** sets how far around each picked hue counts as that color, from 5 to 90 degrees. Two colors close together share some pixels between their ranges, and those pixels move less.
+
+On the wheel, the filled dots are the colors as picked and the rings are where the pair moves them. Drag a ring around the wheel to set the separation, or in and out to set the balance.
+
+Pairs read each pixel's hue the same way the hue curves do, under the Neutral guard and the Smoothing dial, and they compose with the curves, all reading the original pixel. A pair works on the colors Recolor receives, so it keeps its effect at Recolor's place in the graph rather than holding the relationship against later edits. Removing a pair, or setting its three dials to zero, puts those colors back.
+
 ## Split toning
 
 Recolor took over from the old Split Tone section: a split tone here is a curve along brightness, with as many zones as you place points, where Split Tone had two.

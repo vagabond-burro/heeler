@@ -20284,7 +20284,7 @@ fn smoothed_lookup_in_use(n: &UiNode) -> bool {
     let text = |k: &str| n.params.get(k).and_then(|v| v.as_str()).unwrap_or("");
     match n.node_type.as_str() {
         "heeler.color_console" => heeler_engine::ops_console::has_active_bands(text("bands")),
-        "heeler.recolor" => heeler_engine::recolor_uses_smoothed_lookup(text("curves"), text("surfaces")),
+        "heeler.recolor" => heeler_engine::recolor_uses_smoothed_lookup(text("curves"), text("surfaces")) || heeler_engine::recolor_pairs_active(text("pairs")),
         _ => false,
     }
 }

@@ -2263,6 +2263,11 @@ impl Registry {
                 // JSON map of 5 rows (EV -6..+3) by 12 columns (every
                 // 30° of hue), in the output's own units.
                 text("surfaces", ""),
+                // Color pairs: a JSON list of up to three pairs of
+                // picked colors whose relationship is edited (hue
+                // separation, saturation balance, lightness contrast);
+                // see ops_recolor's Pair.
+                text("pairs", ""),
             ],
             // "by" is a mask read as an INDEX (the Mask row's x-axis), distinct from
             // "mask", which gates the whole node. "ref": the color the hue and

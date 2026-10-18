@@ -697,7 +697,7 @@ export const PARAM_TEXT_DEFAULT: Record<string, Record<string, string>> = {
   "heeler.chromatic_adapt": { illuminant: "custom" },
   // Recolor's text: the curve map, the surfaces, the hue→hue verb and
   // the Mask row's source. Reset empties all four.
-  "heeler.recolor": { curves: "", surfaces: "", hue_hue_mode: "", by_mask: "" },
+  "heeler.recolor": { curves: "", surfaces: "", hue_hue_mode: "", by_mask: "", pairs: "" },
   // The flare's rig is mirrored from Depth Lighting and is not reset
   // with the look; the streak color and the preset stamp are.
   "heeler.flare": { streak_color: "#5aa0ff", streak_stops: "", preset: "" },
@@ -1352,6 +1352,11 @@ export function previewTarget(s: State): string | null {
             : maskPreviewNode(s);
 }
 
+/** One color of a Recolor pair as picked: its OkLCh hue (degrees, 0 to
+ * 360) and chroma, its EV from middle gray, and its scene-linear color
+ * for the swatch. */
+export interface RecolorPairEnd { h: number; c: number; ev: number; rgb: [number, number, number] }
+
 /** What an influence view shows: brightness, color or both changes as a
  * heatmap, or the node's own contribution around middle gray. */
 export type InfluenceMode = "luma" | "color" | "both" | "isolate";
@@ -1486,6 +1491,7 @@ const PICKER_RESET = {
   keyLightPick: false,
   chartPlace: false,
   inspectPick: false,
+  recolorPairPick: null,
 };
 
 /** Whether any picker is waiting on a click. */
@@ -1505,7 +1511,8 @@ export function anyPickerArmed(s: State): boolean {
     s.dofPick ||
     s.keyLightPick ||
     s.chartPlace ||
-    s.inspectPick
+    s.inspectPick ||
+    s.recolorPairPick !== null
   );
 }
 
@@ -3823,6 +3830,9 @@ export interface State {
   /** Recolor's picker, and which routing cell a pick lands in: shared
    * state so the panel, the window, and the viewer agree. */
   recolorPick: string | null;
+  /** Recolor's pair picker: armed for a node, waiting on its first color
+   * or, with `first`, its second. */
+  recolorPairPick: { id: string; first: RecolorPairEnd | null } | null;
   /** Recolor's Match picker: the node it is armed for, and the source color once
    * the first click has landed*/
   recolorMatch: {
@@ -5118,6 +5128,10 @@ export type Command =
   /** Show one band (1 finest to 5 broadest) of a Detail Equalizer as
    * the frame; the same band again puts it down. */
   | { type: "toggle_detail_eq_view"; id: string; band: number }
+  /** Arm or put away Recolor's pair picker for a node. */
+  | { type: "toggle_recolor_pair_pick"; id: string }
+  /** The pair picker's first color is in; it waits on the second. */
+  | { type: "recolor_pair_first"; end: RecolorPairEnd }
   /** Arm or put away the Inspect picker. */
   | { type: "toggle_inspect_pick" }
   /** Trace the pixel at this point of the frame (0..1). */
@@ -13542,7 +13556,7 @@ const PICK_GRAPH_REPLACEMENTS = new Set<string>([
 /** The pickers whose disarm cancels a pending answer aimed through them. */
 const PICK_ARMS = [
   "curvePick", "wbPick", "toneEqPick", "recolorPick", "recolorMatch", "bwSeparate", "bwPick", "zonePlace",
-  "csetDropper", "consolePick", "dofPick", "keyLightPick", "chartPlace", "inspectPick",
+  "csetDropper", "consolePick", "dofPick", "keyLightPick", "chartPlace", "inspectPick", "recolorPairPick",
 ] as const;
 /** A dropper a pick session can name as the arm it answers through. Typed
  * from the list so a misspelt arm is a compile error, not a session that
@@ -14164,6 +14178,7 @@ function reduceWithLifted(s: State, cmd: Command, logged: boolean): State {
     if (gone(next.toneEqPick)) next = { ...next, toneEqPick: null, toneEqHoverX: null };
     if (gone(next.wbPick)) next = { ...next, wbPick: null };
     if (gone(next.recolorPick)) next = { ...next, recolorPick: null, recolorHoverX: null };
+    if (gone(next.recolorPairPick?.id)) next = { ...next, recolorPairPick: null };
     if (gone(next.recolorMatch?.id)) next = { ...next, recolorMatch: null };
     if (gone(next.consolePick)) next = { ...next, consolePick: null, consolePickBand: null };
     if (next.csetDropper !== null && gone(`cset${next.csetDropper}_mask`)) next = { ...next, csetDropper: null, csetHoverHue: null };
@@ -18882,6 +18897,12 @@ function reduceInner(s: State, cmd: Command): State {
         detailEqView: null,
       };
     }
+    case "toggle_recolor_pair_pick":
+      return s.recolorPairPick?.id === cmd.id
+        ? { ...s, recolorPairPick: null }
+        : { ...s, ...PICKER_RESET, recolorPairPick: { id: cmd.id, first: null } };
+    case "recolor_pair_first":
+      return s.recolorPairPick ? { ...s, recolorPairPick: { ...s.recolorPairPick, first: cmd.end } } : s;
     case "toggle_inspect_pick":
       return s.inspectPick ? { ...s, inspectPick: false } : { ...s, ...PICKER_RESET, inspectPick: true };
     case "inspect_at":
@@ -19464,7 +19485,7 @@ function reduceInner(s: State, cmd: Command): State {
           // one never flips it back off.
           const arming =
             (n.type === "heeler.color_console" && cmd.param === "bands") ||
-            (n.type === "heeler.recolor" && (cmd.param === "curves" || cmd.param === "surfaces")) ||
+            (n.type === "heeler.recolor" && (cmd.param === "curves" || cmd.param === "surfaces" || cmd.param === "pairs")) ||
             (n.type === "heeler.black_white" && cmd.param === "hue_curve");
           return arming && !next.enabled && cmd.value.trim() !== "" && !layerIsOff(s, n.id)
             ? { ...next, enabled: true }

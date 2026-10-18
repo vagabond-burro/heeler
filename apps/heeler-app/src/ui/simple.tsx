@@ -145,6 +145,7 @@ import { PrintControls } from "./print";
 import { GrainFilmRow, GrainFrameRow } from "./grainfilm";
 import { ZonesBlock } from "./zones";
 import { RecolorHost } from "./recolor";
+import { RecolorPairs } from "./recolorpairs";
 import { SectionLooks } from "./sectionlooks";
 import { ColorConsoleBlock } from "./colorconsole";
 import { DepthProgressBar, depthFromFile, passesOf, NormalsChoice } from "./depthtool";
@@ -6473,7 +6474,7 @@ consistency)."*/}
                         type: "set_params",
                         id: node.id,
                         values: {},
-                        text: { curves: "", surfaces: "", hue_hue_mode: "", by_mask: "" },
+                        text: { curves: "", surfaces: "", hue_hue_mode: "", by_mask: "", pairs: "" },
                       });
                     }
                     // Depth Lighting owns its rig JSON: colors, types, positions,
@@ -7187,6 +7188,10 @@ menu"). The graph inspector's Source node draws the same rows.*/}
                             slider (guardstrip.tsx). */}
                         {sec.recolorWidget && !closed && r.param === "neutral_guard" && (
                           <GuardStrip state={state} node={target} cell={state.recolorCell} dispatch={dispatch} />
+                        )}
+                        {/* Color pairs: two picked colors' relationship. */}
+                        {sec.recolorWidget && !closed && r.param === "neutral_guard" && (
+                          <RecolorPairs state={state} node={target} dispatch={dispatch} width={width ?? 320} />
                         )}
                       </React.Fragment>
                     );
