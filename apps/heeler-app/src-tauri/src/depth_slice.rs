@@ -197,9 +197,14 @@ fn injected_depth_key_is_whole_frame_key() {
 fn injected_depth_seat_is_only_the_users_geometry() {
     let ui = graph("fog", true);
     let (roi, _) = inject_roi_px(&ui, [0.5, 0.25, 0.25, 0.5], Some(192.0)).unwrap();
+    // The Depth Map reads the photograph before its crops (lifted), so
+    // they are not in its plane: planting cuts the plane by them.
+    let lifted = lifted_depth_crops(&ui);
+    assert!(lifted.contains("crop") && lifted.contains("rotate"));
     let whole = depth_seat_geometry(&ui, Some(1));
-    assert!(whole.contains("crop") && whole.contains("rotate"));
+    assert!(!whole.contains("crop") && !whole.contains("rotate"));
     assert_eq!(depth_seat_geometry(&roi, Some(1)), whole);
+    assert_eq!(lifted_depth_crops(&roi), lifted, "the slice's own cut is never lifted");
 }
 #[test]
 fn one_plane_fans_out_to_two_depth_consumers() {

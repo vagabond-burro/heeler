@@ -296,8 +296,9 @@ fn the_focus_picker_reads_the_depth_under_the_pointer_behind_a_crop() {
         let far = depth_sample_on_frame(&ui, plane.clone(), from_file, 0.5, 0.5);
         assert!((far - 0.75).abs() < 0.01, "from the file {from_file}: read {far}, the pointer is on 0.75");
     }
-    // A plane the wired Depth Map computed behind the crop is on the
-    // frame already, and is read as it is.
+    // The wired Depth Map reads the photograph before the crop
+    // (lifted_depth_crops), so its plane is whole-frame too and falls
+    // under the pointer the same way.
     let seated = chain(serde_json::json!([
         { "id": "src", "type": "heeler.image_source", "enabled": true, "params": {} },
         { "id": "crop", "type": "heeler.crop_rotate", "enabled": true, "params": { "crop_x": 0.5, "crop_w": 0.5 } },
@@ -305,7 +306,19 @@ fn the_focus_picker_reads_the_depth_under_the_pointer_behind_a_crop() {
         { "id": "output", "type": "heeler.output", "enabled": true, "params": {} }
     ]));
     let far = depth_sample_on_frame(&seated, plane.clone(), false, 0.5, 0.5);
-    assert!((far - 0.5).abs() < 0.01, "a seated plane: read {far}");
+    assert!((far - 0.75).abs() < 0.01, "a plane read before the crop: read {far}");
+    // A grid warp ahead of the Depth Map keeps the crop in its picture
+    // (the mesh is placed on the cropped frame): that plane is on the
+    // frame already, and is read as it is.
+    let warped = chain(serde_json::json!([
+        { "id": "src", "type": "heeler.image_source", "enabled": true, "params": {} },
+        { "id": "crop", "type": "heeler.crop_rotate", "enabled": true, "params": { "crop_x": 0.5, "crop_w": 0.5 } },
+        { "id": "gridwarp", "type": "heeler.grid_warp", "enabled": true, "params": {} },
+        { "id": "depthmap", "type": "heeler.depth_map", "enabled": true, "params": {} },
+        { "id": "output", "type": "heeler.output", "enabled": true, "params": {} }
+    ]));
+    let far = depth_sample_on_frame(&warped, plane.clone(), false, 0.5, 0.5);
+    assert!((far - 0.5).abs() < 0.01, "a seated plane behind a warp: read {far}");
     // A file's own pass is whole-frame even with a Depth Map seated.
     let far = depth_sample_on_frame(&seated, plane, true, 0.5, 0.5);
     assert!((far - 0.75).abs() < 0.01, "a file's pass behind a seated map: read {far}");

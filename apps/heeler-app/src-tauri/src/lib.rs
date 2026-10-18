@@ -5354,8 +5354,9 @@ fn file_depth_key(path: &Path) -> u64 {
 /// Reconnect its image and field wires for identity only. The render
 /// still uses the injected graph and conforms the cached plane to it.
 fn depth_identity_graph(graph: &UiGraph) -> std::borrow::Cow<'_, UiGraph> {
+    let lifted = lifted_depth_crops(graph);
     let cuts: std::collections::HashSet<&str> = graph.nodes.iter()
-        .filter(|n| is_roi_crop(n)).map(|n| n.id.as_str()).collect();
+        .filter(|n| is_roi_crop(n) || lifted.contains(&n.id)).map(|n| n.id.as_str()).collect();
     if cuts.is_empty() { return std::borrow::Cow::Borrowed(graph); }
     let mut whole = graph.clone();
     whole.nodes.retain(|n| !cuts.contains(n.id.as_str()));
@@ -5489,9 +5490,56 @@ fn depth_seat_geometry(graph: &UiGraph, input: Option<u64>) -> std::collections:
         return out;
     }
     if let Some(n) = graph.nodes.iter().find(|n| n.node_type == "heeler.depth_map" && n.enabled) {
-        out.extend(upstream_crops(graph, &n.id).into_iter().filter(|c| !is_roi_crop(c)).map(|c| c.id.clone()));
+        // A lifted crop is not in the plane: it falls on the plane at
+        // planting, as it does on every raster made on the photograph.
+        let lifted = lifted_depth_crops(graph);
+        out.extend(upstream_crops(graph, &n.id).into_iter().filter(|c| !is_roi_crop(c) && !lifted.contains(&c.id)).map(|c| c.id.clone()));
     }
     out
+}
+
+/// The crops the Depth Map reads its picture without: every crop ahead of
+/// its seat, unless a grid or shape warp is there too (a warp's mesh is
+/// placed on the cropped frame, so the uncropped picture would warp
+/// differently and the cut could not be taken after it). How far things
+/// are does not change with the framing, and a plane read through the
+/// crop had to be read again for every crop, and for the crop tool's
+/// whole frame: until it landed, a layer limited by its Depth mask
+/// covered its whole shape (the owner, 2026-10-17: a radial meant for an
+/// owl flashed over its whole ellipse as the crop tool came up). Read
+/// before the crop, the plane is cut to each crop at planting
+/// (conform_rasters_to_geometry), the way a smart mask's raster is, and
+/// no crop asks the model again. The angle, the flips and the quarter
+/// turns go with the crop: planting applies them as the crop op does.
+fn lifted_depth_crops(graph: &UiGraph) -> std::collections::HashSet<String> {
+    let Some(n) = graph.nodes.iter().find(|n| n.node_type == "heeler.depth_map" && n.enabled) else {
+        return std::collections::HashSet::new();
+    };
+    let ahead = upstream_crops(graph, &n.id);
+    if ahead.iter().any(|c| matches!(c.node_type.as_str(), "heeler.grid_warp" | "heeler.shape_warp")) {
+        return std::collections::HashSet::new();
+    }
+    ahead.into_iter().filter(|c| c.node_type == "heeler.crop_rotate" && !is_roi_crop(c)).map(|c| c.id.clone()).collect()
+}
+
+/// The graph the Depth Map's picture is rendered through: the lifted
+/// crops passed by, their consumers fed what fed them.
+fn depth_input_graph(graph: &UiGraph) -> std::borrow::Cow<'_, UiGraph> {
+    let lifted = lifted_depth_crops(graph);
+    if lifted.is_empty() {
+        return std::borrow::Cow::Borrowed(graph);
+    }
+    let mut out = graph.clone();
+    out.nodes.retain(|n| !lifted.contains(&n.id));
+    out.connections.retain(|c| !lifted.contains(&c.to.0));
+    for c in &mut out.connections {
+        let mut seen = std::collections::HashSet::new();
+        while lifted.contains(&c.from.0) && seen.insert(c.from.0.clone()) {
+            let Some(feed) = graph.connections.iter().find(|feed| feed.to.0 == c.from.0 && feed.to.1 == "in") else { break };
+            c.from = feed.from.clone();
+        }
+    }
+    std::borrow::Cow::Owned(out)
 }
 
 /// Whether a planted sources key carries the shared depth plane: the
@@ -5601,6 +5649,8 @@ fn depth_guide_for_export(
     source: &Arc<ImageBuf>,
     extra: &HashMap<String, SourceImage>,
 ) -> Option<ImageBuf> {
+    let lifted = depth_input_graph(ui);
+    let ui: &UiGraph = &lifted;
     let node = ui.nodes.iter().find(|n| n.node_type == "heeler.depth_map" && n.enabled)?;
     // The UI graph decides wiredness: build_graph heals a dangling
     // required input from the first source, so the engine graph always
@@ -6797,6 +6847,8 @@ fn depth_map_input_frame(
     source: &Arc<ImageBuf>,
     opts: heeler_io::RawSourceOpts,
 ) -> Option<ImageBuf> {
+    let lifted = depth_input_graph(graph);
+    let graph: &UiGraph = &lifted;
     let node = graph.nodes.iter().find(|n| n.node_type == "heeler.depth_map" && n.enabled)?;
     // The UI graph decides wiredness: build_graph heals a dangling
     // required input from the first source, so the engine graph always
@@ -28841,11 +28893,13 @@ mod tests {
                 _ => panic!("terminal is not an image"),
             }
         };
+        // The crop ahead of the map is lifted out of its picture
+        // (lifted_depth_crops): it falls on the plane at planting.
         let guide_new = depth_guide_for_export(&migrated(), &photo, &extra).unwrap();
-        assert_eq!(guide_new.data, terminal(&migrated(), "crop").data,
-            "at the seat the map reads the geometry-corrected photograph");
+        assert_eq!(guide_new.data, terminal(&depth_input_graph(&migrated()), "src").data,
+            "at the seat the map reads the photograph before its crop");
         let guide_old = depth_guide_for_export(&saved(), &photo, &extra).unwrap();
-        assert_eq!(guide_old.data, terminal(&saved(), "exposure").data,
+        assert_eq!(guide_old.data, terminal(&depth_input_graph(&saved()), "exposure").data,
             "the old seat read the toned picture, which is what the move fixes");
     }
 
@@ -28891,7 +28945,15 @@ mod tests {
         let base = depth_input_key(&graph(0.5, 40), "testbase", None);
         assert!(base.is_some(), "a wired, enabled Depth Map has an input key");
         assert_eq!(base, depth_input_key(&graph(0.5, 40), "testbase", None), "the key is stable");
-        assert_ne!(base, depth_input_key(&graph(0.6, 40), "testbase", None), "an upstream change rekeys the plane");
+        // The crop ahead of the Depth Map is lifted out of its picture
+        // (lifted_depth_crops): a new crop is the same plane, cut anew.
+        assert_eq!(base, depth_input_key(&graph(0.6, 40), "testbase", None), "a crop does not rekey the plane");
+        let mut lensed = graph(0.5, 40);
+        lensed.nodes.push(UiNode { id: "lens".into(), node_type: "heeler.lens_correct".into(), enabled: true, params: HashMap::from([("distortion".to_string(), serde_json::json!(20))]) });
+        lensed.connections.retain(|c| c.to.0 != "crop");
+        lensed.connections.push(UiConnection { from: ("src".into(), "out".into()), to: ("lens".into(), "in".into()) });
+        lensed.connections.push(UiConnection { from: ("lens".into(), "out".into()), to: ("crop".into(), "in".into()) });
+        assert_ne!(base, depth_input_key(&lensed, "testbase", None), "an upstream change rekeys the plane");
         assert_eq!(base, depth_input_key(&graph(0.5, 70), "testbase", None), "a downstream change does not");
         assert_ne!(base, depth_input_key(&graph(0.5, 40), "otherbase", None), "another photograph is another plane");
         // The carve-outs: a file's own depth pass supplies the plane and
@@ -28942,16 +29004,17 @@ mod tests {
             ]
         })).unwrap();
         let full = Arc::new(ImageBuf::filled(16, 12, [0.3, 0.3, 0.3, 1.0]));
-        // The guide is the node's input at the export's size: cropped to
-        // 8x6 by the seat's crop, brightened by the exposure in front.
+        // The guide is the node's input at the export's size, brightened
+        // by the exposure in front, before the crop: the map reads the
+        // photograph before its crop (lifted_depth_crops).
         let guide = depth_guide_for_export(&graph, &full, &HashMap::new()).expect("a wired node has a guide");
-        assert_eq!((guide.width, guide.height), (8, 6), "the guide carries the seat's geometry");
+        assert_eq!((guide.width, guide.height), (16, 12), "the guide is the photograph before the crop");
         assert!(guide.pixel(0, 0)[0] > 0.9, "the guide is the rendered input, not the raw decode: {}", guide.pixel(0, 0)[0]);
         let mut unwired = graph.clone();
         unwired.connections.retain(|c| c.to.0 != "depthmap");
         assert!(depth_guide_for_export(&unwired, &full, &HashMap::new()).is_none(), "an unwired node guides on the photograph as before");
-        // The refinement plants at the guide's frame and does not take
-        // the seat's crop again.
+        // The refinement plants at the guide's frame and the crop falls on
+        // it once, at planting.
         let key = depth_input_key(&graph, "testbase", None);
         let recipe = depth_recipe(&graph);
         let raw = Arc::new(ImageBuf::filled(4, 4, [0.4, 0.4, 0.4, 1.0]));
@@ -28963,7 +29026,7 @@ mod tests {
         assert_eq!(
             (sources["depthmap@depth"].image.width, sources["depthmap@depth"].image.height),
             (8, 6),
-            "the plane was refined in the input's frame and the seat's crop was not applied twice"
+            "the plane was refined before the crop and cut to it once"
         );
         assert!((sources["depthmap@depth"].image.pixel(0, 0)[0] - 0.4).abs() < 0.05, "a constant plane survives refinement: {}", sources["depthmap@depth"].image.pixel(0, 0)[0]);
     }

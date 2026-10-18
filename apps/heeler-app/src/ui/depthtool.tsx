@@ -141,7 +141,9 @@ export function depthRecipeKey(s: State): string {
  * keyed by the recipe alone, the runner took the plane as done after a
  * crop or with the crop tool up, and a layer limited by its Depth mask
  * covered its whole shape (the owner, 2026-10-17: a radial brightening
- * meant for an owl lit its whole ellipse). */
+ * meant for an owl lit its whole ellipse). The crop counts only with a
+ * warp ahead of the map: otherwise the desktop reads the map before the
+ * crop and cuts it to each one, so no crop asks again. */
 const AHEAD_OF_DEPTH = [
   "heeler.model_denoise",
   "heeler.merge",
@@ -153,8 +155,11 @@ const AHEAD_OF_DEPTH = [
 
 export function depthGeometryKey(s: State): string {
   const nodes = s.tool === "crop" ? cropPreviewGraph(s).nodes : s.nodes;
+  // The desktop reads the map before the crop unless a warp is ahead of
+  // it too (lib.rs lifted_depth_crops): then a crop is no new plane.
+  const warped = nodes.some((n) => n.enabled && (n.type === "heeler.grid_warp" || n.type === "heeler.shape_warp"));
   const geometry = nodes
-    .filter((n) => n.enabled && AHEAD_OF_DEPTH.includes(n.type))
+    .filter((n) => n.enabled && AHEAD_OF_DEPTH.includes(n.type) && (warped || n.type !== "heeler.crop_rotate"))
     .map((n) => [n.id, n.params, n.textParams ?? {}]);
   return JSON.stringify(geometry);
 }

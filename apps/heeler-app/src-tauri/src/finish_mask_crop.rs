@@ -264,8 +264,10 @@ pub(super) fn graph_for<'a>(mut g: serde_json::Value, crop: [f64; 5], foot: &'a 
 }
 
 /// The desktop's planted rasters for this graph: the smart mask's matte
-/// of the feature on the photograph's grid, the depth plane on the
-/// Depth Map's seat (the cropped frame) with the feature near.
+/// of the feature on the photograph's grid, and the depth plane with the
+/// feature near, on the photograph's grid too: the Depth Map reads the
+/// photograph before the crop (lifted_depth_crops), and planting cuts
+/// the plane to the frame.
 pub(super) fn planted(ui: &UiGraph, photo: &Arc<ImageBuf>, foot: &Footprint) -> HashMap<String, SourceImage> {
     let mut session = Session::default();
     for n in ui.nodes.iter().filter(|n| n.node_type == "heeler.smart_mask") {
@@ -273,13 +275,26 @@ pub(super) fn planted(ui: &UiGraph, photo: &Arc<ImageBuf>, foot: &Footprint) -> 
         session.smart_rasters.insert(format!("{IMAGE_ID}|{}", n.id), (feature_raster(W, H), want));
     }
     if let Some(dm) = ui.nodes.iter().find(|n| n.node_type == "heeler.depth_map") {
-        let mut plane = ImageBuf::new(foot.w, foot.h);
-        for y in 0..foot.h {
-            for x in 0..foot.w {
-                let far = if foot.on[y * foot.w + x] { 0.1 } else { 0.9 };
-                plane.set_pixel(x, y, [far, far, far, 1.0]);
+        // A warp ahead of the map keeps the crop in its picture: that
+        // plane is on the cropped frame, the seat's.
+        let plane = if lifted_depth_crops(ui).is_empty() && upstream_crops(ui, &dm.id).iter().any(|c| c.node_type == "heeler.crop_rotate") {
+            let mut plane = ImageBuf::new(foot.w, foot.h);
+            for y in 0..foot.h {
+                for x in 0..foot.w {
+                    let far = if foot.on[y * foot.w + x] { 0.1 } else { 0.9 };
+                    plane.set_pixel(x, y, [far, far, far, 1.0]);
+                }
             }
-        }
+            plane
+        } else {
+            let feature = feature_raster(W, H);
+            let mut plane = ImageBuf::new(W, H);
+            for (o, f) in plane.data.chunks_mut(4).zip(feature.data.chunks(4)) {
+                let far = if f[0] > 0.5 { 0.1 } else { 0.9 };
+                o.copy_from_slice(&[far, far, far, 1.0]);
+            }
+            plane
+        };
         let key = depth_input_key_in_session(&session, ui, IMAGE_ID);
         session.smart_rasters.insert(format!("{IMAGE_ID}|{}@depth", dm.id), (Arc::new(plane), depth_version(IMAGE_ID, depth_recipe(ui), key)));
     }

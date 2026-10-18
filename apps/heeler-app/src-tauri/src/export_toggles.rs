@@ -140,8 +140,19 @@ fn the_depth_layer_is_the_depth_plane_on_the_frame() {
         let z = exr_planes(&written, &["mist.Z"]).remove(0);
         assert_eq!(z.len(), foot.w * foot.h, "{frame}: the plane is on the export's frame");
         // The planted plane: farness 0.1 on the feature, 0.9 elsewhere,
-        // on the cropped frame. Written raw (f32), so exact.
+        // cut to the frame. Written raw (f32), so exact, but for a
+        // rotated crop's resampling across the feature's edge (the map
+        // reads the photograph before the crop, lifted_depth_crops).
+        let rotated = c[0] != 0.0;
+        let edge = |px: usize| {
+            let (x, y) = (px % foot.w, px / foot.w);
+            (x.saturating_sub(1)..=(x + 1).min(foot.w - 1)).any(|i| (y.saturating_sub(1)..=(y + 1).min(foot.h - 1)).any(|j| foot.on[j * foot.w + i] != foot.on[px]))
+        };
         for (px, v) in z.iter().enumerate() {
+            if rotated && edge(px) {
+                assert!((0.1 - 1e-6..=0.9 + 1e-6).contains(v), "{frame}: pixel {px} wrote {v}, outside the plane's range");
+                continue;
+            }
             let want = if foot.on[px] { 0.1 } else { 0.9 };
             assert!((v - want).abs() < 1e-6, "{frame}: pixel {px} wrote {v}, the plane says {want}");
         }

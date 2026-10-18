@@ -214,38 +214,35 @@ describe("the Depth Map's recipe drives the runner", () => {
 
 describe("the plane follows the geometry ahead of it", () => {
   const wanting = (s: State) => run(s, { type: "set_param", id: "fog", param: "density", value: 40 });
-  it("computes again for a crop, and for the whole frame while the crop tool is up", async () => {
-    // A crop rekeys the plane the desktop reads (the picture the Depth Map
-    // reads is cropped), so the runner must not take it as done: the
-    // owner's radial, limited to an owl by its Depth mask, lit its whole
-    // ellipse after a crop and with the crop tool up (2026-10-17).
+  it("is not read again for a crop or the crop tool, but is with a warp ahead of the map", async () => {
+    // The desktop reads the map before the crop and cuts it to each one
+    // (lifted_depth_crops), so a crop and the crop tool's whole frame are
+    // the plane already read: nothing to wait for, nothing to flash (the
+    // owner, 2026-10-17: a radial limited to an owl by depth flashed over
+    // its whole ellipse while the map was read again for the crop tool).
     const s0 = wanting(initialState());
     const got: Command[] = [];
     const view = render(<DepthRunner state={s0} dispatch={(c) => got.push(c)} />);
     const { depthMap } = await import("../bridge");
     await waitFor(() => expect(vi.mocked(depthMap)).toHaveBeenCalledTimes(1));
-    const crop = s0.nodes.find((n) => n.type === "heeler.crop_rotate");
-    const cropped = crop
-      ? run(s0, { type: "set_params", id: crop.id, values: { crop_x: 0.1, crop_w: 0.8 } })
-      : run(s0, { type: "set_tool", tool: "crop" }, { type: "set_params", id: "crop", values: { crop_x: 0.1, crop_w: 0.8 } }, { type: "set_tool", tool: "none" });
-    expect(depthGeometryKey(cropped)).not.toBe(depthGeometryKey(s0));
+    const crop = s0.nodes.find((n) => n.type === "heeler.crop_rotate")!;
+    const cropped = run(s0, { type: "set_params", id: crop.id, values: { crop_x: 0.1, crop_w: 0.8 } });
+    expect(depthGeometryKey(cropped)).toBe(depthGeometryKey(s0));
+    expect(depthGeometryKey({ ...cropped, tool: "crop" })).toBe(depthGeometryKey(s0));
     view.rerender(<DepthRunner state={wanting(cropped)} dispatch={(c) => got.push(c)} />);
+    view.rerender(<DepthRunner state={{ ...wanting(cropped), tool: "crop" }} dispatch={(c) => got.push(c)} />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(vi.mocked(depthMap)).toHaveBeenCalledTimes(1);
+    // Something else ahead of the map is a new plane.
+    const lens = s0.nodes.find((n) => n.type === "heeler.lens_correct")!;
+    const lensed = run(cropped, { type: "set_param", id: lens.id, param: "distortion", value: 20 });
+    expect(depthGeometryKey(lensed)).not.toBe(depthGeometryKey(s0));
+    view.rerender(<DepthRunner state={wanting(lensed)} dispatch={(c) => got.push(c)} />);
     await waitFor(() => expect(vi.mocked(depthMap)).toHaveBeenCalledTimes(2));
-    // The crop tool shows the whole frame: the plane of the frame before
-    // the crop, read already, and asked for with the graph the preview
-    // renders rather than the crop's.
-    const tool = { ...wanting(cropped), tool: "crop" as const };
-    expect(depthGeometryKey(tool)).toBe(depthGeometryKey(s0));
-    view.rerender(<DepthRunner state={tool} dispatch={(c) => got.push(c)} />);
-    await new Promise((r) => setTimeout(r, 20));
-    expect(vi.mocked(depthMap)).toHaveBeenCalledTimes(2);
-    // Another crop is another plane; going back to one read is not.
-    const recrop = run(cropped, { type: "set_params", id: crop?.id ?? "crop", values: { crop_x: 0.2, crop_w: 0.6 } });
-    view.rerender(<DepthRunner state={wanting(recrop)} dispatch={(c) => got.push(c)} />);
-    await waitFor(() => expect(vi.mocked(depthMap)).toHaveBeenCalledTimes(3));
-    view.rerender(<DepthRunner state={wanting(cropped)} dispatch={(c) => got.push(c)} />);
-    await new Promise((r) => setTimeout(r, 20));
-    expect(vi.mocked(depthMap)).toHaveBeenCalledTimes(3);
+    // With a warp ahead of the map the crop stays in its picture.
+    const warp = { ...lensed, nodes: [...lensed.nodes, { ...lens, id: "gw", type: "heeler.grid_warp", enabled: true, params: {} }] };
+    const rewarped = { ...warp, nodes: warp.nodes.map((n) => (n.id === crop.id ? { ...n, params: { ...n.params, crop_x: 0.2 } } : n)) };
+    expect(depthGeometryKey(rewarped)).not.toBe(depthGeometryKey(warp));
   });
 });
 
