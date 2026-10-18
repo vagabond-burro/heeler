@@ -876,7 +876,13 @@ export function revealActiveThumb(
       const el = document.querySelector<HTMLElement>(
         `[data-testid="thumb-${state.activeImage}"]`,
       );
-      if (!el) { window.dispatchEvent(new Event("heeler:reveal-thumbnail")); return; }
+      // The app scrolling on its own (a photo opened or restored) asks the
+      // ribbon's strip, which measures in its own offsets and leaves a photo
+      // already in view where it is: WebKit's client rects and
+      // scrollIntoView miss inside the strip's CSS zoom, so a launch never
+      // centered the photo. The expanded table scrolls its rows itself.
+      const inStrip = !!el?.closest('[data-testid="ribbon-scroll"]');
+      if (!el || (onlyIfOffscreen && inStrip)) { window.dispatchEvent(new Event("heeler:reveal-thumbnail")); return; }
       if (onlyIfOffscreen && thumbIsVisible(el)) return;
       el.scrollIntoView({ block: "center", behavior });
       // An instant programmatic scroll can leave WKWebView holding stale

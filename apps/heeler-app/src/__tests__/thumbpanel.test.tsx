@@ -8,7 +8,7 @@
 // metadata sorted by columns for each image."
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import {
   META_COLUMNS,
@@ -271,51 +271,45 @@ describe("the restored photograph's thumbnail", () => {
   it("scrolls itself into view on launch, without pulsing or yanking", async () => {
     // "it does go to my last selected photo but the
     // thumbnail needs to auto-scroll so its centered in the thumbnail
-    // view."
+    // view." The strip centers it from its rows' offsets: the native app's
+    // WebKit did not honor scrollIntoView and client rects inside the
+    // strip's CSS zoom, so a launch had left the strip at its top. jsdom
+    // has no layout, so the rows' offsets and the strip's height are given
+    // the way a browser would report them.
     const { App } = await import("../app");
-    const scrolled: { el: Element; opts: unknown }[] = [];
+    const ROW = 120;
+    const VIEW = 300;
+    const scrolled: Element[] = [];
     const orig = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = function (this: Element, opts: unknown) {
-      scrolled.push({ el: this, opts });
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
     };
-    // A strip taller than its box, with the active photo below the fold.
-    // jsdom hands every element a zero-size rect, so both the geometry
-    // and the scrollability have to be supplied for "off screen" to
-    // mean anything.
-    const proto = HTMLElement.prototype;
-    const prior = ["scrollHeight", "clientHeight"].map(
-      (k) => [k, Object.getOwnPropertyDescriptor(proto, k)] as const,
-    );
-    Object.defineProperty(proto, "scrollHeight", { configurable: true, get: () => 2000 });
-    Object.defineProperty(proto, "clientHeight", { configurable: true, get: () => 400 });
-    const priorRect = Element.prototype.getBoundingClientRect;
-    Element.prototype.getBoundingClientRect = function (this: Element) {
-      const thumb = (this as HTMLElement).getAttribute?.("data-testid")?.startsWith("thumb-");
-      const [top, bottom] = thumb ? [900, 980] : [0, 400];
-      return { top, bottom, left: 0, right: 200, width: 200, height: bottom - top, x: 0, y: top, toJSON() {} } as DOMRect;
-    };
+    const offsetTop = vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) {
+      const i = this.dataset.stripIndex;
+      return i === undefined ? 0 : Number(i) * ROW;
+    });
+    const offsetHeight = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.dataset.stripIndex === undefined ? 0 : ROW - 3;
+    });
+    const clientHeight = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.dataset.testid === "ribbon-scroll" ? VIEW : 0;
+    });
     try {
       render(<App />);
-      await waitFor(() =>
-        expect(
-          scrolled.some(
-            (s) => (s.el as HTMLElement).getAttribute("data-testid") === "thumb-4871",
-          ),
-        ).toBe(true),
-      );
-      // Instant, centered, and no gold flash: the app did this, not the
-      // person, so it should not ask for attention.
-      const hit = scrolled.find(
-        (s) => (s.el as HTMLElement).getAttribute("data-testid") === "thumb-4871",
-      )!;
-      expect(hit.opts).toMatchObject({ block: "center", behavior: "auto" });
-      expect(
-        (hit.el as HTMLElement).classList.contains("thumb-reveal"),
-      ).toBe(false);
+      const thumb = await screen.findByTestId("thumb-4871");
+      const index = Number(thumb.closest<HTMLElement>("[data-strip-index]")!.dataset.stripIndex);
+      expect(index * ROW).toBeGreaterThan(VIEW);
+      await new Promise((r) => setTimeout(r, 50));
+      // Centered, by the strip itself, and no gold flash: the app did
+      // this, not the person, so it should not ask for attention.
+      expect(screen.getByTestId("ribbon-scroll").scrollTop).toBeCloseTo(index * ROW - (VIEW - (ROW - 3)) / 2, 5);
+      expect(scrolled.filter((el) => el.closest("[data-testid='ribbon-scroll']"))).toHaveLength(0);
+      expect(thumb.classList.contains("thumb-reveal")).toBe(false);
     } finally {
       Element.prototype.scrollIntoView = orig;
-      Element.prototype.getBoundingClientRect = priorRect;
-      for (const [k, d] of prior) if (d) Object.defineProperty(proto, k, d);
+      offsetTop.mockRestore();
+      offsetHeight.mockRestore();
+      clientHeight.mockRestore();
     }
   });
 

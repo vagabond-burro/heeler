@@ -9,6 +9,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../app";
+import { ThumbnailStrip } from "../ui/thumbnailstrip";
 
 const ROW = 120;
 const VIEW = 300;
@@ -50,5 +51,44 @@ describe("reopening the thumbnail strip", () => {
     await user.click(screen.getByRole("button", { name: /collapse ribbon/i }));
     await user.click(screen.getByRole("button", { name: /expand ribbon/i }));
     expect(screen.getByTestId("ribbon-scroll").scrollTop).toBe(0);
+  });
+
+  // At launch the strip is up before the catalog has listed the
+  // photographs: it had centered only as it mounted, with nothing open
+  // yet, so the restored photo was never brought into view.
+  it("centers the photo when the photographs arrive after the strip", () => {
+    const strip = (count: number, activeIndex: number) => (
+      <ThumbnailStrip count={count} rowHeight={ROW} activeIndex={activeIndex}>
+        {(i) => <button data-testid={`thumb-${i}`}>{i}</button>}
+      </ThumbnailStrip>
+    );
+    const { rerender } = render(strip(0, -1));
+    const scroll = screen.getByTestId("ribbon-scroll");
+    expect(scroll.scrollTop).toBe(0);
+    rerender(strip(39, 30));
+    expect(scroll.scrollTop).toBeCloseTo(30 * ROW - (VIEW - (ROW - 3)) / 2, 5);
+    // Then a click in the strip opens another photo: no recentering.
+    const at = scroll.scrollTop;
+    rerender(strip(39, 29));
+    expect(scroll.scrollTop).toBe(at);
+  });
+
+  it("brings an opened photo into view from its own offsets when the app asks", () => {
+    const strip = (activeIndex: number) => (
+      <ThumbnailStrip count={39} rowHeight={ROW} activeIndex={activeIndex}>
+        {(i) => <button data-testid={`thumb-${i}`}>{i}</button>}
+      </ThumbnailStrip>
+    );
+    const { rerender } = render(strip(0));
+    const scroll = screen.getByTestId("ribbon-scroll");
+    expect(scroll.scrollTop).toBe(0);
+    rerender(strip(36));
+    act(() => { window.dispatchEvent(new Event("heeler:reveal-thumbnail")); });
+    expect(scroll.scrollTop).toBeCloseTo(36 * ROW - (VIEW - (ROW - 3)) / 2, 5);
+    // One already wholly in view stays where it is.
+    scroll.scrollTop = 35 * ROW;
+    rerender(strip(35));
+    act(() => { window.dispatchEvent(new Event("heeler:reveal-thumbnail")); });
+    expect(scroll.scrollTop).toBe(35 * ROW);
   });
 });

@@ -13,10 +13,16 @@ export function ThumbnailStrip({ count, rowHeight, activeIndex, children }: {
   const reveal = (index: number, focus = false) => {
     const root=ref.current;
     if(!root || index<0 || index>=count)return;
-    const top=index*rowHeight;
-    if(top<root.scrollTop || top+rowHeight>root.scrollTop+(root.clientHeight||viewport.height)) {
-      root.scrollTop=Math.max(0,top-(root.clientHeight||viewport.height)/2);
-      setViewport({top:root.scrollTop,height:root.clientHeight||viewport.height});
+    // The row where it is laid out when it is (offsets, as the centering
+    // below measures), else where the windowed list would place it.
+    const row=root.querySelector<HTMLElement>(`[data-strip-index="${index}"]`);
+    const inner=root.firstElementChild as HTMLElement|null;
+    const top=(row ? row.offsetTop : index*rowHeight)+(inner?.offsetTop??0);
+    const height=row ? row.offsetHeight : rowHeight;
+    const view=root.clientHeight||viewport.height;
+    if(top<root.scrollTop || top+height>root.scrollTop+view) {
+      root.scrollTop=Math.max(0,top-(view-height)/2);
+      setViewport({top:root.scrollTop,height:view});
     }
     if(focus) requestAnimationFrame(()=>root.querySelector<HTMLElement>(`[data-strip-index="${index}"] button`)?.focus());
   };
@@ -32,10 +38,14 @@ export function ThumbnailStrip({ count, rowHeight, activeIndex, children }: {
   // (2026-09-27: reopening scrolled back to the top). Measured from the
   // row's own offsetTop, in the same units as scrollTop: the strip sits
   // inside CSS zoom, where WebKit's scrollIntoView and client rects did
-  // not put the photo in view although Chromium did.
+  // not put the photo in view although Chromium did. At launch the strip
+  // is up before the catalog has listed the photographs, so it centers
+  // the first time it has one open to center, not only as it mounts.
+  const centered=useRef(false);
   useLayoutEffect(()=>{
     const root=ref.current;
-    if(!root || activeIndex<0)return;
+    if(!root || activeIndex<0 || centered.current)return;
+    centered.current=true;
     const center=()=>{
       const row=root.querySelector<HTMLElement>(`[data-strip-index="${activeIndex}"]`);
       // The rows are placed in the inner list, which the strip's padding
@@ -51,9 +61,9 @@ export function ThumbnailStrip({ count, rowHeight, activeIndex, children }: {
     center();
     const frame=requestAnimationFrame(center);
     return ()=>cancelAnimationFrame(frame);
-    // Mount only: a click in the strip must never recenter it.
+    // Once only: a click in the strip must never recenter it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[]);
+  },[activeIndex>=0]);
   useLayoutEffect(()=>{
     if(virtual)reveal(activeIndex);
     const go=()=>reveal(activeIndex);
