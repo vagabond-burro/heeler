@@ -6,6 +6,7 @@
 
 - **A progress dialog for exports.** A Quick Export or an Export panel run that takes more than half a second shows what it is doing and how far along it is, photograph by photograph, with a **Cancel** that stops it where it is and keeps what was already written. [Exporting](user-guide/export.md#run-and-stop).
 - **Export a TIFF or EXR without its layers.** The Export panel has a **Layers** switch when the edit carries export layers: **Left out** writes the picture alone, without unticking each layer in the edit. Presets remember it. [Exporting](user-guide/export.md#export-layers).
+- **iPhone ProRAW exports in a fraction of the memory.** A ProRAW photograph is now read a tile at a time as the export reaches each part of it, instead of being developed whole first, with exactly the same pixels as before. A 48 MP ProRAW's export starts from about a quarter of the memory it took, and reads in about half the time. [Exporting](user-guide/export.md#memory-and-large-exports).
 - **Big exports fit in less memory.** A full-size export renders the photograph in horizontal strips and writes each strip into the file as it goes, so even a 48 MP photograph with heavy edits exports within a phone's memory, with the same pixels as before. Heeler also hands memory back to the system sooner, which keeps large exports lighter on any computer. [Exporting](user-guide/export.md).
 
 ### Faster

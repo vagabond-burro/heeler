@@ -854,6 +854,77 @@ struct KeptDevelop {
 enum KeptSamples16 {
     One { rgb: Vec<u16>, gain: f32 },
     Blend { clip: Vec<u16>, blend: BlendRows, weight: Vec<u8>, gain: f32 },
+    /// A linear DNG in lossless JPEG tiles (Apple ProRAW) kept as its
+    /// file, its rows developed from the tiles under them by heeler-raw,
+    /// the same to the bit as LibRaw's develop of the whole frame.
+    Linear(Box<LinearKept>),
+}
+
+/// What a linear DNG's kept develop needs: the file, the Clip develop's
+/// numbers, and under Blend the Blend develop's and its scale, when
+/// enough of the frame clipped (clipped_weight's rule).
+#[cfg(feature = "libraw")]
+struct LinearKept {
+    dng: heeler_raw::linear_dng::LinearDng,
+    clip: heeler_raw::linear_dng::Numbers,
+    blend: Option<(heeler_raw::linear_dng::Numbers, f32)>,
+    gain: f32,
+}
+
+/// clipped_weight's rows `y0..y1`, from the Clip develop's rows `a..b`
+/// (`window`, three samples a pixel), which must hold every row within
+/// seven of the band that the frame has: the same arithmetic, row for
+/// row, as clipped_weight over the whole frame.
+#[cfg(feature = "libraw")]
+fn clipped_weight_rows(window: &[u16], a: usize, w: usize, h: usize, y0: usize, y1: usize) -> Vec<u8> {
+    const AT_WHITE: u16 = (0.98 * 65535.0) as u16;
+    const GROW: usize = 4;
+    const FEATHER: usize = 3;
+    let b = a + window.len() / (w * 3);
+    let clipped = |r: usize, x: usize| { let p = &window[((r - a) * w + x) * 3..][..3]; p[0].max(p[1]).max(p[2]) >= AT_WHITE };
+    // The horizontal grow, rows a..b.
+    let mut hgrow = vec![false; (b - a) * w];
+    for r in a..b {
+        for x in 0..w {
+            if clipped(r, x) {
+                for xx in x.saturating_sub(GROW)..=(x + GROW).min(w - 1) {
+                    hgrow[(r - a) * w + xx] = true;
+                }
+            }
+        }
+    }
+    // The grown and horizontally boxed rows the band's vertical box reads.
+    let g0 = y0.saturating_sub(FEATHER);
+    let g1 = (y1 + FEATHER).min(h);
+    let n = (2 * FEATHER + 1) as f32;
+    let mut hbox = vec![0f32; (g1 - g0) * w];
+    let mut grown = vec![0f32; w];
+    for r in g0..g1 {
+        for (x, g) in grown.iter_mut().enumerate() {
+            let lo = r.saturating_sub(GROW).max(a);
+            let hi = (r + GROW).min(h - 1).min(b - 1);
+            *g = if (lo..=hi).any(|rr| hgrow[(rr - a) * w + x]) { 1.0 } else { 0.0 };
+        }
+        for x in 0..w {
+            let mut sum = 0.0;
+            for d in 0..=2 * FEATHER {
+                sum += grown[(x + d).saturating_sub(FEATHER).min(w - 1)];
+            }
+            hbox[(r - g0) * w + x] = sum / n;
+        }
+    }
+    let mut out = vec![0u8; (y1 - y0) * w];
+    for y in y0..y1 {
+        for x in 0..w {
+            let mut sum = 0.0;
+            for d in 0..=2 * FEATHER {
+                let yy = (y + d).saturating_sub(FEATHER).min(h - 1);
+                sum += hbox[(yy - g0) * w + x];
+            }
+            out[(y - y0) * w + x] = ((sum / n).clamp(0.0, 1.0) * 255.0).round() as u8;
+        }
+    }
+    out
 }
 
 /// The Blend develop's rows that any weight reaches, packed: a row whose
@@ -902,6 +973,9 @@ impl KeptDevelop {
     /// develop_full's arithmetic, pixel by pixel.
     fn develop_rows(&self, y0: usize, y1: usize) -> Result<ImageBuf, heeler_engine::EngineError> {
         let w = self.w;
+        if let KeptSamples16::Linear(k) = &self.develop {
+            return self.linear_rows(k, y0, y1);
+        }
         let mut out = ImageBuf::try_new(w, y1 - y0)?;
         for (j, o) in out.data.chunks_exact_mut(4).enumerate() {
             let i = (y0 * w + j) * 3;
@@ -918,6 +992,52 @@ impl KeptDevelop {
                         o[c] = if wt == 0.0 { kept } else { kept + (blend.get(y0 * w + j, c) as f32 / 65535.0 * gain - kept) * wt };
                     }
                 }
+                KeptSamples16::Linear(_) => unreachable!("developed above"),
+            }
+            o[3] = 1.0;
+        }
+        Ok(out)
+    }
+
+    /// A linear DNG's develop rows `y0..y1`, unsharpened: its Clip
+    /// develop's rows, and under Blend the Blend develop's where the
+    /// weight reaches, with develop_full's arithmetic.
+    fn linear_rows(&self, k: &LinearKept, y0: usize, y1: usize) -> Result<ImageBuf, heeler_engine::EngineError> {
+        let (w, h) = (self.w, self.h);
+        let raw = |e: heeler_raw::RawError| match e {
+            heeler_raw::RawError::Memory(m) => heeler_engine::EngineError::Memory(m),
+            e => heeler_engine::EngineError::Memory(MemoryError::Allocation(e.to_string())),
+        };
+        let mut out = ImageBuf::try_new(w, y1 - y0)?;
+        let Some((blend_numbers, gain)) = &k.blend else {
+            let rgb = k.dng.rows(&k.clip, y0, y1).map_err(raw)?;
+            for (o, p) in out.data.chunks_exact_mut(4).zip(rgb.chunks_exact(3)) {
+                for c in 0..3 {
+                    o[c] = p[c] as f32 / 65535.0 * k.gain;
+                }
+                o[3] = 1.0;
+            }
+            return Ok(out);
+        };
+        // The Clip rows the weight reads, seven past the band each way.
+        let (a, b) = (y0.saturating_sub(7), (y1 + 7).min(h));
+        let _job = heeler_engine::memory::Job::admit(heeler_engine::memory::sum([
+            heeler_engine::memory::bytes(w, b - a, 3, 2)?,
+            heeler_engine::memory::bytes(w, y1 - y0, 3, 2)?,
+            heeler_engine::memory::bytes(w, b - a, 1, 6)?,
+        ])?, "linear DNG develop rows")?;
+        let window = k.dng.rows(&k.clip, a, b).map_err(raw)?;
+        let weight = clipped_weight_rows(&window, a, w, h, y0, y1);
+        let blended = if weight.iter().any(|&v| v != 0) { Some(k.dng.rows(blend_numbers, y0, y1).map_err(raw)?) } else { None };
+        let clip = &window[(y0 - a) * w * 3..(y1 - a) * w * 3];
+        for (j, o) in out.data.chunks_exact_mut(4).enumerate() {
+            let wt = weight[j] as f32 / 255.0;
+            for c in 0..3 {
+                let kept = clip[j * 3 + c] as f32 / 65535.0;
+                o[c] = match &blended {
+                    Some(bl) if wt != 0.0 => kept + (bl[j * 3 + c] as f32 / 65535.0 * gain - kept) * wt,
+                    _ => kept,
+                };
             }
             o[3] = 1.0;
         }
@@ -981,6 +1101,7 @@ impl heeler_engine::banded::SourceRows for KeptDevelop {
         match &self.develop {
             KeptSamples16::One { rgb, .. } => rgb.len() * 2,
             KeptSamples16::Blend { clip, blend, weight, .. } => clip.len() * 2 + blend.bytes() + weight.len(),
+            KeptSamples16::Linear(k) => k.dng.bytes(),
         }
     }
     fn workspace(&self) -> Result<usize, heeler_engine::EngineError> {
@@ -1000,6 +1121,35 @@ impl heeler_engine::banded::SourceRows for KeptDevelop {
         }
         Ok(img)
     }
+}
+
+/// A linear DNG in lossless JPEG tiles kept as its file (heeler-raw's
+/// linear_dng), on Apple's arm64 builds, whose LibRaw arithmetic
+/// linear_dng reproduces to the bit; None for any other file or build,
+/// which LibRaw develops as before. The frame-wide numbers are settled
+/// here: the data maximum, and under Blend whether enough of the Clip
+/// develop clipped (clipped_weight's 64 pixels).
+#[cfg(feature = "libraw")]
+fn keep_linear(bytes: &[u8], dev: heeler_raw::DevelopOpts) -> Result<Option<(KeptSamples16, usize, usize, bool)>, heeler_raw::RawError> {
+    if !cfg!(all(target_arch = "aarch64", target_vendor = "apple")) || !heeler_raw::linear_dng::enabled() {
+        return Ok(None);
+    }
+    let Some(dng) = heeler_raw::linear_dng::LinearDng::open(bytes.to_vec(), dev)? else { return Ok(None) };
+    let _job = heeler_engine::memory::Job::admit(dng.bytes(), "linear DNG kept as its file")?;
+    let data_max = dng.data_maximum()?;
+    let (w, h) = dng.size();
+    let clip = dng.numbers(data_max, 0);
+    let blend = if dev.highlight == 2 && dng.count_at_white(&clip, (0.98 * 65535.0) as u16)? >= 64 {
+        let n = dng.numbers(data_max, 2);
+        Some((n, heeler_raw::linear_dng::LinearDng::headroom(&n).max(1.0)))
+    } else {
+        None
+    };
+    // A develop without a highlight mode, or a Clip develop standing for
+    // Blend, scales by its own headroom, which is 1 without one.
+    let kept = LinearKept { dng, clip, blend, gain: 1.0 };
+    // A linear raw is not sensor data: it takes no capture sharpening.
+    Ok(Some((KeptSamples16::Linear(Box::new(kept)), w, h, false)))
 }
 
 /// decode_any_with's LibRaw branch, kept (KeptDevelop): None wherever
@@ -1023,6 +1173,9 @@ fn keep_develop(path: &Path, bytes: &[u8], opts: RawSourceOpts) -> Result<Option
         demosaic: opts.demosaic,
     };
     let decoded = (|| -> Result<(KeptSamples16, usize, usize, bool), heeler_raw::RawError> {
+        if let Some(linear) = keep_linear(bytes, dev)? {
+            return Ok(linear);
+        }
         if dev.highlight != 2 {
             let s = heeler_raw::decode_sensor_with(bytes, dev)?;
             return Ok((KeptSamples16::One { gain: s.headroom.max(1.0), rgb: s.rgb }, s.width, s.height, s.sensor_data));
@@ -2160,6 +2313,64 @@ mod tests {
     #[cfg(feature = "libraw")]
     fn clipped_sky() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../heeler-raw/tests/fixtures/IMG_3310.CR2")
+    }
+
+    /// A linear DNG in lossless JPEG tiles (Apple ProRAW's kind) is kept
+    /// as its file and its rows developed by heeler-raw's linear_dng, the
+    /// whole decode's to the bit, under Blend and Clip, upright and
+    /// turned; and LibRaw's own kept develop of it is the same.
+    #[cfg(all(feature = "libraw", target_arch = "aarch64", target_vendor = "apple"))]
+    #[test]
+    fn a_linear_dng_kept_as_its_file_makes_the_whole_decodes_rows() {
+        let pixel = |y: usize, x: usize| -> [u16; 3] {
+            let n = ((x as u32).wrapping_mul(2_654_435_761) ^ (y as u32).wrapping_mul(2_246_822_519)) >> 22;
+            if (40..60).contains(&x) && (30..50).contains(&y) {
+                return [1023, 1023 - (n & 7) as u16, 1010];
+            }
+            let base = (x * 7 + y * 3) as u32 % 900;
+            [(base + n % 60).min(1023) as u16, (base / 2 + n % 40) as u16, ((900 - base) + n % 50).min(1023) as u16]
+        };
+        let dir = tempfile::tempdir().unwrap();
+        for orientation in [1u16, 6] {
+            let path = dir.path().join(format!("linear-{orientation}.dng"));
+            std::fs::write(&path, heeler_raw::linear_dng::synthetic_dng(150, 101, 64, 48, orientation, pixel)).unwrap();
+            for highlight in [2, 0] {
+                let opts = RawSourceOpts { highlight, ..RawSourceOpts::default() };
+                let whole = decode_any_with(&path, opts).unwrap();
+                for linear in [true, false] {
+                    heeler_raw::linear_dng::set_enabled(linear);
+                    let rows = decode_rows_with(&path, opts).unwrap().expect("kept");
+                    heeler_raw::linear_dng::set_enabled(true);
+                    assert_eq!(rows.size(), (whole.width, whole.height));
+                    let mut made = Vec::new();
+                    for y in (0..whole.height).step_by(13) {
+                        made.extend_from_slice(&rows.rows(y, (y + 13).min(whole.height)).unwrap().data);
+                    }
+                    assert!(made.iter().zip(&whole.data).all(|(a, b)| a.to_bits() == b.to_bits()), "orientation {orientation}, highlight {highlight}, linear_dng {linear}");
+                }
+            }
+        }
+    }
+
+    /// A band's Blend weight is clipped_weight's rows for that band, at
+    /// the frame's edges and away from them, from the Clip rows seven
+    /// past the band each way.
+    #[cfg(feature = "libraw")]
+    #[test]
+    fn a_bands_blend_weight_is_the_whole_frames() {
+        let (w, h) = (37usize, 61usize);
+        let mut rgb = vec![0u16; w * h * 3];
+        for (i, v) in rgb.iter_mut().enumerate() {
+            let n = (i as u32).wrapping_mul(2_654_435_761) >> 20;
+            *v = if n % 23 == 0 { 65535 } else { (n % 60000) as u16 };
+        }
+        let image = heeler_raw::SensorImage { width: w, height: h, rgb: rgb.clone(), headroom: 1.0, sensor_data: false };
+        let whole = clipped_weight(&image).expect("enough clips");
+        for (y0, y1) in [(0usize, h), (0, 1), (0, 9), (5, 17), (20, 21), (52, h), (60, h), (30, 45)] {
+            let (a, b) = (y0.saturating_sub(7), (y1 + 7).min(h));
+            let band = clipped_weight_rows(&rgb[a * w * 3..b * w * 3], a, w, h, y0, y1);
+            assert_eq!(band, whole[y0 * w..y1 * w], "rows {y0}..{y1}");
+        }
     }
 
     /// The Clip and Blend develops run side by side when the budget holds

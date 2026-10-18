@@ -80,6 +80,10 @@ name = "rawdiff"
 required-features = ["rawler", "libraw"]
 
 [[example]]
+name = "keptvswhole"
+required-features = ["libraw"]
+
+[[example]]
 name = "decodepeak"
 required-features = ["libraw"]
 

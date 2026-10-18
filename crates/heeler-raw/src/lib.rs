@@ -38,6 +38,7 @@ pub const ZLIB_LINKED: bool = matches!(env!("HEELER_RAW_ZLIB").as_bytes(), b"1")
 
 mod gain_map;
 mod gpr;
+pub mod linear_dng;
 pub use gpr::is_gpr;
 
 #[derive(Debug, thiserror::Error)]
@@ -405,15 +406,10 @@ unsafe extern "C" fn stop_requested(data: *mut c_void, _stage: c_int, _iteration
     (*(data as *const AtomicBool)).load(Ordering::Relaxed) as c_int
 }
 
-fn develop(bytes: &[u8], opts: DevelopOpts, stop: Option<&AtomicBool>) -> Result<SensorImage, RawError> {
-    xtrans_default();
-    let stopped = || stop.is_some_and(|s| s.load(Ordering::Relaxed));
-    if stopped() {
-        return Err(RawError::Cancelled);
-    }
-    // A GoPro GPR's VC-5 tile is decoded here; LibRaw sees a plain DNG.
-    let converted = gpr::as_dng(bytes)?;
-    let bytes = converted.as_deref().unwrap_or(bytes);
+/// A LibRaw handle set up as every Heeler develop sets one up: 16-bit
+/// linear sRGB-primaries output, no auto-brightening, and the develop's
+/// own choices.
+fn configured(opts: DevelopOpts) -> Result<Handle, RawError> {
     let handle = {
         let p = unsafe { libraw_init(0) };
         if p.is_null() {
@@ -440,6 +436,19 @@ fn develop(bytes: &[u8], opts: DevelopOpts, stop: Option<&AtomicBool>) -> Result
         // to stderr by default, reading like hard failures in dev logs.
         heeler_silence_data_errors(handle.0);
     }
+    Ok(handle)
+}
+
+fn develop(bytes: &[u8], opts: DevelopOpts, stop: Option<&AtomicBool>) -> Result<SensorImage, RawError> {
+    xtrans_default();
+    let stopped = || stop.is_some_and(|s| s.load(Ordering::Relaxed));
+    if stopped() {
+        return Err(RawError::Cancelled);
+    }
+    // A GoPro GPR's VC-5 tile is decoded here; LibRaw sees a plain DNG.
+    let converted = gpr::as_dng(bytes)?;
+    let bytes = converted.as_deref().unwrap_or(bytes);
+    let handle = configured(opts)?;
     check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
     let (width, height) = unsafe { (heeler_raw_width(handle.0) as usize, heeler_raw_height(handle.0) as usize) };
     if width == 0 || height == 0 { return Err(RawError::Unexpected); }

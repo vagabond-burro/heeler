@@ -1927,6 +1927,7 @@ dependencies = [
  "heeler-engine",
  "libz-sys",
  "mozjpeg-sys",
+ "rayon",
  "thiserror 2.0.21",
 ]
 

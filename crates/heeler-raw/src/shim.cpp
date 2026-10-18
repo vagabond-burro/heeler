@@ -142,6 +142,134 @@ void heeler_choose_demosaic(void *ctx) {
 
 extern "C" {
 
+// What heeler-raw's own decoder for linear DNGs (linear_dng.rs) needs
+// from LibRaw's open of a file: the sizes, the tiles, the levels, the
+// white balance and matrix it develops with, the settings that steer
+// dcraw_process, and two tables: the linearization LibRaw applies as it
+// loads each sample (imgdata.color.curve after open) and the output
+// curve copy_mem_image writes through (gamma_curve's mode 2 at the
+// white copy_mem_image takes without auto-brightening). Read after open,
+// before unpack. Answers 0 when the handle is not open.
+struct HeelerLinear {
+    unsigned raw_width, raw_height, width, height, top_margin, left_margin;
+    int flip;
+    unsigned filters;
+    int colors;
+    unsigned tiff_samples, tiff_bps, tiff_compress, tile_width, tile_length;
+    unsigned raw_color, zero_is_bad, fuji_width, is_foveon, lossless_dng;
+    unsigned maximum, black;
+    unsigned cblack[6];
+    unsigned dng_version;
+    int as_shot_wb_applied;
+    float pixel_aspect;
+    float cam_mul[4], pre_mul[4];
+    float rgb_cam[3][4];
+    unsigned short white[8][8];
+    float user_mul[4];
+    int use_auto_wb, use_camera_wb, highlight, user_black, user_cblack[4], user_sat, med_passes;
+    int no_auto_scale, green_matching, exp_correc, no_interpolation, has_bad_pixels, has_dark_frame, cropbox_set, half_size;
+    int output_color, output_bps, four_color_rgb, use_fuji_rotate;
+    float threshold, adjust_maximum_thr, bright;
+    double aber[4];
+    double gamm[6];
+};
+struct LinearAccess : LibRaw {
+    static libraw_internal_data_t &internal(LibRaw *r) { return r->*(&LinearAccess::libraw_internal_data); }
+    static bool lossless(LibRaw *r) { return (r->*(&LinearAccess::load_raw)) == &LinearAccess::lossless_dng_load_raw; }
+    static void gamma(LibRaw *r, double pwr, double ts, int mode, int imax) { (r->*(&LinearAccess::gamma_curve))(pwr, ts, mode, imax); }
+};
+int heeler_linear_facts(libraw_data_t *d, HeelerLinear *f, unsigned short *lintable, unsigned short *outcurve) {
+    if (!d || !d->parent_class || !f) return 0;
+    LibRaw *r = static_cast<LibRaw *>(d->parent_class);
+    libraw_internal_data_t &in = LinearAccess::internal(r);
+    const libraw_colordata_t &C = d->color;
+    const libraw_output_params_t &O = d->params;
+    f->raw_width = d->sizes.raw_width; f->raw_height = d->sizes.raw_height;
+    f->width = d->sizes.width; f->height = d->sizes.height;
+    f->top_margin = d->sizes.top_margin; f->left_margin = d->sizes.left_margin;
+    f->flip = d->sizes.flip; f->filters = d->idata.filters; f->colors = d->idata.colors;
+    f->tiff_samples = in.unpacker_data.tiff_samples; f->tiff_bps = in.unpacker_data.tiff_bps;
+    f->tiff_compress = in.unpacker_data.tiff_compress;
+    f->tile_width = in.unpacker_data.tile_width; f->tile_length = in.unpacker_data.tile_length;
+    f->raw_color = in.internal_output_params.raw_color; f->zero_is_bad = in.internal_output_params.zero_is_bad;
+    f->fuji_width = in.internal_output_params.fuji_width; f->is_foveon = d->idata.is_foveon;
+    f->lossless_dng = LinearAccess::lossless(r);
+    f->maximum = C.maximum; f->black = C.black;
+    for (int i = 0; i < 6; i++) f->cblack[i] = C.cblack[i];
+    f->dng_version = d->idata.dng_version; f->as_shot_wb_applied = C.as_shot_wb_applied;
+    f->pixel_aspect = float(d->sizes.pixel_aspect);
+    for (int i = 0; i < 4; i++) { f->cam_mul[i] = C.cam_mul[i]; f->pre_mul[i] = C.pre_mul[i]; f->user_mul[i] = O.user_mul[i]; f->user_cblack[i] = O.user_cblack[i]; f->aber[i] = O.aber[i]; }
+    for (int i = 0; i < 3; i++) for (int j = 0; j < 4; j++) f->rgb_cam[i][j] = C.rgb_cam[i][j];
+    for (int i = 0; i < 8; i++) for (int j = 0; j < 8; j++) f->white[i][j] = C.white[i][j];
+    f->use_auto_wb = O.use_auto_wb; f->use_camera_wb = O.use_camera_wb; f->highlight = O.highlight;
+    f->user_black = O.user_black; f->user_sat = O.user_sat; f->med_passes = O.med_passes;
+    f->no_auto_scale = O.no_auto_scale; f->green_matching = O.green_matching; f->exp_correc = O.exp_correc;
+    f->no_interpolation = O.no_interpolation; f->has_bad_pixels = O.bad_pixels != nullptr; f->has_dark_frame = O.dark_frame != nullptr;
+    f->cropbox_set = (~O.cropbox[2] && ~O.cropbox[3]) ? 1 : 0; f->half_size = O.half_size;
+    f->output_color = O.output_color; f->output_bps = O.output_bps; f->four_color_rgb = O.four_color_rgb; f->use_fuji_rotate = O.use_fuji_rotate;
+    f->threshold = O.threshold; f->adjust_maximum_thr = O.adjust_maximum_thr; f->bright = O.bright;
+    for (int i = 0; i < 6; i++) f->gamm[i] = O.gamm[i];
+    if (lintable) for (int i = 0; i < 0x10000; i++) lintable[i] = C.curve[i];
+    if (outcurve) {
+        // copy_mem_image's own call: t_white 0x2000 without auto-brightening.
+        int t_white = 0x2000;
+        LinearAccess::gamma(r, O.gamm[0], O.gamm[1], 2, int((t_white << 3) / O.bright));
+        for (int i = 0; i < 0x10000; i++) outcurve[i] = d->color.curve[i];
+        // The linearization table is the curve LibRaw loads through: put
+        // it back, so the handle could still be unpacked as opened.
+        if (lintable) for (int i = 0; i < 0x10000; i++) d->color.curve[i] = lintable[i];
+    }
+    return 1;
+}
+
+// The develop's working image at three points, for the tests that hold
+// linear_dng.rs to LibRaw's develop step by step: as loaded (before the
+// black level), as scaled (before pre_interpolate), and before the
+// conversion to RGB; with the white level and data maximum before the
+// scale and the white-balance multipliers after it. Installed on a
+// handle that is about to be processed, which its own pre_converttorgb
+// stage then leaves to this capture.
+struct LinearCapture {
+    unsigned short *loaded, *scaled, *before_rgb;
+    size_t pixels;
+    unsigned *maxima;
+    float *pre_mul;
+    float *rgb_cam;
+};
+thread_local LinearCapture heeler_capture = {};
+void heeler_capture_into(LibRaw *r, unsigned short *to) {
+    size_t n = size_t(r->imgdata.sizes.iheight) * r->imgdata.sizes.iwidth;
+    if (!to || n != heeler_capture.pixels || !r->imgdata.image) return;
+    for (size_t i = 0; i < n * 4; i++) to[i] = (&r->imgdata.image[0][0])[i];
+}
+void heeler_capture_loaded(void *ctx) {
+    LibRaw *r = static_cast<LibRaw *>(ctx);
+    heeler_capture_into(r, heeler_capture.loaded);
+    if (heeler_capture.maxima) {
+        heeler_capture.maxima[0] = r->imgdata.color.maximum;
+        heeler_capture.maxima[1] = r->imgdata.color.data_maximum;
+    }
+}
+void heeler_capture_scaled(void *ctx) {
+    LibRaw *r = static_cast<LibRaw *>(ctx);
+    heeler_capture_into(r, heeler_capture.scaled);
+    if (heeler_capture.pre_mul) for (int c = 0; c < 4; c++) heeler_capture.pre_mul[c] = r->imgdata.color.pre_mul[c];
+    if (heeler_capture.maxima) heeler_capture.maxima[2] = r->imgdata.color.maximum;
+}
+void heeler_capture_before_rgb(void *ctx) {
+    LibRaw *r = static_cast<LibRaw *>(ctx);
+    heeler_capture_into(r, heeler_capture.before_rgb);
+    if (heeler_capture.rgb_cam) for (int i = 0; i < 3; i++) for (int j = 0; j < 4; j++) heeler_capture.rgb_cam[i * 4 + j] = r->imgdata.color.rgb_cam[i][j];
+}
+void heeler_linear_capture(libraw_data_t *d, unsigned short *loaded, unsigned short *scaled, unsigned short *before_rgb, size_t pixels, unsigned *maxima, float *pre_mul, float *rgb_cam) {
+    if (!d || !d->parent_class) return;
+    heeler_capture = LinearCapture{loaded, scaled, before_rgb, pixels, maxima, pre_mul, rgb_cam};
+    libraw_callbacks_t &cb = CallbackAccess::of(static_cast<LibRaw *>(d->parent_class));
+    cb.pre_scalecolors_cb = heeler_capture_loaded;
+    cb.pre_preinterpolate_cb = heeler_capture_scaled;
+    cb.pre_converttorgb_cb = heeler_capture_before_rgb;
+}
+
 // How many workers share a full-size Bayer develop's AHD tiles: 0 for the
 // machine's cores, 1 for one after another (LibRaw's own path's order).
 void heeler_set_ahd_threads(int n) { heeler_ahd_threads_wanted = n < 0 ? 0 : n; }
