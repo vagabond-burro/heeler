@@ -19,7 +19,7 @@ import {
   type Command,
   type State
 } from "../state";
-import { nodeResetValues, SECTIONS } from "../ui/simple";
+import { nodeResetValues, SECTIONS } from "../ui/simpledata";
 import { DepthRunner, depthFromFile, depthGeometryKey, depthRecipeKey, depthWanted } from "../ui/depthtool";
 import { Preferences } from "../ui/preferences";
 

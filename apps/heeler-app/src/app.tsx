@@ -101,7 +101,7 @@ import {
 import { handleKey, legend, moveWheel, quantize, stepFor } from "./keynav";
 import { COMMANDS, bindingMap, bindingOf, keyBelongsToFocus, popoutGraphCommand } from "./hotkeys";
 import { inScope, runCommand } from "./commands";
-import { navSections, powerOnSection, SECTIONS } from "./ui/simple";
+import { navSections, powerOnSection, SECTIONS } from "./ui/simpledata";
 import {
   TopBar,
   TabRail,

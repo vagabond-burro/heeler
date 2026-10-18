@@ -5,7 +5,7 @@ import { loadUiSettings, saveUiSettings } from "../bridge";
 import { initialState } from "../data";
 import { uiSettingsCommands, uiSettingsSnapshot } from "../settings";
 import { DEFAULT_PREFS, reduce, type Command, type State } from "../state";
-import { SECTIONS, sectionIsOn, visibleSections } from "../ui/simple";
+import { SECTIONS, sectionIsOn, visibleSections } from "../ui/simpledata";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
 const order = () => Array.from(document.querySelectorAll("[data-section]")).map((el) => el.getAttribute("data-section"));

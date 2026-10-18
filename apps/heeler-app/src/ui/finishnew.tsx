@@ -31,64 +31,13 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ArtContentKind, Command, State } from "../state";
 import { ART_ADJUSTMENTS, ART_CONTENT_KINDS, ART_KINDS, activeSelectionMask, selectionHasContent } from "../state";
 import { runCommand } from "../commands";
-import { EXPAND_ON_SELECT_GLYPH, MESH_WARP_GLYPH } from "./panelicons";
+import { EXPAND_ON_SELECT_GLYPH, NEW_LAYER_GLYPHS } from "./panelicons";
 import { MenuSurface } from "./menusurface";
 import { useDismiss } from "./hooks";
 import { addImageLayerFromFile } from "./imagelayers";
 
 type D = React.Dispatch<Command>;
 
-/** The new-layer glyphs, 16x16 at a 1.4 stroke like the rest of the
- * Finish toolbar. */
-export const NEW_LAYER_GLYPHS = {
-  // A sheet with a corner turned: a canvas of pixels.
-  pixel: (
-    <>
-      <path d="M2.5 2.5h7l4 4v7h-11z" />
-      <path d="M9.5 2.5v4h4" />
-    </>
-  ),
-  // A square shading from empty to full.
-  gradient: (
-    <>
-      <rect x="2.5" y="2.5" width="11" height="11" />
-      <path d="M4.5 11.5h7M6 9.5h5.5M8 7.5h3.5" />
-    </>
-  ),
-  // A paint bucket, tipped.
-  fill: (
-    <>
-      <path d="M7 2.5l5.5 5.5-5 5-5.5-5.5z" />
-      <path d="M13.5 10.5c.8 1.2.8 2 0 2.6-.8.5-1.6.1-1.6-.9 0-.6.5-1.2 1.6-1.7z" fill="currentColor" stroke="none" />
-    </>
-  ),
-  // Half-filled circle: the contrast dial every app draws for an
-  // adjustment, because an adjustment is a change of tone.
-  adjust: (
-    <>
-      <circle cx="8" cy="8" r="5.5" />
-      <path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none" />
-    </>
-  ),
-  // An open frame with sparkles inside: the model-made selection.
-  smart: (
-    <>
-      <path d="M6.5 2.5h-2a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-2" />
-      <path d="M11 1.6l.85 1.95 1.95.85-1.95.85L11 7.2l-.85-1.95-1.95-.85 1.95-.85z" fill="currentColor" stroke="none" />
-      <path d="M7.6 6.7l.55 1.25 1.25.55-1.25.55-.55 1.25-.55-1.25-1.25-.55 1.25-.55z" fill="currentColor" stroke="none" />
-    </>
-  ),
-  // A grid whose lines bow (panelicons MESH_WARP_GLYPH).
-  warp: MESH_WARP_GLYPH,
-  // A framed picture, hills under a sun.
-  image: (
-    <>
-      <rect x="2.5" y="3.5" width="11" height="9" />
-      <path d="M3 11.5l3.2-3.4 2.3 2.2 1.8-1.6 2.7 2.8" />
-      <circle cx="10.6" cy="6.2" r="1" fill="currentColor" stroke="none" />
-    </>
-  ),
-} as const;
 
 /** A 16x16 glyph at the toolbar's stroke. */
 export function Glyph({ glyph, size = 15 }: { glyph: React.ReactNode; size?: number }) {

@@ -191,7 +191,7 @@ describe("Tone Equalizer ships off, with no node in the graph", () => {
 // need a switch that lies about one of them.
 describe("Grain and Vignette are two looks with two switches", () => {
   it("names the grain section for what is in it", async () => {
-    const { SECTIONS } = await import("../ui/simple");
+    const { SECTIONS } = await import("../ui/simpledata");
     const titles = SECTIONS.map((s) => s.title);
     expect(titles).toContain("Grain");
     expect(titles).toContain("Vignette");
@@ -201,7 +201,7 @@ describe("Grain and Vignette are two looks with two switches", () => {
   it("puts Vignette above Grain, the order it runs in", async () => {
     // A lens shades the corners of the light before the film records
     // it, so the grain lies over the vignette rather than under it.
-    const { SECTIONS } = await import("../ui/simple");
+    const { SECTIONS } = await import("../ui/simpledata");
     const titles = SECTIONS.map((s) => s.title);
     expect(titles.indexOf("Vignette")).toBeLessThan(titles.indexOf("Grain"));
     expect(CHAIN_ORDER.indexOf("vignette")).toBeLessThan(CHAIN_ORDER.indexOf("grain"));
@@ -209,7 +209,7 @@ describe("Grain and Vignette are two looks with two switches", () => {
   });
 
   it("gives the section the node's own three controls", async () => {
-    const { SECTIONS } = await import("../ui/simple");
+    const { SECTIONS } = await import("../ui/simpledata");
     const vig = SECTIONS.find((s) => s.title === "Vignette")!;
     expect(vig.rows.map((r) => r.param)).toEqual(["vignette", "vignette_mid", "softness"]);
     expect(vig.node(initialState())).toBeTruthy();
@@ -250,7 +250,7 @@ describe("Grain and Vignette are two looks with two switches", () => {
     // Two controls called "Vignette" is what the app's own duplicate
     // guard forbids, and it caught these the moment the section landed.
     // One undoes what the glass did; the other is a choice.
-    const { SECTIONS } = await import("../ui/simple");
+    const { SECTIONS } = await import("../ui/simpledata");
     const lens = SECTIONS.find((s) => s.title === "Lens")!;
     expect(lens.rows.map((r) => r.label)).toContain("Lens vignetting");
     expect(lens.rows.map((r) => r.label)).not.toContain("Vignette");

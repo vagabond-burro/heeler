@@ -7,7 +7,7 @@ import { App } from "../app";
 import { initialState } from "../data";
 import { CHAIN_ORDER } from "../recipes";
 import { MODEL_DENOISE_ID, denoiseMethodIsModel, denoiseSectionOn, reduce, type Command, type State } from "../state";
-import { SECTIONS, sectionIsOn } from "../ui/simple";
+import { SECTIONS, sectionIsOn } from "../ui/simpledata";
 import { denoiseTileCount } from "../bridge";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);

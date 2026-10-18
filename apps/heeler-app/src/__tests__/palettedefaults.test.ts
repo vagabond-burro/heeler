@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import { reduce, REGISTRY_DEFAULTS, TYPE_NUM_PARAMS, type State } from "../state";
 import { makeNode, NODE_CATALOG } from "../nodes";
 import { initialState } from "../data";
-import { paramDefault } from "../ui/simple";
+import { paramDefault } from "../ui/simpledata";
 
 /** num(...) and flag(...) inside each type_name block of spec.rs, the
  * same parse state.test.ts makes, flags as 0 and 1. */

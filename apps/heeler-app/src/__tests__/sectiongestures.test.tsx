@@ -3,7 +3,7 @@ import { afterEach, expect, it } from "vitest";
 import { App } from "../app";
 import { initialState } from "../data";
 import { reduce } from "../state";
-import { SECTIONS, sectionIsOn } from "../ui/simple";
+import { SECTIONS, sectionIsOn } from "../ui/simpledata";
 import { setMacForTests } from "../platform";
 import { saveUiSettings } from "../bridge";
 import { COMMANDS } from "../hotkeys";

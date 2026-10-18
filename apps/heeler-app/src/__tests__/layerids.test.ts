@@ -10,7 +10,7 @@ import { initialState } from "../data";
 import { makeNode, specFor } from "../nodes";
 import { LAYER_TOOLS, migrateGraph, reduce, toolNode, whyNotDuplicable, type Command, type NodeCard, type State } from "../state";
 import { savableAsRecipe } from "../noderecipes";
-import { SECTIONS, sectionExportTap } from "../ui/simple";
+import { SECTIONS, sectionExportTap } from "../ui/simpledata";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
 const withLayers = (n: number, type: "range" | "radial" = "range") =>

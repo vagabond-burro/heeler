@@ -15,7 +15,7 @@ import {
   type Command,
   type State
 } from "../state";
-import { SECTIONS } from "../ui/simple";
+import { SECTIONS } from "../ui/simpledata";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
 

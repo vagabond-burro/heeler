@@ -3,7 +3,7 @@ import { initialState } from "../data";
 import { serializeGraph } from "../bridge";
 import { migrateGraph, reduce, toolNode, type Command, type NodeCard, type State } from "../state";
 import { sharpeningGroup, skinGroup, toolMemberId } from "../recipes";
-import { nodeResetValues } from "../ui/simple";
+import { nodeResetValues } from "../ui/simpledata";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
 const on = () => reduce(initialState(), { type: "set_category", title: "Sharpening", on: true });

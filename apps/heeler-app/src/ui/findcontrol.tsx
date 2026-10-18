@@ -11,7 +11,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { COMMANDS } from "../hotkeys";
 import { runCommand } from "../commands";
 import type { Command, State } from "../state";
-import { ROW_TIPS, SECTIONS, SECTION_BLURBS, sectionHidden } from "./simple";
+import { ROW_TIPS, SECTIONS, SECTION_BLURBS, sectionHidden } from "./simpledata";
 
 type D = React.Dispatch<Command>;
 

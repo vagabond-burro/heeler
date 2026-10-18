@@ -12,7 +12,7 @@ import type { PhotoFacts, SelectedNode, WhereFacts, Workspace } from "./assistan
 import { NODE_CATALOG } from "./nodes";
 import { nodeChapter } from "./tourstops";
 import { artLayers, LAYER_TOOLS, layersOf, mainConversion, PANEL_TABS, type NodeCard, type State } from "./state";
-import { SECTIONS, sectionIsOn } from "./ui/simple";
+import { SECTIONS, sectionIsOn } from "./ui/simpledata";
 
 // -- where the user is ------------------------------------------------------------
 

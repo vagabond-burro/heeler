@@ -17,7 +17,7 @@ import type { Chapter, Workspace } from "./assistant";
 import { NODE_CATALOG, RETIRED_TYPES, type NodeSpec } from "./nodes";
 import { nodeSlug, portsConnect, sectionChapter, slugOf, STOP_BY_ID, TOUR_STOPS, type TourStop } from "./tourstops";
 import type { FollowUp, Tour, TourStep } from "./tourwalk";
-import { SECTIONS } from "./ui/simple";
+import { SECTIONS } from "./ui/simpledata";
 import { initialState } from "./data";
 import type { State } from "./state";
 import { repairPlan } from "./tourplan";

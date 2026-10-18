@@ -18,7 +18,7 @@ import { PREVIEW_MODES } from "./selection";
 import { ColorField, FillColorControls } from "./colorfield";
 import { MaskViewButton, SmartModePanel, depthEyeHint, depthEyeModifier } from "./smarttool";
 import { ObjectMattePanel } from "./mattetool";
-import { MASK_FROM_SELECTION_GLYPH } from "./panelicons";
+import { MASK_FROM_SELECTION_GLYPH, NEW_LAYER_GLYPHS } from "./panelicons";
 import { FinishWarpControls } from "./finishwarp";
 import { bakeLayerMask, bakeMaskRaster } from "../bridge";
 import { flashStatus, reportToolError } from "./hints";
@@ -26,12 +26,13 @@ import { MASK_OFF_HINT, slashed } from "./masktoggle";
 import { publishBusy } from "./statusbar";
 import { modLabel } from "../platform";
 import { GradientControls, GradientPanel, isByTone, readStops } from "./gradientstops";
-import { BrushTipPicker, ValueField, paramDefault } from "./simple";
+import { BrushTipPicker, ValueField } from "./simple";
+import { paramDefault } from "./simpledata";
 import { LevelsEditor } from "./levels";
 import { DEPTH_LEVELS_HINT, DEPTH_LEVELS_KEYS, useDepthBins } from "./depthbins";
 import { TrackSlider, fmt as valueText } from "./track";
 import { ImageLayerControls, isImageLayer } from "./imagelayers";
-import { FinishEmptyList, FinishToolbar, IconButton, NEW_LAYER_GLYPHS, contentItems, adjustmentItems, UTILITY_ITEMS, IMAGE_ITEMS, type NewMenu } from "./finishnew";
+import { FinishEmptyList, FinishToolbar, IconButton, contentItems, adjustmentItems, UTILITY_ITEMS, IMAGE_ITEMS, type NewMenu } from "./finishnew";
 
 type D = React.Dispatch<Command>;
 

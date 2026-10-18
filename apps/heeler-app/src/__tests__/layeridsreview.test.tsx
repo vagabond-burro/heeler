@@ -4,7 +4,7 @@ import { initialState } from "../data";
 import { makeNode, specFor } from "../nodes";
 import { layersOf, layerIsOff, reduce, toolNode, type Command, type State } from "../state";
 import { Inspector } from "../ui/graph";
-import { SECTIONS, sectionExportTap } from "../ui/simple";
+import { SECTIONS, sectionExportTap } from "../ui/simpledata";
 
 const run = (s: State, ...commands: Command[]) => commands.reduce(reduce, s);
 const layered = () => run(initialState(), { type: "add_layer", maskType: "brush" }, { type: "add_layer", maskType: "radial" });

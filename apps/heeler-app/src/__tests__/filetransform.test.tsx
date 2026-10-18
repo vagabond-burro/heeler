@@ -489,7 +489,7 @@ describe("review fixes", () => {
 
 describe("Reset on a node", () => {
   it("puts every dial, choice and curve back and leaves strokes and the switch alone", async () => {
-    const { nodeResetValues } = await import("../ui/simple");
+    const { nodeResetValues } = await import("../ui/simpledata");
     let s = initialState();
     s = run(
       s,

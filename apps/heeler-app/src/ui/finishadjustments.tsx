@@ -5,7 +5,7 @@ import { ART_KINDS, curveModeOf, hardRange, paramRange } from "../state";
 import { nodeThumbs, serializeGraph } from "../bridge";
 import { CurveEditor, Wheel } from "./editors";
 import { LevelsEditor } from "./levels";
-import { paramDefault } from "./simple";
+import { paramDefault } from "./simpledata";
 import { BwControls } from "./bwcontrols";
 import { TrackSlider, ValueField } from "./track";
 

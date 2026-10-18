@@ -18,7 +18,8 @@ import { modLabel } from "../platform";
 import type { Command, NodeCard, State } from "../state";
 import { parseSmartPoints, subjectAim } from "../smartpoints";
 import { reportToolError } from "./hints";
-import { DepthMaskBlock, MASK_ROWS, MaskInvertRow, Slider } from "./simple";
+import { DepthMaskBlock, MaskInvertRow, Slider } from "./simple";
+import { MASK_ROWS } from "./simpledata";
 import { SmartModePanel, activeSmartMask } from "./smarttool";
 import { publishBusy } from "./statusbar";
 

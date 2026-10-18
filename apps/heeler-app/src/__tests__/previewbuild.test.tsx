@@ -14,7 +14,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { initialState } from "../data";
 import { CATEGORY_PIECES } from "../recipes";
 import { freshGraphFor, reduce, type Command, type NodeCard, type State } from "../state";
-import { SECTIONS, SimplePanel, previewNodes } from "../ui/simple";
+import { SimplePanel } from "../ui/simple";
+import { SECTIONS, previewNodes } from "../ui/simpledata";
 
 afterEach(cleanup);
 

@@ -943,7 +943,7 @@ describe("the bend wheel's reach ring", () => {
     // And Reset writes the same number, or a reset bend would reach
     // further than a new one. There is a contract test for that in
     // state.test.ts; this is the half that names the value.
-    const { PARAM_DEFAULT } = await import("../ui/simple");
+    const { PARAM_DEFAULT } = await import("../ui/simpledata");
     expect(PARAM_DEFAULT.falloff).toBe(BEND_FALLOFF_DEFAULT);
   });
 });

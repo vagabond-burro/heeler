@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 import { App } from "../app";
 import { makeNode, NODE_CATALOG, RETIRED_TYPES } from "../nodes";
 import { mainConversion, type Command, type State } from "../state";
-import { SECTIONS } from "../ui/simple";
+import { SECTIONS } from "../ui/simpledata";
 import { seatsOf, TOUR_STOPS, VIEW_COMMANDS, type TourStop } from "../tourstops";
 import { tourHostForTests } from "../tourwalk";
 

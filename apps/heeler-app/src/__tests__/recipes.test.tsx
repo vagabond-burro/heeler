@@ -14,7 +14,8 @@ import { initialState } from "../data";
 import { LAYER_TOOLS, hardRange, migrateGraph, migrateRecipeBlocks, paramRange, reduce, spliceOut, type Command, type NodeCard, type State } from "../state";
 import { applyRecipe, recipeIsOn, recipeNodeIds, recipeParamDefault, toCard, toolMemberId, type Recipe } from "../recipes";
 import { serializeGraph } from "../bridge";
-import { SECTIONS, SimplePanel } from "../ui/simple";
+import { SimplePanel } from "../ui/simple";
+import { SECTIONS } from "../ui/simpledata";
 
 /** Derived rather than listed: a recipe added to the panel and forgotten
  * here would otherwise fail this file with a puzzle instead of a fact. */
@@ -549,7 +550,7 @@ describe("recipe three: noise reduction, luma and color apart", () => {
   /// start driving a pro node on exactly the photographs nobody tested.
   it("does not steal the free slider on a photo that has no denoise node yet", async () => {
     const { toolNode } = await import("../state");
-    const { previewNodes } = await import("../ui/simple");
+    const { previewNodes } = await import("../ui/simpledata");
     const real = initialState();
     const withoutDenoise = real.nodes.filter((n) => n.id !== "denoise");
     const s: State = {
@@ -696,7 +697,7 @@ describe("a switched-off category still shows what it does", () => {
   /// is exactly how Noise Reduction first shipped, so the check is
   /// derived from SECTIONS rather than written out per recipe.
   it("every recipe section draws its controls before it is switched on", async () => {
-    const { previewNodes } = await import("../ui/simple");
+    const { previewNodes } = await import("../ui/simpledata");
     const real = initialState();
     const s: State = { ...real, nodes: [...real.nodes, ...previewNodes(real.nodes)] };
     const missing: string[] = [];
@@ -712,7 +713,7 @@ describe("a switched-off category still shows what it does", () => {
   /// The other half: moving one of those preview controls has to build
   /// the real block, or the slider moves and nothing happens.
   it("names the recipe that each preview control belongs to", async () => {
-    const { previewNodes, buildFor } = await import("../ui/simple");
+    const { previewNodes, buildFor } = await import("../ui/simpledata");
     const real = initialState();
     const previews = previewNodes(real.nodes);
     for (const sec of SECTIONS.filter((x) => x.recipe)) {

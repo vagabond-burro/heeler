@@ -24,7 +24,8 @@ import {
   type Command,
   type State,
 } from "../state";
-import { SECTIONS, SimplePanel, sectionExportTap } from "../ui/simple";
+import { SimplePanel } from "../ui/simple";
+import { SECTIONS, sectionExportTap } from "../ui/simpledata";
 import { Inspector, NodeEditor } from "../ui/graph";
 
 

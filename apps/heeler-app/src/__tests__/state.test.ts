@@ -7,7 +7,7 @@ import { runCommand } from "../commands";
 import { handleApi, handleApiAsync, API_BATCH_ONLY, API_COMMANDS, API_METHODS, API_NATIVE } from "../api";
 import { mockExportedLog, mockResetExports, serializeBeforeGraph, serializeGraph } from "../bridge";
 import { COMMANDS, exportHotkeys } from "../hotkeys";
-import { SECTIONS, paramDefault, ROW_TIPS } from "../ui/simple";
+import { SECTIONS, paramDefault, ROW_TIPS } from "../ui/simpledata";
 
 function run(s: State, ...cmds: Command[]): State {
   return cmds.reduce(reduce, s);
@@ -796,7 +796,7 @@ describe("graph state semantics", () => {
     // section summaries on the name, a sentence on every slider. This
     // guard makes a NEW section or row without its help a failing test
     // rather than a silent gap.
-    const { SECTIONS, SECTION_BLURBS, ROW_TIPS, SOURCE_ROWS } = await import("../ui/simple");
+    const { SECTIONS, SECTION_BLURBS, ROW_TIPS, SOURCE_ROWS } = await import("../ui/simpledata");
     for (const sec of SECTIONS) {
       expect(SECTION_BLURBS[sec.title], `${sec.title}: no summary`).toBeTruthy();
       for (const row of sec.rows) {
@@ -981,7 +981,7 @@ describe("graph state semantics", () => {
     expect(Object.keys(registry).length).toBeGreaterThan(40);
 
     // The deliberate deviations, each with its reason recorded where the
-    // override lives (PARAM_DEFAULT_BY_TYPE in ui/simple.tsx).
+    // override lives (PARAM_DEFAULT_BY_TYPE in ui/simpledata.ts).
     const deliberate = new Set([
       // The shipped look, not the registry's neutral zero.
       "heeler.tone_profile.baseline_ev",
@@ -1527,7 +1527,7 @@ describe("graph state semantics", () => {
     /// exactly on the wheel's own edge, which is the confusion the
     /// constant was introduced to fix in the first place.
     const { BEND_FALLOFF_DEFAULT, migrateGraph, migrateNodes } = await import("../state");
-    const { PARAM_DEFAULT } = await import("../ui/simple");
+    const { PARAM_DEFAULT } = await import("../ui/simpledata");
     const s = initialState();
 
     // The bend in a fresh session.

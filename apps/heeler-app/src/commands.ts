@@ -12,7 +12,7 @@ import { activeFillLayer } from "./ui/filltool";
 import { activeSmartMask } from "./ui/smarttool";
 import { openPolish } from "./polishdoor";
 import { COMMANDS, type Scope } from "./hotkeys";
-import { SECTIONS } from "./ui/simple";
+import { SECTIONS } from "./ui/simpledata";
 import { NAV_START } from "./keynav";
 import { BAKE_DIALOG_BACKUP_LINE, bakeBackupNotice } from "./bakedbackups";
 import { redo, undo } from "./libraryundo";

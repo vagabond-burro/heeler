@@ -27,7 +27,8 @@ import {
   type State,
 } from "../state";
 import { serializeGraph } from "../bridge";
-import { SECTIONS, SimplePanel, BrushTipPicker, sectionExportCommand, sectionExportTap } from "../ui/simple";
+import { SimplePanel, BrushTipPicker } from "../ui/simple";
+import { SECTIONS, sectionExportCommand, sectionExportTap } from "../ui/simpledata";
 import { ArtLayersTab } from "../ui/artlayers";
 import { depthWanted } from "../ui/depthtool";
 

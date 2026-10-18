@@ -5,7 +5,7 @@
 // way to it, and what state change completes it.
 //
 // Generated wherever the app has a definition to read: the Develop
-// sections and their rows (ui/simple.tsx SECTIONS), the panel tabs
+// sections and their rows (ui/simpledata.ts SECTIONS), the panel tabs
 // (PANEL_TABS), the workspaces, the export sizes, the crop ratios, the
 // Preferences categories, and in Graph mode every node type in the
 // palette (NODE_CATALOG) with each of its ports (makeNode's flags, the
@@ -21,7 +21,7 @@
 import type { Command, Mode, NodeCard, State, Wire } from "./state";
 import { artFindLayer, panelShown, artLayers, CROP_RATIOS, LAYER_TOOLS, mainConversion, toolNode, PANEL_TABS } from "./state";
 import { makeNode, NODE_CATALOG, nodeMenuPath, portData, portName, producesMask, MASK_IN_TYPES, RETIRED_TYPES, sectionOf, type NodeSpec, type PortSeat } from "./nodes";
-import { SECTIONS, sectionIsOn } from "./ui/simple";
+import { SECTIONS, sectionIsOn } from "./ui/simpledata";
 import { EXPORT_SIZES } from "./ui/exportpanel";
 import { PREFS_CATEGORIES } from "./ui/preferences";
 import { IR_MATERIALS } from "./film";

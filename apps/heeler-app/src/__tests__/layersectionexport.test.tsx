@@ -16,7 +16,8 @@ import { render, screen } from "@testing-library/react";
 import { initialState } from "../data";
 import { exportWrittenName, layersOf, reduce, sectionExportId, type Command, type NodeCard, type State } from "../state";
 import { serializeGraph } from "../bridge";
-import { SECTIONS, SimplePanel, sectionExportCommand, sectionExportOffered, sectionExportTap } from "../ui/simple";
+import { SimplePanel } from "../ui/simple";
+import { SECTIONS, sectionExportCommand, sectionExportOffered, sectionExportTap } from "../ui/simpledata";
 
 
 const run = (s: State, ...cmds: Command[]): State => cmds.reduce(reduce, s);

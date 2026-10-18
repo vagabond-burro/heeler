@@ -16,7 +16,7 @@ import { serializeGraph } from "../bridge";
 import { NodeEditor } from "../ui/graph";
 import { ExportPanel } from "../ui/exportpanel";
 import { ArtLayersTab } from "../ui/artlayers";
-import { SECTIONS } from "../ui/simple";
+import { SECTIONS } from "../ui/simpledata";
 import { menuRows } from "./menuhelp";
 
 function run(s: State, ...cmds: Command[]): State {

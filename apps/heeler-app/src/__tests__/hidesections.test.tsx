@@ -11,7 +11,7 @@ import { uiSettingsCommands, uiSettingsSnapshot } from "../settings";
 import { DEFAULT_PREFS, reduce, type Command, type State } from "../state";
 import { Preferences } from "../ui/preferences";
 import { FindControl } from "../ui/findcontrol";
-import { SECTIONS, hiddenSectionCount, navSections, sectionHidden, visibleSections } from "../ui/simple";
+import { SECTIONS, hiddenSectionCount, navSections, sectionHidden, visibleSections } from "../ui/simpledata";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
 const titles = (s: State) => visibleSections(s).sections.map((sec) => sec.title);

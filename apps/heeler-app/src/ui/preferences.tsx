@@ -1,7 +1,7 @@
 import { modLabel } from "../platform";
 import { useDialogFocus } from "./dialogfocus";
 import { EyeOffIcon, MaskEyeIcon, PinIcon } from "./panelicons";
-import { SECTIONS, hiddenSectionCount, sectionHidden } from "./simple";
+import { SECTIONS, hiddenSectionCount, sectionHidden } from "./simpledata";
 import React, { useEffect, useMemo, useState } from "react";
 import type { Command, State } from "../state";
 import { BACKUP_CADENCES, RAW_SHARPENING, tetherShown, DEFAULT_PREFS, MASK_OVERLAY_COLORS, clampMaskOverlayOpacity, SHAPE_LINE_WIDTH_RANGE, clampAutosaveDelay, clampGesturePreviewEdge, clampGrainStep, clampPreviewEdge, clampShapeLineWidth, clampTetherPoll, clampThumbnailEdge, clampViewerRotationStep, clampViewerZoomRate, ribbonBounds, clampDepthSetting, DEPTH_SIZES, snapDepthSize } from "../state";

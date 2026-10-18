@@ -150,7 +150,8 @@ import { CustomRecipeItems } from "./customrecipes";
 import { paletteRecipes } from "./nodepalette";
 import { menuTree } from "../nodes";
 import { colorSetOf } from "../colorsets";
-import { DETAIL_WEIGHT_PARAMS, DepthMaskBlock, DetailAdvanced, LayerOpacitySlider, MASK_ROWS, MaskInvertRow, RadialShapePicker, RangeHistogram, RangeMaskTools, SECTIONS, SectionExportTick, Slider, nodeResetValues, sectionExportTap } from "./simple";
+import { DepthMaskBlock, DetailAdvanced, LayerOpacitySlider, MaskInvertRow, RadialShapePicker, RangeHistogram, RangeMaskTools, SectionExportTick, Slider } from "./simple";
+import { DETAIL_WEIGHT_PARAMS, MASK_ROWS, SECTIONS, nodeResetValues, sectionExportTap } from "./simpledata";
 import { LevelsEditor } from "./levels";
 import { LuminanceMaskControls } from "./lummask";
 import { BendWheel } from "./bend";
@@ -2987,7 +2988,7 @@ function ParamChoiceRow({ node, param: p, value, dispatch }: { node: NodeCard; p
  * generically here, so both surfaces call the same dial the same
  * thing and list them the same way ("I should expect to
  * see the same size of controls, labels, and fonts in Graph and
- * Canvas"). Mirrors the labels in simple.tsx's SECTIONS; keep the two
+ * Canvas"). Mirrors the labels in simpledata.ts's SECTIONS; keep the two
  * in step. A param not listed for its type keeps the prettified name.*/
 /** Flags whose name does not read as their label; the rest are the
  * name with its underscores as spaces. */

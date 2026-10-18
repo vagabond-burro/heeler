@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { App } from "../app";
 import { initialState } from "../data";
 import { reduce, type State } from "../state";
-import { navSections } from "../ui/simple";
+import { navSections } from "../ui/simpledata";
 
 afterEach(() => cleanup());
 

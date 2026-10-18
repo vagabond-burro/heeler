@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import { initialState } from "../data";
 import { reduce, OFF_BY_DEFAULT } from "../state";
 import { handleKey, legend, type NavState } from "../keynav";
-import { navSections } from "../ui/simple";
+import { navSections } from "../ui/simpledata";
 import { App } from "../app";
 
 describe("off sections in the keyboard map", () => {

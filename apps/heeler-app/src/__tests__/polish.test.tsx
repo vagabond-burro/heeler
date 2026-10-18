@@ -267,7 +267,7 @@ describe("the panel takes the Adjustments column", () => {
     view.unmount();
     // The same dial on the layer's own seat and the node inspector,
     // which share one list.
-    const { MASK_ROWS } = await import("../ui/simple");
+    const { MASK_ROWS } = await import("../ui/simpledata");
     expect(MASK_ROWS.selection.map((r) => r.param)).toContain("ramp");
   });
 
@@ -477,7 +477,7 @@ describe("polish strokes belong to the shape they refined", () => {
 
 
 it("the shared Develop and inspector defaults agree with legacy selection nodes", async () => {
-  const { paramDefault } = await import("../ui/simple");
+  const { paramDefault } = await import("../ui/simpledata");
   expect(paramDefault("matte_contrast", "heeler.selection_mask")).toBe(25);
   expect(paramDefault("matte_reach", "heeler.selection_mask")).toBe(50);
 });

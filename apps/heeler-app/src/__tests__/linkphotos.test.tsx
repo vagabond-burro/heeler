@@ -420,7 +420,7 @@ it("mirrors depth toggles as absolute flags even when a member was already on", 
 });
 
 it("keeps override hints within the house limit without printing undefined", async () => {
-  const { sliderHint } = await import("../ui/simple");
+  const { sliderHint } = await import("../ui/simpledata");
   expect(sliderHint("a".repeat(165), true)!.length).toBeLessThanOrEqual(165);
   expect(sliderHint("a".repeat(165), true)).toContain("Overridden");
   expect(sliderHint(undefined, true)).not.toContain("undefined");
