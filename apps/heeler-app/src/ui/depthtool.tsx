@@ -13,7 +13,7 @@ import { reportToolError } from "./hints";
 import { ModelConsentCard } from "./modelconsent";
 import { publishBusy } from "./statusbar";
 import type { Command, FilePasses, State, NodeCard } from "../state";
-import { nodeWantsDepth, snapDepthSize } from "../state";
+import { cropPreviewGraph, nodeWantsDepth, snapDepthSize } from "../state";
 
 type D = React.Dispatch<Command>;
 
@@ -132,6 +132,33 @@ export function depthRecipeKey(s: State): string {
   return `e${pct(n.params.edges)}f${pct(n.params.flatten)}n${near}x${far}s${size}`;
 }
 
+/** What the preview's depth plane is read through: the nodes ahead of
+ * the Depth Map's seat (CHAIN_ORDER: the model denoise, a merge, the
+ * lens, the crop and the warps), as the graph the
+ * preview renders has them (the crop opened to the whole frame while the
+ * crop tool is up). The desktop keys the plane by the picture the Depth
+ * Map reads, so a different geometry is a different plane to compute;
+ * keyed by the recipe alone, the runner took the plane as done after a
+ * crop or with the crop tool up, and a layer limited by its Depth mask
+ * covered its whole shape (the owner, 2026-10-17: a radial brightening
+ * meant for an owl lit its whole ellipse). */
+const AHEAD_OF_DEPTH = [
+  "heeler.model_denoise",
+  "heeler.merge",
+  "heeler.lens_correct",
+  "heeler.crop_rotate",
+  "heeler.grid_warp",
+  "heeler.shape_warp",
+];
+
+export function depthGeometryKey(s: State): string {
+  const nodes = s.tool === "crop" ? cropPreviewGraph(s).nodes : s.nodes;
+  const geometry = nodes
+    .filter((n) => n.enabled && AHEAD_OF_DEPTH.includes(n.type))
+    .map((n) => [n.id, n.params, n.textParams ?? {}]);
+  return JSON.stringify(geometry);
+}
+
 // The per-node predicates live in state.ts as nodeWantsDepth (26.3
 // Phase 10.3): the runner and the depth wiring must agree on what a
 // depth consumer at work is, and the wiring cannot import from here.
@@ -221,7 +248,7 @@ export function DepthRunner({ state, dispatch }: { state: State; dispatch: D }) 
   // session. A moved Depth Map dial is a new key, and the runner
   // waits for the gesture to end (below) so a drag is one compute.
   const recipe = depthRecipeKey(state);
-  const mark = `${state.activeImage}|${recipe}|${state.depthEpoch}`;
+  const mark = `${state.activeImage}|${recipe}|${state.depthEpoch}|${depthGeometryKey(state)}`;
   const sizeKey = /s(\d+)$/.exec(recipe)?.[1] ?? "518";
   const done = useRef<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);

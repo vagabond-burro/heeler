@@ -20,7 +20,7 @@ import {
   type State
 } from "../state";
 import { nodeResetValues, SECTIONS } from "../ui/simple";
-import { DepthRunner, depthFromFile, depthRecipeKey, depthWanted } from "../ui/depthtool";
+import { DepthRunner, depthFromFile, depthGeometryKey, depthRecipeKey, depthWanted } from "../ui/depthtool";
 import { Preferences } from "../ui/preferences";
 
 /** What the desktop answers for the photograph's own depth pass: a
@@ -209,6 +209,43 @@ describe("the Depth Map's recipe drives the runner", () => {
     expect(vi.mocked(depthMap)).toHaveBeenCalledTimes(2);
     view.rerender(<DepthRunner state={s2} dispatch={(c) => got.push(c)} />);
     await waitFor(() => expect(vi.mocked(depthMap)).toHaveBeenCalledTimes(3));
+  });
+});
+
+describe("the plane follows the geometry ahead of it", () => {
+  const wanting = (s: State) => run(s, { type: "set_param", id: "fog", param: "density", value: 40 });
+  it("computes again for a crop, and for the whole frame while the crop tool is up", async () => {
+    // A crop rekeys the plane the desktop reads (the picture the Depth Map
+    // reads is cropped), so the runner must not take it as done: the
+    // owner's radial, limited to an owl by its Depth mask, lit its whole
+    // ellipse after a crop and with the crop tool up (2026-10-17).
+    const s0 = wanting(initialState());
+    const got: Command[] = [];
+    const view = render(<DepthRunner state={s0} dispatch={(c) => got.push(c)} />);
+    const { depthMap } = await import("../bridge");
+    await waitFor(() => expect(vi.mocked(depthMap)).toHaveBeenCalledTimes(1));
+    const crop = s0.nodes.find((n) => n.type === "heeler.crop_rotate");
+    const cropped = crop
+      ? run(s0, { type: "set_params", id: crop.id, values: { crop_x: 0.1, crop_w: 0.8 } })
+      : run(s0, { type: "set_tool", tool: "crop" }, { type: "set_params", id: "crop", values: { crop_x: 0.1, crop_w: 0.8 } }, { type: "set_tool", tool: "none" });
+    expect(depthGeometryKey(cropped)).not.toBe(depthGeometryKey(s0));
+    view.rerender(<DepthRunner state={wanting(cropped)} dispatch={(c) => got.push(c)} />);
+    await waitFor(() => expect(vi.mocked(depthMap)).toHaveBeenCalledTimes(2));
+    // The crop tool shows the whole frame: the plane of the frame before
+    // the crop, read already, and asked for with the graph the preview
+    // renders rather than the crop's.
+    const tool = { ...wanting(cropped), tool: "crop" as const };
+    expect(depthGeometryKey(tool)).toBe(depthGeometryKey(s0));
+    view.rerender(<DepthRunner state={tool} dispatch={(c) => got.push(c)} />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(vi.mocked(depthMap)).toHaveBeenCalledTimes(2);
+    // Another crop is another plane; going back to one read is not.
+    const recrop = run(cropped, { type: "set_params", id: crop?.id ?? "crop", values: { crop_x: 0.2, crop_w: 0.6 } });
+    view.rerender(<DepthRunner state={wanting(recrop)} dispatch={(c) => got.push(c)} />);
+    await waitFor(() => expect(vi.mocked(depthMap)).toHaveBeenCalledTimes(3));
+    view.rerender(<DepthRunner state={wanting(cropped)} dispatch={(c) => got.push(c)} />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(vi.mocked(depthMap)).toHaveBeenCalledTimes(3);
   });
 });
 

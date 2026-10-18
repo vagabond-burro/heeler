@@ -12,7 +12,7 @@ import { nextSaveRevision, observeSaveRevision } from "./saverevision";
 import type { ImageEntry, NodeCard, State, ViewState, PresetFile } from "./state";
 import { frameLook, lookPreviewState, mainConversion, maskOverlayWanted, previewEdgeFor,
   settleJpegQuality, previewTarget, renderedSource, bornRendered, isRenderedSource, needsRenderedBypass, type FilePasses } from "./state";
-import { ART_ID, ART_KINDS, ART_FX, BEND_FALLOFF_DEFAULT, artGroupMembers, exportDpi, exportWrittenName, flattenGroups, freshGraphFor, groupMembersReadBelow, isLayerEffect, isPictureWarp, spliceIn, thumbnailGraphFor } from "./state";
+import { ART_ID, ART_KINDS, ART_FX, BEND_FALLOFF_DEFAULT, artGroupMembers, cropPreviewGraph, exportDpi, exportWrittenName, flattenGroups, freshGraphFor, groupMembersReadBelow, isLayerEffect, isPictureWarp, spliceIn, thumbnailGraphFor } from "./state";
 
 import { addLogCatalogRoot, logDebug } from "./log";
 import { awaitFullPass } from "./fullpass";
@@ -2311,8 +2311,11 @@ export function onDenoiseProgress(fn: (p: DenoiseProgress) => void): () => void 
  * progress estimate learns from model reads alone. */
 export async function depthMap(state: State): Promise<DepthMapAnswer> {
   if (!isTauri()) return { version: "mock-depth", work: "cached" };
+  // The plane for the picture the preview renders: with the crop tool up
+  // that is the whole frame (cropPreviewGraph), not the crop.
+  const shown = state.tool === "crop" ? { ...state, ...cropPreviewGraph(state) } : state;
   return await call("depth_map", {
-    graph: serializeGraph(state),
+    graph: serializeGraph(shown),
     imageId: state.activeImage,
   });
 }
