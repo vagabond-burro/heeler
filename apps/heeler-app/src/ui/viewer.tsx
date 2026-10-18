@@ -1,4 +1,5 @@
 import { isPrimaryPress } from "./pointerguard";
+import { InspectLayer, InspectPanel } from "./inspect";
 import { usePickSessions } from "../picksession";
 // The image viewer: toolbar + image with live preview filter (mock bridge)
 // or engine-rendered data URL (Tauri).
@@ -1398,6 +1399,22 @@ two frames for before and after, and a frame split down the middle.*/}
             <circle cx="20" cy="5" r="1.6" fill="currentColor" stroke="none" />
           </svg>
         </button>
+        {/* Influence Mapping: a crosshair that traces a pixel through
+the graph, node by node. */}
+        <button
+          data-active={state.inspectPick || state.inspectPoint !== null}
+          onClick={() => dispatch(state.inspectPoint !== null && !state.inspectPick ? { type: "close_inspect" } : { type: "toggle_inspect_pick" })}
+          data-testid="btn-inspect"
+          aria-label="Inspect"
+          data-hint="Click a point to see how each node changes it, and where each node changes the picture"
+          data-hint-cmd="view.inspect"
+          style={{ display: "inline-flex", alignItems: "center" }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden focusable="false">
+            <circle cx="12" cy="12" r="6" />
+            <path d="M12 2v5M12 17v5M2 12h5M17 12h5" />
+          </svg>
+        </button>
         {/* "Histogram overlay" and "Mask overlay" sat here with no handler
 behind either: mockup furniture that survived into the app. The
 report: "there is a label that says Histogram Overlay but doesn't
@@ -1684,6 +1701,7 @@ armed has settings to show.*/}
           )}
           <GamutBadge state={state} dispatch={dispatch} />
         </div>
+        <InspectPanel state={state} dispatch={dispatch} />
         {/* A stack merging for this photograph, over the frame it replaces:
 say how far it has got rather than sit there looking frozen. With
 no frame yet, the loading view below carries it instead.*/}
@@ -3013,6 +3031,7 @@ the writes are ordinary parameter edits.*/}
 gray, and the hue curve pushes them apart. Samples the conversion's
 INPUT, the color the curve keys on; the pin marks the first click
 until the second lands or Escape drops it.*/}
+            <InspectLayer state={state} dispatch={dispatch} view={view} />
             {state.bwSeparate && (
               <div
                 data-testid="bw-separate-overlay"

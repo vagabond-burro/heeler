@@ -1370,6 +1370,7 @@ export function App() {
         depthView: state.depthView,
         halationView: state.halationView,
         detailEqView: state.detailEqView,
+        influenceView: state.influenceView,
         collisionView: state.collisionView,
         collisionTolerance: state.collisionTolerance,
         bwSeparate: state.bwSeparate,
@@ -1867,6 +1868,7 @@ export function App() {
     state.depthView,
     state.halationView,
     state.detailEqView,
+    state.influenceView,
     state.collisionView,
     // The view's Tolerance dial rides in the target, so it is a frame
     // change too (2026-09-15: "Tolerance slider doesn't change

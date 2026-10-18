@@ -24,6 +24,7 @@ Use the **Note** field to record why the node exists or how it should be used. T
 - Enable or disable it.
 - Reset it to its defaults.
 - Probe its output in the image viewport. The scopes also read the probed output. Close the probe badge in the viewport to return to final output.
+- **Show influence**: where the node changes the picture, warm where it brightens and cool where it darkens, with color changes in magenta. **Isolate contribution**: only what the node adds to the picture it receives, around a middle gray. Choose either again to return. See [Inspect a pixel](../image-viewport.md#inspect-a-pixel).
 - Compare two branch endpoints A/B in the viewport and drag the divider.
 - Bake a compatible color branch to a `.cube` LUT.
 - Delete the selection with configured neighbor healing.

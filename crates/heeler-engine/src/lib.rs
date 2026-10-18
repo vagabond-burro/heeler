@@ -35,6 +35,7 @@ mod ops_adapt;
 mod ops_recolor;
 mod separation;
 pub mod zones;
+pub mod influence;
 pub mod film;
 pub mod paper;
 pub mod spectral;

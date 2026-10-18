@@ -216,7 +216,7 @@ Adjustments and Graph").*/}
         // stay clickable, so the disarm button always works.
         <div
           className={
-            state.curvePick || state.toneEqPick || state.recolorPick || state.consolePick || state.wbPick || state.bwSeparate || state.bwPick || state.zonePlace || state.chartPlace
+            state.curvePick || state.toneEqPick || state.recolorPick || state.consolePick || state.wbPick || state.bwSeparate || state.bwPick || state.zonePlace || state.chartPlace || state.inspectPick
               ? "pick-through"
               : undefined
           }

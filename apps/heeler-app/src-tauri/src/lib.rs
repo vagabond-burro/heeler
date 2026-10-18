@@ -2741,6 +2741,14 @@ fn collision_view_terminal(graph: &UiGraph) -> Option<String> {
         .map(|c| c.from.0.clone())
 }
 
+/// The mode and node of an influence view's target,
+/// "__influence__@mode@node".
+fn influence_view_target(target: &str) -> Option<(heeler_engine::influence::InfluenceMode, String)> {
+    let (mode, id) = target.strip_prefix("__influence__@")?.split_once('@')?;
+    let mode = heeler_engine::influence::InfluenceMode::parse(mode)?;
+    (!id.is_empty()).then(|| (mode, id.to_string()))
+}
+
 /// The band and node of a Detail Equalizer band view's target,
 /// "__detaileq__@band@node".
 fn detail_eq_view_target(target: &str) -> Option<(usize, String)> {
@@ -13545,6 +13553,139 @@ async fn gamut_report(
     .map_err(|e| e.to_string())?
 }
 
+/// One point of a pixel's trace: scene-linear channel means and the
+/// display luma, the units the panel shows.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq)]
+pub struct TraceSample {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub luma: f32,
+}
+
+/// One node on the pixel's path: its input and output at the point,
+/// how much of it its mask lets through there, whether it is on, and
+/// whether it moves pixels (a crop, a warp), where in and out are not
+/// the same place of the photograph.
+#[derive(Serialize, Debug)]
+pub struct TraceStep {
+    pub id: String,
+    pub node_type: String,
+    pub enabled: bool,
+    pub input: Option<TraceSample>,
+    pub output: Option<TraceSample>,
+    pub coverage: Option<f32>,
+    pub moves: bool,
+}
+
+/// The node types that move pixels: a point means a different place of
+/// the photograph before and after them.
+const TRACE_MOVERS: &[&str] = &[
+    "heeler.crop_rotate", "heeler.perspective", "heeler.transform", "heeler.grid_warp",
+    "heeler.shape_warp", "heeler.lens_correct",
+];
+
+/// The patch a trace averages, as a share of the short side: a few
+/// pixels, so a pick on noise is stable.
+const TRACE_RADIUS: f32 = 0.002;
+
+fn trace_sample(img: &ImageBuf, x: f32, y: f32) -> TraceSample {
+    let s = sample_patch(img, x, y, TRACE_RADIUS);
+    TraceSample { r: s.r, g: s.g, b: s.b, luma: s.luma }
+}
+
+/// The trace's walk, pure over a render function so it can be tested
+/// without an app handle: the spine from the source to the output, each
+/// node's output at the point and its input as what feeds it there.
+/// Upstream of the last node that moves pixels the point is `source`
+/// (the photograph's own place, as the frontend maps it back), from it
+/// on `frame`.
+fn trace_spine(
+    graph: &UiGraph,
+    frame: (f32, f32),
+    source: (f32, f32),
+    mut render: impl FnMut(&str) -> Option<Value>,
+) -> Vec<TraceStep> {
+    let spine = image_spine(graph);
+    let node = |id: &str| graph.nodes.iter().find(|n| n.id == id);
+    let last_mover = spine
+        .iter()
+        .rposition(|id| node(id).is_some_and(|n| n.enabled && TRACE_MOVERS.contains(&n.node_type.as_str())));
+    let at = |i: usize| if last_mover.is_some_and(|m| i < m) { source } else { frame };
+    let sample_of = |v: &Value, p: (f32, f32)| -> Option<TraceSample> {
+        match v {
+            Value::Image(img) => Some(trace_sample(img, p.0, p.1)),
+            Value::Mask(m) => Some(trace_sample(&mask_to_image(m), p.0, p.1)),
+        }
+    };
+    let mut steps = Vec::with_capacity(spine.len());
+    let mut previous: Option<Value> = None;
+    for (i, id) in spine.iter().enumerate() {
+        let Some(n) = node(id) else { continue };
+        let out = render(id);
+        let p = at(i);
+        let moves = TRACE_MOVERS.contains(&n.node_type.as_str()) && n.enabled;
+        // A mover's input is read where the photograph was, before it.
+        let input_at = if moves { source } else { p };
+        let coverage = graph
+            .connections
+            .iter()
+            .find(|c| c.to.0 == *id && c.to.1 == "mask")
+            .and_then(|c| render(&c.from.0))
+            .and_then(|v| sample_of(&v, p))
+            .map(|s| s.r);
+        steps.push(TraceStep {
+            id: id.clone(),
+            node_type: n.node_type.clone(),
+            enabled: n.enabled,
+            input: previous.as_ref().and_then(|v| sample_of(v, input_at)),
+            output: out.as_ref().and_then(|v| sample_of(v, p)),
+            coverage,
+            moves,
+        });
+        previous = out;
+    }
+    steps
+}
+
+/// Influence Mapping's pixel trace: every node on the picture's path,
+/// source first, with its input and output at the clicked point. A
+/// session-executor cache read against the frame already on screen,
+/// at the preview's own size. `x`, `y` are the point on the frame;
+/// `sx`, `sy` the same point of the photograph before any crop or warp.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn trace_pixel(
+    app: tauri::AppHandle,
+    graph: UiGraph,
+    image_id: String,
+    x: f32,
+    y: f32,
+    sx: f32,
+    sy: f32,
+    preview_edge: Option<usize>,
+) -> Result<Vec<TraceStep>, String> {
+    let _guard = render_lock().lock().await;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _held = RenderLockHeld::hold(_guard);
+        let opts = source_opts_of(&graph);
+        let source = preview_source_at(&app, &image_id, opts, preview_edge.unwrap_or(2048))?;
+        let registry = Registry::builtin();
+        let mut sources = HashMap::new();
+        for n in graph.nodes.iter().filter(|n| n.node_type == "heeler.image_source" || n.node_type == "heeler.group") {
+            sources.insert(
+                n.id.clone(),
+                SourceImage { image: source.clone(), version: preview_source_version(&app, &image_id, opts, &source), measured: false },
+            );
+        }
+        let g = plant_and_build(&app, &image_id, &graph, &registry, &source, false, &mut sources)?;
+        let mut exec = PreviewExecutor::take(&app)?;
+        Ok(trace_spine(&graph, (x, y), (sx, sy), |id| exec.render(&g, id, &sources).ok()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[derive(Serialize)]
 pub struct NoiseOut {
     luma_sigma: f32,
@@ -17966,7 +18107,17 @@ fn render_preview_attempt(
         .map(collision_target)
         .unwrap_or((None, heeler_engine::GRAY_NEAR_DEFAULT));
     let band_view = mask_node.as_deref().map(|m| m.starts_with("__detaileq__")).unwrap_or(false);
-    let mask_node = if depth_view || halation_view || collision_view || zones_view || band_view { None } else { mask_node };
+    // Influence Mapping's views, "__influence__@mode@node": where that
+    // node changes the picture, or what it adds, made from its input and
+    // its output (heeler_engine::influence). A node that is gone, off,
+    // or has no picture input renders the plain frame.
+    let influence = mask_node.as_deref().and_then(influence_view_target).and_then(|(mode, id)| {
+        let on = graph.nodes.iter().any(|n| n.id == id && n.enabled);
+        let feed = graph.connections.iter().find(|c| c.to.0 == id && c.to.1 == "in").map(|c| c.from.0.clone());
+        on.then_some(()).and(feed).map(|feed| (mode, id, feed))
+    });
+    let influence_named = mask_node.as_deref().map(|m| m.starts_with("__influence__")).unwrap_or(false);
+    let mask_node = if depth_view || halation_view || collision_view || zones_view || band_view || influence_named { None } else { mask_node };
     let mask_terminal_for = |roi_rect: &mut Option<[f64; 4]>| -> Result<Option<String>, String> {
         match &mask_node {
             Some(id) if g.nodes().any(|n| &n.id == id) => {
@@ -17983,6 +18134,14 @@ fn render_preview_attempt(
         }
     };
     let mask_terminal = mask_terminal_for(&mut roi_rect)?;
+    // A node shown as the frame by the band or influence views that sits
+    // above a 1:1 slice's cut renders whole, as a probe does.
+    let view_node = detail_eq_view.as_ref().map(|(_, id)| id.clone()).or_else(|| influence.as_ref().map(|(_, id, _)| id.clone()));
+    if let (Some(id), Some(_)) = (&view_node, roi_rect) {
+        if !on_the_patch(&graph, id) {
+            roi_rect = Some(WHOLE_FRAME);
+        }
+    }
     // Halation's isolated view stops AT the halation node: left at the
     // graph's terminal, downstream tools (Bend, Recolor, the profile)
     // would grade the gate map, and the docs promise the raw gated
@@ -18001,6 +18160,8 @@ fn render_preview_attempt(
         // The band view: the equalizer IS the frame, so nothing after
         // it grades the gray.
         _ if detail_eq_view.as_ref().is_some_and(|(_, id)| g.nodes().any(|n| &n.id == id)) => detail_eq_view.as_ref().unwrap().1.clone(),
+        // An influence view is made at the node's own place.
+        _ if influence.as_ref().is_some_and(|(_, id, _)| g.nodes().any(|n| &n.id == id)) => influence.as_ref().unwrap().1.clone(),
         // Overlay (or no mask): the photograph is the frame; the mask
         // renders separately below and tints it.
         _ => terminal_of(&graph).ok_or("empty graph")?,
@@ -18010,6 +18171,9 @@ fn render_preview_attempt(
     // None when the treatment is off, and the frame renders plainly.
     let collision_terminal = if collision_view { collision_view_terminal(&graph) } else { None };
     let mut collision_value: Option<Value> = None;
+    // An influence view's second render: what feeds the node.
+    let influence_input = influence.as_ref().filter(|(_, id, feed)| terminal == *id && g.nodes().any(|n| &n.id == feed)).map(|(_, _, feed)| feed.clone());
+    let mut influence_value: Option<Value> = None;
     let mut backend = String::from("cpu");
     let mut overlay_value: Option<Value> = None;
     // The crops a wired Depth Map's plane already carries, which the
@@ -18145,6 +18309,9 @@ fn render_preview_attempt(
         if let Some(ct) = &collision_terminal {
             collision_value = exec.render(&g, ct, &sources).ok();
         }
+        if let Some(feed) = &influence_input {
+            influence_value = exec.render(&g, feed, &sources).ok();
+        }
         result
     } else {
         // Hybrid path: the CPU executor (with its cross-render cache)
@@ -18153,9 +18320,11 @@ fn render_preview_attempt(
         // to the pure CPU render; a preview must never fail over a
         // performance path.
         let gpu_on = gpu_previews_on(app);
-        let gpu_tail = if mask_node.is_none() && !halation_view && gpu_on {
-            // The isolated halation view has its own terminal, and the
-            // tail walk would start from the graph's instead.
+        let own_terminal = halation_view || detail_eq_view.is_some() || influence.is_some();
+        let gpu_tail = if mask_node.is_none() && !own_terminal && gpu_on {
+            // The isolated halation view, the band view and the influence
+            // views have their own terminal, and the tail walk would start
+            // from the graph's instead.
             gpu_tail_of(&graph)
         } else {
             None
@@ -18269,6 +18438,9 @@ fn render_preview_attempt(
         if let Some(ct) = &collision_terminal {
             collision_value = exec.render(&g, ct, &sources).ok();
         }
+        if let Some(feed) = &influence_input {
+            influence_value = exec.render(&g, feed, &sources).ok();
+        }
         drop(exec);
         result.map_err(|e| e.to_string())?
     };
@@ -18288,7 +18460,7 @@ fn render_preview_attempt(
     // will clip at encode. A view, not an overlay, so it rides the whole
     // existing delivery path.
     let gamut_marked;
-    let image = if gamut_view == Some(true) && mask_node.is_none() {
+    let image = if gamut_view == Some(true) && mask_node.is_none() && view_node.is_none() {
         let mut buf = ImageBuf::new(image.width, image.height);
         for (o, s) in buf.data.chunks_mut(4).zip(image.data.chunks(4)) {
             let (r, g, b) = (s[0], s[1], s[2]);
@@ -18312,6 +18484,20 @@ fn render_preview_attempt(
         &gamut_marked
     } else {
         image
+    };
+    // An influence view: the node's output against its input. A size
+    // the node changed (a crop, a warp) has no pixel-for-pixel change,
+    // and shows the node's output plainly.
+    let influenced;
+    let image = match (influence.as_ref(), influence_value.as_ref().and_then(|v| v.as_image())) {
+        (Some((mode, _, _)), Some(input)) => match heeler_engine::influence::influence_frame(input, image, *mode) {
+            Some(buf) => {
+                influenced = std::sync::Arc::new(buf);
+                &influenced
+            }
+            None => image,
+        },
+        _ => image,
     };
     // The zone map, on the frame as rendered.
     let zoned;
@@ -22141,6 +22327,7 @@ pub fn run() {
             place_zone,
             estimate_noise,
             gamut_report,
+            trace_pixel,
             lens_profile_for,
             export_image,
             open_folder,
@@ -24730,12 +24917,74 @@ mod tests {
         assert_eq!(g.node("effect").unwrap().params.get("view").and_then(|v| v.as_str()), Some("band:4"));
     }
 
+    /// The trace walks the picture's path source first, reads each
+    /// node's input and output at the point, its mask's coverage, and
+    /// upstream of a crop reads the photograph's own place.
+    #[test]
+    fn a_pixel_trace_reads_each_node_at_the_point() {
+        let node = |id: &str, ty: &str| UiNode { id: id.into(), node_type: ty.into(), enabled: true, params: HashMap::new() };
+        let wire = |a: &str, b: &str, port: &str| UiConnection { from: (a.into(), "out".into()), to: (b.into(), port.into()) };
+        let ui = UiGraph {
+            graph_id: "trace".into(),
+            nodes: vec![
+                node("src", "heeler.image_source"),
+                node("exp", "heeler.exposure"),
+                node("m", "heeler.radial_mask"),
+                node("adj", "heeler.exposure"),
+                node("crop", "heeler.crop_rotate"),
+                node("output", "heeler.output"),
+            ],
+            connections: vec![
+                wire("src", "exp", "in"),
+                wire("exp", "adj", "in"),
+                wire("m", "adj", "mask"),
+                wire("adj", "crop", "in"),
+                wire("crop", "output", "in"),
+            ],
+        };
+        // A ramp left to right, so where a node is read shows in its value.
+        let ramp = |w: usize, scale: f32| {
+            let mut img = ImageBuf::new(w, 8);
+            for (i, px) in img.data.chunks_mut(4).enumerate() {
+                let v = scale * (i % w) as f32 / (w - 1) as f32;
+                px.copy_from_slice(&[v, v, v, 1.0]);
+            }
+            Value::Image(Arc::new(img))
+        };
+        let render = |id: &str| -> Option<Value> {
+            Some(match id {
+                "src" => ramp(101, 1.0),
+                "exp" | "adj" => ramp(101, 0.5),
+                "m" => Value::Mask(Arc::new(MaskBuf { width: 101, height: 8, data: vec![0.25; 808] })),
+                _ => ramp(51, 0.5),
+            })
+        };
+        let steps = trace_spine(&ui, (0.2, 0.5), (0.8, 0.5), render);
+        let ids: Vec<&str> = steps.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, ["src", "exp", "adj", "crop", "output"]);
+        assert!(steps[0].input.is_none());
+        // Upstream of the crop the point is the photograph's (0.8).
+        let exp = &steps[1];
+        assert!((exp.input.unwrap().r - 0.8).abs() < 0.02 && (exp.output.unwrap().r - 0.4).abs() < 0.02, "{exp:?}");
+        assert_eq!(steps[2].coverage, Some(0.25));
+        assert!(steps[1].coverage.is_none());
+        // The crop moves pixels: in at the photograph's place, out at the frame's.
+        let crop = &steps[3];
+        assert!(crop.moves && (crop.input.unwrap().r - 0.4).abs() < 0.02 && (crop.output.unwrap().r - 0.1).abs() < 0.02, "{crop:?}");
+        assert!(!steps[4].moves && (steps[4].output.unwrap().r - 0.1).abs() < 0.02);
+    }
+
     #[test]
     fn a_band_view_target_names_its_band_and_node() {
         assert_eq!(detail_eq_view_target("__detaileq__@3@layer_2_detaileq"), Some((3, "layer_2_detaileq".to_string())));
         assert_eq!(detail_eq_view_target("__detaileq__@6@detaileq"), None);
         assert_eq!(detail_eq_view_target("__detaileq__@2@"), None);
         assert_eq!(detail_eq_view_target("__halation__"), None);
+        use heeler_engine::influence::InfluenceMode;
+        assert_eq!(influence_view_target("__influence__@isolate@layer_1_adj"), Some((InfluenceMode::Isolate, "layer_1_adj".to_string())));
+        assert_eq!(influence_view_target("__influence__@both@exposure"), Some((InfluenceMode::Both, "exposure".to_string())));
+        assert_eq!(influence_view_target("__influence__@loud@exposure"), None);
+        assert_eq!(influence_view_target("__influence__@luma@"), None);
     }
 
     #[test]

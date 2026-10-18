@@ -2579,6 +2579,34 @@ read it, because they read whatever is on screen.*/}
                 ? "Stop probing"
                 : "Probe output"}
             </button>
+            {/* Influence Mapping's two views of one node: where it changes
+                the picture, and what it adds. */}
+            <button
+              data-testid="menu-influence-node"
+              disabled={state.selection.length !== 1}
+              data-hint="Show where this node changes the picture, warm where it brightens and cool where it darkens"
+              onClick={() => {
+                dispatch({ type: "toggle_influence_view", id: state.selection[0], mode: "both" });
+                setMenu(null);
+              }}
+            >
+              {state.selection.length === 1 && state.influenceView?.id === state.selection[0] && state.influenceView.mode !== "isolate"
+                ? "Hide influence"
+                : "Show influence"}
+            </button>
+            <button
+              data-testid="menu-isolate-node"
+              disabled={state.selection.length !== 1}
+              data-hint="Show only what this node adds to the picture it receives, around a middle gray"
+              onClick={() => {
+                dispatch({ type: "toggle_influence_view", id: state.selection[0], mode: "isolate" });
+                setMenu(null);
+              }}
+            >
+              {state.selection.length === 1 && state.influenceView?.id === state.selection[0] && state.influenceView.mode === "isolate"
+                ? "Stop isolating"
+                : "Isolate contribution"}
+            </button>
             {/* Branch A/B (proposal §5): two graph points side by side
                 in the viewer split. Two nodes selected compares them
                 outright; one node arms A, and the next node's menu

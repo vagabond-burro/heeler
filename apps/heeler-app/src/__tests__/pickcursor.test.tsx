@@ -43,6 +43,7 @@ const ARMED: { overlay: string; cmds: Command[] }[] = [
   { overlay: "recolor-match-overlay", cmds: [{ type: "set_category", title: "Recolor", on: true }, { type: "toggle_recolor_match", id: "recolor" }] },
   { overlay: "console-pick-overlay", cmds: [{ type: "set_category", title: "Color Tune", on: true }, { type: "toggle_console_pick", id: "colorconsole" }] },
   { overlay: "pick-overlay", cmds: [{ type: "set_tool", tool: "pick" }] },
+  { overlay: "inspect-overlay", cmds: [{ type: "toggle_inspect_pick" }] },
 ];
 
 describe("the pickers' cursor", () => {

@@ -48,6 +48,18 @@ Some adjustments arm an on-image picker, such as white balance, Curves, Tone Equ
 
 While the Color Sets picker is armed, hovering the photograph draws a faint marker on the set's color bar at the hue under the cursor, so you can see where a click would land; a gray keeps the marker where it was. The picker changes the selection only while the left button is held: click to center the band on the sampled color, or press and drag to sweep across a subject and gather it in one stroke. Turn on the set's mask eye first to watch the selection follow the drag. The status line shows which set you are picking for and what the modifiers do; press `Esc` (or the set's picker button) to turn the picker off.
 
+## Inspect a pixel
+
+The **Inspect** button in the viewer's toolbar (a crosshair) shows why a point of the photograph looks the way it does. Click it, then click the photograph: a pin marks the point and the Inspect panel lists every node on the picture's path, from the photograph to the finished frame. **Inspect a Pixel** in Keyboard Shortcuts can be given a key.
+
+Each row is a node with two swatches, the color it receives and the color it hands on at that point, and its output's brightness from 0 to 100 with how far it moved it in brackets. A node that changes nothing there is dimmed. A layer's node also says how much of it its mask lets through at that point, so `mask 0%` explains a layer that does nothing there. A crop or warp says **moves pixels**: before it, the panel reads the place of the photograph that ends up at your point. The **Final** row is the finished color with its channels.
+
+The changes do not add up to the final value, and the panel does not pretend they do: each node works on what the one before it made, and curves, masks and blends are not sums.
+
+Click a node's name to select it. **Map** shows where that node changes the whole picture: the photograph dimmed to gray, painted warm where the node brightens it, cool where it darkens it, and magenta where it moves color. The chooser at the top of the panel picks **Brightness**, **Color** or **Both**. **Isolate** shows only what the node adds, as its output minus its input around a middle gray, at its own place in the graph rather than with every other node switched off. Click either again to return to the photograph. **Pick** chooses another point, and × closes the panel.
+
+The panel follows your edits: move a slider and the trace reads again. Inspecting never changes the edit, its history, a take or an export. In Graph, a node's right-click menu offers the same two views, **Show influence** and **Isolate contribution**.
+
 ## Selections
 
 The Select tool supports rectangle, ellipse, pen, freehand, magnetic, color brush, color pick, region, and smart methods where available. Hold `Shift` to add, `Option` (`Alt` on Windows) to subtract, both to intersect, and `Cmd` (`Ctrl` on Windows) to draw rectangles or ellipses from the center. The cursor badge shows the active combination mode.

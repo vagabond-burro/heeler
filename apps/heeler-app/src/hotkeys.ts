@@ -240,6 +240,7 @@ export const COMMANDS: CommandSpec[] = [
   { id: "tool.shapewarp", label: "Shape Warp Tool", group: "Tools", scope: "global", binding: "Shift+W" },
   { id: "tool.brush", label: "Brush Tool", group: "Tools", scope: "global", binding: "" },
   { id: "tool.pick", label: "Eyedropper", group: "Tools", scope: "global", binding: "I" },
+  { id: "view.inspect", label: "Inspect a Pixel", group: "Tools", scope: "global", binding: "" },
   { id: "tool.cancel", label: "Cancel Tool", group: "Tools", scope: "global", binding: "Escape" },
   { id: "tool.apply", label: "Apply Tool", group: "Tools", scope: "global", binding: "Enter" },
 

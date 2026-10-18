@@ -1298,6 +1298,7 @@ export function maskViewOverriddenBy(s: State): string | null {
   if (shown === "__depth__") return "View depth";
   if (shown === "__halation__") return "the halation view";
   if (shown.startsWith("__detaileq__")) return "the band view";
+  if (shown.startsWith("__influence__")) return "the influence view";
   if (shown.startsWith("__collision__")) return "the separation view";
   if (shown.startsWith("__zones__")) return "the zone view";
   return null;
@@ -1342,11 +1343,34 @@ export function previewTarget(s: State): string | null {
       ? "__halation__"
       : detailEqViewOn(s)
         ? `__detaileq__@${s.detailEqView!.band}@${s.detailEqView!.id}`
+        : influenceViewOn(s)
+          ? `__influence__@${s.influenceView!.mode}@${s.influenceView!.id}`
         : s.collisionView && treatmentOn(s)
           ? `__collision__${collisionSuffix(s)}`
           : s.zonesView
             ? "__zones__"
             : maskPreviewNode(s);
+}
+
+/** What an influence view shows: brightness, color or both changes as a
+ * heatmap, or the node's own contribution around middle gray. */
+export type InfluenceMode = "luma" | "color" | "both" | "isolate";
+
+/** Whether an influence view has a node to show: one in the graph and
+ * switched on. */
+export function influenceViewOn(s: State): boolean {
+  const v = s.influenceView;
+  return !!v && graphHasNode(s.nodes, v.id) && !!findNodeDeep(s.nodes, v.id)?.enabled;
+}
+
+/** A node by id, in a group or not. */
+function findNodeDeep(nodes: NodeCard[], id: string): NodeCard | undefined {
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    const inner = n.groupNodes ? findNodeDeep(n.groupNodes, id) : undefined;
+    if (inner) return inner;
+  }
+  return undefined;
 }
 
 /** Whether the Detail Equalizer's band view has a node to show: one in
@@ -1384,7 +1408,7 @@ const CSET_MASK = /^cset(\d+)_mask$/;
  * the user presses it (or its mask leaves the graph); no other
  * control, the Depth mask switch, its Levels, its depth eye, puts it
  * down.*/
-export const MASK_EYE_TAKES_FRAME = { depthView: false, halationView: false, collisionView: false, zonesView: false, detailEqView: null } as const;
+export const MASK_EYE_TAKES_FRAME = { depthView: false, halationView: false, collisionView: false, zonesView: false, detailEqView: null, influenceView: null } as const;
 
 /** The mask view switched on for one mask: a set's by its eye, a
  * layer's (Develop or Finish) by the layer mask view. */
@@ -1461,6 +1485,7 @@ const PICKER_RESET = {
   dofPick: false,
   keyLightPick: false,
   chartPlace: false,
+  inspectPick: false,
 };
 
 /** Whether any picker is waiting on a click. */
@@ -1479,7 +1504,8 @@ export function anyPickerArmed(s: State): boolean {
     s.consolePickBand !== null ||
     s.dofPick ||
     s.keyLightPick ||
-    s.chartPlace
+    s.chartPlace ||
+    s.inspectPick
   );
 }
 
@@ -1554,6 +1580,9 @@ const GRAPH_POINTERS_RESET = {
   ...PICKER_RESET,
   csetMaskView: null,
   probeNode: null,
+  inspectPoint: null,
+  influenceView: null,
+  detailEqView: null,
   keyLightSel: null,
   artActive: null,
   artSelected: [],
@@ -3735,6 +3764,15 @@ export interface State {
    * cleared on photo switch; the scopes follow automatically because
    * they read the frame on screen.*/
   probeNode: string | null;
+  /** Influence Mapping's Inspect picker is armed: a click on the frame
+   * traces that pixel through the graph. */
+  inspectPick: boolean;
+  /** The point the Inspect panel traces, in 0..1 of the frame, or null
+   * with the panel closed. View state, never saved. */
+  inspectPoint: { x: number; y: number } | null;
+  /** An influence view: where one node changes the picture (luma,
+   * color or both), or what it adds (isolate), as the frame. */
+  influenceView: { id: string; mode: InfluenceMode } | null;
   /** Branch A/B (proposal §5): two graph points compared in the viewer
    * split. `b` null means A is armed and the next pick completes the
    * pair. View state like the probe, so no undo history. */
@@ -5080,6 +5118,15 @@ export type Command =
   /** Show one band (1 finest to 5 broadest) of a Detail Equalizer as
    * the frame; the same band again puts it down. */
   | { type: "toggle_detail_eq_view"; id: string; band: number }
+  /** Arm or put away the Inspect picker. */
+  | { type: "toggle_inspect_pick" }
+  /** Trace the pixel at this point of the frame (0..1). */
+  | { type: "inspect_at"; x: number; y: number }
+  /** Close the Inspect panel and put the picker away. */
+  | { type: "close_inspect" }
+  /** Show where a node changes the picture, or what it adds; the same
+   * node and mode again puts it down. */
+  | { type: "toggle_influence_view"; id: string; mode: InfluenceMode }
   /** a lens character: one preset written across the optical sections
    * in one step*/
   | { type: "apply_lens_character"; id: string }
@@ -13495,7 +13542,7 @@ const PICK_GRAPH_REPLACEMENTS = new Set<string>([
 /** The pickers whose disarm cancels a pending answer aimed through them. */
 const PICK_ARMS = [
   "curvePick", "wbPick", "toneEqPick", "recolorPick", "recolorMatch", "bwSeparate", "bwPick", "zonePlace",
-  "csetDropper", "consolePick", "dofPick", "keyLightPick", "chartPlace",
+  "csetDropper", "consolePick", "dofPick", "keyLightPick", "chartPlace", "inspectPick",
 ] as const;
 /** A dropper a pick session can name as the arm it answers through. Typed
  * from the list so a misspelt arm is a compile error, not a session that
@@ -14111,6 +14158,7 @@ function reduceWithLifted(s: State, cmd: Command, logged: boolean): State {
       };
     }
     if (gone(next.probeNode)) next = { ...next, probeNode: null };
+    if (gone(next.influenceView?.id)) next = { ...next, influenceView: null };
     if (next.csetMaskView !== null && gone(`cset${next.csetMaskView}_mask`)) next = { ...next, csetMaskView: null };
     if (gone(next.curvePick?.nodeId)) next = { ...next, curvePick: null, curveHoverX: null };
     if (gone(next.toneEqPick)) next = { ...next, toneEqPick: null, toneEqHoverX: null };
@@ -14572,8 +14620,12 @@ function reduceInner(s: State, cmd: Command): State {
         compareTake: null,
         // A probe points into one photo's graph; the next photo's graph
         // is a different circuit. The armed zone picker follows the
-        // same rule.
+        // same rule. So do the inspected point and the influence and
+        // band views.
         probeNode: null,
+        inspectPoint: null,
+        influenceView: null,
+        detailEqView: null,
         keyLightSel: null,
         gesture: null,
         gesturePushed: false,
@@ -18086,7 +18138,7 @@ function reduceInner(s: State, cmd: Command): State {
     // The zone views are frame views like the depth eye, one at a time
     // with it; the hover is session state the ruler writes.
     case "toggle_zones_view":
-      return { ...s, zonesView: !s.zonesView, depthView: false, halationView: false, collisionView: false, detailEqView: null };
+      return { ...s, zonesView: !s.zonesView, depthView: false, halationView: false, collisionView: false, detailEqView: null, influenceView: null };
     case "set_zone_hover":
       return s.zoneHover === cmd.zone ? s : { ...s, zoneHover: cmd.zone };
     // Choosing a zone on the ruler arms the placement with it; choosing
@@ -18761,7 +18813,7 @@ function reduceInner(s: State, cmd: Command): State {
     // color grader: "you can view the scene as a depth map"). Session state
     // like maskView, never saved.
     case "toggle_depth_view": {
-      const views = { halationView: false, collisionView: false, zonesView: false, detailEqView: null };
+      const views = { halationView: false, collisionView: false, zonesView: false, detailEqView: null, influenceView: null };
       if (cmd.mask && cmd.flavor) {
         // 2026-09-29: "when holding a modifier and you click it shows the red
         // overlay like what masks on the Finish layers can do to review the
@@ -18787,7 +18839,7 @@ function reduceInner(s: State, cmd: Command): State {
     // The separation view: one frame view at a time, like the two
     // beside it.
     case "toggle_collision_view":
-      return { ...s, collisionView: !s.collisionView, depthView: false, halationView: false, zonesView: false, detailEqView: null };
+      return { ...s, collisionView: !s.collisionView, depthView: false, halationView: false, zonesView: false, detailEqView: null, influenceView: null };
     case "set_collision_tolerance":
       return { ...s, collisionTolerance: Math.max(0, Math.min(COLLISION_TOLERANCE_MAX, Math.round(cmd.percent))) };
     case "recompute_depth":
@@ -18804,7 +18856,7 @@ function reduceInner(s: State, cmd: Command): State {
         ? s
         : { ...s, filePasses: { image: cmd.image, passes: cmd.passes } };
     case "toggle_halation_view":
-      return { ...s, halationView: !s.halationView, depthView: false, collisionView: false, zonesView: false, detailEqView: null };
+      return { ...s, halationView: !s.halationView, depthView: false, collisionView: false, zonesView: false, detailEqView: null, influenceView: null };
     // One frame view at a time, like the ones above.
     case "toggle_detail_eq_view": {
       const same = s.detailEqView?.id === cmd.id && s.detailEqView.band === cmd.band;
@@ -18815,8 +18867,27 @@ function reduceInner(s: State, cmd: Command): State {
         halationView: false,
         collisionView: false,
         zonesView: false,
+        influenceView: null,
       };
     }
+    case "toggle_influence_view": {
+      const same = s.influenceView?.id === cmd.id && s.influenceView.mode === cmd.mode;
+      return {
+        ...s,
+        influenceView: same ? null : { id: cmd.id, mode: cmd.mode },
+        depthView: false,
+        halationView: false,
+        collisionView: false,
+        zonesView: false,
+        detailEqView: null,
+      };
+    }
+    case "toggle_inspect_pick":
+      return s.inspectPick ? { ...s, inspectPick: false } : { ...s, ...PICKER_RESET, inspectPick: true };
+    case "inspect_at":
+      return { ...s, inspectPoint: { x: Math.min(1, Math.max(0, cmd.x)), y: Math.min(1, Math.max(0, cmd.y)) } };
+    case "close_inspect":
+      return { ...s, inspectPick: false, inspectPoint: null, influenceView: null };
     // Find a Control: the Help-menu search. flash_control marks the
     // landing so the row wears the keyboard navigator's gold outline
     // for a beat; the panel clears it after the glance.

@@ -3263,6 +3263,46 @@ export type GamutReport = {
   first_clip_node: string | null;
 };
 
+/** One node on a traced pixel's path (lib.rs trace_pixel): its input
+ * and output at the point (scene-linear channels, display luma), its
+ * mask's coverage there, whether it is on, and whether it moves pixels. */
+export interface TraceSample { r: number; g: number; b: number; luma: number }
+export interface TraceStep {
+  id: string;
+  node_type: string;
+  enabled: boolean;
+  input: TraceSample | null;
+  output: TraceSample | null;
+  coverage: number | null;
+  moves: boolean;
+}
+
+/** Influence Mapping's trace of the pixel at (x, y) of the frame: every
+ * node on the picture's path, source first. Upstream of a crop or warp
+ * the backend reads the photograph's own place, mapped back here. A
+ * cache read against the frame on screen. Null in the browser build or
+ * on failure. */
+export async function tracePixel(state: State, x: number, y: number): Promise<TraceStep[] | null> {
+  if (!isTauri()) return null;
+  try {
+    const graph = serializeGraph(state);
+    const meta = await imageMetadata(state, state.activeImage).catch(() => null);
+    const size: [number, number] = meta?.width && meta.height ? [meta.width, meta.height] : [1000, 1000];
+    const src = sourcePoint(graph, size, [x, y]) ?? [x, y];
+    return await call<TraceStep[]>("trace_pixel", {
+      graph,
+      imageId: state.activeImage,
+      x,
+      y,
+      sx: src[0],
+      sy: src[1],
+      previewEdge: previewEdgeFor(state),
+    });
+  } catch {
+    return null;
+  }
+}
+
 /** The gamut warning's numbers and attribution: a
  * session-executor cache read against the frame already on
  * screen.*/

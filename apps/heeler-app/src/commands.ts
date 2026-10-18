@@ -891,6 +891,9 @@ export function runCommand(
     case "tool.pick":
       dispatch({ type: "set_tool", tool: "pick" });
       return true;
+    case "view.inspect":
+      dispatch({ type: "toggle_inspect_pick" });
+      return true;
     case "tool.cancel":
       // An armed picker is the topmost modal thing while it is up, so Escape
       // peels every picker first; the next Escape reaches the tool. The
