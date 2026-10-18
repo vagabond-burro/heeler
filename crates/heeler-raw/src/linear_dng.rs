@@ -181,8 +181,24 @@ impl LinearDng {
     /// The bytes it keeps, for admission: the file, its tables, and the
     /// tile cache at its fullest.
     pub fn bytes(&self) -> usize {
-        let tile = self.facts.tile_width as usize * self.facts.tile_length as usize * 6;
-        self.bytes.len() + self.tiles.len() * 16 + (self.lintable.len() + self.outcurve.len()) * 2 + self.cache_tiles() * tile
+        let tile = (self.facts.tile_width as usize).saturating_mul(self.facts.tile_length as usize).saturating_mul(6);
+        self.bytes.capacity()
+            .saturating_add(self.tiles.capacity().saturating_mul(16))
+            .saturating_add((self.lintable.len() + self.outcurve.len()) * 2)
+            .saturating_add(self.cache_tiles().saturating_mul(tile.saturating_add(80)))
+            .saturating_add(1024)
+    }
+
+    /// Peak workspace beside the kept file and cache: one tile and its
+    /// developed pixels per active worker, JPEG tables and predictor
+    /// rows, and the tile index lists. Output samples are counted by the
+    /// caller separately.
+    pub fn workspace(&self) -> Result<usize, heeler_engine::memory::MemoryError> {
+        use heeler_engine::memory::{bytes, sum};
+        let workers = rayon::current_num_threads().min(self.tiles.len());
+        let tile = bytes(self.facts.tile_width as usize, self.facts.tile_length as usize, 1, 22)?;
+        let decoder = 9 * (1 + (1 << 16)) * 2 + 65535 * 12 + 4096;
+        sum([bytes(workers, 1, 1, sum([tile, decoder])?)?, bytes(self.tiles.len(), 1, 1, 32)?, 4096])
     }
 
     /// How many decoded tiles the cache holds: one row or column of tiles,
@@ -198,7 +214,7 @@ impl LinearDng {
         if let Some(hit) = self.cache.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(i, _)| *i == t).map(|(_, v)| v.clone()) {
             return Ok(hit);
         }
-        let tile = std::sync::Arc::new(self.tile(t)?);
+        let tile = std::sync::Arc::new(self.decode_tile(t)?);
         let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         cache.retain(|(i, _)| *i != t);
         cache.push((t, tile.clone()));
@@ -224,7 +240,11 @@ impl LinearDng {
     /// develop of the whole frame hands back for those rows, to the bit.
     pub fn rows(&self, n: &Numbers, y0: usize, y1: usize) -> Result<Vec<u16>, RawError> {
         use rayon::prelude::*;
-        let (ow, _) = self.size();
+        let (ow, oh) = self.size();
+        if y0 > y1 || y1 > oh { return Err(RawError::Unexpected) }
+        if y0 == y1 { return Ok(Vec::new()) }
+        let output = heeler_engine::memory::bytes(ow, y1 - y0, 3, 2)?;
+        let _job = heeler_engine::memory::Job::admit(heeler_engine::memory::sum([self.bytes(), self.workspace()?, output])?, "linear DNG rows")?;
         let (sw, sh) = (self.facts.width as usize, self.facts.height as usize);
         let flip = self.facts.flip;
         let (tw, th) = (self.facts.tile_width as usize, self.facts.tile_length as usize);
@@ -240,13 +260,14 @@ impl LinearDng {
         let tiles: Vec<usize> = (rows.0 / th..rows.1.div_ceil(th))
             .flat_map(|tr| (cols.0 / tw..cols.1.div_ceil(tw)).map(move |tc| tr * self.across + tc))
             .collect();
-        let decoded: Result<Vec<_>, RawError> = tiles.par_iter().map(|&t| self.cached(t)).collect();
-        let decoded = decoded?;
         let mut out = vec![0u16; ow * (y1 - y0) * 3];
         let band = std::sync::Mutex::new(&mut out);
-        tiles.par_iter().zip(&decoded).for_each(|(&t, tile)| {
+        tiles.par_iter().try_for_each(|&t| -> Result<(), RawError> {
+            let tile = self.cached(t)?;
             let (r0, c0) = ((t / self.across) * th, (t % self.across) * tw);
-            let mut local = Vec::new();
+            let height = (r0 + th).min(rows.1) - r0.max(rows.0);
+            let width = (c0 + tw).min(cols.1) - c0.max(cols.0);
+            let mut local = Vec::with_capacity(width * height);
             for r in r0.max(rows.0)..(r0 + th).min(rows.1) {
                 for c in c0.max(cols.0)..(c0 + tw).min(cols.1) {
                     let i = ((r - r0) * tw + (c - c0)) * 3;
@@ -261,18 +282,20 @@ impl LinearDng {
             for (at, px) in local {
                 band[at * 3..at * 3 + 3].copy_from_slice(&px);
             }
-        });
+            Ok(())
+        })?;
         Ok(out)
     }
 
     /// How many pixels of the develop with `n` reach `at_white` in any
     /// channel, over the whole frame.
     pub fn count_at_white(&self, n: &Numbers, at_white: u16) -> Result<usize, RawError> {
+        let _job = heeler_engine::memory::Job::admit(heeler_engine::memory::sum([self.bytes(), self.workspace()?])?, "linear DNG highlights")?;
         use rayon::prelude::*;
         let (sw, sh) = (self.facts.width as usize, self.facts.height as usize);
         let (tw, th) = (self.facts.tile_width as usize, self.facts.tile_length as usize);
         let counts: Result<Vec<usize>, RawError> = (0..self.tiles.len()).into_par_iter().map(|t| {
-            let tile = self.tile(t)?;
+            let tile = self.decode_tile(t)?;
             let (r0, c0) = ((t / self.across) * th, (t % self.across) * tw);
             let mut k = 0;
             for r in r0..(r0 + th).min(sh) {
@@ -294,8 +317,13 @@ impl LinearDng {
     /// past the frame's edge left zero.
     #[doc(hidden)]
     pub fn tile(&self, t: usize) -> Result<Vec<u16>, RawError> {
+        let _job = heeler_engine::memory::Job::admit(heeler_engine::memory::sum([self.bytes(), self.workspace()?])?, "linear DNG tile")?;
+        self.decode_tile(t)
+    }
+
+    fn decode_tile(&self, t: usize) -> Result<Vec<u16>, RawError> {
         let (tw, th) = (self.facts.tile_width as usize, self.facts.tile_length as usize);
-        let (at, len) = self.tiles[t];
+        let &(at, len) = self.tiles.get(t).ok_or(RawError::Unexpected)?;
         let data = self.bytes.get(at..at + len).ok_or(RawError::Unexpected)?;
         let mut out = vec![0u16; tw * th * 3];
         let (trow, tcol) = ((t / self.across) * th, (t % self.across) * tw);
@@ -369,8 +397,9 @@ impl LinearDng {
     /// The brightest sample of the frame, LibRaw's data_maximum: the
     /// fourth channel it never loads is zero, so the three loaded.
     pub fn data_maximum(&self) -> Result<u16, RawError> {
+        let _job = heeler_engine::memory::Job::admit(heeler_engine::memory::sum([self.bytes(), self.workspace()?])?, "linear DNG maximum")?;
         use rayon::prelude::*;
-        let maxima: Result<Vec<u16>, RawError> = (0..self.tiles.len()).into_par_iter().map(|t| Ok(self.tile(t)?.into_iter().max().unwrap_or(0))).collect();
+        let maxima: Result<Vec<u16>, RawError> = (0..self.tiles.len()).into_par_iter().map(|t| Ok(self.decode_tile(t)?.into_iter().max().unwrap_or(0))).collect();
         Ok(maxima?.into_iter().max().unwrap_or(0))
     }
 
@@ -671,9 +700,12 @@ mod ljpeg {
         }
         /// LibRaw's getbithuff: `n` bits, or a Huffman symbol through
         /// `huff` (whose first entry is its longest code length).
-        fn get(&mut self, n: i32, huff: Option<&[u16]>) -> u32 {
-            if n == 0 || self.vbits < 0 {
-                return 0;
+        fn get(&mut self, n: i32, huff: Option<&[u16]>) -> Result<u32, Bad> {
+            if !(0..=16).contains(&n) {
+                return Err(Bad);
+            }
+            if n == 0 {
+                return if huff.is_none() { Ok(0) } else { Err(Bad) };
             }
             while !self.reset && self.vbits < n {
                 let Some(&c) = self.data.get(self.at) else { break };
@@ -682,8 +714,6 @@ mod ljpeg {
                     let next = self.data.get(self.at).copied();
                     self.at += 1;
                     if next != Some(0) {
-                        // A marker (or the end): LibRaw's reset, the 0xff
-                        // not added.
                         self.reset = true;
                         break;
                     }
@@ -691,18 +721,21 @@ mod ljpeg {
                 self.buf = (self.buf << 8).wrapping_add(c as u32);
                 self.vbits += 8;
             }
+            // A Huffman lookup can peek past the last sample's bits, but
+            // its actual code and every difference must be present.
             let c = if self.vbits == 0 { 0 } else { (self.buf << (32 - self.vbits) as u32) >> (32 - n) as u32 };
-            match huff {
+            let (used, value) = match huff {
                 Some(h) => {
-                    let e = h.get(1 + c as usize).copied().unwrap_or(0);
-                    self.vbits -= (e >> 8) as i32;
-                    (e & 0xff) as u32
+                    let e = *h.get(1 + c as usize).ok_or(Bad)?;
+                    let used = (e >> 8) as i32;
+                    if used == 0 { return Err(Bad) }
+                    (used, (e & 0xff) as u32)
                 }
-                None => {
-                    self.vbits -= n;
-                    c
-                }
-            }
+                None => (n, c),
+            };
+            if used > self.vbits { return Err(Bad) }
+            self.vbits -= used;
+            Ok(value)
         }
     }
 
@@ -714,6 +747,7 @@ mod ljpeg {
         while max > 0 && count[max - 1] == 0 {
             max -= 1;
         }
+        if max == 0 { return None }
         let mut huff = vec![0u16; 1 + (1 << max)];
         huff[0] = max as u16;
         let mut src = 16;
@@ -721,12 +755,12 @@ mod ljpeg {
         for len in 1..=max {
             for _ in 0..count[len - 1] {
                 let sym = *spec.get(src)? as u16;
+                if sym > 16 { return None }
                 src += 1;
                 for _ in 0..1usize << (max - len) {
-                    if h <= 1 << max {
-                        huff[h] = (len as u16) << 8 | sym;
-                        h += 1;
-                    }
+                    if h > 1 << max { return None }
+                    huff[h] = (len as u16) << 8 | sym;
+                    h += 1;
                 }
             }
         }
@@ -749,7 +783,7 @@ mod ljpeg {
         loop {
             let seg = data.get(at..at + 4).ok_or(Bad)?;
             let tag = (seg[0] as u16) << 8 | seg[1] as u16;
-            let len = ((seg[2] as u16) << 8 | seg[3] as u16).wrapping_sub(2) as usize;
+            let len = ((seg[2] as u16) << 8 | seg[3] as u16).checked_sub(2).ok_or(Bad)? as usize;
             if tag <= 0xff00 {
                 return Err(Bad);
             }
@@ -757,6 +791,7 @@ mod ljpeg {
             at += 4 + len;
             match tag {
                 0xffc3 | 0xffc1 | 0xffc0 => {
+                    if body.len() < 6 || body[5] != 3 || body.len() < 6 + 3 * body[5] as usize { return Err(Bad) }
                     let sraw = if tag == 0xffc3 { ((body[7] >> 4) as i32 * (body[7] & 15) as i32 - 1) & 3 } else { 0 };
                     if sraw != 0 {
                         // Canon sRAW subsampling, which a DNG never has.
@@ -774,7 +809,7 @@ mod ljpeg {
                         let c = body[dp] as usize;
                         dp += 1;
                         if c & !19 != 0 {
-                            break;
+                            return Err(Bad);
                         }
                         let (table, used) = decoder(&body[dp..]).ok_or(Bad)?;
                         huff[c] = Some(std::rc::Rc::new(table));
@@ -782,12 +817,16 @@ mod ljpeg {
                     }
                 }
                 0xffda => {
-                    let n = body[0] as usize;
+                    let n = *body.first().ok_or(Bad)? as usize;
+                    if n != clrs || body.len() < 4 + n * 2 { return Err(Bad) }
                     psv = *body.get(1 + n * 2).ok_or(Bad)? as i32;
                     bits -= (*body.get(3 + n * 2).ok_or(Bad)? & 15) as i32;
                     break;
                 }
-                0xffdd => restart = ((body[0] as i64) << 8) | body[1] as i64,
+                0xffdd => {
+                    if body.len() != 2 { return Err(Bad) }
+                    restart = ((body[0] as i64) << 8) | body[1] as i64;
+                }
                 _ => {}
             }
         }
@@ -803,16 +842,16 @@ mod ljpeg {
         let mut b = Bits { data, at, buf: 0, vbits: 0, reset: false };
         let mut vpred = [0i32; 6];
         let mut rows = [vec![0u16; wide * clrs], vec![0u16; wide * clrs]];
-        let diff = |b: &mut Bits, t: &[u16]| -> i32 {
-            let len = b.get(t[0] as i32, Some(t)) as i32;
+        let diff = |b: &mut Bits, t: &[u16]| -> Result<i32, Bad> {
+            let len = b.get(t[0] as i32, Some(t))? as i32;
             if len == 16 {
-                return -32768;
+                return Ok(-32768);
             }
-            let mut d = b.get(len, None) as i32;
+            let mut d = b.get(len, None)? as i32;
             if len > 0 && d & (1 << (len - 1)) == 0 {
                 d -= (1 << len) - 1;
             }
-            d
+            Ok(d)
         };
         let (mut row, mut col) = (0usize, 0usize);
         for jrow in 0..high {
@@ -823,7 +862,7 @@ mod ljpeg {
                     let mut i = b.at.saturating_sub(2);
                     let mut mark: u16 = 0;
                     loop {
-                        let Some(&c) = data.get(i) else { i += 1; break };
+                        let &c = data.get(i).ok_or(Bad)?;
                         i += 1;
                         mark = (mark << 8).wrapping_add(c as u16);
                         if mark >> 4 == 0xffd {
@@ -837,11 +876,11 @@ mod ljpeg {
             let (cur, prev) = if jrow & 1 == 0 { let (a, p) = rows.split_at_mut(1); (&mut a[0], &p[0]) } else { let (p, a) = rows.split_at_mut(1); (&mut a[0], &p[0]) };
             for jc in 0..wide {
                 for c in 0..clrs {
-                    let d = diff(&mut b, &tables[c]);
+                    let d = diff(&mut b, &tables[c])?;
                     let i = jc * clrs + c;
                     let mut pred = if jc == 0 {
                         let p = vpred[c];
-                        vpred[c] += d;
+                        vpred[c] = vpred[c].checked_add(d).ok_or(Bad)?;
                         p
                     } else {
                         cur[i - clrs] as i32
@@ -859,7 +898,10 @@ mod ljpeg {
                             _ => 0,
                         };
                     }
-                    cur[i] = (pred + d) as u16;
+                    let sample = pred.checked_add(d).ok_or(Bad)?;
+                    // A 16-bit lossless difference can wrap, as LibRaw's
+                    // assignment to ushort does.
+                    cur[i] = sample as u16;
                 }
             }
             for jc in 0..wide {
@@ -873,6 +915,52 @@ mod ljpeg {
         }
         Ok(())
     }
+
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        fn a_sixteen_bit_difference_wraps_as_libraws_ushort_does() {
+            fn segment(out: &mut Vec<u8>, tag: u8, body: &[u8]) {
+                out.extend_from_slice(&[255, tag]);
+                out.extend_from_slice(&((body.len() + 2) as u16).to_be_bytes());
+                out.extend_from_slice(body);
+            }
+            let mut data = vec![255, 216];
+            segment(&mut data, 0xc3, &[16, 0, 1, 0, 2, 3, 1, 17, 0, 2, 17, 0, 3, 17, 0]);
+            let mut table = vec![0; 17];
+            table[5] = 17;
+            table.extend(0..17);
+            segment(&mut data, 0xc4, &table);
+            segment(&mut data, 0xda, &[3, 1, 0, 2, 0, 3, 0, 1, 0, 0]);
+            let (mut acc, mut bits) = (0u64, 0u32);
+            let mut put = |value: u32, n: u32| {
+                acc = (acc << n) | value as u64;
+                bits += n;
+                while bits >= 8 {
+                    let byte = (acc >> (bits - 8)) as u8;
+                    data.push(byte);
+                    if byte == 255 { data.push(0); }
+                    bits -= 8;
+                }
+            };
+            for (category, difference) in [(13, 7232), (15, 25536)] {
+                for _ in 0..3 {
+                    put(category, 5);
+                    put(difference, category);
+                }
+            }
+            if bits > 0 {
+                let byte = ((acc << (8 - bits)) | ((1 << (8 - bits)) - 1)) as u8;
+                data.push(byte);
+                if byte == 255 { data.push(0); }
+            }
+            data.extend_from_slice(&[255, 217]);
+            let mut pixels = Vec::new();
+            assert!(super::decode(&data, |_, _, px| pixels.push(px.to_vec()), 2, 2).is_ok());
+            assert_eq!(pixels, vec![vec![40000; 3], vec![0; 3]]);
+        }
+    }
+
 }
 
 /// The few TIFF reads tile_table needs.
@@ -958,6 +1046,9 @@ mod tiff {
                 let b = e.value;
                 Some(if self.le { u32::from_le_bytes(b) } else { u32::from_be_bytes(b) } as usize)
             };
+            if let Some(off) = base {
+                self.d.get(off..off.checked_add(total)?)?;
+            }
             let mut out = Vec::with_capacity(n);
             for i in 0..n {
                 let v = match base {

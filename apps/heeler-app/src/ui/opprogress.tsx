@@ -156,12 +156,13 @@ export function opCanceled(op: string): boolean {
 /** An export, or a batch of them, under the progress dialog (2026-10-17:
  * "a progress dialog for exports (whether batch or quick export) similar
  * to the stacking dialog would help"): `title` is the dialog's line.
- * Resolves to the job's answer, or null when the user canceled it. */
+ * Resolves to the job's answer, or null when the desktop honored Cancel. */
 export async function watchExport<T>(title: string, job: () => Promise<T>): Promise<T | null> {
   beginOp(EXPORT_OP, title);
   try {
     const out = await job();
-    return canceled.has(EXPORT_OP) ? null : out;
+    // A successful answer means the files were already published.
+    return out;
   } catch (e) {
     if (canceled.has(EXPORT_OP) || String(e).includes(EXPORT_CANCELED)) return null;
     throw e;

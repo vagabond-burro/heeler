@@ -11719,6 +11719,8 @@ thread_local! {
     /// or streamed, in how many bands of how many rows; None when it
     /// rendered whole. For the slow export's log line (ExportStages).
     static EXPORT_PATH: std::cell::Cell<Option<(&'static str, usize, usize)>> = const { std::cell::Cell::new(None) };
+    // The final stage checks Cancel again before publishing any files.
+    static EXPORT_CANCEL: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
     /// The time this thread has waited for the app's locks (the session,
     /// the catalog), so a slow export can say how much of it was waiting
     /// rather than work (with_timed_lock).
@@ -11836,6 +11838,13 @@ impl ExportStages {
     /// Cancel stopping it between bands (banded::with_band_progress).
     fn render<T>(&self, f: impl FnOnce() -> T) -> T {
         let Some((id, report)) = self.watch.clone() else { return f() };
+        struct Reset(Option<String>);
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                EXPORT_CANCEL.with(|c| *c.borrow_mut() = self.0.take());
+            }
+        }
+        let _reset = Reset(EXPORT_CANCEL.with(|c| c.borrow_mut().replace(id.clone())));
         let last = EXPORT_STAGES.len() as u64 - 1;
         heeler_engine::banded::with_band_progress(Box::new(move |done, total| {
             let share = EXPORT_STAGE_STEPS * done as u64 / total.max(1) as u64;
@@ -19155,6 +19164,11 @@ fn finish_export_admitted(
         "webp" => heeler_io::set_webp_dpi(&mut bytes, dpi, size.0 as u32, size.1 as u32),
         "tif" | "tiff" | "dng" => {}
         _ => heeler_io::set_jpeg_dpi(&mut bytes, dpi),
+    }
+    // Rendering and encoding may have run whole, without band callbacks.
+    // Once publishing starts, finish the beauty and all its siblings.
+    if EXPORT_CANCEL.with(|c| c.borrow().as_ref().is_some_and(|id| progress::is_cancelled(id))) {
+        return Err(EXPORT_CANCELED.into());
     }
     write_named(dest, &bytes)?;
     // The export layers' TIFF form: one sibling per layer beside the
@@ -28391,6 +28405,45 @@ mod tests {
             "the plane was refined in the input's frame and the seat's crop was not applied twice"
         );
         assert!((sources["depthmap@depth"].image.pixel(0, 0)[0] - 0.4).abs() < 0.05, "a constant plane survives refinement: {}", sources["depthmap@depth"].image.pixel(0, 0)[0]);
+    }
+
+    /// Cancel during the final stage also stops a whole render before
+    /// its encoded bytes can create or overwrite a file. The scope and
+    /// operation are released so the next export can succeed.
+    #[test]
+    fn a_canceled_whole_export_publishes_no_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let graph = ui_graph();
+        let source = Arc::new(ImageBuf::filled(16, 40, [0.2, 0.3, 0.4, 1.0]));
+        let export = |dest: &Path| finish_export(
+            ExportInput { graph: &graph, source_path: None, source: source.clone(), smart: &HashMap::new(), keywords: &[], alpha: None, layers: Vec::new(), beauty: None, rows: None },
+            dest,
+            ExportOptions { format: "jpeg", quality: 90, max_edge: None, keep_metadata: false, matte: false, scale_percent: None, allow_overwrite: true, dpi: heeler_io::DEFAULT_DPI },
+            |_, _| {},
+        );
+        EXPORT_BAND_ROWS.with(|r| r.set(usize::MAX));
+        for existing in [false, true] {
+            let dest = dir.path().join(if existing { "existing.jpg" } else { "new.jpg" });
+            if existing { std::fs::write(&dest, b"original bytes").unwrap(); }
+            let stages = ExportStages::reporting(Arc::new(|_, _, _, _| {}));
+            let id = stages.watch.as_ref().unwrap().0.clone();
+            let answer = stages.render(|| {
+                // The last stage is already running when Cancel arrives.
+                progress::cancel(&id);
+                export(&dest)
+            });
+            assert_eq!(answer, Err(EXPORT_CANCELED.to_string()));
+            assert_eq!(EXPORT_BANDS_MADE.with(|b| b.get()), 0, "rendered whole");
+            if existing { assert_eq!(std::fs::read(&dest).unwrap(), b"original bytes"); }
+            else { assert!(!dest.exists()); }
+            assert!(EXPORT_CANCEL.with(|c| c.borrow().is_none()));
+            drop(stages);
+            assert!(!progress::is_cancelled(&id));
+        }
+        let dest = dir.path().join("next.jpg");
+        export(&dest).unwrap();
+        assert!(dest.exists());
+        EXPORT_BAND_ROWS.with(|r| r.set(0));
     }
 
     /// An export watched by the progress dialog reports each stage as it

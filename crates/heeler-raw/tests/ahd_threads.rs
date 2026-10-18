@@ -47,3 +47,19 @@ fn a_demosaic_other_than_ahd_is_left_to_libraw() {
         assert!(run.rgb == own.rgb, "demosaic {demosaic}");
     }
 }
+
+#[test]
+fn a_bayer_develop_fits_the_worker_slice_it_estimates() {
+    let _turn = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let bytes = fixture();
+    heeler_raw::set_parallel_ahd(true);
+    heeler_raw::set_ahd_threads(3);
+    for highlight in [0, 2] {
+        let opts = heeler_raw::DevelopOpts { highlight, ..Default::default() };
+        let needed = heeler_raw::develop_bytes(&bytes, opts).unwrap();
+        let job = heeler_engine::memory::Job::admit(needed, "develop worker test").unwrap();
+        let image = job.worker(needed).run(|| heeler_raw::decode_sensor_with(&bytes, opts)).unwrap();
+        assert!(!image.rgb.is_empty());
+    }
+    heeler_raw::set_ahd_threads(0);
+}

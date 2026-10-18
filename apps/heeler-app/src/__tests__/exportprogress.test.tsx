@@ -91,6 +91,19 @@ describe("an export under the progress dialog", () => {
     expect(await done).toBeNull();
   });
 
+  it("reports a successful file when Cancel arrives after publication", async () => {
+    tauri();
+    render(<BakeProgressDialog />);
+    let land!: (path: string) => void;
+    const done = watchExport("Exporting DSC00114", () => new Promise<string>((r) => (land = r)));
+    await report(7999, 8000, "Rendering and writing the file");
+    await wait(BAKE_DIALOG_DELAY_MS + 50);
+    fireEvent.click(screen.getByTestId("bake-dialog-cancel"));
+    await act(async () => land("/out/DSC00114.jpg"));
+    expect(await done).toBe("/out/DSC00114.jpg");
+    expect(screen.queryByTestId("bake-dialog")).toBeNull();
+  });
+
   it("a batch names its photograph, stops on Cancel and keeps what it wrote", async () => {
     tauri();
     const s = initialState();

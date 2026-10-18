@@ -65,3 +65,38 @@ fn a_file_outside_the_module_is_declined() {
     let dng = synthetic_dng(64, 48, 32, 24, 1, pixel);
     assert_eq!(heeler_raw::linear_dng::declined_because(&dng, DevelopOpts { highlight: 5, ..DevelopOpts::default() }).unwrap(), Some("a highlight rebuild"));
 }
+
+#[test]
+fn damaged_tile_headers_and_entropy_return_errors() {
+    let original = synthetic_dng(150, 101, 64, 48, 1, pixel);
+    let start = original.windows(2).position(|p| p == [255, 216]).unwrap();
+    for tag in [0xc3, 0xda, 0xdd] {
+        let mut bytes = original.clone();
+        let at = if tag == 0xdd { start + 2 } else {
+            start + bytes[start..].windows(2).position(|p| p == [255, tag]).unwrap()
+        };
+        bytes[at + 1] = tag;
+        bytes[at + 2..at + 4].copy_from_slice(&2u16.to_be_bytes());
+        let dng = LinearDng::open(bytes, DevelopOpts::default()).unwrap().unwrap();
+        assert!(dng.tile(0).is_err(), "short {tag:x} segment");
+    }
+    let dht = start + original[start..].windows(2).position(|p| p == [255, 196]).unwrap();
+    for bad in [17, 32, 255] {
+        let mut bytes = original.clone();
+        let len = u16::from_be_bytes([bytes[dht + 2], bytes[dht + 3]]) as usize;
+        bytes[dht + 21..dht + 2 + len].fill(bad);
+        let dng = LinearDng::open(bytes, DevelopOpts::default()).unwrap().unwrap();
+        assert!(dng.tile(0).is_err(), "Huffman category {bad}");
+    }
+    // Keep the directory and tile intact but end its declared byte span
+    // immediately after SOS, before any entropy bits are available.
+    let mut bytes = original;
+    let sos = start + bytes[start..].windows(2).position(|p| p == [255, 218]).unwrap();
+    let end = sos + 2 + u16::from_be_bytes([bytes[sos + 2], bytes[sos + 3]]) as usize;
+    let count = u16::from_le_bytes([bytes[8], bytes[9]]) as usize;
+    let entry = (0..count).map(|i| 10 + i * 12).find(|&i| u16::from_le_bytes([bytes[i], bytes[i + 1]]) == 325).unwrap();
+    let at = u32::from_le_bytes(bytes[entry + 8..entry + 12].try_into().unwrap()) as usize;
+    bytes[at..at + 4].copy_from_slice(&((end - start) as u32).to_le_bytes());
+    let dng = LinearDng::open(bytes, DevelopOpts::default()).unwrap().unwrap();
+    assert!(dng.tile(0).is_err(), "missing entropy");
+}

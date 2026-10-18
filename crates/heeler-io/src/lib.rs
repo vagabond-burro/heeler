@@ -860,6 +860,9 @@ enum KeptSamples16 {
     Linear(Box<LinearKept>),
 }
 
+#[cfg(feature = "libraw")]
+const LINEAR_RUN: usize = 64;
+
 /// What a linear DNG's kept develop needs: the file, the Clip develop's
 /// numbers, and under Blend the Blend develop's and its scale, when
 /// enough of the frame clipped (clipped_weight's rule).
@@ -1003,6 +1006,18 @@ impl KeptDevelop {
     /// develop's rows, and under Blend the Blend develop's where the
     /// weight reaches, with develop_full's arithmetic.
     fn linear_rows(&self, k: &LinearKept, y0: usize, y1: usize) -> Result<ImageBuf, heeler_engine::EngineError> {
+        let mut out = ImageBuf::try_new(self.w, y1 - y0)?;
+        // Keep the Clip window and Blend samples bounded even when a
+        // whole frame is requested for a refinement or a whole render.
+        for a in (y0..y1).step_by(LINEAR_RUN) {
+            let b = (a + LINEAR_RUN).min(y1);
+            let rows = self.linear_run(k, a, b)?;
+            out.data[(a - y0) * self.w * 4..(b - y0) * self.w * 4].copy_from_slice(&rows.data);
+        }
+        Ok(out)
+    }
+
+    fn linear_run(&self, k: &LinearKept, y0: usize, y1: usize) -> Result<ImageBuf, heeler_engine::EngineError> {
         let (w, h) = (self.w, self.h);
         let raw = |e: heeler_raw::RawError| match e {
             heeler_raw::RawError::Memory(m) => heeler_engine::EngineError::Memory(m),
@@ -1105,6 +1120,12 @@ impl heeler_engine::banded::SourceRows for KeptDevelop {
         }
     }
     fn workspace(&self) -> Result<usize, heeler_engine::EngineError> {
+        if let KeptSamples16::Linear(k) = &self.develop {
+            return Ok(memory::sum([
+                k.dng.workspace()?,
+                memory::bytes(self.w, (LINEAR_RUN + 14).min(self.h), 1, 34)?,
+            ])?);
+        }
         self.sharpen.as_ref().map_or(Ok(0), |s| s.workspace())
     }
     fn rows(&self, y0: usize, y1: usize) -> Result<ImageBuf, heeler_engine::EngineError> {

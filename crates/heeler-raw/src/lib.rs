@@ -386,7 +386,7 @@ pub fn develop_bytes(bytes: &[u8], opts: DevelopOpts) -> Result<usize, RawError>
     let per_pixel = if opts.half_size { 24 } else { 48 };
     if let Some((w, h)) = gpr::dimensions(bytes) {
         let converted = heeler_engine::memory::bytes(w, h, 1, 2)?;
-        return Ok(heeler_engine::memory::sum([heeler_engine::memory::bytes(w, h, 1, per_pixel)?, bytes.len(), converted, converted])?);
+        return Ok(heeler_engine::memory::sum([heeler_engine::memory::bytes(w, h, 1, per_pixel)?, bytes.len(), converted, converted, if opts.half_size { 0 } else { unsafe { heeler_ahd_workers_bytes() } }])?);
     }
     let p = unsafe { libraw_init(0) };
     if p.is_null() {
@@ -398,7 +398,7 @@ pub fn develop_bytes(bytes: &[u8], opts: DevelopOpts) -> Result<usize, RawError>
     if width == 0 || height == 0 {
         return Err(RawError::Unexpected);
     }
-    Ok(heeler_engine::memory::sum([heeler_engine::memory::bytes(width, height, 1, per_pixel)?, bytes.len(), unsafe { heeler_xtrans_extra(handle.0) }])?)
+    Ok(heeler_engine::memory::sum([heeler_engine::memory::bytes(width, height, 1, per_pixel)?, bytes.len(), unsafe { heeler_xtrans_extra(handle.0) }, unsafe { heeler_ahd_extra(handle.0) }])?)
 }
 
 /// LibRaw's progress callback: a nonzero answer cancels the develop.
