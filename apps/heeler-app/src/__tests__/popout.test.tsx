@@ -12,7 +12,7 @@ import { dragTrack } from "./trackdrive";
 // transport is a different instance than the one setTransport poked,
 // and the window then talks on a bus nobody is listening to.
 import { ToolWindow } from "../ui/toolwindow";
-import { announceConsoleWindow, consoleWindowLive } from "../ui/console";
+import { announceConsoleWindow, consoleWindowLive } from "../ui/consolestate";
 import { fireEvent } from "@testing-library/react";
 import { initialState } from "../data";
 import {

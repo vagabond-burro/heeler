@@ -18,12 +18,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setMacForTests } from "../platform";
-import {
-  ConsolePanel,
-  _resetPyConsoleForTests,
-  _restoreScratchForTests,
-  highlightPython,
-} from "../ui/console";
+import { ConsolePanel } from "../ui/console";
+import { _resetPyConsoleForTests, _restoreScratchForTests, highlightPython } from "../ui/consolestate";
 import { mockScripts, pyReset } from "../bridge";
 import { _clearFlashForTests } from "../ui/hints";
 import { clearLog, getLogLevel, logMsg, setLogLevel } from "../log";
@@ -261,7 +257,7 @@ describe("the console as an OS window", () => {
   });
 
   it("the sync carries entries both ways", async () => {
-    const { connectPySync } = await import("../ui/console");
+    const { connectPySync } = await import("../ui/consolestate");
     render(<ConsolePanel open dispatch={() => {}} />);
 
     // A fake channel: what one window sends, the other ingests.

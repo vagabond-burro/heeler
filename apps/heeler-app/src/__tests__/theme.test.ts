@@ -121,7 +121,7 @@ describe("the palette holds its shape", () => {
     // Both spellings are checked here.
     const ALLOWED = new Set([
       "theme.css",          // --warn, and amber is what caution looks like
-      "ui/console.tsx",     // the Python syntax scheme's number color
+      "ui/consolestate.ts", // the Python syntax scheme's number color
       "ui/keylightgizmo.tsx", // a warm key light, which is the light's color
     ]);
     const offenders: string[] = [];

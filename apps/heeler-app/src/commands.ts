@@ -308,7 +308,7 @@ export function runCommand(
     case "view.console":
       // The console is an OS window, never a float; the key summons or
       // dismisses the window itself.
-      void import("./ui/console").then(({ toggleConsoleWindow }) => toggleConsoleWindow());
+      void import("./ui/consolestate").then(({ toggleConsoleWindow }) => toggleConsoleWindow());
       return true;
     case "window.graph":
       dispatch({ type: "set_graph_popped_out", out: !state.graphPoppedOut });

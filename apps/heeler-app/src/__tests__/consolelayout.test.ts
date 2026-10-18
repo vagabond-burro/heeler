@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { announceConsoleWindow, connectPySync, consoleWindowLive, onConsoleWindow } from "../ui/console";
+import { announceConsoleWindow, connectPySync, consoleWindowLive, onConsoleWindow } from "../ui/consolestate";
 
 it("remote Console open and OS-close announcements notify layout listeners without echoing", () => {
   let receive!: (p: { window: boolean }) => void;

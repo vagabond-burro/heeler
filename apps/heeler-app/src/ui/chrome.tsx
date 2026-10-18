@@ -2419,7 +2419,7 @@ export function MenuBar({ state, dispatch }: { state: State; dispatch: D }) {
               `menu-window-tool-${kind}`, `Opens ${TOOL_WINDOWS[kind].title.replace(/^Heeler /, "")} in a window of its own; the panel folds to a bar while it is out.`),
           )}
         </SubMenu>,
-        check("Console", consoleLive, () => void import("../ui/console").then(({ toggleConsoleWindow }) => toggleConsoleWindow()), "menu-window-console",
+        check("Console", consoleLive, () => void import("../ui/consolestate").then(({ toggleConsoleWindow }) => toggleConsoleWindow()), "menu-window-console",
           "Opens the console in its own window: the session log with a DEBUG switch, and the Python scratchboard.", "view.console"),
         <div key="sep-window-1" className="sep" />,
         item("Bring all windows back", () => dispatch({ type: "dock_all_windows" }), "menu-window-dock-all", false, "window.dock_all",
@@ -2778,7 +2778,7 @@ its size.*/}
           data-testid="btn-console"
           data-hint="Console"
           data-hint-cmd="view.console"
-          onClick={() => void import("../ui/console").then(({ toggleConsoleWindow }) => toggleConsoleWindow())}
+          onClick={() => void import("../ui/consolestate").then(({ toggleConsoleWindow }) => toggleConsoleWindow())}
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ea2a5" strokeWidth="1.6">
             <path d="M4 17l6-5-6-5M12 19h8" />

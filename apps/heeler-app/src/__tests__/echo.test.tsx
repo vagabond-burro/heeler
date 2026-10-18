@@ -9,15 +9,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EchoTap, pyEquivalent, pyLiteral } from "../echo";
 import type { Command } from "../state";
-import {
-  ConsolePanel,
-  _resetPyConsoleForTests,
-  announceConsoleWindow,
-  consoleWindowLive,
-  echoEnabled,
-  pushEcho,
-  setEcho,
-} from "../ui/console";
+import { ConsolePanel } from "../ui/console";
+import { _resetPyConsoleForTests, announceConsoleWindow, consoleWindowLive, echoEnabled, pushEcho, setEcho } from "../ui/consolestate";
 
 beforeEach(() => _resetPyConsoleForTests());
 afterEach(() => vi.useRealTimers());

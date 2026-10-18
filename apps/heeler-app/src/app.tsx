@@ -162,7 +162,7 @@ import { SimplePanel } from "./ui/simple";
 import { framePixels } from "./ui/spectrum";
 import { NodeEditor, Inspector, InspectorBar, GroupDialog } from "./ui/graph";
 import { CanvasMode } from "./ui/canvas";
-import { announceConsoleWindow, connectPySync, consoleWindowLive, echoEnabled, onConsoleWindow, pushEcho } from "./ui/console";
+import { announceConsoleWindow, connectPySync, consoleWindowLive, echoEnabled, onConsoleWindow, pushEcho } from "./ui/consolestate";
 import { closeConsoleWindow, openConsoleWindow } from "./popout";
 import { GraphElsewhere } from "./ui/graphelsewhere";
 import { EchoTap } from "./echo";

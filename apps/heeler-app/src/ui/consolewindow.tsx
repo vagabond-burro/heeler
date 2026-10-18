@@ -12,7 +12,8 @@
 // whichever window is typing at it.
 
 import { useEffect, useState } from "react";
-import { connectPySync, ConsolePanel } from "./console";
+import { ConsolePanel } from "./console";
+import { connectPySync } from "./consolestate";
 import { connectConsoleAssistant } from "../assistant";
 import { connectTours } from "../tourwalk";
 import { connectAssistantChat } from "../assistantchat";
