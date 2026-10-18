@@ -9124,6 +9124,19 @@ fn downscale_scratch_bytes(width: usize, height: usize, max_edge: usize) -> Resu
     ]).map_err(|e| e.to_string())
 }
 
+/// A rendered mask as the gray frame the preview sends, paying for its
+/// own four channels: the render admitted the mask, one channel, and
+/// the frame made after it inside the preview's job was capped at that,
+/// so a mask view of a cropped 2048 frame was refused at "27 MiB, with
+/// 13 MiB available" and fell to the 1024 tier (the owner's Polish
+/// session, 2026-10-17).
+fn mask_to_image_admitted(mask: &MaskBuf) -> Result<ImageBuf, String> {
+    let _job = memory::bytes(mask.width, mask.height, 4, 4)
+        .and_then(|need| Job::admit(need, "mask view frame"))
+        .map_err(|e| e.to_string())?;
+    memory::catch(|| mask_to_image(mask)).map_err(|e| e.to_string())
+}
+
 fn downscale_admitted(src: &ImageBuf, max_edge: usize) -> Result<ImageBuf, String> {
     let _job = Job::admit(
         downscale_scratch_bytes(src.width, src.height, max_edge)?,
@@ -18639,7 +18652,7 @@ fn render_preview_attempt(
         Some(img) => img,
         None => {
             let mask = value.as_mask().ok_or("terminal node is not an image or mask")?;
-            gray = std::sync::Arc::new(mask_to_image(mask));
+            gray = std::sync::Arc::new(mask_to_image_admitted(mask)?);
             &gray
         }
     };
@@ -32243,6 +32256,22 @@ mod tests {
             assert!(bare.is_err(), "the bare downscale is exactly the refusal this guards against");
             let paid = downscale_admitted(&src, 1024).expect("the admitted downscale");
             assert_eq!(paid.width, 1024);
+        });
+    }
+
+    /// A mask view's gray frame is made after the render, inside the
+    /// preview's job, which the render grew only to the mask's one
+    /// channel: it pays for its own four.
+    #[test]
+    fn a_mask_views_frame_pays_for_itself_inside_the_previews_job() {
+        let mask = MaskBuf { width: 1699, height: 1011, data: vec![0.5; 1699 * 1011] };
+        memory::with_budget(64 << 30, || {
+            let _outer = Job::admit(0, "preview").unwrap();
+            let _render = Job::admit(memory::bytes(1699, 1011, 1, 8).unwrap(), "graph render and intermediates").unwrap();
+            assert!(memory::catch(|| mask_to_image(&mask)).is_err(), "bare, the frame is exactly the refusal this guards against");
+            let frame = mask_to_image_admitted(&mask).expect("the admitted frame");
+            assert_eq!((frame.width, frame.height), (1699, 1011));
+            assert_eq!(frame.pixel(10, 10), [0.5, 0.5, 0.5, 1.0]);
         });
     }
 
