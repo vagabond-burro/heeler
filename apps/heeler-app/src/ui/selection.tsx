@@ -573,6 +573,14 @@ export function useEngineMask(state: State | undefined, nodeId: string): FramePi
   // newer one when they land out of order.
   const seq = useRef(0);
   const lastRun = useRef(0);
+  // One render in flight at a time, and the newest change waiting behind
+  // it: a render cannot be called back once asked, so a stroke that asked
+  // every 160 ms for a render taking longer than that queued them behind
+  // the render lock until each waited past the 30 s answer limit, and the
+  // overlay fell back to the outline and never showed the polished matte
+  // (the owner, 2026-10-17: "polish is straight up not working").
+  const busy = useRef(false);
+  const pending = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!state || !node) {
       setMask(null);
@@ -581,7 +589,18 @@ export function useEngineMask(state: State | undefined, nodeId: string): FramePi
     let live = true;
     const my = ++seq.current;
     const run = () => {
+      if (busy.current) {
+        pending.current = run;
+        return;
+      }
+      busy.current = true;
       lastRun.current = Date.now();
+      const settle = () => {
+        busy.current = false;
+        const next = pending.current;
+        pending.current = null;
+        next?.();
+      };
       void import("../bridge").then(({ renderMaskOf }) =>
         renderMaskOf(state, nodeId).then((url) => {
           if (!live || !url || my !== seq.current) return;
@@ -608,7 +627,7 @@ export function useEngineMask(state: State | undefined, nodeId: string): FramePi
           };
           img.src = url;
         }),
-      );
+      ).finally(settle);
     };
     // Throttled, not debounced. A trailing debounce resets on every streamed
     // point of a polish stroke, so while the hand kept moving no render ever
@@ -621,6 +640,7 @@ export function useEngineMask(state: State | undefined, nodeId: string): FramePi
     return () => {
       live = false;
       window.clearTimeout(t);
+      if (pending.current === run) pending.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stamp, nodeId, !!state]);
