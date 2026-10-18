@@ -1488,6 +1488,11 @@ const PICK_MODE_ICONS: [PickMode, string, string, React.ReactNode][] = [
 
 export function LayersSection({ state, dispatch, width }: { state: State; dispatch: D; /** the panel's width, so the depth Levels scales with it */ width?: number }) {
   const [renaming, setRenaming] = useState<string | null>(null);
+  // The selected layer whose controls a second click folded away: a
+  // click on the selected layer folds them and another opens them, and
+  // choosing another layer opens its own (the owner's ask: "clicking
+  // it again does nothing").
+  const [folded, setFolded] = useState<string | null>(null);
   const layers = layersOf(state);
   const active = state.activeLayer;
   const activeInfo = layers.find((l) => l.id === active);
@@ -1672,6 +1677,11 @@ export function LayersSection({ state, dispatch, width }: { state: State; dispat
                     );
                     return;
                   }
+                  if (state.activeLayer === l.id) {
+                    setFolded((f) => (f === l.id ? null : l.id));
+                    return;
+                  }
+                  setFolded(null);
                   dispatch({ type: "set_active_layer", id: l.id });
                 }}
                 onDoubleClick={() => setRenaming(l.id)}
@@ -1768,7 +1778,7 @@ heals the chain.*/}
             </div>
           ))}
       </div>
-      {activeInfo && maskNode && (
+      {activeInfo && maskNode && folded !== activeInfo.id && (
         <div
           style={{ marginTop: 7, padding: "0 12px 0 18px" }}
           data-testid="layer-mask-controls"
