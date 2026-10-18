@@ -32,13 +32,19 @@ describe("the Tone Equalizer toolbar", () => {
 
   /// The button matches the menu because the two share a stretched box
   /// of their own, not because either names a height.
-  it("pairs the pick button with the fields and the faces in one stretched row", () => {
+  it("pairs the pick button with the Layout menu in one stretched row above the plot", () => {
     render(<EqEditor node={toneEq()} dispatch={() => {}} onTogglePick={() => {}} />);
     const pair = screen.getByTestId("tone-eq-pick").parentElement!;
     expect(pair.style.alignItems).toBe("stretch");
-    expect(pair).toContainElement(screen.getByTestId("eq-interp"));
-    // The Layout menu moved above the spectrum (2026-09-02).
-    expect(pair).not.toContainElement(screen.getByTestId("eq-preset"));
+    // 2026-10-18: the row below the plot "is not scaling down well ...
+    // Put the eye dropper above the top left corner and move the Layout
+    // option menu to the right of the eyedropper button".
+    expect(pair).toContainElement(screen.getByTestId("eq-preset"));
+    expect(screen.getByTestId("tone-eq-pick").compareDocumentPosition(screen.getByTestId("eq-preset")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(pair.compareDocumentPosition(screen.getByTestId("eq-plot")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The point's fields and the interpolation stay below the plot.
+    expect(pair).not.toContainElement(screen.getByTestId("eq-interp"));
+    expect(pair).not.toContainElement(screen.getByTestId("eq-point-x"));
     // The hint sits outside that pair, so its own wrapping cannot drag
     // the button's height around.
     expect(pair).not.toContainElement(screen.getByText(/2×click add/));

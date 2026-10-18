@@ -160,6 +160,28 @@ describe("copy and paste in Recolor", () => {
     expect(screen.getByTestId("recolor-clip-paste")).toBeDisabled();
   });
 
+  it("puts BY and ADJUST on a row each, their menus lined up, and the picker beside Layout", () => {
+    render(<RecolorHarness start={recolorOn()} first="hue_sat" />);
+    // 2026-10-18: side by side they "don't scale down well when the view
+    // is collapsed".
+    const rowOf = (id: string) => screen.getByTestId(id).closest<HTMLElement>("[data-testid='recolor-block'] > div")!;
+    expect(rowOf("recolor-by")).not.toBe(rowOf("recolor-adjust"));
+    const label = (id: string) => rowOf(id).firstElementChild as HTMLElement;
+    expect(label("recolor-by").textContent).toBe("BY");
+    expect(label("recolor-adjust").textContent).toBe("ADJUST");
+    expect(label("recolor-by").style.width).toBe(label("recolor-adjust").style.width);
+  });
+
+  it("puts the picker above the plot, left of Layout", () => {
+    const node = recolorOn().nodes.find((n) => n.id === "recolor")!;
+    render(<RecolorBlock node={node} dispatch={() => {}} cell="hue_sat" onCell={() => {}} clipboard={null} onTogglePick={() => {}} />);
+    const layoutRow = screen.getByTestId("eq-preset").parentElement!.parentElement!;
+    const pick = screen.getByTestId("tone-eq-pick");
+    expect(layoutRow).toContainElement(pick);
+    expect(pick.compareDocumentPosition(screen.getByTestId("eq-preset")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(layoutRow).not.toContainElement(screen.getByTestId("eq-point-x"));
+  });
+
   it("copies an ADJUST curve onto another under the same BY, scaled to its range, one undo step", () => {
     const sat = [{ x: 0, y: 50 }, { x: 120, y: -20, r: [10, 5] as [number, number] }, { x: 240, y: 0 }];
     render(<RecolorHarness start={withCell(recolorOn(), "hue_sat", sat)} first="hue_sat" />);

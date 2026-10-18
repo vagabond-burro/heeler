@@ -291,13 +291,16 @@ function PairDial({ label, value, min, max, hint, testid, onChange, onBegin, onE
  * its two colors, its scope and its dials. */
 export function RecolorPairs({ state, node, dispatch, width }: { state: State; node: NodeCard; dispatch: D; width: number }) {
   const [open, setOpen] = useState(false);
+  // Pairs folded to their two swatches, by place in the list, so one can
+  // be worked while the others stay out of the way.
+  const [folded, setFolded] = useState<number[]>([]);
   const pairs = parsePairs(node.textParams?.pairs);
   const armed = state.recolorPairPick?.id === node.id;
   const write = (next: RecolorPair[]) => dispatch({ type: "set_text_param", id: node.id, param: "pairs", value: next.length ? JSON.stringify(next) : "" });
   const set = (i: number, patch: Partial<RecolorPair>) => write(pairs.map((p, k) => (k === i ? { ...p, ...patch } : p)));
   const begin = (i: number) => dispatch({ type: "begin_gesture", key: `${node.id}.pairs.${i}` });
   const end = () => dispatch({ type: "end_gesture" });
-  const active = pairs.filter((p) => p.sep || p.sat || p.lum).length;
+
   return (
     <div style={{ marginTop: 8 }} data-testid="recolor-pairs">
       <button
@@ -312,9 +315,10 @@ export function RecolorPairs({ state, node, dispatch, width }: { state: State; n
           <path d="M9 6l6 6-6 6" />
         </svg>
         PAIRS
-        {active > 0 && (
+        {/* How many pairs there are, every one, moved or not yet. */}
+        {pairs.length > 0 && (
           <span style={{ color: "var(--accent)" }} data-testid="recolor-pairs-badge">
-            {active}
+            {pairs.length}
           </span>
         )}
       </button>
@@ -340,7 +344,19 @@ export function RecolorPairs({ state, node, dispatch, width }: { state: State; n
           )}
           {pairs.map((p, i) => (
             <div key={i} data-testid={`recolor-pair-${i}`} style={{ borderTop: "1px solid var(--line-2)", padding: "6px 0" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: folded.includes(i) ? 0 : 4 }}>
+                <button
+                  data-testid={`recolor-pair-fold-${i}`}
+                  aria-expanded={!folded.includes(i)}
+                  aria-label={folded.includes(i) ? "Show this pair's wheel and dials" : "Fold this pair to its two colors"}
+                  data-hint={folded.includes(i) ? "Show this pair's wheel and dials" : "Fold this pair to its two colors"}
+                  style={{ all: "unset", cursor: "pointer", display: "inline-flex", alignItems: "center", padding: "2px 2px", color: "var(--text-dim)" }}
+                  onClick={() => setFolded((f) => (f.includes(i) ? f.filter((k) => k !== i) : [...f, i]))}
+                >
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" aria-hidden="true" style={{ transform: folded.includes(i) ? "none" : "rotate(90deg)" }}>
+                    <path d="M9 6l6 6-6 6" />
+                  </svg>
+                </button>
                 <span style={{ width: 12, height: 12, background: css(p.a.rgb), border: "1px solid var(--line-4)" }} />
                 <span style={{ color: "var(--text-ghost)" }}>and</span>
                 <span style={{ width: 12, height: 12, background: css(p.b.rgb), border: "1px solid var(--line-4)" }} />
@@ -349,11 +365,16 @@ export function RecolorPairs({ state, node, dispatch, width }: { state: State; n
                   data-testid={`recolor-pair-remove-${i}`}
                   data-hint="Remove this pair"
                   style={{ fontSize: 11, padding: "1px 7px", marginLeft: "auto" }}
-                  onClick={() => write(pairs.filter((_, k) => k !== i))}
+                  onClick={() => {
+                    write(pairs.filter((_, k) => k !== i));
+                    // The pairs after it move up a place, and their folds with them.
+                    setFolded((f) => f.filter((k) => k !== i).map((k) => (k > i ? k - 1 : k)));
+                  }}
                 >
                   Remove
                 </button>
               </div>
+              {!folded.includes(i) && (
               <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                 <PairScope pair={p} size={Math.min(110, Math.max(80, width / 3))} index={i} onChange={(patch) => set(i, patch)} onBegin={() => begin(i)} onEnd={end} />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -363,6 +384,7 @@ export function RecolorPairs({ state, node, dispatch, width }: { state: State; n
                   <PairDial label="Width" value={p.width} min={5} max={90} testid={`recolor-pair-width-${i}`} hint="How far around each picked hue counts as that color, in degrees" onChange={(v) => set(i, { width: v })} onBegin={() => begin(i)} onEnd={end} />
                 </div>
               </div>
+              )}
             </div>
           ))}
         </div>

@@ -716,30 +716,77 @@ export function EqEditor({
   const binW = hist ? plotW / hist.bins.length : 0;
   return (
     <div data-testid="eq-editor">
-      {/* The Layout menu rides ABOVE the plot, on its left edge
-("Move the Layout dropdown above the spectrum ... and align to the
-left edge of the spectrum").*/}
-      {!noPresets && (
-        <div style={{ display: "flex", alignItems: "stretch", marginBottom: 3, paddingLeft: PAD.l, paddingRight: PAD.r }}>
-          <MenuField
-            testid="eq-preset"
-            label="Curve layout"
-            hint="Lay the curve's points out evenly; one undo step takes it back"
-            size="regular"
-            value=""
-            placeholder="Layout…"
-            options={presets.map((p) => ({ id: p.id, label: p.label }))}
-            fitLabels={["Layout…", ...presets.map((p) => p.label)]}
-            onChange={(id) => {
-              const preset = presets.find((p) => p.id === id);
-              if (!preset) return;
-              dispatch({ type: "begin_gesture", key: `${node.id}.points` });
-              write(preset.points.map((p) => ({ ...p })));
-              dispatch({ type: "end_gesture" });
-              setEcho(null);
-              setSelected(null);
-            }}
-          />
+      {/* The picker and the Layout menu ride ABOVE the plot, from its
+left edge ("Move the Layout dropdown above the spectrum ... and align
+to the left edge of the spectrum"; 2026-10-18, the row below "is not
+scaling down well either, too many controls. Put the eye dropper above
+the top left corner and move the Layout option menu to the right of
+the eyedropper button").*/}
+      {(!noPresets || onTogglePick || onToggleMatch || trailing) && (
+        <div style={{ display: "flex", alignItems: "stretch", gap: 6, marginBottom: 3, paddingLeft: PAD.l, paddingRight: PAD.r }}>
+          {onTogglePick && (
+            <button
+              className="chip"
+              data-testid={pickTestId}
+              data-active={pickArmed || undefined}
+              aria-pressed={pickArmed}
+              aria-label={pickLabel}
+              data-hint={pickHint}
+              style={{
+                padding: "0 7px",
+                flex: "none",
+                display: "flex",
+                alignItems: "center",
+              }}
+              onClick={onTogglePick}
+            >
+              <EyedropperIcon size={11} />
+            </button>
+          )}
+          {onToggleMatch && (
+            <button
+              className="chip"
+              data-testid={matchTestId}
+              data-active={matchArmed || undefined}
+              aria-pressed={matchArmed}
+              aria-label={matchLabel}
+              data-hint={matchHint}
+              style={{
+                padding: "0 7px",
+                flex: "none",
+                display: "flex",
+                alignItems: "center",
+              }}
+              onClick={onToggleMatch}
+            >
+              <svg width="13" height="11" viewBox="0 0 13 11" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
+                <circle cx="2.8" cy="5.5" r="2.1" />
+                <circle cx="10.2" cy="5.5" r="2.1" fill="currentColor" />
+                <path d="M5.3 5.5h2.4M6.9 4.2l1 1.3-1 1.3" />
+              </svg>
+            </button>
+          )}
+          {!noPresets && (
+            <MenuField
+              testid="eq-preset"
+              label="Curve layout"
+              hint="Lay the curve's points out evenly; one undo step takes it back"
+              size="regular"
+              value=""
+              placeholder="Layout…"
+              options={presets.map((p) => ({ id: p.id, label: p.label }))}
+              fitLabels={["Layout…", ...presets.map((p) => p.label)]}
+              onChange={(id) => {
+                const preset = presets.find((p) => p.id === id);
+                if (!preset) return;
+                dispatch({ type: "begin_gesture", key: `${node.id}.points` });
+                write(preset.points.map((p) => ({ ...p })));
+                dispatch({ type: "end_gesture" });
+                setEcho(null);
+                setSelected(null);
+              }}
+            />
+          )}
           {trailing && <div style={{ marginLeft: "auto", display: "flex" }}>{trailing}</div>}
         </div>
       )}
@@ -1017,56 +1064,12 @@ Sharing the row squeezed the teaching text into whatever was left
 beside four controls, which in a Recolor cell was a column three
 words wide.*/}
       <div style={{ marginTop: 4 }}>
-      {/* One row of controls, ordered by where the hand goes next: the
-picker sits far LEFT because the picture it picks from is to the
-left of this panel; the fields hold one fixed width so Tone Equalizer and
-Recolor agree; and the Layout menu stretches to the plot's right
-edge, so it is the same size in every editor instead of
-shrink-wrapping its longest label. alignItems stretch is what keeps
-all four the same height without any of them naming one.*/}
+      {/* The selected point's numbers and the interpolation: the picker
+went above the plot, beside Layout, so a narrow panel holds this row.
+The fields hold one fixed width so Tone Equalizer and Recolor agree;
+alignItems stretch keeps them the same height without any of them
+naming one.*/}
       <div style={{ display: "flex", alignItems: "stretch", gap: 6, paddingLeft: PAD.l, paddingRight: PAD.r }}>
-        {onTogglePick && (
-          <button
-            className="chip"
-            data-testid={pickTestId}
-            data-active={pickArmed || undefined}
-            aria-pressed={pickArmed}
-            aria-label={pickLabel}
-            data-hint={pickHint}
-            style={{
-              padding: "0 7px",
-              flex: "none",
-              display: "flex",
-              alignItems: "center",
-            }}
-            onClick={onTogglePick}
-          >
-            <EyedropperIcon size={11} />
-          </button>
-        )}
-        {onToggleMatch && (
-          <button
-            className="chip"
-            data-testid={matchTestId}
-            data-active={matchArmed || undefined}
-            aria-pressed={matchArmed}
-            aria-label={matchLabel}
-            data-hint={matchHint}
-            style={{
-              padding: "0 7px",
-              flex: "none",
-              display: "flex",
-              alignItems: "center",
-            }}
-            onClick={onToggleMatch}
-          >
-            <svg width="13" height="11" viewBox="0 0 13 11" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
-              <circle cx="2.8" cy="5.5" r="2.1" />
-              <circle cx="10.2" cy="5.5" r="2.1" fill="currentColor" />
-              <path d="M5.3 5.5h2.4M6.9 4.2l1 1.3-1 1.3" />
-            </svg>
-          </button>
-        )}
         {/* The selected point, as numbers. Disabled rather than absent
             with nothing selected, per the menu rule: an empty seat says
             the capability exists and the hint says how to reach it. */}

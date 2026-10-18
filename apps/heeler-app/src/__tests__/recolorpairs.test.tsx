@@ -168,4 +168,36 @@ describe("Recolor pairs", () => {
     fireEvent.click(screen.getByTestId("recolor-pair-remove-0"));
     expect(current.nodes.find((n) => n.id === id)!.textParams?.pairs).toBe("");
   });
+
+  it("folds each pair to its two colors on its own, and a removed pair takes its fold with it", () => {
+    let s = run(initialState(), { type: "set_category", title: "Recolor", on: true });
+    const id = toolNode(s, "recolor")!.id;
+    s = run(s, { type: "set_text_param", id, param: "pairs", value: JSON.stringify([pair(200, 100), pair(40, 120), pair(300, 20)]) });
+    let current = s;
+    const dispatch = (c: Command) => {
+      current = reduce(current, c);
+      view.rerender(<RecolorPairs state={current} node={current.nodes.find((n) => n.id === id)!} dispatch={dispatch} width={320} />);
+    };
+    const view = render(<RecolorPairs state={current} node={current.nodes.find((n) => n.id === id)!} dispatch={dispatch} width={320} />);
+    // The badge counts every pair, dials moved or not.
+    expect(screen.getByTestId("recolor-pairs-badge")).toHaveTextContent("3");
+    fireEvent.click(screen.getByTestId("recolor-pairs-toggle"));
+    // Every pair opens with its wheel and dials.
+    for (const i of [0, 1, 2]) expect(screen.queryByTestId(`recolor-pair-sep-${i}`)).not.toBeNull();
+    // Folding the second hides its dials alone; its swatches and Remove stay.
+    fireEvent.click(screen.getByTestId("recolor-pair-fold-1"));
+    expect(screen.getByTestId("recolor-pair-fold-1")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("recolor-pair-sep-1")).toBeNull();
+    expect(screen.getByTestId("recolor-pair-remove-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("recolor-pair-sep-0")).not.toBeNull();
+    expect(screen.queryByTestId("recolor-pair-sep-2")).not.toBeNull();
+    // Removing the first moves the folded pair up a place, folded still.
+    fireEvent.click(screen.getByTestId("recolor-pair-remove-0"));
+    expect(screen.queryByTestId("recolor-pair-sep-0")).toBeNull();
+    expect(screen.queryByTestId("recolor-pair-sep-1")).not.toBeNull();
+    expect(screen.getByTestId("recolor-pairs-badge")).toHaveTextContent("2");
+    // And it opens again.
+    fireEvent.click(screen.getByTestId("recolor-pair-fold-0"));
+    expect(screen.queryByTestId("recolor-pair-sep-0")).not.toBeNull();
+  });
 });

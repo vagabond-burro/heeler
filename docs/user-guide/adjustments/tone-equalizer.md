@@ -27,7 +27,7 @@ Looks work on the photograph's own chain. With an adjustment layer selected the 
 
 Drag a tonal zone up to brighten that range or down to darken it. Adjust Range shift when the affected part of the photograph does not line up with the desired zone. Increase Smoothing if the correction creates visible tonal boundaries.
 
-Use the on-image picker to put a point on the curve at the tone under the pointer.
+Use the on-image picker, the eyedropper above the curve's left corner beside the Layout menu, to put a point on the curve at the tone under the pointer.
 
 ## Placing points precisely
 

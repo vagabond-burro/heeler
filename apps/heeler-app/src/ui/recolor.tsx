@@ -59,6 +59,9 @@ const ADJUST_HINT: Record<RecolorAdjust, string> = {
 /** RecolorBlock with its histogram fed from the color the node's hue
  * rows key on (the same source the Black & White Hue curve draws),
  * falling back to the frame; a host with the app state mounts this. */
+/** The width the BY and ADJUST labels share, so their menus line up. */
+const ROUTE_LABEL_W = 40;
+
 export function RecolorHost({
   state,
   frame,
@@ -201,8 +204,11 @@ export function RecolorBlock({
 
   return (
     <div data-testid="recolor-block">
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5, fontSize: 9, paddingLeft: EQ_PLOT_INSET }}>
-        <span style={{ color: "var(--text-dim)", letterSpacing: ".08em" }}>BY</span>
+      {/* BY and ADJUST, a row each: side by side, a narrow panel squeezed
+          the two menus past reading. The labels share a width so the menus
+          line up. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, fontSize: 9, paddingLeft: EQ_PLOT_INSET }}>
+        <span style={{ color: "var(--text-dim)", letterSpacing: ".08em", width: ROUTE_LABEL_W, flex: "none" }}>BY</span>
         <MenuField
           testid="recolor-by"
           label="Select pixels by"
@@ -218,8 +224,9 @@ export function RecolorBlock({
             onCell(cellFor(input, output));
           }}
         />
-        <span style={{ color: "var(--text-ghost)" }}>▸</span>
-        <span style={{ color: "var(--text-dim)", letterSpacing: ".08em" }}>ADJUST</span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5, fontSize: 9, paddingLeft: EQ_PLOT_INSET }}>
+        <span style={{ color: "var(--text-dim)", letterSpacing: ".08em", width: ROUTE_LABEL_W, flex: "none" }}>ADJUST</span>
         <MenuField
           testid="recolor-adjust"
           label="Adjust"
