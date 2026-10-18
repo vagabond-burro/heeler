@@ -97,6 +97,13 @@ export function pathStops(line: ProfileLine, aspect = 1): number[] {
 
 /** The point a share `t` of the way along a path. */
 export function pointAlong(line: ProfileLine, t: number, aspect = 1): [number, number] {
+  return alongAt(line, t, aspect).at;
+}
+
+/** The point a share `t` of the way along a path and the way its stretch
+ * there runs, a unit step in the frame's pixels (x over the frame's width
+ * scaled by `aspect`, y over its height). */
+function alongAt(line: ProfileLine, t: number, aspect: number): { at: [number, number]; dir: [number, number] } {
   const p = line.points;
   const stops = pathStops(line, aspect);
   const at = Math.min(1, Math.max(0, t));
@@ -104,10 +111,16 @@ export function pointAlong(line: ProfileLine, t: number, aspect = 1): [number, n
     if (at <= stops[i] || i === p.length - 1) {
       const span = stops[i] - stops[i - 1];
       const f = span > 0 ? (at - stops[i - 1]) / span : 0;
-      return [p[i - 1][0] + (p[i][0] - p[i - 1][0]) * f, p[i - 1][1] + (p[i][1] - p[i - 1][1]) * f];
+      const dx = (p[i][0] - p[i - 1][0]) * aspect;
+      const dy = p[i][1] - p[i - 1][1];
+      const len = Math.hypot(dx, dy);
+      return {
+        at: [p[i - 1][0] + (p[i][0] - p[i - 1][0]) * f, p[i - 1][1] + (p[i][1] - p[i - 1][1]) * f],
+        dir: len > 0 ? [dx / len, dy / len] : [1, 0],
+      };
     }
   }
-  return p[0];
+  return { at: p[0], dir: [1, 0] };
 }
 
 /** The frame's levels along a path, 0..1 as displayed, one entry per
@@ -127,39 +140,69 @@ export function lineProfile(
   frame: { pixels: Uint8ClampedArray; w: number; h: number },
   line: ProfileLine,
   samples: number,
+  /** how far each side of the path the reading reaches, in the frame's
+   * pixels: 0 reads the pixels under it, more averages across a band */
+  radius = 0,
 ): Profile {
   const n = Math.max(2, Math.round(samples));
   const out: Profile = { r: [], g: [], b: [], luma: [] };
   const { pixels, w, h } = frame;
   const aspect = w / Math.max(1, h);
   const at = (x: number, y: number, c: number) => pixels[(y * w + x) * 4 + c];
+  const r = Number.isFinite(radius) ? Math.max(0, radius) : 0;
+  // Across the band, a reading at least every pixel, the path's own one
+  // among them.
+  const across = r > 0 ? Math.ceil(r) : 0;
+  const sum = [0, 0, 0];
   for (let i = 0; i < n; i++) {
-    const [px, py] = pointAlong(line, i / (n - 1), aspect);
-    // Pixel centers: 0..1 of the frame is 0..w of its pixels.
-    const fx = Math.min(w - 1, Math.max(0, px * w - 0.5));
-    const fy = Math.min(h - 1, Math.max(0, py * h - 0.5));
-    const x0 = Math.floor(fx);
-    const y0 = Math.floor(fy);
-    const x1 = Math.min(w - 1, x0 + 1);
-    const y1 = Math.min(h - 1, y0 + 1);
-    const ax = fx - x0;
-    const ay = fy - y0;
-    const bil = (c: number) =>
-      (at(x0, y0, c) * (1 - ax) + at(x1, y0, c) * ax) * (1 - ay) + (at(x0, y1, c) * (1 - ax) + at(x1, y1, c) * ax) * ay;
-    if (bil(3) < 128) {
+    const { at: [px, py], dir } = alongAt(line, i / (n - 1), aspect);
+    let count = 0;
+    sum[0] = sum[1] = sum[2] = 0;
+    for (let k = -across; k <= across; k++) {
+      // The normal to the path, in the frame's pixels.
+      const o = across > 0 ? (k / across) * r : 0;
+      // Pixel centers: 0..1 of the frame is 0..w of its pixels.
+      const fx = px * w - 0.5 - dir[1] * o;
+      const fy = py * h - 0.5 + dir[0] * o;
+      if (fx < -0.5 || fy < -0.5 || fx > w - 0.5 || fy > h - 0.5) continue;
+      const cx = Math.min(w - 1, Math.max(0, fx));
+      const cy = Math.min(h - 1, Math.max(0, fy));
+      const x0 = Math.floor(cx);
+      const y0 = Math.floor(cy);
+      const x1 = Math.min(w - 1, x0 + 1);
+      const y1 = Math.min(h - 1, y0 + 1);
+      const ax = cx - x0;
+      const ay = cy - y0;
+      const bil = (c: number) =>
+        (at(x0, y0, c) * (1 - ax) + at(x1, y0, c) * ax) * (1 - ay) + (at(x0, y1, c) * (1 - ax) + at(x1, y1, c) * ax) * ay;
+      if (bil(3) < 128) continue;
+      sum[0] += bil(0);
+      sum[1] += bil(1);
+      sum[2] += bil(2);
+      count++;
+    }
+    if (count === 0) {
       out.r.push(NaN);
       out.g.push(NaN);
       out.b.push(NaN);
       out.luma.push(NaN);
       continue;
     }
-    const [r, g, b] = [bil(0) / 255, bil(1) / 255, bil(2) / 255];
-    out.r.push(r);
+    const [rr, g, b] = [sum[0] / count / 255, sum[1] / count / 255, sum[2] / count / 255];
+    out.r.push(rr);
     out.g.push(g);
     out.b.push(b);
-    out.luma.push(0.2126 * r + 0.7152 * g + 0.0722 * b);
+    out.luma.push(0.2126 * rr + 0.7152 * g + 0.0722 * b);
   }
   return out;
+}
+
+/** How long a path is in the frame's pixels. */
+export function pathLength(line: ProfileLine, w: number, h: number): number {
+  const p = line.points;
+  let len = 0;
+  for (let i = 1; i < p.length; i++) len += Math.hypot((p[i][0] - p[i - 1][0]) * w, (p[i][1] - p[i - 1][1]) * h);
+  return len;
 }
 
 /** Where on a path a point of the frame falls, 0 at its start and 1 at

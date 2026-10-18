@@ -5,8 +5,11 @@
 // place along it is marked here and on the scope's plot, whichever it is
 // over. A view setting: the path never reaches an edit, a Take, the
 // history or an export.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Command, State } from "../state";
+import { serializeGraph } from "../bridge";
+import { sourceSizeFor } from "../framemap";
+import { sourceMapOf } from "../pickgeometry";
 import { alongLine, pointAlong, type ProfileLine } from "../spectrums";
 import { PICK_CURSOR } from "./cursors";
 import { norm, normFree, type ViewTransform } from "./overlays";
@@ -26,6 +29,25 @@ const DRAG_LINE = 0.01;
 function aspectOf(el: HTMLElement | null | undefined): number {
   const r = el?.getBoundingClientRect();
   return r && r.height > 0 ? r.width / r.height : 1;
+}
+
+/** How many of the photograph's pixels the frame spans, across and
+ * down: its own pixels walked back through the crop and warps across the
+ * frame's middle. Null before the viewer has noted the photograph's size.
+ * The Line Profile's radius is in these pixels, so a band reads the same
+ * at any zoom and in any panel. */
+export function framePhotoSize(state: State): [number, number] | null {
+  const size = sourceSizeFor(state.activeImage);
+  if (!size) return null;
+  const map = sourceMapOf(serializeGraph(state), size);
+  const span = (from: [number, number], to: [number, number]) => {
+    const a = map(from);
+    const b = map(to);
+    return a && b ? Math.hypot((b[0] - a[0]) * size[0], (b[1] - a[1]) * size[1]) / 0.1 : NaN;
+  };
+  const w = span([0.45, 0.5], [0.55, 0.5]);
+  const h = span([0.5, 0.45], [0.5, 0.55]);
+  return w > 0 && h > 0 && Number.isFinite(w) && Number.isFinite(h) ? [w, h] : null;
 }
 
 /** A point of the path as a handle: a fixed size on screen at any zoom. */
@@ -89,6 +111,14 @@ export function ProfileLineLayer({ state, dispatch, view }: { state: State; disp
     setDragging(null);
   };
 
+  // The photograph's size is noted when its metadata lands, which can be
+  // after the band is turned on: that counts as a change too.
+  const noted = sourceSizeFor(state.activeImage);
+  const photoSize = useMemo(
+    () => (state.profileBand ? framePhotoSize(state) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.profileBand, state.nodes, state.activeImage, state.renderVersion, noted?.[0], noted?.[1]],
+  );
   const editing = state.profileEdit && !!state.profileLine;
   const shown: ProfileLine | null = editing && dragging
     ? { points: dragging.points }
@@ -102,6 +132,31 @@ export function ProfileLineLayer({ state, dispatch, view }: { state: State; disp
 
   return (
     <div ref={root} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+      {/* The band the profile reads, in red: the radius each side of the
+          path, drawn in the photograph's pixels so it covers what is
+          averaged at any zoom. At 0 it is the one pixel under the path. */}
+      {state.profileBand && shown && shown.points.length >= 2 && photoSize && (() => {
+        const [fw, fh] = photoSize;
+        return (
+          <svg
+            data-testid="profile-band"
+            data-radius={state.profileRadius}
+            viewBox={`0 0 ${fw} ${fh}`}
+            preserveAspectRatio="none"
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible" }}
+          >
+            <polyline
+              points={shown.points.map((p) => `${p[0] * fw},${p[1] * fh}`).join(" ")}
+              fill="none"
+              stroke="rgb(208,52,44)"
+              strokeOpacity={0.55}
+              strokeWidth={Math.max(1, 2 * state.profileRadius)}
+              strokeLinecap="butt"
+              strokeLinejoin="bevel"
+            />
+          </svg>
+        );
+      })()}
       {shown && shown.points.length >= 2 && (
         <svg
           data-testid="profile-line"

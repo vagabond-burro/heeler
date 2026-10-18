@@ -8,7 +8,9 @@ import { anyPickerArmed, reduce, type Command, type State } from "../state";
 import { alongLine, lineProfile, pathStops, pointAlong, SPECTRUM_KINDS, type ProfileLine } from "../spectrums";
 import { profileReadout, Spectrums } from "../ui/spectrum";
 import { setUiPref } from "../uiprefs";
-import { ProfileLineLayer } from "../ui/profileline";
+import { framePhotoSize, ProfileLineLayer } from "../ui/profileline";
+import { noteSourceSize } from "../framemap";
+import { PROFILE_RADIUS_MAX } from "../state";
 import { IDENTITY_VIEW } from "../ui/overlays";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
@@ -160,13 +162,13 @@ describe("Line Profile", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
-  it("puts its three tools where the selection button sits, with pictures, not words", () => {
+  it("puts its tools where the selection button sits, with pictures, not words", () => {
     setUiPref("spectrumKind", "profile");
     const dispatch = vi.fn();
     render(<Spectrums state={initialState()} dispatch={dispatch} />);
     expect(screen.queryByTestId("spectrum-selection")).toBeNull();
     const tools = screen.getByTestId("spectrum-profile-tools");
-    for (const id of ["draw", "edit", "clear"]) {
+    for (const id of ["draw", "edit", "clear", "band"]) {
       const b = screen.getByTestId(`spectrum-profile-${id}`);
       expect(tools.contains(b)).toBe(true);
       expect(b.textContent).toBe("");
@@ -174,7 +176,94 @@ describe("Line Profile", () => {
     }
     fireEvent.click(screen.getByTestId("spectrum-profile-draw"));
     expect(dispatch).toHaveBeenCalledWith({ type: "toggle_profile_draw" });
+    fireEvent.click(screen.getByTestId("spectrum-profile-band"));
+    expect(dispatch).toHaveBeenCalledWith({ type: "toggle_profile_band" });
+    // The radius is the row's fifth control, a number that types and drags.
+    const radius = screen.getByTestId("spectrum-profile-radius");
+    expect(tools.contains(radius)).toBe(true);
+    expect([...tools.querySelectorAll("button, input")].indexOf(radius)).toBe(4);
+    expect((radius as HTMLInputElement).value).toBe("0");
+    fireEvent.change(radius, { target: { value: "5" } });
+    fireEvent.keyDown(radius, { key: "Enter" });
+    expect(dispatch).toHaveBeenCalledWith({ type: "set_profile_radius", radius: 5 });
+    fireEvent.mouseDown(radius, { button: 0, clientX: 100 });
+    fireEvent.mouseMove(window, { clientX: 130 });
+    fireEvent.mouseUp(window);
+    expect(dispatch).toHaveBeenCalledWith({ type: "set_profile_radius", radius: 3 });
     setUiPref("spectrumKind", "histogram");
+  });
+
+  it("averages a band either side of the path, by its radius", () => {
+    // Rows alternating dark and bright, the path along a dark one.
+    const w = 20;
+    const h = 11;
+    const pixels = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) pixels.set([y % 2 ? 255 : 0, 0, 0, 255], (y * w + x) * 4);
+    const frame = { pixels, w, h };
+    const along = line([0.1, 4.5 / h], [0.9, 4.5 / h]);
+    // At 0 it reads the row under the path.
+    expect(lineProfile(frame, along, 8).r.every((v) => v === 0)).toBe(true);
+    // A radius of 1 takes the row each side in: two bright to one dark.
+    for (const v of lineProfile(frame, along, 8, 1).r) expect(v).toBeCloseTo(2 / 3, 5);
+    // A radius of 2 reaches two each side: two bright to three dark.
+    for (const v of lineProfile(frame, along, 8, 2).r) expect(v).toBeCloseTo(2 / 5, 5);
+    // Down a dark column the band runs across, the same way.
+    const down = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) down.set([x % 2 ? 255 : 0, 0, 0, 255], (y * w + x) * 4);
+    for (const v of lineProfile({ pixels: down, w, h }, line([10.5 / w, 0.1], [10.5 / w, 0.9]), 6, 1).r) expect(v).toBeCloseTo(2 / 3, 5);
+    // Off the frame and on its transparent pixels the band reads only
+    // what is on the photograph; a band all off it is a gap.
+    const r = ramp(9, 4);
+    const edge = lineProfile(r, line([0.95, 0.2], [0.95, 0.8]), 4, 3);
+    expect(edge.r.every((v) => Number.isFinite(v) && v < 1)).toBe(true);
+    expect(lineProfile(r, line([1, 0.2], [1, 0.8]), 4).r.every((v) => Number.isNaN(v))).toBe(true);
+    // A radius that is not a number reads as none.
+    expect(lineProfile(frame, along, 8, NaN).r.every((v) => v === 0)).toBe(true);
+  });
+
+  it("keeps the radius a whole number of pixels in range, and the band a view setting", () => {
+    let s = initialState();
+    expect(s.profileRadius).toBe(0);
+    expect(s.profileBand).toBe(false);
+    s = run(s, { type: "set_profile_radius", radius: 2.6 });
+    expect(s.profileRadius).toBe(3);
+    expect(run(s, { type: "set_profile_radius", radius: -4 }).profileRadius).toBe(0);
+    expect(run(s, { type: "set_profile_radius", radius: 1e9 }).profileRadius).toBe(PROFILE_RADIUS_MAX);
+    expect(run(s, { type: "set_profile_radius", radius: NaN }).profileRadius).toBe(3);
+    s = run(s, { type: "toggle_profile_band" });
+    expect(s.profileBand).toBe(true);
+    expect(anyPickerArmed(s)).toBe(false);
+    expect(run(s, { type: "toggle_profile_band" }).profileBand).toBe(false);
+  });
+
+  it("measures the radius in the photograph's pixels, the band drawn in red at that size", () => {
+    let s = { ...initialState(), activeImage: "band-photo" };
+    // The photograph's own pixels, through the edit's crop: none here.
+    expect(framePhotoSize(s)).toBeNull();
+    noteSourceSize(s.activeImage, 3000, 2000);
+    const size = framePhotoSize(s)!;
+    expect(size[0]).toBeCloseTo(3000, 3);
+    expect(size[1]).toBeCloseTo(2000, 3);
+    s = run(s, { type: "set_profile_line", line: line([0.1, 0.5], [0.9, 0.5]) }, { type: "set_profile_radius", radius: 5 });
+    stage(s, vi.fn());
+    expect(screen.queryByTestId("profile-band")).toBeNull();
+    s = run(s, { type: "toggle_profile_band" });
+    stage(s, vi.fn());
+    const band = screen.getByTestId("profile-band");
+    const [vw, vh] = band.getAttribute("viewBox")!.split(" ").slice(2).map(Number);
+    expect(vw).toBeCloseTo(3000, 3);
+    expect(vh).toBeCloseTo(2000, 3);
+    const stroke = band.querySelector("polyline")!;
+    const [p0, p1] = stroke.getAttribute("points")!.split(" ").map((p) => p.split(",").map(Number));
+    expect(p0[0]).toBeCloseTo(300, 2);
+    expect(p1[0]).toBeCloseTo(2700, 2);
+    expect(p0[1]).toBeCloseTo(1000, 2);
+    expect(stroke.getAttribute("stroke-width")).toBe("10");
+    // At 0, the one pixel under the path.
+    s = run(s, { type: "set_profile_radius", radius: 0 });
+    stage(s, vi.fn());
+    const bands = screen.getAllByTestId("profile-band");
+    expect(bands[bands.length - 1].querySelector("polyline")!.getAttribute("stroke-width")).toBe("1");
   });
 
   it("marks the hovered place on the path", () => {

@@ -988,6 +988,8 @@ export function initialState(): State {
     profileEdit: false,
     profileLine: null,
     profileHover: null,
+    profileRadius: 0,
+    profileBand: false,
     inspectPoint: null,
     influenceView: null,
     keyLightPick: false,

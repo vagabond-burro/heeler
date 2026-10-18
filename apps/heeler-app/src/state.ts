@@ -1471,6 +1471,10 @@ export function frameLook(s: State): string {
  * comparison source still names a real take. */
 /** Every picker at rest. The list of arms a click can be waiting on,
  * in one place, so Escape and a graph swap put away the same set. */
+/** The widest band the Line Profile reads, in the photograph's pixels
+ * each side of its path. */
+export const PROFILE_RADIUS_MAX = 250;
+
 const PICKER_RESET = {
   curvePick: null,
   curveHoverX: null,
@@ -3790,6 +3794,12 @@ export interface State {
   /** The point along the line under the cursor, 0 at its start and 1 at
    * its end, from the scope or the viewer, so each marks it in the other. */
   profileHover: number | null;
+  /** How far each side of the path the Line Profile reads, in the
+   * photograph's pixels: 0 reads the pixels under it, 5 averages five
+   * either side. A view setting, beside the path. */
+  profileRadius: number;
+  /** The band the Line Profile reads is shown in red on the viewer. */
+  profileBand: boolean;
   /** Influence Mapping's Inspect picker is armed: a click on the frame
    * traces that pixel through the graph. */
   inspectPick: boolean;
@@ -5157,6 +5167,8 @@ export type Command =
   | { type: "toggle_profile_edit" }
   /** Lay down the Line Profile's path, or clear it with null. */
   | { type: "set_profile_line"; line: ProfileLine | null }
+  | { type: "set_profile_radius"; radius: number }
+  | { type: "toggle_profile_band" }
   /** The point along the line under the cursor, or null. */
   | { type: "set_profile_hover"; t: number | null }
   /** Arm or put away the Inspect picker. */
@@ -18953,6 +18965,12 @@ function reduceInner(s: State, cmd: Command): State {
     }
     case "toggle_profile_edit":
       return s.profileEdit || !s.profileLine ? { ...s, profileEdit: false } : { ...s, ...PICKER_RESET, profileEdit: true };
+    case "set_profile_radius": {
+      const radius = Number.isFinite(cmd.radius) ? Math.round(Math.min(PROFILE_RADIUS_MAX, Math.max(0, cmd.radius))) : s.profileRadius;
+      return radius === s.profileRadius ? s : { ...s, profileRadius: radius };
+    }
+    case "toggle_profile_band":
+      return { ...s, profileBand: !s.profileBand };
     case "set_profile_hover":
       return s.profileHover === cmd.t ? s : { ...s, profileHover: cmd.t === null ? null : Math.min(1, Math.max(0, cmd.t)) };
     case "toggle_inspect_pick":

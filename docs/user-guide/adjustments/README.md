@@ -70,17 +70,19 @@ The button at the readout's left, a small histogram wrapped in a marquee rectang
 
 ### Line profile
 
-The line profile shows brightness along a path you draw. Choose it in the scopes, then use its three buttons:
+The line profile shows brightness along a path you draw. Choose it in the scopes, then use its buttons and its radius:
 
 - **Draw** (a path of dots) places a new path: click a point at a time across the photograph, and double-click or press `Enter` to finish. Drag instead of clicking to lay a straight line down in one stroke. `Esc` puts Draw away.
 - **Edit** (squares on a line) changes the path: drag a point to move it, **Option-click** (**Alt-click** on Windows) a point to take it out, and click on the path between two points to put a new one there. A path keeps at least two points. `Esc`, `Enter` or the button again ends editing.
 - **Clear** (an ×) takes the path away.
+- **Band** (a line with a wide shadow) shows in red what the profile reads: the path, and the radius each side of it.
+- **Radius**, the number after the buttons, is how far each side of the path the profile reads, in the photograph's pixels. At **0** it reads the pixels under the path. At **5** it averages five pixels on each side, which calms grain and noise when you are reading broad tone. Drag the number sideways or click it and type; the arrow keys step it by one, ten with `Shift`.
 
-The plot runs from the path's first point at the left to its last at the right, evenly by distance along it, with brightness up the side and a small tick at the foot for each corner. The channel row picks what it traces: **LUM** for brightness alone, **RGB** for the red, green and blue traces with brightness over them, or a single channel. Drag across a sky to see how evenly it falls off, along a face to see the light wrap around it, or across an edge to see how sharp the step is.
+The plot runs from the path's first point at the left to its last at the right, evenly by distance along it, with brightness up the side and a small tick at the foot for each corner. The channel row picks what it traces: **LUM** for brightness alone, **RGB** for the red, green and blue traces with brightness over them, or a single channel. Drag across a sky to see how evenly it falls off, along a face to see the light wrap around it, or across an edge to see how sharp the step is. The profile reads the frame on screen at its own size, so for the finest detail, such as a sharpening halo or single pixels of grain, zoom in: at a fitted view the frame holds fewer pixels than the photograph.
 
-Point at the plot and a ring marks that place on the path in the viewer; point along the path in the viewer and the plot marks it, while the readout gives how far along it is and its levels. Where the path crosses the empty edge of a warp, the trace breaks rather than dropping to black. The path reads the whole frame the other scopes read, including a probed node's output; the selection button is not there, since a path is not a region, and its three buttons sit in its place at the bottom left.
+Point at the plot and a ring marks that place on the path in the viewer; point along the path in the viewer and the plot marks it, while the readout gives how far along it is and its levels. Where the path crosses the empty edge of a warp, the trace breaks rather than dropping to black. The path reads the whole frame the other scopes read, including a probed node's output; the selection button is not there, since a path is not a region, and the path's buttons and radius sit in its place at the bottom left.
 
-The path is only a view: it is not part of the edit, so it never reaches a Take, the history or an export, and it stays put as you move between photographs so two can be read along the same path.
+The path, its radius and the band are only a view: they are not part of the edit, so they never reach a Take, the history or an export, and they stay put as you move between photographs so two can be read along the same path.
 
 ### Reading the histogram as ink
 

@@ -14,7 +14,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Command, CurveChannel, State } from "../state";
-import { activeSelectionMask } from "../state";
+import { PROFILE_RADIUS_MAX, activeSelectionMask } from "../state";
 import { useEngineMask } from "./selection";
 import { FIELD, selectionField } from "./selectionfield";
 import {
@@ -41,11 +41,13 @@ import {
   type Histogram,
   type SpectrumKind,
   lineProfile,
+  pathLength,
   pathStops,
   type Profile,
 } from "../spectrums";
 import { HARMONY_MODES, HARMONY_REACH, harmonyHues, hueDelta, type Harmony } from "../harmony";
-import { TrackSlider } from "./track";
+import { TrackSlider, ValueField } from "./track";
+import { framePhotoSize } from "./profileline";
 import { setUiPref, uiPref } from "../uiprefs";
 import { HarmonyIcon, SpectrumIcon } from "./panelicons";
 import { CHIP_METRICS, CHIP_METRICS_LARGE, ChannelChips } from "./channelchips";
@@ -602,6 +604,11 @@ function drawChroma(
  * harmony families cannot drift from the row above them.*/
 const CHIP_SIZE = CHIP_METRICS;
 
+/** The widest the Line Profile reads the frame, in pixels. */
+const PROFILE_SAMPLE = 4096;
+/** The most samples the Line Profile takes along its path. */
+const PROFILE_SAMPLES_MAX = 4000;
+
 /** Exposure-stop grid lines, on the waveform and the parade.
  *
  * A chip like the channel row's, accent-outlined when it is on, which
@@ -858,9 +865,10 @@ export function drawEvScale(
   ctx.restore();
 }
 
-/** The Line Profile's three tools, as pictures with their names on hover:
+/** The Line Profile's tools, as pictures with their names on hover:
  * Draw places a new path, Edit moves, adds and removes its points, Clear
- * takes it away. */
+ * takes it away, Band shows in red what the profile reads; then the
+ * radius of that band, a number that drags. */
 function ProfileChips({ state, dispatch, metrics = CHIP_SIZE }: { state: State; dispatch: D; metrics?: React.CSSProperties }) {
   const chip = { ...metrics, padding: "0 6px", display: "inline-flex", alignItems: "center", justifyContent: "center" };
   const glyph = { width: 13, height: 13, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true, focusable: false };
@@ -918,6 +926,42 @@ function ProfileChips({ state, dispatch, metrics = CHIP_SIZE }: { state: State; 
           <path d="M4 4l8 8M12 4l-8 8" />
         </svg>
       </button>
+      <button
+        className="chip"
+        data-testid="spectrum-profile-band"
+        data-active={state.profileBand}
+        aria-pressed={state.profileBand}
+        aria-label="Show the band"
+        data-tip="Show the band"
+        data-hint="Show in red what the profile reads: the path, and the radius each side of it"
+        style={chip}
+        onClick={() => dispatch({ type: "toggle_profile_band" })}
+      >
+        <svg {...glyph}>
+          <path d="M2 12l5-6 3 3 4-5" strokeWidth={4.5} strokeOpacity={0.4} />
+          <path d="M2 12l5-6 3 3 4-5" />
+        </svg>
+      </button>
+      <span
+        data-testid="spectrum-profile-radius-box"
+        data-tip="Radius"
+        style={{ ...metrics, width: 38, display: "inline-flex", alignItems: "center", border: "1px solid var(--line-4)", boxSizing: "border-box" }}
+      >
+        <ValueField
+          param="profile_radius"
+          testid="spectrum-profile-radius"
+          label="Radius each side of the path, in the photograph's pixels"
+          hint="How far each side of the path the profile reads, in the photograph's pixels: 0 reads the pixels under the path, 5 averages five either side. Drag sideways or type"
+          value={state.profileRadius}
+          lo={0}
+          hi={PROFILE_RADIUS_MAX}
+          step={1}
+          shiftStep={10}
+          align="center"
+          display={(v) => String(Math.round(v))}
+          onCommit={(v) => dispatch({ type: "set_profile_radius", radius: v })}
+        />
+      </span>
     </>
   );
 }
@@ -1015,7 +1059,10 @@ export function Spectrums({
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const size = useCrispCanvas(canvasRef);
-  const raw = usePixels(frame, state.previewNonce ?? 0, sample);
+  // The Line Profile reads the frame at its own size, up to a limit: the
+  // band it averages is measured in pixels, and a copy cut to the panel's
+  // width would already have blended a dozen of the photograph's into one.
+  const raw = usePixels(frame, state.previewNonce ?? 0, kind === "profile" ? Math.max(sample, PROFILE_SAMPLE) : sample);
   // The selection scope ("selection based spectrums... To
   // display histogram, RGB parade, waveform, etc data based on a
   // selected region only"). Everything outside the selection goes
@@ -1060,14 +1107,24 @@ export function Spectrums({
     [data, kind],
   );
 
-  // The Line Profile's samples: a few hundred along the line, at most
-  // one a pixel of the frame read.
+  // The Line Profile's samples: one a pixel of the frame read along the
+  // path, a few hundred at the least for a smooth plot, and the radius
+  // turned from the photograph's pixels into the frame's.
   const profile = useMemo<Profile | null>(
     // The whole frame, never the selection scope: this scope has no
     // selection button, so a region it was told of nowhere must not cut
     // its path.
-    () => (kind === "profile" && raw && state.profileLine ? lineProfile(raw, state.profileLine, 400) : null),
-    [kind, raw, state.profileLine],
+    () => {
+      if (kind !== "profile" || !raw || !state.profileLine) return null;
+      const n = Math.min(PROFILE_SAMPLES_MAX, Math.max(400, Math.round(pathLength(state.profileLine, raw.w, raw.h)) + 1));
+      // Worked out with each frame, so a photograph's size noted after the
+      // path was drawn still counts. Unknown, the frame's own pixels.
+      const across = state.profileRadius > 0 ? framePhotoSize(state)?.[0] : undefined;
+      const radius = state.profileRadius * (raw.w / (across ?? raw.w));
+      return lineProfile(raw, state.profileLine, n, radius);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [kind, raw, state.profileLine, state.profileRadius, state.nodes],
   );
 
   useEffect(() => {
