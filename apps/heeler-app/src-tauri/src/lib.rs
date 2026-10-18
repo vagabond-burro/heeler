@@ -11762,12 +11762,18 @@ pub(crate) fn gpu_tail_of(ui: &UiGraph) -> Option<(String, Vec<String>)> {
 
     // Zero-strength detail ops early-return the exact source in the
     // engine (verified by its identity tests), so they ride the tail as
-    // free identity passes. UI param names, since this walks the UI graph.
+    // free identity passes. The UI graph carries either name a param has
+    // (map_param): the panels send the registry's own (`intensity`,
+    // `amount`), older graphs the legacy one. Read by the legacy name
+    // alone, a grain or an Unsharp the panel set read as zero and was
+    // passed by, so with GPU previews on the canvas showed no grain
+    // while the thumbnail and the export had it (the owner, 2026-10-17,
+    // reopening the grain report).
     let zero_effect = |n: &UiNode| {
         let num = |k: &str| n.params.get(k).and_then(|v| v.as_f64()).unwrap_or(0.0);
         match n.node_type.as_str() {
-            "heeler.grain" => num("grain_amount") == 0.0,
-            "heeler.sharpen" => num("sharpening") == 0.0,
+            "heeler.grain" => num("intensity") == 0.0 && num("grain_amount") == 0.0,
+            "heeler.sharpen" => num("amount") == 0.0 && num("sharpening") == 0.0,
             "heeler.denoise" => num("strength") == 0.0,
             // Curves with no points on any channel is an exact identity;
             // channel arrays serialize as [[x,y],...], so no '[' means none.
@@ -35626,6 +35632,20 @@ mod tests {
         // output pass remains past it, and zero dispatches means no tail.
         ui.nodes[4].params.insert("grain_amount".into(), serde_json::json!(30.0));
         assert!(gpu_tail_of(&ui).is_none());
+
+        // The Grain panel sends the registry's own name, `intensity`: a
+        // grain set there is real too. Read by the legacy name alone it
+        // was passed by as zero, and the canvas showed no grain while the
+        // thumbnail and the export did (the owner, reopening the grain
+        // report, 2026-10-17).
+        ui.nodes[4].params.remove("grain_amount");
+        ui.nodes[4].params.insert("intensity".into(), serde_json::json!(55.0));
+        assert!(gpu_tail_of(&ui).is_none(), "a grain set from the panel ends the tail");
+        // Unsharp the same way: the Detail panel sends `amount`.
+        ui.nodes[4].params.insert("intensity".into(), serde_json::json!(0.0));
+        ui.nodes[3].params.insert("amount".into(), serde_json::json!(40.0));
+        let (_, tail) = gpu_tail_of(&ui).map_or((String::new(), Vec::new()), |t| t);
+        assert!(!tail.contains(&"sh".to_string()), "an Unsharp set from the panel is not passed by: {tail:?}");
     }
 
     #[test]
