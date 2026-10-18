@@ -601,6 +601,7 @@ export const CATEGORY_OF: Record<string, string> = Object.fromEntries(
  * toolNode for.*/
 export const TOOL_PIECES: Record<string, CategoryPiece> = {
   sharpen: { id: "sharpen", type: "heeler.sharpen", name: "Sharpen", cat: "detail" },
+  detaileq: { id: "detaileq", type: "heeler.detail_eq", name: "Detail Equalizer", cat: "detail" },
   denoise: { id: "denoise", type: "heeler.denoise", name: "Denoise", cat: "detail" },
   bw: { id: "bw", type: "heeler.black_white", name: "Black & White", cat: "color" },
 };
@@ -648,6 +649,8 @@ export const CHAIN_ORDER = [
   // Detail right after Color, which is where its dials ran while they
   // were Color's own.
   "detail",
+  // The Detail Equalizer right after Detail, the section it lives in.
+  "detaileq",
   "cbal",
   "exposure",
   // Directly after Exposure, which is where it was wired when it was

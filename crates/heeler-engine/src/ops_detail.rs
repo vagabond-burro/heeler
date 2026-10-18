@@ -651,7 +651,7 @@ fn soft_limit(raw: f32) -> f32 {
     soft_limit_at(raw, DETAIL_LIMIT_LIGHT, DETAIL_LIMIT)
 }
 
-fn soft_limit_at(raw: f32, up: f32, down: f32) -> f32 {
+pub(crate) fn soft_limit_at(raw: f32, up: f32, down: f32) -> f32 {
     let limit = if raw > 0.0 { up } else { down };
     raw / (1.0 + (raw / limit).abs())
 }
@@ -660,7 +660,7 @@ fn soft_limit_at(raw: f32, up: f32, down: f32) -> f32 {
 /// full-strength clarity at a hard synthetic edge lands on zero again,
 /// and zero is the black ring this rewrite exists to kill. 0.45 display
 /// is about -2.8 EV of local darkening at the absolute worst case.
-const DETAIL_DARK_FLOOR: f32 = 0.45;
+pub(crate) const DETAIL_DARK_FLOOR: f32 = 0.45;
 /// The guided filter's eps for the three boosts, in display luma units
 /// squared: what counts as texture to boost against what counts as an
 /// edge to stop at. Measured (halo_probe below, a 0.03 texture on

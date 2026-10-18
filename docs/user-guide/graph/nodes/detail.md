@@ -32,6 +32,17 @@ A standalone local contrast node with Texture, Clarity, and Local contrast, each
 
 Detail's Advanced weights are not part of this node. Zero on all three controls passes the image through unchanged.
 
+### Detail Equalizer (`heeler.detail_eq`)
+
+Raises or lowers contrast at five scales of detail, the node behind Detail's Equalizer fold.
+
+- **Menu:** Detail > Sharpen & Detail > Detail Equalizer.
+- **Ports:** rgb in, mask in, rgb out.
+- **Fine**, **Small**, **Medium**, **Large** and **Broad**, each from -100 to 100, finest first. Each band holds the detail between its neighbors' widths, which are shares of the frame, so the preview and the export treat the same structures.
+- **Shadows**, **Midtones**, **Highlights**, **Red**, **Green** and **Blue** weight every band together, from 0 to 200, as Detail's Advanced weights do.
+
+The bands come from the same edge-aware filter as Texture and Clarity, so a hard edge does not ring. Zero on all five bands passes the image through unchanged, whatever the weights.
+
 ### Sharpen (`heeler.sharpen`)
 
 Local contrast at the fine scale: the unsharp mask. Detail's Unsharp, Radius and Threshold rows build it on the first move.

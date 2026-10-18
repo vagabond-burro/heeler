@@ -685,6 +685,8 @@ fn margin(node: &Node, w: usize, h: usize) -> Option<(usize, usize)> {
                 let r = crate::ops_detail::detail_radii(short, [on("texture"), on("clarity"), local]).max().unwrap_or(0);
                 both(if r > 0 { 2 * r + 2 } else { 0 })
             }
+            // A guided filter per base up to the broadest band it changes.
+            "heeler.detail_eq" => both(crate::ops_detail_eq::reach(node, w, h)),
             // The guided base at Radius, and at the next whole box radius
             // to blend toward.
             "heeler.sharpen" => {
@@ -1296,6 +1298,8 @@ fn carry_slots(node: &Node) -> usize {
         "heeler.sharpen" => 3 * 2 * 4,
         // A guided_self of four passes per scale.
         "heeler.detail" | "heeler.standard_color" | "heeler.clarity" => 3 * 4,
+        // A guided_self per base, up to five.
+        "heeler.detail_eq" => 5 * 4,
         "heeler.tone_eq" | "heeler.recolor" => 4,
         "heeler.color_console" => 2,
         "heeler.measure" => 1,

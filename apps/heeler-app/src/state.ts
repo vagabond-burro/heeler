@@ -1297,6 +1297,7 @@ export function maskViewOverriddenBy(s: State): string | null {
   if (shown === mask || shown === null) return null;
   if (shown === "__depth__") return "View depth";
   if (shown === "__halation__") return "the halation view";
+  if (shown.startsWith("__detaileq__")) return "the band view";
   if (shown.startsWith("__collision__")) return "the separation view";
   if (shown.startsWith("__zones__")) return "the zone view";
   return null;
@@ -1339,11 +1340,21 @@ export function previewTarget(s: State): string | null {
     ? "__depth__"
     : s.halationView
       ? "__halation__"
-      : s.collisionView && treatmentOn(s)
-        ? `__collision__${collisionSuffix(s)}`
-        : s.zonesView
-          ? "__zones__"
-          : maskPreviewNode(s);
+      : detailEqViewOn(s)
+        ? `__detaileq__@${s.detailEqView!.band}@${s.detailEqView!.id}`
+        : s.collisionView && treatmentOn(s)
+          ? `__collision__${collisionSuffix(s)}`
+          : s.zonesView
+            ? "__zones__"
+            : maskPreviewNode(s);
+}
+
+/** Whether the Detail Equalizer's band view has a node to show: one in
+ * the graph and switched on. A view left up for a node that went away
+ * renders the plain frame. */
+export function detailEqViewOn(s: State): boolean {
+  const v = s.detailEqView;
+  return !!v && s.nodes.some((n) => n.id === v.id && n.type === "heeler.detail_eq" && n.enabled);
 }
 
 /** Whether the black and white treatment is on: the conversion exists,
@@ -1373,7 +1384,7 @@ const CSET_MASK = /^cset(\d+)_mask$/;
  * the user presses it (or its mask leaves the graph); no other
  * control, the Depth mask switch, its Levels, its depth eye, puts it
  * down.*/
-export const MASK_EYE_TAKES_FRAME = { depthView: false, halationView: false, collisionView: false, zonesView: false } as const;
+export const MASK_EYE_TAKES_FRAME = { depthView: false, halationView: false, collisionView: false, zonesView: false, detailEqView: null } as const;
 
 /** The mask view switched on for one mask: a set's by its eye, a
  * layer's (Develop or Finish) by the layer mask view. */
@@ -2261,6 +2272,7 @@ export const NEUTRAL_PARAMS: Record<string, Record<string, number>> = {
     blacks: 0,
   },
   "heeler.sharpen": { amount: 0, radius: 1, threshold: 0 },
+  "heeler.detail_eq": { fine: 0, small: 0, medium: 0, large: 0, broad: 0, shadows: 100, midtones: 100, highlights: 100, red: 100, green: 100, blue: 100 },
   "heeler.levels": { black: 0, white: 1, gamma: 1, black_soft: 0, white_soft: 0 },
   "heeler.grain": {
     intensity: 0,
@@ -4022,6 +4034,9 @@ export interface State {
   filePasses: { image: string; passes: FilePasses | null } | null;
   /** Halation's isolated-regions view: the gated source as the frame */
   halationView: boolean;
+  /** The Detail Equalizer's band view: one band of one node's input,
+   * alone, as gray texture, or null. View state like halationView. */
+  detailEqView: { id: string; band: number } | null;
   /** The Depth Lighting rig's viewport handles are up. */
   keyLightPick: boolean;
   /** The Color Checker's chart overlay is up, waiting on quad drags
@@ -5062,6 +5077,9 @@ export type Command =
   | { type: "depth_settled" }
   | { type: "file_passes_known"; image: string; passes: FilePasses | null }
   | { type: "toggle_halation_view" }
+  /** Show one band (1 finest to 5 broadest) of a Detail Equalizer as
+   * the frame; the same band again puts it down. */
+  | { type: "toggle_detail_eq_view"; id: string; band: number }
   /** a lens character: one preset written across the optical sections
    * in one step*/
   | { type: "apply_lens_character"; id: string }
@@ -6698,6 +6716,12 @@ export const LAYER_TOOLS: Record<
     name: "Sharpen",
     cat: "detail",
     params: { amount: 0, radius: 1, threshold: 0 },
+  },
+  detaileq: {
+    type: "heeler.detail_eq",
+    name: "Detail Equalizer",
+    cat: "detail",
+    params: { ...NEUTRAL_PARAMS["heeler.detail_eq"] },
   },
   denoise: {
     type: "heeler.denoise",
@@ -12295,6 +12319,11 @@ export function visibleImages(s: State): ImageEntry[] {
  * linear mask's angle is a full rotation, not crop's ±45 straighten.
  * Mirrors the registry's per-node clamps. */
 const PARAM_RANGE_BY_TYPE: Record<string, Record<string, [number, number]>> = {
+  // The Detail Equalizer's bands and its six weights, Texture's units.
+  "heeler.detail_eq": {
+    fine: [-100, 100], small: [-100, 100], medium: [-100, 100], large: [-100, 100], broad: [-100, 100],
+    shadows: [0, 200], midtones: [0, 200], highlights: [0, 200], red: [0, 200], green: [0, 200], blue: [0, 200],
+  },
   // Transform's size is a percentage that can go past the frame; the
   // shared `size` is grain's, in a smaller unit.
   "heeler.transform": { size: [1, 400] },
@@ -18057,7 +18086,7 @@ function reduceInner(s: State, cmd: Command): State {
     // The zone views are frame views like the depth eye, one at a time
     // with it; the hover is session state the ruler writes.
     case "toggle_zones_view":
-      return { ...s, zonesView: !s.zonesView, depthView: false, halationView: false, collisionView: false };
+      return { ...s, zonesView: !s.zonesView, depthView: false, halationView: false, collisionView: false, detailEqView: null };
     case "set_zone_hover":
       return s.zoneHover === cmd.zone ? s : { ...s, zoneHover: cmd.zone };
     // Choosing a zone on the ruler arms the placement with it; choosing
@@ -18732,7 +18761,7 @@ function reduceInner(s: State, cmd: Command): State {
     // color grader: "you can view the scene as a depth map"). Session state
     // like maskView, never saved.
     case "toggle_depth_view": {
-      const views = { halationView: false, collisionView: false, zonesView: false };
+      const views = { halationView: false, collisionView: false, zonesView: false, detailEqView: null };
       if (cmd.mask && cmd.flavor) {
         // 2026-09-29: "when holding a modifier and you click it shows the red
         // overlay like what masks on the Finish layers can do to review the
@@ -18758,7 +18787,7 @@ function reduceInner(s: State, cmd: Command): State {
     // The separation view: one frame view at a time, like the two
     // beside it.
     case "toggle_collision_view":
-      return { ...s, collisionView: !s.collisionView, depthView: false, halationView: false, zonesView: false };
+      return { ...s, collisionView: !s.collisionView, depthView: false, halationView: false, zonesView: false, detailEqView: null };
     case "set_collision_tolerance":
       return { ...s, collisionTolerance: Math.max(0, Math.min(COLLISION_TOLERANCE_MAX, Math.round(cmd.percent))) };
     case "recompute_depth":
@@ -18775,7 +18804,19 @@ function reduceInner(s: State, cmd: Command): State {
         ? s
         : { ...s, filePasses: { image: cmd.image, passes: cmd.passes } };
     case "toggle_halation_view":
-      return { ...s, halationView: !s.halationView, depthView: false, collisionView: false, zonesView: false };
+      return { ...s, halationView: !s.halationView, depthView: false, collisionView: false, zonesView: false, detailEqView: null };
+    // One frame view at a time, like the ones above.
+    case "toggle_detail_eq_view": {
+      const same = s.detailEqView?.id === cmd.id && s.detailEqView.band === cmd.band;
+      return {
+        ...s,
+        detailEqView: same ? null : { id: cmd.id, band: Math.max(1, Math.min(5, Math.round(cmd.band))) },
+        depthView: false,
+        halationView: false,
+        collisionView: false,
+        zonesView: false,
+      };
+    }
     // Find a Control: the Help-menu search. flash_control marks the
     // landing so the row wears the keyboard navigator's gold outline
     // for a beat; the panel clears it after the glance.

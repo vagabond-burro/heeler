@@ -37,12 +37,12 @@ describe("Detail review contracts", () => {
   expect(toolNode(s, "detail")!.params.clarity).toBe(-25);
   for (const i of [1, 2]) expect(s.wires).toContainEqual({ from: `layer_${i}_mask`, to: `layer_${i}_detail`, toPort: "mask", kind: "mask" });
  });
- it("the switch reaches all three nodes on Base and a layer", () => {
+ it("the switch reaches all four nodes on Base and a layer", () => {
   for (const layered of [false, true]) {
    let s = run(fresh(), { type: "set_category", title: "Detail", on: true }); if (layered) s = run(s, { type: "add_layer", maskType: "range" });
-   for (const [tool, param] of [["detail", "texture"], ["sharpen", "amount"], ["denoise", "strength"]] as const) s = run(s, { type: "set_param", id: toolNode(s, tool)?.id ?? tool, param, value: 25 });
+   for (const [tool, param] of [["detail", "texture"], ["sharpen", "amount"], ["denoise", "strength"], ["detaileq", "fine"]] as const) s = run(s, { type: "set_param", id: toolNode(s, tool)?.id ?? tool, param, value: 25 });
    const sec = SECTIONS.find(s => s.title === "Detail")!;
-   const ids = [sec.node(s), ...(sec.alsoToggles?.(s) ?? [])].map(n => n!.id); expect(ids).toHaveLength(3);
+   const ids = [sec.node(s), ...(sec.alsoToggles?.(s) ?? [])].map(n => n!.id); expect(ids).toHaveLength(4);
    let current = s;
    function Harness() { const [state, dispatch] = React.useReducer(reduce, s); current = state; return <SimplePanel state={state} dispatch={dispatch} />; }
    const view = render(<Harness />);

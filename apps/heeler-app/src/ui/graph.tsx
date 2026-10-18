@@ -2970,6 +2970,7 @@ const FLAG_LABELS: Record<string, string> = {
 const DEVELOP_PARAM_LABELS: Record<string, Record<string, string>> = {
   "heeler.vignette": { vignette: "Amount", vignette_mid: "Midpoint", softness: "Softness" },
   "heeler.sharpen": { amount: "Unsharp", radius: "Radius", threshold: "Threshold" },
+  "heeler.detail_eq": { fine: "Fine", small: "Small", medium: "Medium", large: "Large", broad: "Broad", shadows: "Shadows", midtones: "Midtones", highlights: "Highlights", red: "Red", green: "Green", blue: "Blue" },
   "heeler.grain": {
     intensity: "Grain amount", size: "Grain size",
     shadows_gain: "Shadow grain", midtones_gain: "Midtone grain", highlights_gain: "Highlight grain",

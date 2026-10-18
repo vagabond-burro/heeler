@@ -117,6 +117,10 @@
     "in": "image",
     "mask": "mask"
   },
+  "heeler.detail_eq": {
+    "in": "image",
+    "mask": "mask"
+  },
   "heeler.displacement_map": {
     "in": "image",
     "x": "mask",

@@ -1369,6 +1369,7 @@ export function App() {
         maskView: state.maskView,
         depthView: state.depthView,
         halationView: state.halationView,
+        detailEqView: state.detailEqView,
         collisionView: state.collisionView,
         collisionTolerance: state.collisionTolerance,
         bwSeparate: state.bwSeparate,
@@ -1865,6 +1866,7 @@ export function App() {
     // report: "View Depth was not working on any of them").
     state.depthView,
     state.halationView,
+    state.detailEqView,
     state.collisionView,
     // The view's Tolerance dial rides in the target, so it is a frame
     // change too (2026-09-15: "Tolerance slider doesn't change

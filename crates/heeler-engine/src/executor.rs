@@ -286,6 +286,10 @@ pub(crate) fn workspace(node: &Node) -> usize {
         // radius), Grain 3.0. The model's denoise is not measured yet: it
         // reads a planted answer.
         "heeler.sharpen" | "heeler.clarity" | "heeler.blur" | "heeler.grain" | "heeler.model_denoise" => 4,
+        // The luma, two bases, the summed change and a guided filter's
+        // planes, about a frame and a half beside the output; not
+        // measured yet, so a frame of slack on top.
+        "heeler.detail_eq" => 4,
         // NLM 1.75, Tone EQ 1.5, Recolor 1.25.
         "heeler.nlm_denoise" | "heeler.tone_eq" | "heeler.recolor" => 3,
         // Flare 0.25, Denoise 1.0, High Pass 1.0.

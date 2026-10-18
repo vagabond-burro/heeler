@@ -417,7 +417,7 @@ exists.
 **Built 2026-09-28** (first version; the owner asked for it the same day, and
 for first-class graph coverage: "I think guided tours will be really
 helpful for node graphs").
-- The stop list (src/tourstops.ts): 815 stops, generated where the app
+- The stop list (src/tourstops.ts): 820 stops, generated where the app
   has a definition to read (the workspaces, PANEL_TABS, every SECTIONS
   section with its switch and rows, the export sizes, the crop ratios,
   the Preferences pages, and in the graph every palette node: adding

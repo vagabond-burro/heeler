@@ -2741,6 +2741,14 @@ fn collision_view_terminal(graph: &UiGraph) -> Option<String> {
         .map(|c| c.from.0.clone())
 }
 
+/// The band and node of a Detail Equalizer band view's target,
+/// "__detaileq__@band@node".
+fn detail_eq_view_target(target: &str) -> Option<(usize, String)> {
+    let (band, id) = target.strip_prefix("__detaileq__@")?.split_once('@')?;
+    let band = band.parse::<usize>().ok().filter(|b| (1..=5).contains(b))?;
+    (!id.is_empty()).then(|| (band, id.to_string()))
+}
+
 fn halation_view_terminal(graph: &UiGraph) -> Option<String> {
     let terminal = terminal_of(graph)?;
     let registry = Registry::builtin();
@@ -8548,7 +8556,7 @@ fn apply_ui_params(node: &mut heeler_graph::Node, node_type: &str, params: &Hash
         // Render metadata is not a customer control and therefore
         // has no registry dial. Do not discard it with unknown UI
         // parameters: the radius and ROI ops consume it directly.
-        let frame_roi = matches!(node_type, "heeler.detail" | "heeler.clarity" | "heeler.standard_color"
+        let frame_roi = matches!(node_type, "heeler.detail" | "heeler.clarity" | "heeler.standard_color" | "heeler.detail_eq"
             | "heeler.dof" | "heeler.fog" | "heeler.key_light" | "heeler.grain" | "heeler.noise"
             | "heeler.color_console" | "heeler.recolor")
             && matches!(k.as_str(), "roi_x" | "roi_y" | "roi_w" | "roi_h");
@@ -12676,6 +12684,7 @@ fn inject_roi_sized(ui: &UiGraph, r: [f64; 4], frame: Option<(f64, f64)>) -> Opt
                     | "heeler.detail"
                     | "heeler.clarity"
                     | "heeler.standard_color"
+                    | "heeler.detail_eq"
                     // Color Tune's and Recolor's lookup smoothing (and
                     // Recolor's Around field) are shares of the frame's
                     // short side too (the 26.3.2 Color Tune review).
@@ -12851,6 +12860,13 @@ fn clone_reach(ui: &UiGraph, frame: Option<(f64, f64)>) -> (f64, f64) {
                     let on = |k: &str| num(k, 0.0) != 0.0;
                     let local = n.node_type == "heeler.clarity" && on("local_contrast");
                     heeler_engine::detail_reach(short as f32, [on("texture"), on("clarity"), local]) as f64
+                }
+                // The Detail Equalizer's bases up to the broadest band it
+                // changes, or the band its view shows.
+                "heeler.detail_eq" => {
+                    let view = n.params.get("view").and_then(|v| v.as_str()).and_then(|v| v.strip_prefix("band:")).and_then(|k| k.parse::<usize>().ok()).unwrap_or(0);
+                    let moved = heeler_engine::DETAIL_EQ_BANDS.iter().rposition(|b| num(b, 0.0) != 0.0).map_or(0, |k| k + 1);
+                    heeler_engine::detail_eq_reach(short as f32, if view > 0 { view } else { moved }) as f64
                 }
                 // The hue lookup is box-smoothed over Smoothing's share of
                 // the short side (2% at 100); Recolor's Around field
@@ -17774,6 +17790,21 @@ fn render_preview_attempt(
     let full = full_res == Some(true);
     // The settle: the whole frame at full resolution, no slice.
     let settle = full && roi.is_none();
+    // The Detail Equalizer's band view, "__detaileq__@band@node": that
+    // node shows one band of its input as the frame. View state only:
+    // the flag rides this render's own copy of the graph, set before a
+    // 1:1 slice is cut so the slice's margin reads the band's reach.
+    let detail_eq_view = mask_node.as_deref().and_then(detail_eq_view_target).filter(|(_, id)| graph.nodes.iter().any(|n| &n.id == id && n.node_type == "heeler.detail_eq" && n.enabled));
+    let graph = match &detail_eq_view {
+        Some((band, id)) => {
+            let mut ui = graph.clone();
+            for n in ui.nodes.iter_mut().filter(|n| &n.id == id) {
+                n.params.insert("view".into(), serde_json::json!(format!("band:{band}")));
+            }
+            ui
+        }
+        None => graph,
+    };
     let (graph, mut roi_rect) = if full && roi.is_some() {
         match valid_roi(roi) {
             // The rect the patch actually covers comes back from the
@@ -17934,7 +17965,8 @@ fn render_preview_attempt(
         .as_deref()
         .map(collision_target)
         .unwrap_or((None, heeler_engine::GRAY_NEAR_DEFAULT));
-    let mask_node = if depth_view || halation_view || collision_view || zones_view { None } else { mask_node };
+    let band_view = mask_node.as_deref().map(|m| m.starts_with("__detaileq__")).unwrap_or(false);
+    let mask_node = if depth_view || halation_view || collision_view || zones_view || band_view { None } else { mask_node };
     let mask_terminal_for = |roi_rect: &mut Option<[f64; 4]>| -> Result<Option<String>, String> {
         match &mask_node {
             Some(id) if g.nodes().any(|n| &n.id == id) => {
@@ -17966,6 +17998,9 @@ fn render_preview_attempt(
         (Some(mt), false) => mt.clone(),
         // Halation's view: the halation node IS the frame.
         _ if halation_terminal.is_some() => halation_terminal.clone().unwrap(),
+        // The band view: the equalizer IS the frame, so nothing after
+        // it grades the gray.
+        _ if detail_eq_view.as_ref().is_some_and(|(_, id)| g.nodes().any(|n| &n.id == id)) => detail_eq_view.as_ref().unwrap().1.clone(),
         // Overlay (or no mask): the photograph is the frame; the mask
         // renders separately below and tints it.
         _ => terminal_of(&graph).ok_or("empty graph")?,
@@ -19997,6 +20032,7 @@ fn upstream_of(ui: &UiGraph, node_id: &str) -> std::collections::HashSet<String>
 /// these is refused with words rather than baked into nonsense.
 const LUT_SPATIAL_TYPES: &[&str] = &[
     "heeler.detail",
+    "heeler.detail_eq",
     "heeler.blur",
     "heeler.high_pass",
     "heeler.sharpen",
@@ -24656,6 +24692,50 @@ mod tests {
             ui.nodes[1].params = HashMap::from([("dehaze".into(), serde_json::json!(50))]);
             assert_eq!(inject_roi_px(&ui, patch, Some(4000.0)).unwrap().1, patch, "{kind}: dehaze reads no neighbors");
         }
+    }
+
+    /// The Detail Equalizer's bands are shares of the frame like Texture's:
+    /// the slice hands it its rect and grows by the broadest band it
+    /// changes, or by the band its view shows, the engine's reach.
+    #[test]
+    fn the_detail_equalizer_rides_the_slice_with_its_margin() {
+        let mut ui = UiGraph {
+            graph_id: "eq_roi".into(),
+            nodes: vec![
+                UiNode { id: "src".into(), node_type: "heeler.image_source".into(), enabled: true, params: HashMap::new() },
+                UiNode { id: "effect".into(), node_type: "heeler.detail_eq".into(), enabled: true, params: HashMap::new() },
+                UiNode { id: "output".into(), node_type: "heeler.output".into(), enabled: true, params: HashMap::new() },
+            ],
+            connections: vec![
+                UiConnection { from: ("src".into(), "out".into()), to: ("effect".into(), "in".into()) },
+                UiConnection { from: ("effect".into(), "out".into()), to: ("output".into(), "in".into()) },
+            ],
+        };
+        let patch = [0.25, 0.25, 0.2, 0.2];
+        let (plain, rect) = inject_roi_px(&ui, patch, Some(4000.0)).unwrap();
+        assert_eq!(rect, patch, "an idle equalizer grows nothing");
+        assert_eq!(plain.nodes[1].params.get("roi_w").and_then(|v| v.as_f64()), Some(0.2));
+        for (k, band) in heeler_engine::DETAIL_EQ_BANDS.iter().enumerate() {
+            ui.nodes[1].params = HashMap::from([((*band).into(), serde_json::json!(40))]);
+            let (_, grown) = inject_roi_px(&ui, patch, Some(4000.0)).unwrap();
+            // Broad reaches past the patch's quarter of the frame, so the
+            // slice stops at the frame's edge.
+            let expect = (heeler_engine::detail_eq_reach(4000.0, k + 1) as f64).min(patch[0]);
+            assert!((patch[0] - grown[0] - expect).abs() < 1e-6, "{band}: grew {} against {expect}", patch[0] - grown[0]);
+        }
+        ui.nodes[1].params = HashMap::from([("fine".into(), serde_json::json!(40)), ("view".into(), serde_json::json!("band:4"))]);
+        let (_, grown) = inject_roi_px(&ui, patch, Some(4000.0)).unwrap();
+        assert!((patch[0] - grown[0] - heeler_engine::detail_eq_reach(4000.0, 4) as f64).abs() < 1e-6, "the view's band sets the margin");
+        let g = build_graph(&ui, &Registry::builtin()).unwrap();
+        assert_eq!(g.node("effect").unwrap().params.get("view").and_then(|v| v.as_str()), Some("band:4"));
+    }
+
+    #[test]
+    fn a_band_view_target_names_its_band_and_node() {
+        assert_eq!(detail_eq_view_target("__detaileq__@3@layer_2_detaileq"), Some((3, "layer_2_detaileq".to_string())));
+        assert_eq!(detail_eq_view_target("__detaileq__@6@detaileq"), None);
+        assert_eq!(detail_eq_view_target("__detaileq__@2@"), None);
+        assert_eq!(detail_eq_view_target("__halation__"), None);
     }
 
     #[test]

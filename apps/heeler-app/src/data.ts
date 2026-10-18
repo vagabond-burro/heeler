@@ -981,6 +981,7 @@ export function initialState(): State {
     depthRecompute: null,
     filePasses: null,
     halationView: false,
+    detailEqView: null,
     keyLightPick: false,
     chartPlace: false,
     keyLightSel: null,

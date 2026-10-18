@@ -422,6 +422,7 @@ pub fn execute(node: &Node, inputs: &[(String, Value)]) -> Result<Value, EngineE
         "heeler.black_white" => black_white(node, inputs),
         "heeler.sharpen" => crate::ops_detail::sharpen(node, inputs),
         "heeler.clarity" => crate::ops_detail::clarity(node, inputs),
+        "heeler.detail_eq" => crate::ops_detail_eq::detail_eq(node, inputs),
         "heeler.lens_correct" => crate::ops_lens::lens_correct(node, inputs),
         "heeler.gamut_map" => crate::ops_grade::gamut_map(node, inputs),
         "heeler.view_transform" => crate::ops_view::view_transform(node, inputs),

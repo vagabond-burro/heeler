@@ -76,6 +76,7 @@ import {
   paramRange,
   clampBlurStrength,
   toolNode,
+  detailEqViewOn,
   visiblePanelTabs,
   sectionExportId,
   artLayers,
@@ -3478,6 +3479,145 @@ export function DetailAdvanced({
   );
 }
 
+
+/** The Detail Equalizer's five bands, finest first, and what each holds. */
+export const DETAIL_EQ_BANDS: [string, string, string][] = [
+  ["fine", "Fine", "The finest texture: pores, grain, fabric weave, noise"],
+  ["small", "Small", "Small detail: leaves, hair, feathers, gravel"],
+  ["medium", "Medium", "Medium structure: branches, rocks, facial features"],
+  ["large", "Large", "Large forms: buildings, hillsides, clouds"],
+  ["broad", "Broad", "Broad shapes: the light across whole areas of the frame"],
+];
+
+/** Every param the Detail Equalizer sub-section writes, space-separated,
+ * for the face's data-params. */
+export const DETAIL_EQ_PARAMS = [...DETAIL_EQ_BANDS.map(([p]) => p), ...DETAIL_WEIGHTS.map(([w]) => w)].join(" ");
+
+/** The strip above the band sliders: each band's setting as a point on
+ * a line from fine to broad, raised above the middle or lowered below
+ * it, so the five read as one curve at a glance. */
+function DetailEqStrip({ node, width }: { node: NodeCard; width: number }) {
+  const h = 44;
+  const pad = 10;
+  const xs = DETAIL_EQ_BANDS.map((_, i) => pad + (i * (width - 2 * pad)) / 4);
+  const ys = DETAIL_EQ_BANDS.map(([p]) => h / 2 - ((node.params[p] ?? 0) / 100) * (h / 2 - 5));
+  const path = xs.map((x, i) => `${i ? "L" : "M"}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(" ");
+  return (
+    <svg width={width} height={h + 12} data-testid="detail-eq-strip" aria-hidden="true" style={{ display: "block" }}>
+      <line x1={pad} x2={width - pad} y1={h / 2} y2={h / 2} stroke="var(--line-4)" strokeDasharray="2 3" />
+      <path d={path} fill="none" stroke="var(--accent)" strokeWidth={1.5} />
+      {xs.map((x, i) => (
+        <g key={i}>
+          <circle cx={x} cy={ys[i]} r={2.5} fill="var(--accent)" />
+          <text x={x} y={h + 10} fontSize={8} textAnchor="middle" fill="var(--text-ghost)">
+            {DETAIL_EQ_BANDS[i][1]}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+/** The Detail Equalizer, a fold of its own inside Detail: contrast raised
+ * or lowered at five scales of detail, each band with an eye that shows
+ * that band alone on the canvas, and the six weights Texture has, shared
+ * by every band. Its node (heeler.detail_eq) is built on the first band
+ * or weight that moves, right after the Detail node, the way Unsharp
+ * builds Sharpen; it follows the selected layer like the rest of Detail. */
+export function DetailEqualizer({ state, dispatch, width }: { state: State; dispatch: D; width: number }) {
+  const [open, setOpen] = useState(false);
+  const [weightsOpen, setWeightsOpen] = useState(false);
+  const node = toolNode(state, "detaileq");
+  if (!node) return null;
+  const built = state.nodes.some((n) => n.id === node.id);
+  const moved = DETAIL_EQ_BANDS.filter(([p]) => (node.params[p] ?? 0) !== 0).length;
+  const weighted = DETAIL_WEIGHTS.some(([w]) => (node.params[w] ?? 100) !== 100);
+  const view = state.detailEqView?.id === node.id && detailEqViewOn(state) ? state.detailEqView.band : null;
+  return (
+    <div style={{ marginTop: 8 }} data-testid="detail-eq" data-params={DETAIL_EQ_PARAMS}>
+      <button
+        className="chip"
+        data-testid="detail-eq-toggle"
+        data-active={open}
+        data-hint="Raise or lower contrast at five scales of detail, from the finest texture to broad shapes"
+        style={{ fontSize: 9, padding: "2px 8px", letterSpacing: ".08em", display: "flex", alignItems: "center", gap: 6 }}
+        onClick={() => setOpen(!open)}
+      >
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" style={{ transform: open ? "rotate(90deg)" : "none" }}>
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+        EQUALIZER
+        {moved > 0 && (
+          <span style={{ color: "var(--accent)" }} data-testid="detail-eq-badge">
+            {moved}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div style={{ marginTop: 7 }}>
+          <DetailEqStrip node={node} width={Math.max(200, width - 24)} />
+          {DETAIL_EQ_BANDS.map(([p, label, tip], i) => (
+            <div key={p} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Slider label={label} param={p} node={node} dispatch={dispatch} tip={tip} />
+              </div>
+              <button
+                className="chip"
+                data-testid={`detail-eq-view-${p}`}
+                data-active={view === i + 1}
+                disabled={!built}
+                aria-label={`View the ${label} band`}
+                data-tip={`View the ${label} band`}
+                data-hint={
+                  built
+                    ? `Show only the ${label.toLowerCase()} band's detail, as gray texture`
+                    : "Move a band first: the view shows the equalizer's own bands"
+                }
+                style={{ padding: "2px 6px", display: "inline-flex", opacity: built ? 1 : 0.4 }}
+                onClick={() => dispatch({ type: "toggle_detail_eq_view", id: node.id, band: i + 1 })}
+              >
+                <MaskEyeIcon />
+              </button>
+            </div>
+          ))}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0 4px" }}>
+            <button
+              className="chip"
+              data-testid="detail-eq-weights-toggle"
+              data-active={weightsOpen}
+              data-hint="Weight the equalizer by tonal band and by channel"
+              style={{ fontSize: 9, padding: "1px 7px", letterSpacing: ".08em" }}
+              onClick={() => setWeightsOpen(!weightsOpen)}
+            >
+              WEIGHTS{weighted ? " \u2022" : ""}
+            </button>
+            {weightsOpen && (
+              <button
+                className="chip"
+                data-testid="detail-eq-weights-reset"
+                data-hint="Put the equalizer's weights back to even"
+                style={{ fontSize: 9, padding: "1px 7px", marginLeft: "auto" }}
+                onClick={() =>
+                  dispatch({ type: "set_params", id: node.id, values: Object.fromEntries(DETAIL_WEIGHTS.map(([w]) => [w, 100])) })
+                }
+              >
+                Even
+              </button>
+            )}
+          </div>
+          {weightsOpen &&
+            DETAIL_WEIGHTS.map(([w, label]) => (
+              <Slider key={w} label={label} param={w} node={node} dispatch={dispatch} centered={false} />
+            ))}
+          <div style={{ fontSize: 9, color: "var(--text-ghost)", marginTop: 6, lineHeight: 1.5 }}>
+            Raise a band to bring out detail at that scale, lower it to soften it. -100 takes the band out.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface SectionSpec {
   title: string;
   /** Which layer tool this section edits. Present means the section
@@ -3570,6 +3710,8 @@ interface SectionSpec {
   /** Detail hosts the per-band and per-channel weighting for texture,
    * clarity and dehaze. */
   detailAdvanced?: boolean;
+  /** Draw the Detail Equalizer's fold after the rows. */
+  detailEq?: boolean;
 }
 
 /** The Source section's controls are not rows: they hang off the tone
@@ -4567,9 +4709,10 @@ export const SECTIONS: SectionSpec[] = [
     layerTool: "detail",
     node: (s) => toolNode(s, "detail"),
     detailAdvanced: true,
-    // Unsharp and Smoothing are their own nodes, so the section switch
-    // has to reach them as well.
-    alsoToggles: (s) => [toolNode(s, "sharpen"), toolNode(s, "denoise")],
+    detailEq: true,
+    // Unsharp, Smoothing and the Equalizer are their own nodes, so the
+    // section switch has to reach them as well.
+    alsoToggles: (s) => [toolNode(s, "sharpen"), toolNode(s, "denoise"), toolNode(s, "detaileq")],
     rows: [
       { label: "Texture", param: "texture" },
       { label: "Clarity", param: "clarity" },
@@ -6483,6 +6626,12 @@ consistency)."*/}
                       });
                       if (state.chartPlace) dispatch({ type: "toggle_chart_place", id: node.id });
                     }
+                    if (sec.detailEq) {
+                      // The Equalizer's bands and weights live off-row.
+                      const eq = toolNode(state, "detaileq");
+                      if (eq && state.nodes.some((n) => n.id === eq.id))
+                        dispatch({ type: "set_params", id: eq.id, values: { ...NEUTRAL_PARAMS["heeler.detail_eq"] } });
+                    }
                     if (sec.detailAdvanced) {
                       dispatch({
                         type: "set_params",
@@ -7089,6 +7238,7 @@ menu"). The graph inspector's Source node draws the same rows.*/}
                     const n = sec.node(state);
                     return n ? <StreakRibbon state={state} dispatch={dispatch} node={n} /> : null;
                   })()}
+                {sec.detailEq && <DetailEqualizer state={state} dispatch={dispatch} width={width ?? 320} />}
                 {sec.zonesWidget && <ZonesBlock state={state} dispatch={dispatch} frame={frame} />}
                 {sec.printWidget && <PrintControls node={node} dispatch={dispatch} />}
                 {sec.grainFilmWidget && <GrainFrameRow grain={node} dispatch={dispatch} />}

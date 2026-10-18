@@ -475,6 +475,32 @@ impl Registry {
             outputs: vec![image_out()],
         });
 
+        // Detail Equalizer: contrast at five scales of detail, finest
+        // first, with Texture's six weights shared by every band. `view`
+        // is a band preview's ("band:1" to "band:5"), set by the desktop
+        // for that render alone.
+        add(NodeSpec {
+            type_name: "heeler.detail_eq".into(),
+            version: 1,
+            label: "Detail Equalizer".into(),
+            params: vec![
+                num("fine", 0.0, -100.0, 100.0),
+                num("small", 0.0, -100.0, 100.0),
+                num("medium", 0.0, -100.0, 100.0),
+                num("large", 0.0, -100.0, 100.0),
+                num("broad", 0.0, -100.0, 100.0),
+                num("shadows", 100.0, 0.0, 200.0),
+                num("midtones", 100.0, 0.0, 200.0),
+                num("highlights", 100.0, 0.0, 200.0),
+                num("red", 100.0, 0.0, 200.0),
+                num("green", 100.0, 0.0, 200.0),
+                num("blue", 100.0, 0.0, 200.0),
+                text("view", ""),
+            ],
+            inputs: vec![image_in(), mask_in()],
+            outputs: vec![image_out()],
+        });
+
         add(NodeSpec {
             type_name: "heeler.grain".into(),
             version: 1,
@@ -2939,6 +2965,7 @@ mod tests {
             "heeler.color_balance",
             "heeler.sharpen",
             "heeler.clarity",
+            "heeler.detail_eq",
             "heeler.grain",
             "heeler.noise",
             "heeler.channel_gain",

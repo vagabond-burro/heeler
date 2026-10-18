@@ -1549,12 +1549,13 @@ describe("a reset photograph runs only what it needs", () => {
     // (2026-09-07). "modeldenoise", Noise Reduction's Model method, is the
     // same kind of Pro node, built when the Method is chosen (2026-09-09).
     // The Color Checker (26.3 Phase 11) is in the sample graph, switched off,
-    // the way Depth Map is.
+    // the way Depth Map is. "detaileq", the Detail Equalizer, is built on its
+    // first change like Sharpen, and the sample's demo edit does not use it.
     const { SAMPLE_NODES } = await import("../data");
     const { CATEGORY_PIECES } = await import("../recipes");
     const { MODEL_DENOISE_ID } = await import("../state");
     const ids = new Set(SAMPLE_NODES.map((n) => n.id));
-    for (const id of CHAIN_ORDER.filter((c) => c !== "art" && c !== "gridwarp" && c !== "shapewarp" && c !== MODEL_DENOISE_ID))
+    for (const id of CHAIN_ORDER.filter((c) => c !== "art" && c !== "gridwarp" && c !== "shapewarp" && c !== "detaileq" && c !== MODEL_DENOISE_ID))
       expect(ids.has(id), `${id} is not a node`).toBe(true);
     expect(CHAIN_ORDER.indexOf(MODEL_DENOISE_ID)).toBe(CHAIN_ORDER.indexOf("src") + 1);
     expect(CATEGORY_PIECES["Grid Warp"][0].id).toBe("gridwarp");

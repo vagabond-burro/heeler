@@ -103,7 +103,7 @@ pub fn class_of(node: &Node) -> Option<BandClass> {
         // Running sums down whole columns, directly or through the guided
         // filters and the illuminance estimate built on them.
         "heeler.tone_eq" | "heeler.color_console" | "heeler.recolor" | "heeler.measure" | "heeler.sharpen"
-        | "heeler.clarity" | "heeler.detail" | "heeler.guided_filter" | "heeler.guided_filter_mask"
+        | "heeler.clarity" | "heeler.detail" | "heeler.detail_eq" | "heeler.guided_filter" | "heeler.guided_filter_mask"
         | "heeler.black_white" => Carried,
 
         "heeler.crop_rotate" | "heeler.perspective" | "heeler.transform" | "heeler.grid_warp"

@@ -197,6 +197,19 @@
     "texture_red": 100.0,
     "texture_shadows": 100.0
   },
+  "heeler.detail_eq": {
+    "blue": 100.0,
+    "broad": 0.0,
+    "fine": 0.0,
+    "green": 100.0,
+    "highlights": 100.0,
+    "large": 0.0,
+    "medium": 0.0,
+    "midtones": 100.0,
+    "red": 100.0,
+    "shadows": 100.0,
+    "small": 0.0
+  },
   "heeler.displacement_map": {
     "max_displacement": 50.0,
     "strength": 20.0

@@ -18,6 +18,24 @@ Use Texture for fine detail and Clarity for larger local contrast. Raise Thresho
 
 Texture and Clarity use edge protection to reduce halos. Their widths follow the frame, so a full-size export treats the same structures as the preview. Strong settings can still emphasize noise and draw broad bands beside transitions. Negative values soften detail; they do not undo a previous positive pass.
 
+## Equalizer
+
+Open **EQUALIZER** under the sliders to raise or lower contrast at five scales of detail, the way [Tone Equalizer](tone-equalizer.md) raises or lowers brightness by zone. The strip at the top draws the five settings as one line, from fine on the left to broad on the right.
+
+- **Fine** is the finest texture: pores, film grain, fabric, noise.
+- **Small** is small detail: leaves, hair, feathers, gravel.
+- **Medium** is medium structure: branches, rocks, the features of a face.
+- **Large** is large forms: buildings, hillsides, clouds.
+- **Broad** is the light across whole areas of the frame.
+
+Raise a band to bring out detail at that scale and lower it to soften it; at -100 the band is taken out. Unlike Texture and Clarity, the bands can go in opposite directions at once: lift Medium to give rock and bark more relief while lowering Fine to calm noise or skin texture. The bands use the same edge-aware filter as Texture and Clarity, so a raised band does not draw a halo along a hard edge, and their widths follow the frame, so the preview and the export match.
+
+The eye beside each band shows that band alone on the canvas, as gray texture around a middle gray: what lights up is what that band will change. Click it again, or another view, to go back to the photograph. The view is only a view: it is not saved and never reaches an export. It works once the Equalizer is in use, after the first band moves.
+
+**WEIGHTS** opens the same six weights as Advanced below, shared by all five bands: Shadows, Midtones and Highlights by brightness, Red, Green and Blue by channel. **Even** puts them back to 100.
+
+The Equalizer is its own node, Detail Equalizer, built right after Detail the first time a band or weight moves. Existing edits are untouched. It follows the selected Develop layer like the rest of Detail, the section's switch bypasses it with the rest, and the section's reset puts its bands and weights back to zero and 100.
+
 ## Advanced weights
 
 Open **ADVANCED**, choose **Texture**, **Clarity**, or **Dehaze**, then adjust that effect's six weights. The badge counts effects with any weight changed from 100. **Even** restores the selected effect's weights. The same controls and values appear on the Detail node in Graph mode. Opening the fold or choosing an effect changes only the panel, not the photograph; those choices are not saved in the edit.
