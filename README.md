@@ -66,6 +66,19 @@ Full RAW decoding for most cameras and phone RAW files, exposure, white balance,
 
 ![The Develop workspace: the library, the thumbnails, the photograph and the Develop panel](docs/readme/develop.png)
 
+## System requirements
+
+| | macOS | Windows | Linux |
+|---|---|---|---|
+| **System** | macOS 11 Big Sur or later | Windows 10 or 11, 64-bit | A 64-bit distribution as recent as Ubuntu 24.04 |
+| **Processor** | Apple silicon (M1 or later) | x64 (Intel or AMD) | x64 (Intel or AMD) |
+| **Graphics** | Any Apple silicon Mac (Metal) | DirectX 12 or Vulkan, optional | Vulkan, optional |
+| **Memory** | 8 GB, 16 GB or more recommended | 8 GB, 16 GB or more recommended | 8 GB, 16 GB or more recommended |
+| **Disk space** | About 120 MB, plus up to 1.7 GB for the optional models | About 120 MB, plus up to 1.7 GB for the optional models | About 120 MB, plus up to 1.7 GB for the optional models |
+| **Also needs** | Nothing else | Microsoft Edge WebView2, built into Windows 11 and added by the installer when missing | Nothing else: Heeler ships as an AppImage |
+
+Without a supported graphics card, previews render on the processor instead, with the same result. The machine learning models (depth, smart selection, noise reduction, object removal and the assistant) are optional downloads, fetched only when you ask; see [Models](docs/user-guide/models.md) for each one's size. Large photographs, stacks and panoramas use more memory: Heeler checks each job against the memory the machine has and says so when one will not fit.
+
 ## Open source
 
 Heeler is open source under the [Mozilla Public License 2.0](LICENSE).
