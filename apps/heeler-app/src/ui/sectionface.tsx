@@ -29,6 +29,7 @@ import { FlipPhotoRow } from "./flipphoto";
 import { PrintControls } from "./print";
 import { DETAIL_WEIGHT_PARAMS, sectionWidgetKinds, type SectionSpec, type SectionWidgetKind, type SectionWidgetSeats } from "./simpledata";
 import { WINDOWED_ROWS } from "./sectionfaceparts";
+import { WhiteBalanceRow } from "./whitebalancerow";
 
 type D = (c: Command) => void;
 
@@ -289,6 +290,7 @@ export function SectionWidgets({
             </div>
           ) : null;
         }
+        if (kind === "whiteBalance") return mark(<WhiteBalanceRow node={node} dispatch={dispatch} state={state} frame={frame} />);
         return mark(<PrintControls node={node} dispatch={dispatch} />);
       })}
     </>

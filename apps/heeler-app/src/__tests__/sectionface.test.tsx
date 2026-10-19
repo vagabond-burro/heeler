@@ -5,7 +5,9 @@
 // pairs are missing. Whether in develop or graph, it should be using the
 // same template layout"; then every other tool with a face in more than
 // one place).
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { initialState } from "../data";
 import { reduce, type Command, type NodeCard, type State } from "../state";
@@ -65,7 +67,7 @@ function graphOrder(title: string): string[] {
  * a change to the definition is a change someone meant. */
 const EXPECTED: Record<string, string[]> = {
   Exposure: ["param:exposure", "param:contrast", "param:color_contrast", "param:highlights", "param:shadows", "param:whites", "param:blacks", "section-widget-zones"],
-  Color: ["param:temperature", "param:tint", "param:saturation", "param:vibrance"],
+  Color: ["param:temperature", "param:tint", "param:saturation", "param:vibrance", "section-widget-whiteBalance"],
   Levels: ["param:black", "param:white", "param:gamma", "param:black_soft", "param:white_soft", "section-widget-levels"],
   Curves: ["section-widget-curveEditor"],
   Print: ["section-widget-print"],
@@ -91,6 +93,30 @@ describe("a section's face", () => {
       expect(graphOrder(title)).toEqual(develop);
     });
   }
+
+  it("Color's white balance row is the same three chips in Develop and in Graph", () => {
+    const { s, node } = opened("Color");
+    const chips = (root: Element | null) =>
+      [...(root?.querySelectorAll('[data-testid="section-widget-whiteBalance"] button') ?? [])].map((b) => b.getAttribute("data-testid"));
+    render(<SimplePanel state={{ ...s, mode: "simple" }} dispatch={() => {}} width={320} />);
+    const develop = chips(document.querySelector('[data-section="Color"]'));
+    cleanup();
+    const { container } = render(<Inspector state={{ ...s, mode: "advanced", selection: [node.id] }} dispatch={() => {}} frame={null} />);
+    expect(develop).toEqual(["wb-auto", "wb-as-shot", "wb-pick"]);
+    expect(chips(container.querySelector(`[data-testid="${faceId("Color")}"]`))).toEqual(develop);
+  });
+
+  it("Color Wheels in Graph has no chip of its own: the header's reset puts back all nine values", () => {
+    let { s, node } = opened("Color Wheels");
+    const nine = ["shadows", "midtones", "highlights"].flatMap((r) => ["hue", "sat", "lum"].map((c) => `${r}_${c}`));
+    s = run(s, { type: "set_params", id: node.id, values: Object.fromEntries(nine.map((p, i) => [p, (i + 1) / 20])) });
+    const sent: Command[] = [];
+    render(<Inspector state={{ ...s, mode: "advanced", selection: [node.id] }} dispatch={(c) => sent.push(c)} frame={null} />);
+    expect(screen.queryByTestId("wheels-reset")).toBeNull();
+    fireEvent.click(screen.getByTestId("inspector-reset"));
+    const after = run(s, ...sent).nodes.find((n) => n.id === node.id)!;
+    for (const p of nine) expect(after.params[p] ?? 0, p).toBe(0);
+  });
 
   it("Recolor's guard row names its strip and the pairs after it", () => {
     const guard = SECTIONS.find((sec) => sec.title === "Recolor")!.rows.find((r) => r.param === "neutral_guard")!;
@@ -137,4 +163,27 @@ describe("a tool window's face", () => {
       if (kind === "colorconsole") expect(face.querySelector('[data-testid="console-smoothing"]')).not.toBeNull();
     });
   }
+
+  it("Color Tune's window names its dials at the panel's size, outside the panel's zoom", async () => {
+    const { s } = opened("Color Tune");
+    const t = fakeTransport();
+    render(<ToolWindow kind="colorconsole" />);
+    act(() => t.send(STATE_CHANNEL, graphSnapshot(s)));
+    const face = await screen.findByTestId(faceId("Color Tune"));
+    for (const id of ["console-smoothing", "console-hue", "console-sat", "console-vib", "console-lum"]) {
+      expect(face.querySelector(`[data-testid="${id}"]`)?.className, id).toBe("srow windowed");
+    }
+    // The size: the panel's 11px times the app zoom the panel wears, and
+    // the name and value columns grown by the same, so the track narrows.
+    const css = readFileSync(resolve(process.cwd(), "src/theme.css"), "utf8");
+    expect(css).toMatch(/\.srow\.windowed \.lbl, \.srow\.windowed \.val \{ font-size: calc\(11px \* var\(--chrome-zoom\)\); \}/);
+    expect(css).toMatch(/\.srow\.windowed \{ grid-template-columns: calc\(78px \* var\(--chrome-zoom\)\) 1fr calc\(42px \* var\(--chrome-zoom\)\); \}/);
+  });
+
+  it("Color Tune in the panel keeps the panel's rows, inside its zoom", () => {
+    const { s } = opened("Color Tune");
+    render(<SimplePanel state={{ ...s, mode: "simple" }} dispatch={() => {}} width={320} />);
+    const hue = document.querySelector('[data-section="Color Tune"] [data-testid="console-hue"]');
+    expect(hue?.className).toBe("srow");
+  });
 });
