@@ -29,7 +29,7 @@ const PLAIN_THUMB = "data:image/png;base64,plain";
 import { App } from "../app";
 import { ZONES, ZONE_V, placementWord, zoneCentre, zoneOf } from "../blackwhite";
 import { nodeThumbs } from "../bridge";
-import { BARS_EDGE } from "../ui/zones";
+import { BARS_EDGE } from "../ui/zonesparts";
 import { clearLog, getEntries } from "../log";
 import { initialState } from "../data";
 import { anyPickerArmed, previewTarget, reduce } from "../state";

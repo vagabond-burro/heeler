@@ -8,15 +8,9 @@
 import type { Command, NodeCard } from "../state";
 import { Slider } from "./simple";
 import { MenuField } from "./menufield";
+import { TONERS } from "./printparts";
 
 type D = React.Dispatch<Command>;
-
-export const TONERS: { key: string; name: string; tip: string }[] = [
-  { key: "selenium", name: "Selenium", tip: "Selenium: cools and deepens the shadows first, the highlights untouched until the crossover" },
-  { key: "sepia", name: "Sepia", tip: "Sepia: warms the highlights first, a brown that reaches into the midtones as the crossover rises" },
-  { key: "gold", name: "Gold", tip: "Gold: a blue-black in the shadows" },
-  { key: "split", name: "Split", tip: "Split: sepia in the highlights over gold in the shadows, the crossover between them" },
-];
 
 /** None, then every toner: the menu's rows. */
 const TONER_CHOICES = [{ id: "", label: "None" }, ...TONERS.map((t) => ({ id: t.key, label: t.name, hint: t.tip }))];

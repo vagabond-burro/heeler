@@ -164,7 +164,8 @@ import { useClearsSibling } from "./layoutroom";
 import { clampMenu, viewportSize } from "./menupos";
 import { MenuSurface } from "./menusurface";
 import { ColorSetControls, HueBandStrip, ColorSetTools } from "./colorsets";
-import { ControlsEditor, PUBLISH_HINT, PublishMenu, publishRowAt } from "./publishcontrols";
+import { ControlsEditor, PublishMenu } from "./publishcontrols";
+import { PUBLISH_HINT, publishRowAt } from "./publishcontrolsparts";
 import { MenuField } from "./menufield";
 
 type D = React.Dispatch<Command>;

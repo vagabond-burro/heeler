@@ -37,6 +37,7 @@ import {
 import { logMsg } from "../log";
 import { clampTetherPoll, type Command, type State } from "../state";
 import { MenuField } from "./menufield";
+import { arrivalsForRibbon } from "./tetherparts";
 
 type D = React.Dispatch<Command>;
 
@@ -203,28 +204,6 @@ const VERDICT_BADGE: Record<string, string> = {
   MassStorageOnly: "card reader",
   KnownCameraNoImaging: "check USB mode",
 };
-
-const sameFolder = (a: string, b: string) =>
-  a.replace(/[\\/]+$/, "") === b.replace(/[\\/]+$/, "");
-
-/** Which arrivals belong in the list on screen. A folder view takes the
- * ones that landed in that folder; a collection view takes the ones the
- * session is adding to that collection. Everything else still moves the
- * session count and the status line, but it must not appear in a list
- * it does not belong to (and vanish on the next folder open, which was
- * the bug). */
-export function arrivalsForRibbon(
-  images: TetherImage[],
-  state: State,
-  collection: number | null,
-): TetherImage[] {
-  if (state.activeCollection !== null) {
-    return collection !== null && collection === state.activeCollection ? images : [];
-  }
-  const shown = state.activeFolderPath;
-  if (!shown) return [];
-  return images.filter((f) => sameFolder(f.folder, shown));
-}
 
 export function TetherTab({ state, dispatch }: { state: State; dispatch: D }) {
   const [hot, setHot] = useState<string | null>(null);

@@ -11,17 +11,8 @@
 // filter), as they did with the datalist.
 
 import React, { useId, useState } from "react";
-import { MENU_LIST_SURFACE, menuRowStyle } from "./menufield";
-
-/** How many suggestions the list shows at most. */
-const SHOWN = 8;
-
-/** The suggestions for `typed`: every one containing it, case aside,
- * the exact match left out (it is already in the field). */
-export function suggestionsFor(all: string[], typed: string): string[] {
-  const q = typed.trim().toLowerCase();
-  return all.filter((s) => s.toLowerCase().includes(q) && s.toLowerCase() !== q).slice(0, SHOWN);
-}
+import { MENU_LIST_SURFACE, menuRowStyle } from "./menufieldparts";
+import { suggestionsFor } from "./suggestfieldparts";
 
 type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "list"> & {
   "data-testid": string;

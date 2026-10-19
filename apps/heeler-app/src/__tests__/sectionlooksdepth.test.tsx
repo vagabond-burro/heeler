@@ -16,7 +16,8 @@ vi.mock("../bridge", async (original) => ({
 import { initialState } from "../data";
 import { reduce, type Command, type State } from "../state";
 import { DepthRunner, depthProgressNow, depthRecipeKey } from "../ui/depthtool";
-import { LOOK_HOVER_MS, SectionLooks } from "../ui/sectionlooks";
+import { SectionLooks } from "../ui/sectionlooks";
+import { LOOK_HOVER_MS } from "../ui/sectionlooksparts";
 
 beforeEach(() => {
   depth.histogram.mockReset();

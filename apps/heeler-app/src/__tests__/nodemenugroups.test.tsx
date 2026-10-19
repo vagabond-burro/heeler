@@ -24,7 +24,7 @@ import registryDefaults from "../registry-defaults.json";
 import { NodeEditor } from "../ui/graph";
 import { MenuBar } from "../ui/chrome";
 import { NodePalette } from "../ui/nodepalette";
-import { placeSubmenu } from "../ui/menusurface";
+import { placeSubmenu } from "../ui/menusurfaceparts";
 import { nodeChapter } from "../tourstops";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";

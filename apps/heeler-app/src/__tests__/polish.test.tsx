@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import { initialState } from "../data";
 import { POLISH_VIEWS, reduce, type Command, type State } from "../state";
 import { serializeGraph } from "../bridge";
-import { polishPaint } from "../ui/polish";
+import { polishPaint } from "../ui/polishparts";
 import { runCommand } from "../commands";
 import { selectionField, traceContours, FIELD } from "../ui/selectionfield";
 

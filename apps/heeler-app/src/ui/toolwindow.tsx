@@ -17,19 +17,7 @@ import { initialState } from "../data";
 import type { Command, State } from "../state";
 import { curveModeOf, toolNode } from "../state";
 import { CurveEditor, Wheel } from "./editors";
-import {
-  DOCK_CHANNEL,
-  STATE_CHANNEL,
-  STATE_REQUEST,
-  FRAME_CHANNEL,
-  FRAME_REQUEST,
-  TOOL_WINDOWS,
-  applySnapshot,
-  sendCommand,
-  transport,
-  type GraphSnapshot,
-  type ToolWindowKind,
-} from "../popout";
+import { DOCK_CHANNEL, STATE_CHANNEL, STATE_REQUEST, TOOL_WINDOWS, applySnapshot, sendCommand, transport, type GraphSnapshot, type ToolWindowKind } from "../popout";
 import { DockButton, MacInset, WindowControls } from "./chrome";
 import { useHintSource } from "./hints";
 import { PopoutStatusRow } from "./popoutstatus";
@@ -39,23 +27,7 @@ import { RecolorBlock } from "./recolor";
 import { GuardStrip } from "./guardstrip";
 import { ColorConsoleBlock } from "./colorconsole";
 import { isLayerNode } from "../layerids";
-
-/** The live preview frame, pushed from the main window on every render
- * (the spectrums' channel; Tone Equalizer's histogram reads the same one, and
- * so does the popped-out graph window's Inspector). */
-export function useLiveFrame(want: boolean): string | null {
-  const [frame, setFrame] = useState<string | null>(null);
-  useEffect(() => {
-    if (!want) return;
-    const un = transport().subscribe(FRAME_CHANNEL, (payload: unknown) => {
-      const f = (payload as { frame?: string | null } | null)?.frame ?? null;
-      setFrame(f);
-    });
-    transport().send(FRAME_REQUEST, true);
-    return un;
-  }, [want]);
-  return frame;
-}
+import { useLiveFrame } from "./toolwindowparts";
 
 /** The section each window's tool lives in, for the switch below. */
 const TOOL_SECTION: Record<ToolWindowKind, string> = {

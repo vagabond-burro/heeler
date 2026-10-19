@@ -30,14 +30,7 @@ import { DockButton, MacInset, WindowControls } from "./chrome";
 import { ActiveIcon, CompareIcon, TrashIcon } from "./takeicons";
 import { useHintSource } from "./hints";
 import { PopoutStatusRow } from "./popoutstatus";
-
-/** The takes of the active photograph, the implicit first one included. */
-export function takesOf(state: State): { takes: Take[]; activeId: string } {
-  const takes: Take[] =
-    state.takes[state.activeImage] ??
-    ([{ id: "take_1", name: "Take 1", nodes: [], wires: [] }] as Take[]);
-  return { takes, activeId: state.activeTakes[state.activeImage] ?? "take_1" };
-}
+import { takesOf } from "./takeswindowparts";
 
 /** Five stars on the thumbnails' scale. Clicking the star a take already
  * has clears the rating, the way the ribbon's stars do. */

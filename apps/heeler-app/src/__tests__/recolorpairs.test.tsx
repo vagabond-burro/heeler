@@ -12,7 +12,8 @@ import { sampleImage } from "../bridge";
 import { initialState } from "../data";
 import { anyPickerArmed, reduce, toolNode, type Command, type State } from "../state";
 import { IDENTITY_VIEW } from "../ui/overlays";
-import { pairAfter, pairTurn, parsePairs, RecolorPairLayer, RecolorPairs, type RecolorPair } from "../ui/recolorpairs";
+import { RecolorPairLayer, RecolorPairs } from "../ui/recolorpairs";
+import { pairAfter, pairTurn, parsePairs, type RecolorPair } from "../ui/recolorpairsparts";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
 const sampleMock = sampleImage as unknown as ReturnType<typeof vi.fn>;

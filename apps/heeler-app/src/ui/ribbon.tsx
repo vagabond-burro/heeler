@@ -13,31 +13,12 @@
 // every consumer sort for themselves.
 
 import { useRef, useState } from "react";
-import { ColorField, hexToRgb255 } from "./colorfield";
+import { ColorField } from "./colorfield";
 import { previewCss, type GradStop } from "./gradientstops";
 import { ValueField } from "./track";
+import { ribbonColorAt } from "./ribbonparts";
 
 const HANDLE = 14;
-
-/** The ribbon's color at `pos`, between its neighboring stops. */
-export function ribbonColorAt(stops: GradStop[], pos: number): string {
-  const sorted = [...stops].sort((a, b) => a.pos - b.pos);
-  if (!sorted.length) return "#808080";
-  if (pos <= sorted[0].pos) return sorted[0].color;
-  const last = sorted[sorted.length - 1];
-  if (pos >= last.pos) return last.color;
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const a = sorted[i];
-    const b = sorted[i + 1];
-    if (pos < a.pos || pos > b.pos) continue;
-    const t = (pos - a.pos) / Math.max(1e-6, b.pos - a.pos);
-    const ca = hexToRgb255(a.color);
-    const cb = hexToRgb255(b.color);
-    const mix = ca.map((v, k) => Math.round(v + (cb[k] - v) * t));
-    return `#${mix.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
-  }
-  return last.color;
-}
 
 export function RibbonEditor({
   stops,

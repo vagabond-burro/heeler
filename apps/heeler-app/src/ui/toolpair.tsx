@@ -19,7 +19,7 @@
 
 import React, { useRef, useState } from "react";
 import { useDismiss } from "./hooks";
-import { MENU_LIST_SURFACE } from "./menufield";
+import { MENU_LIST_SURFACE } from "./menufieldparts";
 
 const HOLD_MS = 320;
 

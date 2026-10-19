@@ -47,7 +47,7 @@ import {
 } from "../spectrums";
 import { HARMONY_MODES, HARMONY_REACH, harmonyHues, hueDelta, type Harmony } from "../harmony";
 import { TrackSlider, ValueField } from "./track";
-import { framePhotoSize } from "./profileline";
+import { framePhotoSize } from "./profilelineparts";
 import { setUiPref, uiPref } from "../uiprefs";
 import { HarmonyIcon, SpectrumIcon } from "./panelicons";
 import { CHIP_METRICS, CHIP_METRICS_LARGE, ChannelChips } from "./channelchips";

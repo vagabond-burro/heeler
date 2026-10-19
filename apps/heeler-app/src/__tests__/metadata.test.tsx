@@ -10,7 +10,7 @@ import { initialState } from "../data";
 import { PANEL_TABS, reduce, type Command, type State } from "../state";
 import { PanelTabs } from "../ui/panelicons";
 import { CursorTip } from "../ui/cursortip";
-import { cameraRows, fileRows, humanShotAt, humanSize } from "../ui/metadata";
+import { cameraRows, fileRows, humanShotAt, humanSize } from "../ui/metadataparts";
 import type { ImageMeta } from "../bridge";
 
 const meta = (over: Partial<ImageMeta> = {}): ImageMeta => ({

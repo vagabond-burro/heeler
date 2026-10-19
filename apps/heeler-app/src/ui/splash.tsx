@@ -9,25 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BOOT_LABEL, BOOT_STEPS, type Boot } from "../state";
-
-/** Heeler is a blue heeler. The app should sound like one. */
-export const QUOTES = [
-  "Fetching your pictures",
-  "I love editing like I love chasing my tail",
-  "Rounding up the strays",
-  "Nose down, tail up",
-  "Herding the highlights",
-  "Sniffing out the good ones",
-  "Shaking the noise off",
-  "Digging up what you buried last time",
-  "Every pixel deserves a walk",
-  "Sitting. Staying. Loading.",
-  "Counting the squirrels in frame",
-  "Chasing the light around the yard",
-  "Ears up, shutter open",
-  "Good boy energy, applied to raw files",
-  "Nudging the shadows back into the pack",
-];
+import { QUOTES } from "./splashparts";
 
 /** How long each line stays up before the next one. */
 const QUOTE_MS = 2400;

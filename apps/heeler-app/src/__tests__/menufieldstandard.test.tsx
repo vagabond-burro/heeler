@@ -5,7 +5,8 @@
 // the menu's own.
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { MenuField, typeaheadRow } from "../ui/menufield";
+import { MenuField } from "../ui/menufield";
+import { typeaheadRow } from "../ui/menufieldparts";
 import { choose, menuValue } from "./menuhelp";
 
 // Spied rather than read back: jsdom's offsets are all 0, so a scroll

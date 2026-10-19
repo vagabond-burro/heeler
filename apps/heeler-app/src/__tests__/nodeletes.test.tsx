@@ -79,7 +79,7 @@ describe("exports never write over what is already there", () => {
     // somebody is deciding whether to turn the other half off. Since
     // 2026-09-30 that is the row's one description ("the
     // checkbox and help text are pushed up against each other").
-    const text = readFileSync(resolve(process.cwd(), "src/ui/preferences.tsx"), "utf8");
+    const text = readFileSync(resolve(process.cwd(), "src/ui/preferencesparts.ts"), "utf8");
     const entry = text.slice(text.indexOf('id: "export-overwrite"'));
     const description = entry.slice(0, entry.indexOf("},"));
     expect(description).toContain("photograph in your library");

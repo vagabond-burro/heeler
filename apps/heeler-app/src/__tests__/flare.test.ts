@@ -8,7 +8,7 @@ import { CATEGORY_PIECES, CHAIN_ORDER } from "../recipes";
 import { FLARE_PRESETS, LAYER_TOOLS, reduce, suggestFlarePreset, type Command, type State } from "../state";
 import { flareSourceOf, lightsOf } from "../ui/keylightgizmo";
 import { readStreakStops } from "../ui/flare";
-import { ribbonColorAt } from "../ui/ribbon";
+import { ribbonColorAt } from "../ui/ribbonparts";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
 const RIG = '[{"kind":"point","px":0.3,"py":0.4,"depth":60,"on":true,"color":"#ffffff","flare":true,"flare_strength":120}]';

@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mockOpenedUrls, mockResetOpenedUrls, mockSetUpdateReply, type UpdateCheck } from "../bridge";
 import { UPDATE_DOWNLOAD_WORDS, checkForUpdates, launchCheckWanted, resetUpdatesForTests, skippedVersion, updatePrompt } from "../updates";
 import { UpdatePrompt } from "../ui/updates";
-import { settingDescription } from "../ui/preferences";
+import { settingDescription } from "../ui/preferencesparts";
 import { App } from "../app";
 
 const NEWER: UpdateCheck = {

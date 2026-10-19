@@ -23,7 +23,7 @@ import { artFindLayer, panelShown, artLayers, CROP_RATIOS, LAYER_TOOLS, mainConv
 import { makeNode, NODE_CATALOG, nodeMenuPath, portData, portName, producesMask, MASK_IN_TYPES, RETIRED_TYPES, sectionOf, type NodeSpec, type PortSeat } from "./nodes";
 import { SECTIONS, sectionIsOn } from "./ui/simpledata";
 import { EXPORT_SIZES } from "./ui/exportpanel";
-import { PREFS_CATEGORIES } from "./ui/preferences";
+import { PREFS_CATEGORIES } from "./ui/preferencesparts";
 import { IR_MATERIALS } from "./film";
 import { isInfrared } from "./filters";
 

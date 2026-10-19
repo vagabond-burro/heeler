@@ -19,7 +19,7 @@ import type { Command, State } from "../state";
 import { SELECT_METHODS } from "../state";
 import { MethodIcon } from "./selecticons";
 import { useDismiss } from "./hooks";
-import { MENU_LIST_SURFACE } from "./menufield";
+import { MENU_LIST_SURFACE } from "./menufieldparts";
 
 /** How long a press has to last before it means "show me the others".
  * Long enough that a normal tap never trips it, short enough that a

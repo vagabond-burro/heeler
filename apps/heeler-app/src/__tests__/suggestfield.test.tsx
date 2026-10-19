@@ -5,7 +5,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
-import { SuggestField, suggestionsFor } from "../ui/suggestfield";
+import { SuggestField } from "../ui/suggestfield";
+import { suggestionsFor } from "../ui/suggestfieldparts";
 
 function Field({ onKeyDown, onBlur }: { onKeyDown?: (key: string) => void; onBlur?: () => void }) {
   const [v, setV] = useState("");

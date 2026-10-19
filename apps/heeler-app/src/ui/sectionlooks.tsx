@@ -28,11 +28,9 @@ import { lookPreviewState, type Command, type State } from "../state";
 import { depthProgressNow, depthRecipeKey, subscribeDepthProgress } from "./depthtool";
 import { MenuField } from "./menufield";
 import { publishBusy } from "./statusbar";
+import { LOOK_HOVER_MS } from "./sectionlooksparts";
 
 type D = (cmd: Command) => void;
-
-/** How long the pointer rests on a row before it is shown. */
-export const LOOK_HOVER_MS = 80;
 
 /** Whether the depth looks can show: the photograph's depth map is on
  * disk at the recipe the look would read. "ready" is the only state a

@@ -16,7 +16,7 @@ import { initialState } from "../data";
 import { NodeEditor, Inspector, InspectorBar, GroupDialog } from "./graph";
 import { AppIcon, DockButton, MacInset, WindowControls } from "./chrome";
 import { DOCK_CHANNEL, GRAPH_KEY_CHANNEL, STATE_CHANNEL, STATE_REQUEST, applySnapshot, sendCommand, transport, type GraphSnapshot } from "../popout";
-import { useLiveFrame } from "./toolwindow";
+import { useLiveFrame } from "./toolwindowparts";
 import { isTauri } from "../bridge";
 import { setHintOverrides, useHintSource } from "./hints";
 import { PopoutStatusRow } from "./popoutstatus";

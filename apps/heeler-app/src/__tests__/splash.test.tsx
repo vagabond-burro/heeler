@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
-import { Splash, QUOTES } from "../ui/splash";
+import { Splash } from "../ui/splash";
+import { QUOTES } from "../ui/splashparts";
 import { BOOT_STEPS, reduce, type State } from "../state";
 import { initialState } from "../data";
 

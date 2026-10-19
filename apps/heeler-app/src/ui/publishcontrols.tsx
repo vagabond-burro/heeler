@@ -23,23 +23,9 @@ import type { Command, NodeCard, Published } from "../state";
 import { publishShape, publishedRange, publishedTargets } from "../state";
 import { clampMenu, viewportSize } from "./menupos";
 import { useDismiss } from "./hooks";
+import { slug } from "./publishcontrolsparts";
 
 type D = (cmd: Command) => void;
-
-/** What a right-click inside the Inspector landed on: the row's member,
- * its param, and the words on the row. Rows say who they are with
- * data-node and data-param (the shared Slider always has; the pickers
- * and switches do since this change). */
-export function publishRowAt(target: EventTarget | null, fallbackNode: string): { node: string; param: string; label: string } | null {
-  const el = target instanceof Element ? target.closest<HTMLElement>("[data-param]") : null;
-  const param = el?.dataset.param;
-  if (!el || !param) return null;
-  const label = el.querySelector(".lbl")?.textContent?.trim() || param.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
-  return { node: el.dataset.node || fallbackNode, param, label };
-}
-
-/** The status line's words for a member's row inside an open group. */
-export const PUBLISH_HINT = "Publish a control to the group: right-click it, and the group offers it from outside";
 
 const fieldStyle: React.CSSProperties = {
   background: "var(--bg-app)",
@@ -146,8 +132,6 @@ export function PublishMenu({
   );
   return typeof document !== "undefined" && document.body ? createPortal(menu, document.body) : menu;
 }
-
-export const slug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
 /** A number typed into a field, committed on Enter or on leaving it. */
 function NumberField({ value, label, testid, onCommit }: { value: number | undefined; label: string; testid: string; onCommit: (v: number | null) => void }) {

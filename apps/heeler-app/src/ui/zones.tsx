@@ -13,60 +13,14 @@
  * is no reset here.*/
 
 import { useEffect, useState } from "react";
-import { ZONES, ZONE_NAMES, zoneCentre, zoneOfSrgb } from "../blackwhite";
+import { ZONES, ZONE_NAMES, zoneCentre } from "../blackwhite";
 import { developmentDial } from "../film";
 import { nodeThumbs } from "../bridge";
 import type { Command, State } from "../state";
 import { renderedSource, chainTerminalId } from "../state";
+import { BARS_EDGE, useZoneBins } from "./zonesparts";
 
 type D = React.Dispatch<Command>;
-
-/** The share of the frame in each zone, peak-normalized, read off the
- * frame on screen the way the Levels histogram is; null without one. */
-export function useZoneBins(src: string | undefined | null): number[] | null {
-  const [bins, setBins] = useState<number[] | null>(null);
-  useEffect(() => {
-    if (!src) {
-      setBins(null);
-      return;
-    }
-    let live = true;
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const c = document.createElement("canvas");
-        const scale = Math.min(1, 128 / (img.width || 128));
-        c.width = Math.max(1, Math.round((img.width || 128) * scale));
-        c.height = Math.max(1, Math.round((img.height || 64) * scale));
-        const ctx = c.getContext("2d")!;
-        ctx.drawImage(img, 0, 0, c.width, c.height);
-        const d = ctx.getImageData(0, 0, c.width, c.height).data;
-        const b = new Array<number>(ZONES).fill(0);
-        for (let i = 0; i < d.length; i += 4) {
-          if (d[i + 3] === 0) continue;
-          b[zoneOfSrgb(d[i] / 255, d[i + 1] / 255, d[i + 2] / 255)]++;
-        }
-        const peak = Math.max(...b, 1);
-        if (live) setBins(b.map((v) => v / peak));
-      } catch {
-        if (live) setBins(null);
-      }
-    };
-    img.src = src;
-    return () => {
-      live = false;
-    };
-  }, [src]);
-  return bins;
-}
-
-/** A small plain render of the chain's end, on the edit clock, for
- * the bars: the frame on screen is the overlay while a zone view is
- * up or a zone is hovered, and counting the overlay's paint was the
- * bars lying (review 2026-09-15, item 4). Null until it lands, or
- * without an engine, when the caller falls back to the frame it has. */
-/** The plain render's edge: what the bars downscale to. */
-export const BARS_EDGE = 128;
 
 function usePlainEndThumb(state: State, wanted: boolean): string | null {
   const terminal = chainTerminalId(state.nodes, state.wires) ?? null;

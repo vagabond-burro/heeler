@@ -16,7 +16,7 @@ import type { Command, State } from "../state";
 import { META_COLUMNS, visibleImages, takeCount } from "../state";
 import { isMacControlClick } from "../platform";
 import { folderMetadata, type ImageMeta } from "../bridge";
-import { humanShotAt, humanSize } from "./metadata";
+import { humanShotAt, humanSize } from "./metadataparts";
 import { chromeZoomFactor } from "../uiprefs";
 
 type D = React.Dispatch<Command>;

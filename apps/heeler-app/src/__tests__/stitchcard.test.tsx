@@ -8,7 +8,8 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { initialState } from "../data";
 import { reduce, type State } from "../state";
-import { STITCH_QUOTES, StitchDialog, stitchLines } from "../ui/stitching";
+import { StitchDialog } from "../ui/stitching";
+import { STITCH_QUOTES, stitchLines } from "../ui/stitchingparts";
 
 const job = (p: Partial<NonNullable<State["stitch"]>>): NonNullable<State["stitch"]> => ({
   image: "pan", fraction: 0.25, stage: "Matching frames 2 and 3", error: null, ...p,

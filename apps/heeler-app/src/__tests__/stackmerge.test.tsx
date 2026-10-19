@@ -12,7 +12,7 @@ import { initialState } from "../data";
 import { activeStackMerge, reduce, type StackMerge } from "../state";
 import { STACK_SET_ASIDE, type StackProgress } from "../bridge";
 import { STACK_QUOTES, StackMergeCanceled, StackMergeProgress, mergeLines, stackEventEffects, timeLeft } from "../ui/stackmerge";
-import { QUOTES } from "../ui/splash";
+import { QUOTES } from "../ui/splashparts";
 import { Viewer } from "../ui/viewer";
 
 const merge = (over: Partial<StackMerge> = {}): StackMerge => ({

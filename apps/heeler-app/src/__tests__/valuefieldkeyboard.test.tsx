@@ -2,7 +2,8 @@ import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
-import { ValueField, fmt } from "../ui/track";
+import { ValueField } from "../ui/track";
+import { fmt } from "../ui/trackparts";
 
 function field(onCommit: (value: number) => void, options: {
   value?: number; scale?: number; step?: number; display?: (v: number) => string;

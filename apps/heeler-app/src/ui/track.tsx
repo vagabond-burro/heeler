@@ -5,8 +5,9 @@
 // control living in simple.tsx would be an import cycle.)
 
 import { startTransition, useRef, useState, type ReactNode } from "react";
-import { PARAM_RANGE, snapStep } from "../state";
+import { snapStep } from "../state";
 import { isPrimaryPress } from "./pointerguard";
+import { fmt } from "./trackparts";
 
 /** The house slider track alone - rail, optional center notch, fill,
  * handle, pointer capture, SHIFT snap, arrow keys - with no opinion
@@ -160,45 +161,6 @@ export function TrackSlider({
     {readout?.(shown)}
     </>
   );
-}
-
-
-const UNSIGNED = new Set([
-  "sharpening",
-  "noise",
-  "grain_amount",
-  "grain_size",
-  "strength",
-  "opacity",
-  "grade_strength",
-  "sample",
-  "shadows_gain",
-  "midtones_gain",
-  "highlights_gain",
-  "red_gain",
-  "green_gain",
-  "blue_gain",
-]);
-
-/** How a value reads beside its slider, per param family. */
-export function fmt(param: string, v: number): string {
-  if (param === "exposure")
-    return (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2);
-  if (param === "temperature") return String(Math.round(v));
-  if (
-    param === "black" ||
-    param === "white" ||
-    param === "gamma" ||
-    param.startsWith("crop_")
-  )
-    return v.toFixed(2);
-  if (param === "angle")
-    return (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "°";
-  const r = Math.round(v);
-  if (UNSIGNED.has(param)) return String(r);
-  const range = PARAM_RANGE[param];
-  if (range && range[1] - range[0] <= 2) return v.toFixed(2);
-  return (r >= 0 ? "+" : "−") + Math.abs(r);
 }
 
 export function ValueField({

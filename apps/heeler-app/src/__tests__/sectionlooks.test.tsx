@@ -9,7 +9,8 @@ import { initialState } from "../data";
 import { RECOLOR_CELLS, TONE_EQ_DOMAIN } from "../eqcurve";
 import { lookById, looksFor, SECTION_LOOKS } from "../sectionlooks";
 import { lookPreviewState, reduce, type Command, type State } from "../state";
-import { LOOK_HOVER_MS, SectionLooks } from "../ui/sectionlooks";
+import { SectionLooks } from "../ui/sectionlooks";
+import { LOOK_HOVER_MS } from "../ui/sectionlooksparts";
 
 afterEach(() => {
   cleanup();
