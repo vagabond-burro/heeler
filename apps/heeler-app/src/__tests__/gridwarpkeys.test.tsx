@@ -21,7 +21,7 @@ import { noteFrameAspect } from "../imagelayers";
 import { GridWarpOverlay, gridWarpKeysLine, type WarpPair } from "../ui/gridwarp";
 import { meshFromNode, restMesh, vertexIndex } from "../gridwarp";
 import { arrowNudge, lockToAxis } from "../gridwarpkeys";
-import type { ViewTransform } from "../ui/overlays";
+import type { ViewTransform } from "../ui/overlaysparts";
 import { App } from "../app";
 
 const run = (s: State, ...cmds: Command[]): State => cmds.reduce(reduce, s);

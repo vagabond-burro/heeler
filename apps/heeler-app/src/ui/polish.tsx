@@ -17,7 +17,7 @@
 import { isPrimaryPress, primaryHeld } from "./pointerguard";
 import React, { memo, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { panePropsEqual } from "./viewmemo";
-import { REFINE_EDGE_GLYPH } from "./panelicons";
+import { REFINE_EDGE_GLYPH } from "./paneliconsparts";
 import type { Command, State } from "../state";
 import { usePickSessions } from "../picksession";
 import { DOC_SEL_ID, POLISH_VIEWS, activeSelectionMask, artMaskNode } from "../state";
@@ -40,7 +40,7 @@ import { FeatherFollowsToggle } from "./featherfollows";
 import { publishBusy } from "./statusbar";
 import { watchOp } from "./opprogress";
 import { clearFullPasses, markFullPassDue } from "../fullpass";
-import { IDENTITY_VIEW, norm, normFree, type ViewTransform } from "./overlays";
+import { IDENTITY_VIEW, norm, normFree, type ViewTransform } from "./overlaysparts";
 import { useDragFollow } from "./dragfollow";
 import { maskOfLayer } from "../layerids";
 import { isMatting, markMatting, mattingEpoch, mattingSubs, polishPaint } from "./polishparts";

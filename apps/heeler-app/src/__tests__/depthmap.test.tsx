@@ -20,7 +20,8 @@ import {
   type State
 } from "../state";
 import { nodeResetValues, SECTIONS } from "../ui/simpledata";
-import { DepthRunner, depthFromFile, depthGeometryKey, depthRecipeKey, depthWanted } from "../ui/depthtool";
+import { DepthRunner } from "../ui/depthtool";
+import { depthFromFile, depthGeometryKey, depthRecipeKey, depthWanted } from "../ui/depthtoolparts";
 import { Preferences } from "../ui/preferences";
 
 /** What the desktop answers for the photograph's own depth pass: a

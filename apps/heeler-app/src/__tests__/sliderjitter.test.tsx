@@ -57,12 +57,13 @@ vi.mock("../spectrums", async (original) => {
   };
 });
 
-import { App, landFrame, noFramesIfAny } from "../app";
+import { App } from "../app";
+import { landFrame, noFramesIfAny } from "../appparts";
 import { TrackSlider } from "../ui/track";
 import { Spectrums } from "../ui/spectrum";
 import { BendWheel } from "../ui/bend";
 import { isMac } from "../platform";
-import { useSelectionClip } from "../ui/selection";
+import { useSelectionClip } from "../ui/selectionparts";
 
 /** Whether the code running now is inside startTransition: React 18's
  * own marker for it, the one thing that tells a transition's update

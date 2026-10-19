@@ -54,7 +54,8 @@ import {
   type RecipeDoc,
 } from "../recipefiles";
 import { publishedChoice, publishedValue, reduce, type Command, type NodeCard, type State, type Wire } from "../state";
-import { NodePalette, paletteRecipes } from "../ui/nodepalette";
+import { NodePalette } from "../ui/nodepalette";
+import { paletteRecipes } from "../ui/nodepaletteparts";
 import { NodeEditor } from "../ui/graph";
 import { nodeKind } from "../nodekind";
 import { loadRecipeFiles, refreshRecipeFiles } from "../recipefiles";

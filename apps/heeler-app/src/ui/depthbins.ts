@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { depthHistogram } from "../bridge";
 import type { NodeCard, State } from "../state";
-import { depthRecipeKey } from "./depthtool";
+import { depthRecipeKey } from "./depthtoolparts";
 import type { LevelsKeys } from "./levelsparts";
 
 export const DEPTH_LEVELS_KEYS: LevelsKeys = { black: "depth_black", white: "depth_white", gamma: "depth_gamma", blackSoft: "depth_black_soft", whiteSoft: "depth_white_soft" };

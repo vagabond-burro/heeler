@@ -15,7 +15,8 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { initialState } from "../data";
 import { reduce, type Command, type State, type Wire } from "../state";
 import { makeNode, NODE_CATALOG, specFor } from "../nodes";
-import { NodeEditor, portCenter } from "../ui/graph";
+import { NodeEditor } from "../ui/graph";
+import { portCenter } from "../ui/graphparts";
 import { resetToursForTests, TourWalk, type Tour, type TourHost } from "../tourwalk";
 
 afterEach(() => {

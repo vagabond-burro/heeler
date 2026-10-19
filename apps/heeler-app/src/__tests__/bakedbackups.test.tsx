@@ -24,7 +24,8 @@ import { runBakeWarp } from "../layeractions";
 import { runCommand } from "../commands";
 import { _clearFlashForTests, currentFlash } from "../ui/hints";
 import { recoveryNote } from "../ui/catalogui";
-import { ImageLayerControls, keptMissingLine } from "../ui/imagelayers";
+import { ImageLayerControls } from "../ui/imagelayers";
+import { keptMissingLine } from "../ui/imagelayersparts";
 import { noteFrameAspect } from "../imagelayers";
 
 const BYTES = 184_123_456;

@@ -53,7 +53,7 @@ import {
   setUiPref,
   uiPref,
 } from "../uiprefs";
-import { RECENTS_MAX, RECENTS_MIN, clampRecents } from "./nodepalette";
+import { RECENTS_MAX, RECENTS_MIN, clampRecents } from "./nodepaletteparts";
 import { TrackSlider, ValueField } from "./track";
 import { logMsg } from "../log";
 import { BAKED_BACKUP_HINTS } from "../bakedbackups";
@@ -61,7 +61,7 @@ import { watchOp } from "./opprogress";
 import { ModelConsentCard } from "./modelconsent";
 import { AssistantSettings } from "./assistantprefs";
 import { MenuField } from "./menufield";
-import { PROFILE_CHOICES, SHARPENING_CHOICES, fitOf } from "./sourcemenus";
+import { PROFILE_CHOICES, SHARPENING_CHOICES, fitOf } from "./sourcemenusparts";
 import { CATEGORIES, type Category, SETTINGS } from "./preferencesparts";
 
 /** The two RAW defaults share one width, the longest choice in either. */

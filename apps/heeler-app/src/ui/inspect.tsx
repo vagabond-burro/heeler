@@ -9,7 +9,7 @@ import { tracePixel, type TraceSample, type TraceStep } from "../bridge";
 import { NODE_CATALOG } from "../nodes";
 import { sectionOfNode } from "./simpledata";
 import { PICK_CURSOR } from "./cursors";
-import { norm, type ViewTransform } from "./overlays";
+import { norm, type ViewTransform } from "./overlaysparts";
 import { isPrimaryPress } from "./pointerguard";
 import { PanelDivider } from "./divider";
 

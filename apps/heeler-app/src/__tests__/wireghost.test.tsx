@@ -9,7 +9,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { initialState } from "../data";
 import { reduce, type Command, type State, type Wire } from "../state";
 import { makeNode, specFor } from "../nodes";
-import { NodeEditor, editorRenders, portCenter } from "../ui/graph";
+import { NodeEditor } from "../ui/graph";
+import { editorRenders, portCenter } from "../ui/graphparts";
 
 afterEach(cleanup);
 

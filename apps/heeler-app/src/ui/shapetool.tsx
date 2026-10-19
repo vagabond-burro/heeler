@@ -24,7 +24,7 @@ import React from "react";
 import type { Command, ShapeMode, State } from "../state";
 import { shapeToolOf } from "../state";
 import { ToolPairButton, type ToolPairHalf } from "./toolpair";
-import { PERSPECTIVE_GLYPH, SKEW_GLYPH, TRANSFORM_GLYPH, WARP_GLYPH } from "./panelicons";
+import { PERSPECTIVE_GLYPH, SKEW_GLYPH, TRANSFORM_GLYPH, WARP_GLYPH } from "./paneliconsparts";
 import { modLabel } from "../platform";
 
 function modes(): ToolPairHalf[] {

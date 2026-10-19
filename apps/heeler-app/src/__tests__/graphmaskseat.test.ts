@@ -20,7 +20,7 @@ import { initialState } from "../data";
 import { MASK_IN_TYPES, NODE_CATALOG, RETIRED_TYPES, engineTakesMask, makeNode, portName, specFor } from "../nodes";
 import inputs from "../registry-inputs.json";
 import { dropDeadMaskSeats, migrateGraph, migrateNodes, reduce, seatTakes, type Command, type NodeCard, type State, type Wire } from "../state";
-import { drawnSeats, pipeFits, sourceSeat } from "../ui/graph";
+import { drawnSeats, pipeFits, sourceSeat } from "../ui/graphparts";
 
 const engine = inputs as Record<string, Record<string, string>>;
 const card = (type: string, id: string, x: number, y: number) => makeNode(specFor(type)!, id, x, y);

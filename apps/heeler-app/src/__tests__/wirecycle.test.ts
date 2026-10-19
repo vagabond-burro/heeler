@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { makeNode, specFor } from "../nodes";
 import type { NodeCard, Wire } from "../state";
-import { dragCycleCheck, drawnSeats, pipeFits } from "../ui/graph";
+import { dragCycleCheck, drawnSeats, pipeFits } from "../ui/graphparts";
 
 const card = (type: string, id: string) => makeNode(specFor(type)!, id, 0, 0);
 

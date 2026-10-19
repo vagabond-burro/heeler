@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { initialState } from "../data";
-import { displayShapedIds } from "../ui/graph";
+import { displayShapedIds } from "../ui/graphparts";
 
 describe("displayShapedIds", () => {
   it("marks everything at and below the tone profile, and nothing above", () => {

@@ -2,7 +2,8 @@ import { act, render } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import { MODEL_DENOISE_ID } from "../state";
-import { DenoiseRunner, denoiseStatusNow, requestFullDenoise, retryDenoise } from "../ui/denoisetool";
+import { DenoiseRunner } from "../ui/denoisetool";
+import { denoiseStatusNow, requestFullDenoise, retryDenoise } from "../ui/denoisetoolparts";
 import * as bridge from "../bridge";
 
 afterEach(() => vi.restoreAllMocks());

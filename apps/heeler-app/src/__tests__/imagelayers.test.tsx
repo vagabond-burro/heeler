@@ -40,8 +40,9 @@ import {
   type Pt,
 } from "../imagelayers";
 import { CatalogLayerDialog, ImageLayerControls, TransformFields } from "../ui/imagelayers";
-import { TransformOverlay, framePoint } from "../ui/overlays";
-import { previewSourceBox } from "../ui/transformpreview";
+import { TransformOverlay } from "../ui/overlays";
+import { framePoint } from "../ui/overlaysparts";
+import { previewSourceBox } from "../ui/transformpreviewparts";
 
 
 function run(s: State, ...cmds: Command[]): State {

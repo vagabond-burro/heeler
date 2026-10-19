@@ -208,7 +208,7 @@ describe("a second picture of another shape", () => {
 
 describe("the wires meet the dots", () => {
   it("ends every wire at the center of its port", async () => {
-    const { portCenter, inputColor, CHANNEL_PORT } = await import("../ui/graph");
+    const { portCenter, inputColor, CHANNEL_PORT } = await import("../ui/graphparts");
     const card = makeNode(specFor("heeler.exposure")!, "e", 100, 200);
     // The in port is drawn at left -4, top 35 inside a 1px border, 7px
     // square: its center is half a pixel in and 39.5 down.
@@ -393,7 +393,7 @@ describe("the Catalog node", () => {
 
 describe("the color key beside the graph", () => {
   it("names its stripe in the status bar and opens the palette to that category", async () => {
-    const { paletteItems } = await import("../ui/nodepalette");
+    const { paletteItems } = await import("../ui/nodepaletteparts");
     const s = fresh();
     const sent: Command[] = [];
     const Harness = () => <NodeEditor state={s} dispatch={((c: Command) => sent.push(c)) as never} />;
@@ -417,7 +417,7 @@ describe("the color key beside the graph", () => {
 
 describe("review fixes", () => {
   it("a drop lands on the nearest port, edge pixels included", async () => {
-    const { inputAt, inputY } = await import("../ui/graph");
+    const { inputAt, inputY } = await import("../ui/graphparts");
     const join = makeNode(specFor("heeler.channel_join")!, "j", 0, 100);
     expect(inputAt(join, 100 + inputY(join, "in"))).toBe("in");
     expect(inputAt(join, 100 + inputY(join, "in3"))).toBe("in3");
@@ -428,7 +428,7 @@ describe("review fixes", () => {
   });
 
   it("Up respects the root as a folder, not as a prefix", async () => {
-    const { parentFolder } = await import("../ui/graph");
+    const { parentFolder } = await import("../ui/graphparts");
     expect(parentFolder("/photos/2026/wedding", "/photos")).toBe("/photos/2026");
     expect(parentFolder("/photos/2026", "/photos")).toBe("/photos");
     expect(parentFolder("/photos", "/photos")).toBeNull();

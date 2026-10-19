@@ -7,7 +7,8 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { PARAM_TEXT_DEFAULT } from "../state";
-import { HIGHLIGHT_CHOICES, SOURCE_MENU_ROWS, SourceMenuRow } from "../ui/sourcemenus";
+import { SourceMenuRow } from "../ui/sourcemenus";
+import { HIGHLIGHT_CHOICES, SOURCE_MENU_ROWS } from "../ui/sourcemenusparts";
 
 const row = (value: string) =>
   render(<SourceMenuRow label="Highlights" name="Highlight reconstruction" value={value} choices={HIGHLIGHT_CHOICES} testid="source-highlights" onChange={() => {}} />);

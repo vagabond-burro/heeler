@@ -10,7 +10,7 @@ import { sampleImage } from "../bridge";
 import { oklabHueChroma } from "../colorsets";
 import { linearToSrgb255 } from "../consolebands";
 import { PICK_CURSOR } from "./cursors";
-import { norm, type ViewTransform } from "./overlays";
+import { norm, type ViewTransform } from "./overlaysparts";
 import { isPrimaryPress } from "./pointerguard";
 import { TrackSlider } from "./track";
 import { TrashIcon } from "./takeicons";

@@ -13,7 +13,7 @@ import React, { useState } from "react";
 import type { Command, State } from "../state";
 import { Shell } from "./selectdialogs";
 import { imageLayerProbe } from "../bridge";
-import { restBoxFor } from "./imagelayers";
+import { restBoxFor } from "./imagelayersparts";
 
 type D = React.Dispatch<Command>;
 

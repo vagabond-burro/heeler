@@ -7,13 +7,14 @@ import { releaseHint, setHint, useHint, useStatusReadout } from "../ui/hints";
 import { initialState } from "../data";
 import { anyPickerArmed, reduce, type Command, type State } from "../state";
 import { alongLine, lineProfile, pathStops, pointAlong, SPECTRUM_KINDS, type ProfileLine } from "../spectrums";
-import { profileReadout, Spectrums } from "../ui/spectrum";
+import { Spectrums } from "../ui/spectrum";
+import { profileReadout } from "../ui/spectrumparts";
 import { setUiPref } from "../uiprefs";
 import { ProfileLineLayer } from "../ui/profileline";
 import { framePhotoSize } from "../ui/profilelineparts";
 import { noteSourceSize } from "../framemap";
 import { PROFILE_RADIUS_MAX } from "../state";
-import { IDENTITY_VIEW } from "../ui/overlays";
+import { IDENTITY_VIEW } from "../ui/overlaysparts";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
 const line = (...points: [number, number][]): ProfileLine => ({ points });

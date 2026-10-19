@@ -3,7 +3,7 @@ import news from "../../../../docs/whats-new.md?raw";
 import imageGuide from "../../../../docs/user-guide/finish/image-layer.md?raw";
 import warpGuide from "../../../../docs/user-guide/finish/warp-layer.md?raw";
 import "../app";
-import { toolbarWraps } from "../ui/finishnew";
+import { toolbarWraps } from "../ui/finishnewparts";
 import { MASK_EXPORT_HINT } from "../ui/exporttickparts";
 
 it("the toolbar copy describes the narrow-panel wrap the layout uses", () => {

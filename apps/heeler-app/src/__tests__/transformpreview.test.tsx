@@ -10,14 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import { initialState } from "../data";
 import { reduce, artLayers, type Command, type State } from "../state";
-import {
-  affineForQuad,
-  affineFromTriangles,
-  homographyForward,
-  project,
-  quadGestureBlendId,
-  transformPreviewPlan,
-} from "../ui/transformpreview";
+import { affineForQuad, affineFromTriangles, homographyForward, project, quadGestureBlendId, transformPreviewPlan } from "../ui/transformpreviewparts";
 
 /** A lifted layer made from a marquee: select, lift, transform. The
  * same shape transformtool.test.tsx builds, because the preview follows

@@ -40,11 +40,11 @@ import {
   type GridMesh,
   type MeshGesture,
 } from "../gridwarp";
-import { IDENTITY_VIEW, type ViewTransform } from "./overlays";
+import { IDENTITY_VIEW, type ViewTransform } from "./overlaysparts";
 import { LinesRow, LineWidthRow } from "./linecolor";
 import { resolveLineColor, useAutoLineColor } from "./linecolorparts";
 import { flashStatus } from "./hints";
-import { drawTriangle } from "./transformpreview";
+import { drawTriangle } from "./transformpreviewparts";
 import type { Forward } from "../shapewarp";
 import { arrowNudge, arrowsOwnedElsewhere, isArrowKey, lockToAxis, NUDGE_PX, NUDGE_PX_BIG } from "../gridwarpkeys";
 

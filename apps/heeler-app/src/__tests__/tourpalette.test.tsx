@@ -10,7 +10,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { App } from "../app";
-import { CARD_W } from "../ui/touroverlay";
+import { CARD_W } from "../ui/touroverlayparts";
 import { currentWalk, endedTour, resetToursForTests, startTourHere, type Tour } from "../tourwalk";
 
 beforeEach(async () => {

@@ -7,7 +7,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import { reduce, type Command, type State } from "../state";
-import { DepthRunner, depthWanted } from "../ui/depthtool";
+import { DepthRunner } from "../ui/depthtool";
+import { depthWanted } from "../ui/depthtoolparts";
 
 vi.mock("../bridge", async (importOriginal) => {
   const real = await importOriginal<typeof import("../bridge")>();

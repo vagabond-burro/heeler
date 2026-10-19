@@ -29509,9 +29509,9 @@ mod tests {
         // to the same list, since a second copy is exactly how the two
         // pickers came to disagree in the first place.
         let art = std::fs::read_to_string(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/ui/artlayers.tsx"),
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/ui/artlayersparts.ts"),
         )
-        .expect("artlayers.tsx sits next to the desktop crate");
+        .expect("artlayersparts.ts sits next to the desktop crate");
         let modes = art
             .split_once("export const ART_MODES")
             .expect("ART_MODES is the layer stack's picker")
@@ -31523,9 +31523,9 @@ mod tests {
     /// tips stay crisp"), and the bytes are the coverage scaled to 0..255.
     #[test]
     fn the_tip_preview_limit_is_one_number_and_holds() {
-        let ts = include_str!("../../src/ui/brushpreview.tsx");
+        let ts = include_str!("../../src/ui/brushpreviewparts.ts");
         let want = format!("export const TIP_PREVIEW_MAX = {};", heeler_engine::ops_masks::TIP_PREVIEW_MAX);
-        assert!(ts.contains(&want), "brushpreview.tsx must say {want}");
+        assert!(ts.contains(&want), "brushpreviewparts.ts must say {want}");
         assert!(heeler_engine::ops_masks::TIP_PREVIEW_MAX > 512);
         let n = heeler_engine::ops_masks::TIP_PREVIEW_MAX;
         let cov = heeler_engine::ops_masks::tip_preview("round", n + 1000, 0.8, 1.0, 0.0, 0.0);

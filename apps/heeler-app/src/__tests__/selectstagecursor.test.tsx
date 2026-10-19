@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { initialState } from "../data";
 import type { State } from "../state";
 import { Viewer } from "../ui/viewer";
-import { selectCursor } from "../ui/selection";
+import { selectCursor } from "../ui/selectionparts";
 
 afterEach(() => cleanup());
 

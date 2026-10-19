@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { initialState } from "../data";
-import { settleSignature } from "../app";
+import { settleSignature } from "../appparts";
 import { serializeGraph } from "../bridge";
 import { cropPreviewGraph } from "../state";
 

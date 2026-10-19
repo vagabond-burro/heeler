@@ -32,7 +32,8 @@ import {
   type Forward,
   type WarpShape,
 } from "../shapewarp";
-import { IDENTITY_VIEW, RadialOverlay, type ViewTransform } from "./overlays";
+import { RadialOverlay } from "./overlays";
+import { IDENTITY_VIEW, type ViewTransform } from "./overlaysparts";
 import { aimedDispatch, edgesCommand, PinchPad, TurnWheel, useWarpPreview, type WarpPair } from "./gridwarp";
 import { TrackSlider, ValueField } from "./track";
 import { flashStatus } from "./hints";

@@ -5,8 +5,8 @@ import { runCommand } from "../commands";
 import { activeSelectionMask, maskPreviewNode, previewTarget, reduce, type State } from "../state";
 import { renderMaskOf, serializeGraph } from "../bridge";
 import { clearLog, logAsText, setLogLevel } from "../log";
-import { depthWanted } from "../ui/depthtool";
-import { useEngineMask, useSelectionOutline } from "../ui/selection";
+import { depthWanted } from "../ui/depthtoolparts";
+import { useEngineMask, useSelectionOutline } from "../ui/selectionparts";
 import { selectionField, type FramePixels } from "../ui/selectionfield";
 
 vi.mock("../bridge", async (original) => ({

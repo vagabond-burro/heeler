@@ -164,7 +164,7 @@ const toScreen = (v: View, x: number, y: number) => [x * STAGE.w * v.scale + v.p
 
 describe("the ants at 1:1 through a zoom and a pan", () => {
   it("sit on the photograph's edge at every frame and never draw the slice's edge", async () => {
-    const { useSelectionOutline } = await import("../ui/selection");
+    const { useSelectionOutline } = await import("../ui/selectionparts");
     const { s, node } = matted();
     let view: View = { px: -400, py: -150, scale: 2 };
     let slice = visible(view);

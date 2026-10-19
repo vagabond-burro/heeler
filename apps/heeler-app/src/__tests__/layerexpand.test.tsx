@@ -26,7 +26,8 @@ import { ART_FX, artLayers, artMaskOf, paramRange, reduce, type Command, type St
 import type { NodeCard } from "../state";
 import { uiSettingsCommands, uiSettingsSnapshot } from "../settings";
 import { noteFrameAspect } from "../imagelayers";
-import { ArtLayersTab, fxReadout, fxReadoutChars, fxReadoutWidth } from "../ui/artlayers";
+import { ArtLayersTab } from "../ui/artlayers";
+import { fxReadout, fxReadoutChars, fxReadoutWidth } from "../ui/artlayersparts";
 
 const run = (s: State, ...cmds: Command[]): State => cmds.reduce(reduce, s);
 

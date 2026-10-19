@@ -22,7 +22,7 @@ import { isPrimaryPress } from "./pointerguard";
 import React, { useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { compareLabels, SPLIT_DEFAULTS, wrapDeg, type Command, type SplitConfig, type State } from "../state";
-import { norm, type ViewTransform } from "./overlays";
+import { norm, type ViewTransform } from "./overlaysparts";
 import { ROTATE_CURSOR } from "./cursors";
 import { modLabel } from "../platform";
 import { MenuField } from "./menufield";

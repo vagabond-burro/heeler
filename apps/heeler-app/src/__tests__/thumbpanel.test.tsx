@@ -19,7 +19,7 @@ import {
   type Command,
   type State,
 } from "../state";
-import { cellText, sortRows } from "../ui/ribbontable";
+import { cellText, sortRows } from "../ui/ribbontableparts";
 import type { ImageMeta } from "../bridge";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);

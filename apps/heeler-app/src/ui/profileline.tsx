@@ -10,7 +10,7 @@ import type { Command, State } from "../state";
 import { sourceSizeFor } from "../framemap";
 import { alongLine, pointAlong, type ProfileLine } from "../spectrums";
 import { PICK_CURSOR } from "./cursors";
-import { norm, normFree, type ViewTransform } from "./overlays";
+import { norm, normFree, type ViewTransform } from "./overlaysparts";
 import { isPrimaryPress } from "./pointerguard";
 import { framePhotoSize } from "./profilelineparts";
 

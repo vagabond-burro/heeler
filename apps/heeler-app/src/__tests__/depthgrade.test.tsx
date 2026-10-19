@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "../app";
 import { initialState } from "../data";
-import { depthWanted } from "../ui/depthtool";
+import { depthWanted } from "../ui/depthtoolparts";
 import { NodeParams } from "../ui/graph";
 import { reduce, type State } from "../state";
 import { chooseWith, menuRows, menuValue } from "./menuhelp";

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "../app";
-import { norm, straightenAngle } from "../ui/overlays";
+import { norm, straightenAngle } from "../ui/overlaysparts";
 import { OFF_BY_DEFAULT, reduce } from "../state";
 import React from "react";
 import { initialState } from "../data";

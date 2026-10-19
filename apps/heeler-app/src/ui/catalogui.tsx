@@ -46,7 +46,7 @@ import { logMsg } from "../log";
 import { flashStatus } from "./hints";
 import { flushRecoverySaves } from "../savebarrier";
 import { watchOp } from "./opprogress";
-import { RIBBON_ICON_CHIP } from "./ribbontable";
+import { RIBBON_ICON_CHIP } from "./ribbontableparts";
 import { deleteCollectionStep } from "../libraryundo";
 
 type D = React.Dispatch<Command>;

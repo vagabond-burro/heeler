@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CATEGORY_ORDER, NODE_CATALOG, byCategory, makeNode, searchNodes, specFor } from "../nodes";
 import type { NodeCard } from "../state";
-import { paletteItems, clampRecents, RECENTS_MIN, RECENTS_MAX } from "../ui/nodepalette";
+import { paletteItems, clampRecents, RECENTS_MIN, RECENTS_MAX } from "../ui/nodepaletteparts";
 
 describe("the node catalog", () => {
   it("has no duplicates and every entry is complete", () => {

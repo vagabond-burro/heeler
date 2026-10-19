@@ -10,7 +10,7 @@ import { runCommand } from "../commands";
 import { DOC_SEL_ID, activeSelectionMask, artLayers, artMaskNode } from "../state";
 import { LAYER_MASK_TYPES, RADIAL_SHAPES, reduce, SELECT_METHODS, SELECT_OPS, type Command, type SelectOp, type SelectRegion, type State } from "../state";
 import { serializeGraph } from "../bridge";
-import { edgeField, snapToEdge, thin } from "../ui/selection";
+import { edgeField, snapToEdge, thin } from "../ui/selectionparts";
 import { selectionField } from "../ui/selectionfield";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
@@ -842,7 +842,7 @@ describe("the radial gizmo says what a drag will do", () => {
   /// "The cursor never changes so I don't know what
   /// happens when I drag on different parts of the shape."
   it("names a zone for every part of the shape", async () => {
-    const { radialZoneAt } = await import("../ui/overlays");
+    const { radialZoneAt } = await import("../ui/overlaysparts");
     const feather = 0.3;
     // Middle: move. Edge: scale. Outside: rotate. Far out: nothing, so
     // the stage keeps its own zoom and pan.
@@ -853,7 +853,7 @@ describe("the radial gizmo says what a drag will do", () => {
   });
 
   it("tells uniform scaling from stretching one axis", async () => {
-    const { radialZoneAt } = await import("../ui/overlays");
+    const { radialZoneAt } = await import("../ui/overlaysparts");
     // On the shape's own axes: one axis only, which is where the square
     // handles sit. On the diagonals: both, where the round ones are.
     for (const axis of [0, 90, 180, -90]) {
@@ -865,7 +865,7 @@ describe("the radial gizmo says what a drag will do", () => {
   });
 
   it("offers the feather ring where the feather actually is", async () => {
-    const { radialZoneAt } = await import("../ui/overlays");
+    const { radialZoneAt } = await import("../ui/overlaysparts");
     // Feather 0.4 puts the ring at 0.6 of the radius.
     expect(radialZoneAt(0.6, 30, 0.4)).toBe("feather");
     // With no feather there is no ring to grab, and the middle stays
@@ -877,7 +877,7 @@ describe("the radial gizmo says what a drag will do", () => {
   });
 
   it("snaps rotation to ten degrees on SHIFT and not otherwise", async () => {
-    const { snapRotation } = await import("../ui/overlays");
+    const { snapRotation } = await import("../ui/overlaysparts");
     expect(snapRotation(37.4, false)).toBeCloseTo(37.4, 5);
     expect(snapRotation(37.4, true)).toBe(40);
     expect(snapRotation(-93, true)).toBe(-90);

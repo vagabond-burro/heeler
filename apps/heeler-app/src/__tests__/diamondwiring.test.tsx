@@ -29,7 +29,8 @@ import { initialState } from "../data";
 import { NODE_W, reduce, seatTakes, type Command, type NodeCard, type State, type Wire } from "../state";
 import { NODE_CATALOG, makeNode, specFor } from "../nodes";
 import { BUILTIN_RECIPES } from "../noderecipes";
-import { Inspector, NodeEditor, drawnSeats, pipeFits, portCenter, sourceSeat, type InSeat } from "../ui/graph";
+import { Inspector, NodeEditor } from "../ui/graph";
+import { drawnSeats, pipeFits, portCenter, sourceSeat, type InSeat } from "../ui/graphparts";
 import { choose, menuRows, menuValue } from "./menuhelp";
 import { setMacForTests } from "../platform";
 

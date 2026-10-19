@@ -25,7 +25,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { depthHistogram, depthMap } from "../bridge";
 import { looksFor, type LookSection, type SectionLook } from "../sectionlooks";
 import { lookPreviewState, type Command, type State } from "../state";
-import { depthProgressNow, depthRecipeKey, subscribeDepthProgress } from "./depthtool";
+import { depthProgressNow, depthRecipeKey, subscribeDepthProgress } from "./depthtoolparts";
 import { MenuField } from "./menufield";
 import { publishBusy } from "./statusbar";
 import { LOOK_HOVER_MS } from "./sectionlooksparts";

@@ -11,7 +11,7 @@ vi.mock("../bridge", async (orig) => {
 import { sampleImage } from "../bridge";
 import { initialState } from "../data";
 import { anyPickerArmed, reduce, toolNode, type Command, type State } from "../state";
-import { IDENTITY_VIEW } from "../ui/overlays";
+import { IDENTITY_VIEW } from "../ui/overlaysparts";
 import { RecolorPairLayer, RecolorPairs } from "../ui/recolorpairs";
 import { pairAfter, pairTurn, parsePairs, type RecolorPair } from "../ui/recolorpairsparts";
 

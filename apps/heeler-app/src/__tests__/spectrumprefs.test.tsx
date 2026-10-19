@@ -5,7 +5,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { initialState } from "../data";
-import { Spectrums, drawEvScale } from "../ui/spectrum";
+import { Spectrums } from "../ui/spectrum";
+import { drawEvScale } from "../ui/spectrumparts";
 
 describe("the scope a window opens on", () => {
   it("the pop-out opens on the panel's scope, channel and EV, and the panel comes back on the window's", () => {

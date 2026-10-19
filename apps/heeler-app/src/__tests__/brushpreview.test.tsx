@@ -398,7 +398,7 @@ describe("the heal dab's tone match", () => {
   // pixelblur.test.tsx.
 
   it("shifts the source's mean onto the destination's", async () => {
-    const { toneShiftAmount } = await import("../ui/brushpreview");
+    const { toneShiftAmount } = await import("../ui/brushpreviewparts");
     const px = (v: number) => {
       const d = new Uint8ClampedArray(4 * 4 * 4);
       for (let i = 0; i < d.length; i += 4) {
@@ -416,7 +416,7 @@ describe("the heal dab's tone match", () => {
   });
 
   it("lets the coverage decide what counts, and ignores absent pixels", async () => {
-    const { toneShiftAmount } = await import("../ui/brushpreview");
+    const { toneShiftAmount } = await import("../ui/brushpreviewparts");
     // Two pixels of source, two of destination. The heavy weight sits
     // on the first pair; the second destination pixel is transparent
     // (an undrawn corner) and must count for nothing, or off-frame
@@ -431,7 +431,7 @@ describe("the heal dab's tone match", () => {
   });
 
   it("answers zero when nothing readable overlaps, rather than dividing by nothing", async () => {
-    const { toneShiftAmount } = await import("../ui/brushpreview");
+    const { toneShiftAmount } = await import("../ui/brushpreviewparts");
     const blank = new Uint8ClampedArray(4 * 4 * 4); // all transparent
     expect(toneShiftAmount(blank, blank, null)).toEqual([0, 0, 0]);
   });
@@ -459,7 +459,7 @@ describe("the wash's blend simulation", () => {
   const alphaAt = (m: ImageData, x: number, y: number) => m.data[(y * m.width + x) * 4 + 3];
 
   it("turns the step between two opacities into a ramp", async () => {
-    const { blendCoverage } = await import("../ui/brushpreview");
+    const { blendCoverage } = await import("../ui/brushpreviewparts");
     // Left half painted at 100, right half at 50 (of 255); the blend
     // brush covers the middle, full weight.
     const before = img(64, 16, (x) => (x < 32 ? 255 : 128));
@@ -478,7 +478,7 @@ describe("the wash's blend simulation", () => {
   });
 
   it("never drifts outside the two sides, the ring-average failure", async () => {
-    const { blendCoverage } = await import("../ui/brushpreview");
+    const { blendCoverage } = await import("../ui/brushpreviewparts");
     // The first engine version read the brush's rim and averaged the
     // middle toward it; laid between two strokes the rim passes through
     // unpainted mask and every dab settled BELOW both sides. A local
@@ -494,7 +494,7 @@ describe("the wash's blend simulation", () => {
   });
 
   it("goes only as far as the opacity asks", async () => {
-    const { blendCoverage } = await import("../ui/brushpreview");
+    const { blendCoverage } = await import("../ui/brushpreviewparts");
     const step = () => img(64, 16, (x) => (x < 32 ? 255 : 128));
     const shape = img(64, 16, (x) => (x >= 22 && x <= 42 ? 255 : 0));
     const light = step();

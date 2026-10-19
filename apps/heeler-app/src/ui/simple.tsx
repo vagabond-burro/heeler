@@ -24,10 +24,11 @@ const MASK_CHIP: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
-import { PROFILE_CHOICES, SOURCE_MENU_ROWS, SourceMenuRow } from "./sourcemenus";
+import { SourceMenuRow } from "./sourcemenus";
+import { PROFILE_CHOICES, SOURCE_MENU_ROWS } from "./sourcemenusparts";
 import { GuardStrip } from "./guardstrip";
 import { capturePreset, maskBrushTarget, maskOverlayRgb, DEPTH_SIZES, snapDepthSize, MODEL_DENOISE_ID, denoiseMethodIsModel, denoiseSectionOn, depthMapMissing, maskViewOverriddenBy, maskPreviewNode, depthMaskShown, maskOverlayWanted, DEPTH_EXPORT_CONVENTION } from "../state";
-import { useDenoiseStatus, useFullDenoiseStatus, requestFullDenoise, retryDenoise, denoiseMark } from "./denoisetool";
+import { useDenoiseStatus, useFullDenoiseStatus, requestFullDenoise, retryDenoise, denoiseMark } from "./denoisetoolparts";
 import { TrackSlider, ValueField } from "./track";
 // Re-exported from its new home so artlayers' import keeps working;
 // the field moved to track.tsx (a leaf) so the Depth Lighting rig can
@@ -107,7 +108,8 @@ import { InspectDock } from "./inspect";
 import { DepthPickButton, DepthShape } from "./depthband";
 import { SectionLooks } from "./sectionlooks";
 import { ColorConsoleBlock } from "./colorconsole";
-import { DepthProgressBar, depthFromFile, passesOf, NormalsChoice } from "./depthtool";
+import { DepthProgressBar, NormalsChoice } from "./depthtool";
+import { depthFromFile, passesOf } from "./depthtoolparts";
 import { ObjectMattePanel } from "./mattetool";
 import { TetherTab } from "./tether";
 import { MaskEyeIcon, MaskOverlayIcon } from "./panelicons";

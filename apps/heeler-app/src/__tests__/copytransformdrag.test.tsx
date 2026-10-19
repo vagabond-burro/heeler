@@ -16,7 +16,7 @@ import { useRef } from "react";
 import { initialState } from "../data";
 import { artLayers, layerQuad, previewEdgeFor, reduce, transformBox, type Command, type State } from "../state";
 import { TransformOverlay, type LiveQuad } from "../ui/overlays";
-import { transformPreviewPlan } from "../ui/transformpreview";
+import { transformPreviewPlan } from "../ui/transformpreviewparts";
 
 const native = vi.hoisted(() => ({
   calls: [] as { name: string; args: Record<string, unknown> }[],

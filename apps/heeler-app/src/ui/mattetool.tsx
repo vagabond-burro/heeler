@@ -12,7 +12,7 @@ import React, { useState } from "react";
 import { mattePick } from "../bridge";
 import { usePickSessions } from "../picksession";
 import { reportToolError } from "./hints";
-import { passesOf } from "./depthtool";
+import { passesOf } from "./depthtoolparts";
 import type { Command, State, NodeCard } from "../state";
 import { activeMatteMask, layerLabel, matteNames } from "./mattetoolparts";
 

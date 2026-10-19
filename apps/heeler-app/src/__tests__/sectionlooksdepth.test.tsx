@@ -15,7 +15,8 @@ vi.mock("../bridge", async (original) => ({
 
 import { initialState } from "../data";
 import { reduce, type Command, type State } from "../state";
-import { DepthRunner, depthProgressNow, depthRecipeKey } from "../ui/depthtool";
+import { DepthRunner } from "../ui/depthtool";
+import { depthProgressNow, depthRecipeKey } from "../ui/depthtoolparts";
 import { SectionLooks } from "../ui/sectionlooks";
 import { LOOK_HOVER_MS } from "../ui/sectionlooksparts";
 

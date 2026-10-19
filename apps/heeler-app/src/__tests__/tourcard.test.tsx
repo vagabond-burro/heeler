@@ -17,7 +17,8 @@ import { mainConversion, reduce, type Command, type State } from "../state";
 import { chatSnapshot, _resetAssistantChatForTests } from "../assistantchat";
 import { placeCard, revealInScroller, scrollTargetFor, type Rect, type Reader } from "../tourgeometry";
 import { resetToursForTests, setTourHost, startTourHere, tourStop, TourWalk, type Tour, type TourHost } from "../tourwalk";
-import { END_W, nodesOf, TourOverlay } from "../ui/touroverlay";
+import { TourOverlay } from "../ui/touroverlay";
+import { END_W, nodesOf } from "../ui/touroverlayparts";
 
 afterEach(() => {
   cleanup();

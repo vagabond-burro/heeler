@@ -8,7 +8,8 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { initialState } from "../data";
 import { reduce, type Command, type State, type Wire } from "../state";
 import { makeNode, specFor } from "../nodes";
-import { Inspector, NodeEditor, cardRenders, wireRenders } from "../ui/graph";
+import { Inspector, NodeEditor } from "../ui/graph";
+import { cardRenders, wireRenders } from "../ui/graphparts";
 
 afterEach(cleanup);
 

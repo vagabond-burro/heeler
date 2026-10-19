@@ -28,7 +28,8 @@ import {
   type Command,
   type State,
 } from "../state";
-import { TransformOverlay, transformQuad, scaleFor, snapAngle, quadRotation } from "../ui/overlays";
+import { TransformOverlay } from "../ui/overlays";
+import { transformQuad, scaleFor, snapAngle, quadRotation } from "../ui/overlaysparts";
 
 /** Every command a runCommand call dispatches, in order. */
 function collect(id: string, s: State): Command[] {

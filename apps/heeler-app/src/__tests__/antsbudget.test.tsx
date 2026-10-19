@@ -5,7 +5,8 @@ import { act, render, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ANTS_MAX_CHARS, ANTS_MAX_ISLANDS, ANTS_MAX_POINTS, FIELD, displayAnts, loopArea, traceContours } from "../ui/selectionfield";
 import { ANTS_ENGINE_MAX_POINTS, fitAnts, traceMask } from "../ui/maskants";
-import { Outline, useMaskAnts } from "../ui/selection";
+import { Outline } from "../ui/selection";
+import { useMaskAnts } from "../ui/selectionparts";
 
 /** A mask the size of the ones the viewer fetches for a square frame. */
 const N = 768;

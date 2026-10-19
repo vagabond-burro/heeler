@@ -11,7 +11,8 @@ import { NEUTRAL_NODES, NEUTRAL_WIRES, initialState } from "../data";
 import { reduce, migrateNodes, NODE_H, NODE_W, type Command, type State } from "../state";
 import { makeNode, portHint, specFor } from "../nodes";
 import { serializeGraph } from "../bridge";
-import { NodeEditor, inputY } from "../ui/graph";
+import { NodeEditor } from "../ui/graph";
+import { inputY } from "../ui/graphparts";
 import { setMacForTests } from "../platform";
 
 function run(s: State, ...cmds: Command[]): State {

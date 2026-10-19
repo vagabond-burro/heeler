@@ -101,7 +101,7 @@ describe("Noise Reduction's Model method", () => {
 
 
 it("keys model work by the actual source text choices", async () => {
-  const { denoiseMark } = await import("../ui/denoisetool");
+  const { denoiseMark } = await import("../ui/denoisetoolparts");
   const s = initialState();
   const changed = (key: string, value: string) => ({ ...s, nodes: s.nodes.map(n => n.type === "heeler.image_source" ? { ...n, textParams: { ...n.textParams, [key]: value } } : n) });
   expect(denoiseMark(changed("highlights", "rebuild"))).not.toBe(denoiseMark(s));

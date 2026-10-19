@@ -30,7 +30,7 @@ import { serializeGraph } from "../bridge";
 import { SimplePanel, BrushTipPicker } from "../ui/simple";
 import { SECTIONS, sectionExportCommand, sectionExportTap } from "../ui/simpledata";
 import { ArtLayersTab } from "../ui/artlayers";
-import { depthWanted } from "../ui/depthtool";
+import { depthWanted } from "../ui/depthtoolparts";
 
 
 function run(s: State, ...cmds: Command[]): State {

@@ -45,7 +45,7 @@ import { GridWarpOverlay, type WarpPair } from "../ui/gridwarp";
 import { ShapeWarpOverlay } from "../ui/shapewarp";
 import { FinishWarpControls } from "../ui/finishwarp";
 import { NodeParams } from "../ui/graph";
-import { previewSourceBox } from "../ui/transformpreview";
+import { previewSourceBox } from "../ui/transformpreviewparts";
 import { legacySelectionMask } from "./legacymask";
 
 

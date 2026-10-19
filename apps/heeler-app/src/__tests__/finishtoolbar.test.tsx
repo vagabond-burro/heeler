@@ -17,7 +17,7 @@ import { App } from "../app";
 import { ART_ADJUSTMENTS, artLayers, type State } from "../state";
 import { tourHostForTests } from "../tourwalk";
 import { uiSettingsCommands, uiSettingsSnapshot } from "../settings";
-import { toolbarWraps, TOOLBAR_GAP } from "../ui/finishnew";
+import { toolbarWraps, TOOLBAR_GAP } from "../ui/finishnewparts";
 
 type User = ReturnType<typeof userEvent.setup>;
 

@@ -17,7 +17,7 @@ import { initialState } from "../data";
 import { anyPickerArmed, reduce, type Command, type NodeCard, type State } from "../state";
 import { bandOf, bandWeight, widenBand } from "../ui/depthbins";
 import { DepthShape } from "../ui/depthband";
-import { depthWanted } from "../ui/depthtool";
+import { depthWanted } from "../ui/depthtoolparts";
 import { serializeGraph } from "../bridge";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);

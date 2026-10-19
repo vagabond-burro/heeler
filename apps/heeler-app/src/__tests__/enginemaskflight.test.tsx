@@ -17,7 +17,10 @@ vi.mock("../bridge", async (orig) => {
 
 import { initialState } from "../data";
 import { reduce, type State } from "../state";
-import { useEngineMask } from "../ui/selection";
+import { useEngineMask } from "../ui/selectionparts";
+// The hook reaches the bridge through a dynamic import; loading it here
+// first keeps that import from taking real time under the fake clock.
+import "../bridge";
 
 function Probe({ state, id }: { state: State; id: string }) {
   useEngineMask(state, id);

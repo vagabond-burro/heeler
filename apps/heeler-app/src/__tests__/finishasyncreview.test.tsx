@@ -6,7 +6,7 @@ import { makeNode, specFor } from "../nodes";
 import { runBakeWarp } from "../layeractions";
 import { runLayerViaCopy } from "../commands";
 import { SectionLooks } from "../ui/sectionlooks";
-import { placeImageFile, placeCatalogImage } from "../ui/imagelayers";
+import { placeImageFile, placeCatalogImage } from "../ui/imagelayersparts";
 import { clearAllOps } from "../ui/opprogress";
 
 const bridge = vi.hoisted(() => ({ bake: vi.fn(), copy: vi.fn(), histogram: vi.fn(), depth: vi.fn(), probe: vi.fn() }));

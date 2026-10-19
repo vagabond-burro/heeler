@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { App } from "../app";
 import { initialState } from "../data";
 import { DEPTH_MASK_DEFAULTS, LAYER_MASK_DEFAULTS, LAYER_MASK_TYPES, NEUTRAL_PARAMS, reduce, type Command, type State } from "../state";
-import { depthWanted } from "../ui/depthtool";
+import { depthWanted } from "../ui/depthtoolparts";
 import { LayersSection } from "../ui/simple";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);

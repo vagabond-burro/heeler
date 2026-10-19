@@ -12,7 +12,7 @@ import { inpaintFill, smartModelDownload, smartModelStatus, type SmartModels } f
 import { logMsg } from "../log";
 import { reportToolError } from "./hints";
 import { ModelConsentCard } from "./modelconsent";
-import { MODEL_FILL_GLYPH } from "./panelicons";
+import { MODEL_FILL_GLYPH } from "./paneliconsparts";
 import { artMaskNode, type Command, type State } from "../state";
 import { publishBusy } from "./statusbar";
 import { activeFillLayer, fillLayers } from "./filltoolparts";

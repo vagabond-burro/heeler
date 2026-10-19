@@ -42,7 +42,8 @@ import {
   type Wire,
 } from "../state";
 import registryDefaults from "../registry-defaults.json";
-import { NodePalette, paletteRecipes } from "../ui/nodepalette";
+import { NodePalette } from "../ui/nodepalette";
+import { paletteRecipes } from "../ui/nodepaletteparts";
 import { NodeEditor } from "../ui/graph";
 
 const run = (s: State, ...cmds: Command[]): State => cmds.reduce(reduce, s);

@@ -9,7 +9,7 @@ import { photoFactsOf, whereFactsOf } from "./assistantphoto";
 import { useScheduledCatalogBackup } from "./ui/catalogbackup";
 import { catalogSaves } from "./savebarrier";
 import { pruneLibrarySteps } from "./libraryundo";
-import { startTransition, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { SelectDialogs } from "./ui/selectdialogs";
 import { FileLayersDialog } from "./ui/filelayers";
 import { CatalogLayerDialog } from "./ui/imagelayers";
@@ -17,7 +17,7 @@ import { DocsViewer } from "./ui/docsviewer";
 import { BakeProgressDialog, OpProgressOverlay } from "./ui/opprogress";
 import { handleApiAsync } from "./api";
 import { onTauriEvent } from "./taurievents";
-import { CONTROL_FLASH_MS, maskOverlayWanted, previewEdgeFor, previewTarget, reduce, settleJpegQuality } from "./state";
+import { CONTROL_FLASH_MS, maskOverlayWanted, previewEdgeFor, previewTarget, reduce } from "./state";
 import type { BootStep, Command, State } from "./state";
 import { initialState } from "./data";
 import { uiSettingsCommands, uiSettingsSnapshot } from "./settings";
@@ -113,7 +113,7 @@ import {
   revealActiveThumb,
 } from "./ui/chrome";
 import { Viewer } from "./ui/viewer";
-import { quadGestureBlendId, transformPreviewPlan } from "./ui/transformpreview";
+import { quadGestureBlendId, transformPreviewPlan } from "./ui/transformpreviewparts";
 // The pump's retry policy lives in its own module: exported from here
 // it defeated Vite's fast refresh, and every edit cost a full reload.
 import { PREVIEW_RETRY_ATTEMPTS, isMissingSource, missingSourcePath, previewRetryDelay } from "./previewretry";
@@ -131,35 +131,9 @@ const SETTLE_DELAY_MS = 600;
  * frame of each row it stops on, and only the row it stays on pays
  * for the sharp one. */
 const LOOK_REST_MS = 250;
-
-/** Exact request identity: the whole serialized graph, not a hash of
- * it (the second pre-merge review found two exposures whose JSON had
- * the same length and the same djb2, and a collision here shows a
- * stale full-resolution frame, not a spare render).
- * The edit counter remains a freshness guard for in-flight work, not
- * a pixel identity: Undo can restore exactly the previous graph. Source
- * identity is checked separately, because the editor's state does not
- * describe files or rasters. The preview edges are NOT part of it: a
- * settle is the whole photograph at its own pixels whatever the stage,
- * so a window step should swap the last settle back in rather than
- * render it again; the reduced tier's memory fallback cannot pass as
- * a settle because a frame with a memory notice is never remembered. */
-export function settleSignature(s: State): string {
-  return JSON.stringify([
-    s.activeImage,
-    s.previewNonce,
-    serializeGraph(s),
-    previewTarget(s) ?? "",
-    s.gamutView,
-    maskOverlayWanted(s),
-    s.prefs.maskOverlayColor ?? "red",
-    s.brushOverlayStrength ?? 0.5,
-    settleJpegQuality(s.prefs),
-  ]);
-}
 import { QuadEditView } from "./ui/quadedit";
 import { SimplePanel } from "./ui/simple";
-import { framePixels } from "./ui/spectrum";
+import { framePixels } from "./ui/spectrumparts";
 import { NodeEditor, Inspector, InspectorBar, GroupDialog } from "./ui/graph";
 import { CanvasMode } from "./ui/canvas";
 import { announceConsoleWindow, connectPySync, consoleWindowLive, echoEnabled, onConsoleWindow, pushEcho } from "./ui/consolestate";
@@ -178,7 +152,8 @@ import { PolishPanel } from "./ui/polish";
 import { PanelDivider } from "./ui/divider";
 import { fittedDragSize, useFittedState, useLayoutRoom } from "./ui/layoutroom";
 import { BakeDialog } from "./ui/bake";
-import { NodePalette, clampRecents } from "./ui/nodepalette";
+import { NodePalette } from "./ui/nodepalette";
+import { clampRecents } from "./ui/nodepaletteparts";
 import { Preferences } from "./ui/preferences";
 import { CatalogDialog, ConfirmDialog } from "./ui/catalogui";
 import { mergeSelection, stitchSelection } from "./ui/chrome";
@@ -191,6 +166,7 @@ import { logMsg } from "./log";
 import { flashStatus, setHint } from "./ui/hints";
 import { logDebug, setLogHome, setLogLevel } from "./log";
 import { maskOfLayer } from "./layerids";
+import { landFrame, noFramesIfAny, settleSignature } from "./appparts";
 
 /** Crop/rotate geometry of the current graph as a string, so effects can
  * depend on it by value. A function of STATE, not of a render: the before
@@ -202,27 +178,6 @@ function cropSigOf(s: State): string {
   return n
     ? `${n.enabled}|${n.params.angle ?? 0}|${n.params.crop_x ?? 0}|${n.params.crop_y ?? 0}|${n.params.crop_w ?? 1}|${n.params.crop_h ?? 1}|${n.params.flip_h ?? 0}|${n.params.flip_v ?? 0}|${n.params.turn ?? 0}`
     : "";
-}
-
-/** A frame lands. Mid-gesture (a slider or a stroke streaming) it
- * lands in a transition: the new picture re-renders the whole window,
- * the panels that read the frame with it, and as an ordinary update
- * that render held the main thread while the hand was still moving the
- * handle (a tester, 2026-09-30: "I do get a bit of jitter/lag on the
- * sliders"). As a transition React may split it across frames and
- * serve the handle first; it lands in the same order as the param
- * writes it follows, which ride transitions too (TrackSlider). At rest
- * a frame lands at once, as before, so a view switch never meets a
- * frame from the view it left. */
-export function landFrame(snap: Pick<State, "gesture">, commit: () => void): void {
-  if (snap.gesture !== null) startTransition(commit);
-  else commit();
-}
-
-/** The multi-view's frames emptied, keeping the same object when they
- * already are, so React bails out instead of committing again. */
-export function noFramesIfAny(prev: Record<string, string>): Record<string, string> {
-  return Object.keys(prev).length === 0 ? prev : {};
 }
 
 /** Drag handle between panels. Reports pointer deltas; the caller turns

@@ -64,6 +64,7 @@ const LEGACY: string[] = [
   "recolor.tsx",
   "ribbon.tsx",
   "ribbontable.tsx",
+  "ribbontableparts.ts",
   "selectdialogs.tsx",
   "simple.tsx",
   "smarttool.tsx",

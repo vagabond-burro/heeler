@@ -8,18 +8,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import type { DepthMapAnswer } from "../bridge";
 import { reduce, type Command, type State } from "../state";
-import {
-  DEPTH_SHEET_DELAY_MS,
-  DepthProgressBar,
-  DepthRunner,
-  depthEstimate,
-  depthFailureNow,
-  depthInlineShown,
-  dismissDepthFailure,
-  depthProgressNow,
-  recordDepthTiming,
-  resetDepthTimings,
-} from "../ui/depthtool";
+import { DepthProgressBar, DepthRunner } from "../ui/depthtool";
+import { DEPTH_SHEET_DELAY_MS, depthEstimate, depthFailureNow, depthInlineShown, dismissDepthFailure, depthProgressNow, recordDepthTiming, resetDepthTimings } from "../ui/depthtoolparts";
 
 const pending: (() => void)[] = [];
 const rejects: ((err: unknown) => void)[] = [];

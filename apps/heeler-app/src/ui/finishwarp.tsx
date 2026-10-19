@@ -44,7 +44,7 @@ import { AddShapeButton, ShapeWarpControls } from "./shapewarp";
 import { TrackSlider } from "./track";
 import { ValueField } from "./simple";
 import { SourceMenuRow } from "./sourcemenus";
-import { BAKE_WARP_GLYPH, MESH_WARP_GLYPH } from "./panelicons";
+import { BAKE_WARP_GLYPH, MESH_WARP_GLYPH } from "./paneliconsparts";
 import { BAKE_WARP_HINT, runBakeWarp } from "../layeractions";
 import { WARP_KIND_CHOICES, editWarpWords, pictureAspectOf } from "./finishwarpparts";
 

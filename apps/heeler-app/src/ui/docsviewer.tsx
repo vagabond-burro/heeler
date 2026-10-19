@@ -24,7 +24,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Command, State } from "../state";
 import { listDocs, readDoc, readDocAsset, type DocEntry } from "../bridge";
 import { buildDocTree, flattenDocs, resolveDocPath, type DocNode } from "../docstree";
-import { RIBBON_ICON_CHIP } from "./ribbontable";
+import { RIBBON_ICON_CHIP } from "./ribbontableparts";
 import { docSlug, searchDocs } from "./docsviewerparts";
 
 type D = React.Dispatch<Command>;

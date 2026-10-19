@@ -156,7 +156,7 @@ describe("the coverage painter trusts the answer's size", () => {
   it("paints a 512 dab as 512 even when 1024 was asked for", async () => {
     const rec = recordingContext();
     restore = rec.restore;
-    const { paintCoverage } = await import("../ui/brushpreview");
+    const { paintCoverage } = await import("../ui/brushpreviewparts");
     const canvas = document.createElement("canvas");
     paintCoverage(canvas, engineDab(1024, 512), 1024);
     expect(canvas.width).toBe(512);

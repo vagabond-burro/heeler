@@ -18,7 +18,7 @@ import { getLogLevel, logVersion, subscribeLog } from "../log";
 import { modLabel } from "../platform";
 import type { Command, State } from "../state";
 import { polishLayerLine, transformDragOf } from "../state";
-import { transformKeysLine } from "./overlays";
+import { transformKeysLine } from "./overlaysparts";
 import { gridWarpKeysLine } from "./gridwarp";
 import { shapeWarpKeysLine } from "./shapewarpparts";
 

@@ -11,7 +11,8 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
-import { PARADE_INK_CHIP, Spectrums, drawEvScale, drawHistogram, readout, type Frame } from "../ui/spectrum";
+import { Spectrums } from "../ui/spectrum";
+import { PARADE_INK_CHIP, drawEvScale, drawHistogram, readout, type Frame } from "../ui/spectrumparts";
 import { histogram, LEVELS } from "../spectrums";
 import { modLabel } from "../platform";
 
