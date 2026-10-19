@@ -23,6 +23,8 @@ import { createPortal } from "react-dom";
 import { panePropsEqual } from "./viewmemo";
 import { SpectrumBar, Spectrums } from "./spectrum";
 import type { Backdrop, Category, Command, NodeCard, State, Wire } from "../state";
+import { inspectDocked } from "../state";
+import { InspectDock } from "./inspect";
 import { FlipPhotoRow } from "./flipphoto";
 import { artMaskView, BACKDROP_COLORS, CAT_COLOR, NODE_H, NODE_W, createsCycle, duplicable, nameMatches, PARAM_OPTIONS, REGISTRY_DEFAULTS, hasParamRange, TYPE_NUM_PARAMS, PARAM_TEXT_DEFAULT, paramRange, publishedValue, publishedChoice, FLAG_PARAMS, ART_KINDS, isLayerEffect, artLayers, warpNodeById, isPlacedLayer, wireLacksPort, curveModeOf, LAYER_WARP, WIRE_GESTURE, exportWrittenName, exportWritesDepth, DEPTH_EXPORT_CONVENTION, DEPTH_MAP_CARD_CONVENTION, depthMapShowsDepth, seatTakes, PARAM_CHOICE_HINTS, maskIsOff, MASK_OFF_GESTURE, defaultGroupName, ungroupBlocked } from "../state";
 import { GridWarpControls } from "./gridwarp";
@@ -4683,6 +4685,11 @@ function InspectorImpl({
   const pool = opened?.groupNodes ?? artMaskView(state).nodes;
   const sel = pool.filter((n) => state.selection.includes(n.id));
   const single = sel.length === 1 ? sel[0] : null;
+  // Color Balance carried an opacity no engine ever read, so it is left
+  // out: its slider moved and the picture did not.
+  const hasOwnOpacity =
+    !!single && ("opacity" in single.params || "opacity" in (REGISTRY_DEFAULTS[single.type] ?? {})) && single.type !== "heeler.color_balance";
+  const maskWires = single ? state.wires.filter((w) => w.to === single.id && w.toPort === "mask") : [];
   // A member of the open group publishes its rows to the group from a
   // right-click (publishcontrols.tsx). Not inside a Develop tool group,
   // whose face is its section's and is rebuilt by the mirror.
@@ -4709,6 +4716,12 @@ function InspectorImpl({
         </div>
       </div>
 
+      {/* Everything between the header and the docked Inspect pane, given
+          the room that is left: the node's own controls scroll inside it
+          and the pane keeps the panel's foot, so dragging its seam moves
+          the pane's top. Without it the pane hung under content of a
+          fixed height and a drag moved its bottom, off the window. */}
+      <div data-testid="inspector-body" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflowY: "auto" }}>
       {/* The spectrums, directly under the header. "The Spectrums
 should be at the top, attributes from the selected node will appear
 below the Spectrum." They are a reference you read while working
@@ -4971,7 +4984,13 @@ its switch ("nodes don't have a reset on them").*/}
             ) : null;
           })()}
           <div style={{ flex: 1 }} />
-          <div onContextMenu={onPublishMenu} style={{ borderTop: "1px solid var(--line-1)", padding: "11px 12px 13px", display: "flex", flexDirection: "column", gap: 9, background: "#1d1c1a" }}>
+          {/* The NODE footer holds a node's Opacity (a layer's with its mask
+              export) and the masks wired to it. A node with none of them
+              shows no footer: the faint "Opacity n/a" row it used to carry
+              read as a control that never worked (2026-10-18: "What is the
+              need of that ... It's always disabled?"). */}
+          {(isLayerAdj(single.id) || hasOwnOpacity || maskWires.length > 0) && (
+          <div onContextMenu={onPublishMenu} data-testid="inspector-node-footer" style={{ borderTop: "1px solid var(--line-1)", padding: "11px 12px 13px", display: "flex", flexDirection: "column", gap: 9, background: "#1d1c1a" }}>
             <div className="kicker">Node</div>
             {/* Color Balance carried an opacity no engine ever read, so
                 its slider moved and the picture did not; graphs saved
@@ -4986,26 +5005,10 @@ its switch ("nodes don't have a reset on them").*/}
 Develop shows under the Depth mask: one node, two seats.*/}
                 <LayerMaskExportRow state={state} layerId={single.id} dispatch={dispatch} testid={`inspector-layer-mask-export-${single.id}`} />
               </>
-            ) : ("opacity" in single.params || "opacity" in (REGISTRY_DEFAULTS[single.type] ?? {})) && single.type !== "heeler.color_balance" ? (
+            ) : hasOwnOpacity ? (
               <Slider label="Opacity" param="opacity" node={single} dispatch={dispatch} centered={false} />
-            ) : (
-              // A node with no opacity of its own. Drawn faint and said
-              // in words, so it cannot be mistaken for a slider that
-              // refuses to move.
-              <div
-                className="srow"
-                data-testid="opacity-none"
-                data-hint="This node has no opacity control; put a Blend Mode or Merge after it to fade it"
-                style={{ gridTemplateColumns: "78px 1fr 42px", opacity: 0.4 }}
-              >
-                <div className="lbl">Opacity</div>
-                <div className="strack">
-                  <div className="rail" />
-                </div>
-                <div className="val">n/a</div>
-              </div>
-            )}
-            {state.wires.filter((w) => w.to === single.id && w.toPort === "mask").map((w) => (
+            ) : null}
+            {maskWires.map((w) => (
               <div key={w.from} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 9px", background: "#1f1c22", borderLeft: "2px solid var(--cat-masking)" }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--cat-masking-lt)" strokeWidth="1.7"><circle cx="12" cy="12" r="8" /></svg>
                 <div style={{ flex: 1, fontSize: 10, color: "#c3bcc9" }}>Mask: {state.nodes.find((n) => n.id === w.from)?.name}</div>
@@ -5013,6 +5016,7 @@ Develop shows under the Depth mask: one node, two seats.*/}
               </div>
             ))}
           </div>
+          )}
         </>
       )}
 
@@ -5022,6 +5026,11 @@ Develop shows under the Depth mask: one node, two seats.*/}
         </div>
       )}
 
+      </div>
+
+      {/* The Inspect panel, docked at the foot as in Develop, in the window
+          that has the viewer the point was picked on. */}
+      {hasViewer && inspectDocked(state) && <InspectDock state={state} dispatch={dispatch} />}
     </div>
   );
 }

@@ -3,13 +3,14 @@
 // Inspecting never changes the edit: the point, the panel and the
 // influence views are view state, and the trace is a cache read
 // against the frame on screen.
-import { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { Command, InfluenceMode, NodeCard, State } from "../state";
 import { tracePixel, type TraceSample, type TraceStep } from "../bridge";
 import { NODE_CATALOG } from "../nodes";
 import { PICK_CURSOR } from "./cursors";
 import { norm, type ViewTransform } from "./overlays";
 import { isPrimaryPress } from "./pointerguard";
+import { PanelDivider } from "./divider";
 
 type D = (c: Command) => void;
 
@@ -20,9 +21,57 @@ const HEAT_MODES: [Exclude<InfluenceMode, "isolate">, string, string][] = [
   ["both", "Both", "Brightness and color changes together"],
 ];
 
+/** The docked pane's height before anyone drags its seam. */
+const INSPECT_SPLIT_DEFAULT = 260;
+
 /** A change under this, in display units, reads as none: a little
  * under half an 8-bit level. */
 const NO_CHANGE = 0.0015;
+
+/** Every row on one grid, the header's too, so each column lines up
+ * whatever a node's name: the name takes what is left and ends in an
+ * ellipsis when it must; the swatches, the value, the change, the
+ * mask's share and the view buttons each hold a width of their own. */
+function rowGrid(withMask: boolean): React.CSSProperties {
+  return {
+    display: "grid",
+    // The MASK column only while some node on the path has a mask: most
+    // paths have none, and its width goes to the names instead.
+    gridTemplateColumns: `minmax(0, 1fr) 14px 34px 40px${withMask ? " 32px" : ""} 38px`,
+    columnGap: 5,
+    alignItems: "center",
+  };
+}
+
+/** A number column: right-aligned, its digits the same width. */
+const NUMBER: React.CSSProperties = { textAlign: "right", color: "var(--text-faint)", fontVariantNumeric: "tabular-nums" };
+
+/** A row's view buttons: pictures with their names on hover, so the
+ * node's name and its numbers keep the row's room. */
+const ICON_CHIP: React.CSSProperties = { padding: "1px 2px", display: "inline-flex", alignItems: "center", flex: "none" };
+
+/** Map: a picture with a hot spot and its contours, where the node
+ * changes it. */
+function MapGlyph() {
+  return (
+    <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" aria-hidden="true" focusable="false">
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1" />
+      <circle cx="9.5" cy="7.5" r="3" />
+      <circle cx="9.5" cy="7.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** Isolate: a disc half filled, what the node adds against a middle
+ * gray. */
+function IsolateGlyph() {
+  return (
+    <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} aria-hidden="true" focusable="false">
+      <circle cx="8" cy="8" r="5.5" />
+      <path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
 
 /** The click layer and pin, inside the transformed stage frame. */
 export function InspectLayer({ state, dispatch, view }: { state: State; dispatch: D; view: ViewTransform }) {
@@ -114,7 +163,13 @@ function changed(step: TraceStep): boolean {
 /** The Inspect panel: the picked point's path from the photograph to the
  * finished frame, each node with its input and output there, and the
  * influence views a click away. */
-export function InspectPanel({ state, dispatch }: { state: State; dispatch: D }) {
+export function InspectPanel({ state, dispatch, docked = false }: {
+  state: State;
+  dispatch: D;
+  /** at the foot of the right panel (InspectDock) rather than floating
+   * over the viewer */
+  docked?: boolean;
+}) {
   const p = state.inspectPoint;
   const [steps, setSteps] = useState<TraceStep[] | null>(null);
   const [heat, setHeat] = useState<Exclude<InfluenceMode, "isolate">>("both");
@@ -138,22 +193,29 @@ export function InspectPanel({ state, dispatch }: { state: State; dispatch: D })
   const rows = (steps ?? []).filter((s) => !s.id.startsWith("__") && s.node_type !== "heeler.output");
   const final = steps && steps.length ? steps[steps.length - 1].output : null;
   const view = state.influenceView;
+  const withMask = rows.some((r) => r.coverage !== null);
+  const grid = rowGrid(withMask);
   return (
     <div
       data-testid="inspect-panel"
-      style={{
-        position: "absolute",
-        top: 10,
-        right: 12,
-        zIndex: 41,
-        width: 320,
-        maxHeight: "calc(100% - 20px)",
-        overflowY: "auto",
-        background: "var(--bg-panel)",
-        border: "1px solid var(--line-4)",
-        padding: "8px 10px",
-        fontSize: 11,
-      }}
+      data-docked={docked || undefined}
+      style={
+        docked
+          ? { padding: "8px 12px", fontSize: 11 }
+          : {
+              position: "absolute",
+              top: 10,
+              right: 12,
+              zIndex: 41,
+              width: 320,
+              maxHeight: "calc(100% - 20px)",
+              overflowY: "auto",
+              background: "var(--bg-panel)",
+              border: "1px solid var(--line-4)",
+              padding: "8px 10px",
+              fontSize: 11,
+            }
+      }
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
         <div className="kicker">Inspect</div>
@@ -170,6 +232,20 @@ export function InspectPanel({ state, dispatch }: { state: State; dispatch: D })
         >
           Pick
         </button>
+        {docked && (
+          <button
+            className="chip"
+            data-testid="inspect-minimize"
+            aria-label="Fold Inspect to a bar"
+            data-hint="Fold Inspect to a bar at the foot of the panel; the point and its trace stay"
+            style={{ fontSize: 11, padding: "1px 6px", display: "inline-flex", alignItems: "center" }}
+            onClick={() => dispatch({ type: "toggle_inspect_split" })}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+        )}
         <button
           className="chip"
           data-testid="inspect-close"
@@ -204,65 +280,106 @@ export function InspectPanel({ state, dispatch }: { state: State; dispatch: D })
       </div>
       {failed && <div style={{ color: "var(--text-ghost)" }}>The trace is not available for this photograph.</div>}
       {!failed && steps === null && <div style={{ color: "var(--text-ghost)" }}>Tracing…</div>}
+      {rows.length > 0 && (
+        <div className="kicker" data-testid="inspect-head" style={{ ...grid, letterSpacing: ".04em", padding: "0 0 3px" }}>
+          <span>NODE</span>
+          <span />
+          <span style={{ textAlign: "right" }}>VALUE</span>
+          <span style={{ textAlign: "right" }}>CHANGE</span>
+          {withMask && <span style={{ textAlign: "right" }} title="How much of the node its mask lets through here">MASK</span>}
+          <span />
+        </div>
+      )}
       {rows.map((s) => {
         const moved = changed(s);
         const dl = s.input && s.output ? Math.round((s.output.luma - s.input.luma) * 1000) / 10 : null;
         const heatOn = view?.id === s.id && view.mode !== "isolate";
         const isoOn = view?.id === s.id && view.mode === "isolate";
+
         return (
           <div
             key={s.id}
             data-testid={`inspect-row-${s.id}`}
             data-changed={moved}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0", borderTop: "1px solid var(--line-2)", opacity: moved || s.moves ? 1 : 0.5 }}
+            style={{ ...grid, padding: "3px 0", borderTop: "1px solid var(--line-2)", opacity: moved || s.moves ? 1 : 0.5 }}
           >
             <button
               data-testid={`inspect-select-${s.id}`}
-              data-hint="Select this node"
-              style={{ flex: 1, minWidth: 0, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", background: "none", border: 0, padding: 0, color: "inherit", cursor: "pointer", fontSize: 11 }}
+              data-hint={`Select ${nameOf(state.nodes, s.id, s.node_type)}`}
+              style={{ minWidth: 0, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", background: "none", border: 0, padding: 0, color: "inherit", cursor: "pointer", fontSize: 11 }}
               onClick={() => dispatch({ type: "select_nodes", ids: [s.id] })}
             >
               {nameOf(state.nodes, s.id, s.node_type)}
               {!s.enabled && <span style={{ color: "var(--text-ghost)" }}> (off)</span>}
             </button>
-            {s.input && <span title="In" style={{ width: 10, height: 10, background: swatch(s.input), border: "1px solid var(--line-4)" }} />}
-            {s.output && <span title="Out" style={{ width: 10, height: 10, background: swatch(s.output), border: "1px solid var(--line-4)" }} />}
-            <span style={{ width: 74, textAlign: "right", color: "var(--text-faint)", fontVariantNumeric: "tabular-nums" }} data-testid={`inspect-value-${s.id}`}>
-              {s.moves
-                ? "moves pixels"
-                : s.output
-                  ? `${pct(s.output)}${dl !== null && moved ? ` (${dl > 0 ? "+" : ""}${dl})` : ""}`
-                  : ""}
-            </span>
-            {s.coverage !== null && (
-              <span style={{ color: "var(--text-ghost)" }} title="How much of this node its mask lets through here" data-testid={`inspect-mask-${s.id}`}>
-                mask {Math.round(s.coverage * 100)}%
+            {/* One swatch, split: the color the node receives on the left,
+                the color it hands on on the right. */}
+            <span
+              data-testid={`inspect-swatch-${s.id}`}
+              title="In, and out"
+              style={{
+                width: 12,
+                height: 12,
+                border: "1px solid var(--line-4)",
+                background:
+                  s.input && s.output
+                    ? `linear-gradient(90deg, ${swatch(s.input)} 50%, ${swatch(s.output)} 50%)`
+                    : s.output
+                      ? swatch(s.output)
+                      : "transparent",
+              }}
+            />
+            {s.moves ? (
+              <span data-testid={`inspect-value-${s.id}`} style={{ gridColumn: withMask ? "3 / 6" : "3 / 5", textAlign: "right", color: "var(--text-faint)" }}>
+                moves pixels
               </span>
-            )}
-            {s.input && !s.moves && (
+            ) : (
               <>
-                <button
-                  className="chip"
-                  data-testid={`inspect-heatmap-${s.id}`}
-                  data-active={heatOn}
-                  data-hint="Show where this node changes the picture"
-                  style={{ fontSize: 11, padding: "0 5px" }}
-                  onClick={() => dispatch({ type: "toggle_influence_view", id: s.id, mode: heat })}
-                >
-                  Map
-                </button>
-                <button
-                  className="chip"
-                  data-testid={`inspect-isolate-${s.id}`}
-                  data-active={isoOn}
-                  data-hint="Show only what this node adds, around a middle gray"
-                  style={{ fontSize: 11, padding: "0 5px" }}
-                  onClick={() => dispatch({ type: "toggle_influence_view", id: s.id, mode: "isolate" })}
-                >
-                  Isolate
-                </button>
+                <span data-testid={`inspect-value-${s.id}`} style={NUMBER}>
+                  {s.output ? pct(s.output) : ""}
+                </span>
+                <span data-testid={`inspect-change-${s.id}`} style={{ ...NUMBER, color: moved ? "var(--text-mid)" : "var(--text-faint)" }}>
+                  {dl !== null && moved ? `${dl > 0 ? "+" : ""}${dl}` : ""}
+                </span>
+                {withMask && (
+                  <span data-testid={s.coverage !== null ? `inspect-mask-${s.id}` : undefined} style={{ ...NUMBER, color: "var(--text-ghost)" }}>
+                    {s.coverage !== null ? `${Math.round(s.coverage * 100)}%` : ""}
+                  </span>
+                )}
               </>
             )}
+            <span style={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
+              {s.input && !s.moves && (
+                <>
+                  <button
+                    className="chip"
+                    data-testid={`inspect-heatmap-${s.id}`}
+                    data-active={heatOn}
+                    aria-pressed={heatOn}
+                    aria-label="Map"
+                    data-tip="Map"
+                    data-hint="Show where this node changes the picture"
+                    style={ICON_CHIP}
+                    onClick={() => dispatch({ type: "toggle_influence_view", id: s.id, mode: heat })}
+                  >
+                    <MapGlyph />
+                  </button>
+                  <button
+                    className="chip"
+                    data-testid={`inspect-isolate-${s.id}`}
+                    data-active={isoOn}
+                    aria-pressed={isoOn}
+                    aria-label="Isolate"
+                    data-tip="Isolate"
+                    data-hint="Show only what this node adds, around a middle gray"
+                    style={ICON_CHIP}
+                    onClick={() => dispatch({ type: "toggle_influence_view", id: s.id, mode: "isolate" })}
+                  >
+                    <IsolateGlyph />
+                  </button>
+                </>
+              )}
+            </span>
           </div>
         );
       })}
@@ -276,8 +393,75 @@ export function InspectPanel({ state, dispatch }: { state: State; dispatch: D })
         </div>
       )}
       <div style={{ color: "var(--text-ghost)", marginTop: 6, lineHeight: 1.5 }}>
-        Each node shows its output at this point, 0 to 100, and in brackets how far it moved it. The changes do not add up: each node works on what the one before it made.
+        VALUE is each node's output at this point, 0 to 100, and CHANGE how far it moved it. The changes do not add up: each node works on what the one before it made.
       </div>
     </div>
+  );
+}
+
+/** The Inspect panel docked at the foot of the right panel, the way the
+ * selection's split is (2026-10-18: "move that to the bottom of the right
+ * panel in its own resizable view? Kind of like the selection and brush
+ * tools do"): a seam above it to drag, its height remembered, and a fold
+ * to a bar and back. Shown while a point is being inspected. */
+export function InspectDock({ state, dispatch }: { state: State; dispatch: D }) {
+  const pane = useRef<HTMLDivElement>(null);
+  if (!state.inspectPoint) return null;
+  if (state.inspectSplitMin) {
+    return (
+      <button
+        data-testid="inspect-split-bar"
+        data-hint="Bring the Inspect panel back up"
+        onClick={() => dispatch({ type: "toggle_inspect_split" })}
+        style={{
+          all: "unset",
+          cursor: "pointer",
+          flex: "none",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "5px 12px",
+          borderTop: "1px solid var(--line-2)",
+          background: "var(--bg-panel-head)",
+        }}
+      >
+        <span className="kicker" style={{ flex: 1 }}>Inspect</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2" aria-hidden="true">
+          <path d="M18 15l-6-6-6 6" />
+        </svg>
+      </button>
+    );
+  }
+  return (
+    <>
+      <PanelDivider
+        vertical={false}
+        testid="divider-inspect-split"
+        grip
+        onDelta={(d) =>
+          dispatch({
+            type: "set_panel_size",
+            panel: "inspectSplit",
+            // The seam sits above the pane, so a drag down shrinks it.
+            // Measured, not remembered, as the selection split's is.
+            size: (pane.current?.offsetHeight ?? 0) - d,
+          })
+        }
+      />
+      <div
+        ref={pane}
+        data-testid="inspect-split"
+        style={{
+          flex: "none",
+          height: state.panelSizes.inspectSplit > 0 ? state.panelSizes.inspectSplit : INSPECT_SPLIT_DEFAULT,
+          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+          borderTop: "1px solid var(--line-2)",
+        }}
+      >
+        <InspectPanel state={state} dispatch={dispatch} docked />
+      </div>
+    </>
   );
 }

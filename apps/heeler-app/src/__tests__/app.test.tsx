@@ -476,9 +476,22 @@ describe("Heeler UI", () => {
     expect(Number(lum.getAttribute("aria-valuenow"))).toBeGreaterThan(before);
 
     // The engine never read an opacity on Color Balance, so the
-    // inspector says it has none rather than offering a dead slider.
+    // inspector offers no slider, and no faint "Opacity n/a" row either:
+    // it read as a control that never worked (2026-10-18). The NODE
+    // footer stays for the mask wired to it, and holds only that.
     expect(screen.queryByTestId("slider-opacity")).toBeNull();
-    expect(screen.getByTestId("opacity-none")).toBeInTheDocument();
+    expect(screen.queryByTestId("opacity-none")).toBeNull();
+    const footer = screen.getByTestId("inspector-node-footer");
+    expect(footer.textContent).toMatch(/Mask:/);
+    expect(footer.textContent).not.toMatch(/Opacity/);
+  });
+
+  it("shows no NODE footer for a node with no opacity and no mask", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await toGraphMode(user);
+    fireEvent.mouseDown(screen.getByTestId("node-curves"));
+    expect(screen.queryByTestId("inspector-node-footer")).toBeNull();
   });
 
   it("curves node opens a draggable curve editor", async () => {

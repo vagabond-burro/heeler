@@ -958,6 +958,7 @@ export function initialState(): State {
     panelSizes: { ...DEFAULT_PANEL_SIZES },
     selectionSplitMin: false,
     selectionSplitClosed: false,
+    inspectSplitMin: false,
     sectionFilter: "all",
     consoleOpen: false,
     consoleWindowOpen: false,

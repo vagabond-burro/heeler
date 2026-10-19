@@ -8,7 +8,7 @@ import { usePickSessions } from "../picksession";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Command, CurveChannel, NodeCard, State, Take } from "../state";
-import { activeStackMerge, pickMaskNode, antsSources, artLayerName, artMaskNode, chainTerminalId, frameLook, renderedSource, mainConversion, previewTarget, shapeLineWidth, transformDragOf, isPlacedLayer, layerFlipBlocked, photoTurn } from "../state";
+import { activeStackMerge, inspectDocked, pickMaskNode, antsSources, artLayerName, artMaskNode, chainTerminalId, frameLook, renderedSource, mainConversion, previewTarget, shapeLineWidth, transformDragOf, isPlacedLayer, layerFlipBlocked, photoTurn } from "../state";
 import { XformIcon } from "./panelicons";
 import { maskBrushTarget, maskOverlayRgb, BRUSH_TIPS, MULTI_MAX, POLISH_MODES, SELECT_OPS, activeSelectionMask, applyPick, artFindLayer, artToolbarVisible, cropNode, fitCropToAspect, layerQuad, multiGrid, transformBox, toolNode } from "../state";
 import { OpIcon } from "./selecticons";
@@ -1703,7 +1703,9 @@ armed has settings to show.*/}
           )}
           <GamutBadge state={state} dispatch={dispatch} />
         </div>
-        <InspectPanel state={state} dispatch={dispatch} />
+        {/* Over the viewer only where no right panel is on screen to hold
+            it; Develop's panel and Graph's Inspector dock it at their foot. */}
+        {!inspectDocked(state) && <InspectPanel state={state} dispatch={dispatch} />}
         {/* A stack merging for this photograph, over the frame it replaces:
 say how far it has got rather than sit there looking frozen. With
 no frame yet, the loading view below carries it instead.*/}

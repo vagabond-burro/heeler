@@ -14,7 +14,7 @@ The Inspector shows the node's name and, under it, what type of node it is in th
 
 Every mask node carries the rows a Develop layer's mask block has: **Invert mask** at its foot and, on the masks that read depth, the **Depth mask** block (its switch, the Levels on the depth map, and Invert depth). Depth Lighting's node has its **Invert depth** switch, the Radial Mask its **Shape**, and the Smart Mask its own face (see [Masking nodes](nodes/masking.md#smart-mask-heelersmart_mask)).
 
-A node with no dials, such as Conditional or Channel Join, shows a port guide instead: each port's name, what it is for in plain words, and what feeds it. A Color Set's card shows the set's mask eye and eyedropper above its controls, as in Develop. The Opacity row at the bottom belongs to nodes that have one; on the others it reads n/a.
+A node with no dials, such as Conditional or Channel Join, shows a port guide instead: each port's name, what it is for in plain words, and what feeds it. A Color Set's card shows the set's mask eye and eyedropper above its controls, as in Develop. The **Node** footer at the bottom holds the node's Opacity, when it has one, and the masks wired to it; a node with neither shows no footer. To fade a node that has no opacity of its own, put a Blend Mode or Merge after it.
 
 Use the **Note** field to record why the node exists or how it should be used. The note also appears on the node card.
 

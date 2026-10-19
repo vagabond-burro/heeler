@@ -2810,6 +2810,15 @@ export function freshExportGroup(
   };
 }
 
+/** Whether the Inspect panel sits at the foot of a right panel on screen:
+ * Develop's (unless Polish has the seat) or Graph's Inspector at home.
+ * Anywhere else it floats over the viewer, as it was. */
+export function inspectDocked(state: State): boolean {
+  if (state.mode === "simple") return !state.polishOpen;
+  if (state.mode === "advanced") return state.inspectorHome === "main";
+  return false;
+}
+
 /** The panel geometry a fresh launch shows, and what Reset layout puts
  * back. One table, read by initialState and by the reset. */
 export const DEFAULT_PANEL_SIZES = {
@@ -2821,6 +2830,7 @@ export const DEFAULT_PANEL_SIZES = {
   // here is only ever what a drag left behind.
   rightSplit: 0,
   selectionSplit: 0,
+  inspectSplit: 0,
   // About eight rows: roughly what the old 45vh cap gave on a laptop,
   // so nothing jumps for anyone who never drags the seam.
   libraryTree: 180,
@@ -4049,6 +4059,8 @@ export interface State {
     rightSplit: number;
     /** height of the automatic selection split; zero means default */
     selectionSplit: number;
+    /** height of the docked Inspect pane; zero means default */
+    inspectSplit: number;
     /** height of the folder TREE box in the library panel.
      *
      * "The position of Collections should not move based on
@@ -4064,6 +4076,9 @@ export interface State {
    * tool is armed or a layer is clicked, the selection itself untouched.
    * Session state, never part of the saved layout. */
   selectionSplitClosed: boolean;
+  /** the docked Inspect pane folded to its bar, its height remembered
+   * for the way back. Session state, never part of the saved layout. */
+  inspectSplitMin: boolean;
   /** Which Adjustments sections the panel lists: every one, the pinned
    * ones, or the ones switched on for this photograph. */
   sectionFilter: SectionFilter;
@@ -5070,6 +5085,7 @@ export type Command =
   | { type: "set_select_tolerance"; tolerance: number }
   | { type: "set_select_magnet_sense"; sense: number }
   | { type: "reset_select_settings" }
+  | { type: "toggle_inspect_split" }
   | { type: "toggle_selection_split" }
   | { type: "close_selection_split" }
   | { type: "set_select_smooth"; smooth: number }
@@ -5230,7 +5246,7 @@ export type Command =
   | { type: "set_crop_aspect"; aspect: number | null }
   | {
       type: "set_panel_size";
-      panel: "library" | "right" | "graphViewer" | "ribbon" | "rightSplit" | "selectionSplit" | "libraryTree";
+      panel: "library" | "right" | "graphViewer" | "ribbon" | "rightSplit" | "selectionSplit" | "inspectSplit" | "libraryTree";
       size: number;
     }
   | { type: "toggle_section"; title: string }
@@ -14482,6 +14498,7 @@ function panelSizeBounds(s: State): Record<keyof typeof DEFAULT_PANEL_SIZES, [nu
     ribbon: ribbonBounds(s.prefs),
     rightSplit: [120, 900],
     selectionSplit: [120, 700],
+    inspectSplit: [120, 700],
     // Down to three rows and up to most of a tall panel. The floor is a
     // height, not a row count, so a deep tree still scrolls rather than
     // vanishing.
@@ -18080,6 +18097,8 @@ function reduceInner(s: State, cmd: Command): State {
     // when restoring from minimized."
     case "toggle_selection_split":
       return { ...s, selectionSplitMin: !s.selectionSplitMin };
+    case "toggle_inspect_split":
+      return { ...s, inspectSplitMin: !s.inspectSplitMin };
     // The panel's door (2026-09-22): the select tool goes away and the
     // panel with it, and NOTHING else moves. It used to step off the
     // selection layer as well, and set_active_layer drops the layer's

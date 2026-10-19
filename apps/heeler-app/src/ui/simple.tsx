@@ -102,6 +102,7 @@ import { GrainFilmRow, GrainFrameRow } from "./grainfilm";
 import { ZonesBlock } from "./zones";
 import { RecolorHost } from "./recolor";
 import { RecolorPairs } from "./recolorpairs";
+import { InspectDock } from "./inspect";
 import { SectionLooks } from "./sectionlooks";
 import { ColorConsoleBlock } from "./colorconsole";
 import { DepthProgressBar, depthFromFile, passesOf, NormalsChoice } from "./depthtool";
@@ -6497,6 +6498,7 @@ back, and a dragged height survives the fold.*/}
             <PanelDivider
               vertical={false}
               testid="divider-selection-split"
+              grip
               onDelta={(d) =>
                 dispatch({
                   type: "set_panel_size",
@@ -6528,6 +6530,10 @@ back, and a dragged height survives the fold.*/}
             </div>
           </>
         ))}
+
+      {/* The Inspect panel, docked under everything else while a point
+          is inspected (inspect.tsx). */}
+      <InspectDock state={state} dispatch={dispatch} />
 
       {tabMenu && (
         <div
