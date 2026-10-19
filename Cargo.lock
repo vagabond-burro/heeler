@@ -1798,7 +1798,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "heeler-catalog"
-version = "26.5.5"
+version = "26.6.0"
 dependencies = [
  "rusqlite",
  "tempfile",
@@ -1807,7 +1807,7 @@ dependencies = [
 
 [[package]]
 name = "heeler-commands"
-version = "26.5.5"
+version = "26.6.0"
 dependencies = [
  "heeler-graph",
  "serde",
@@ -1817,7 +1817,7 @@ dependencies = [
 
 [[package]]
 name = "heeler-desktop"
-version = "26.5.5"
+version = "26.6.0"
 dependencies = [
  "base64 0.22.1",
  "exr",
@@ -1852,7 +1852,7 @@ dependencies = [
 
 [[package]]
 name = "heeler-engine"
-version = "26.5.5"
+version = "26.6.0"
 dependencies = [
  "heeler-graph",
  "heeler-io",
@@ -1864,7 +1864,7 @@ dependencies = [
 
 [[package]]
 name = "heeler-gpu"
-version = "26.5.5"
+version = "26.6.0"
 dependencies = [
  "bytemuck",
  "heeler-engine",
@@ -1876,7 +1876,7 @@ dependencies = [
 
 [[package]]
 name = "heeler-graph"
-version = "26.5.5"
+version = "26.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1886,7 +1886,7 @@ dependencies = [
 
 [[package]]
 name = "heeler-io"
-version = "26.5.5"
+version = "26.6.0"
 dependencies = [
  "core-foundation 0.10.1",
  "exr",
@@ -1909,7 +1909,7 @@ dependencies = [
 
 [[package]]
 name = "heeler-project"
-version = "26.5.5"
+version = "26.6.0"
 dependencies = [
  "heeler-commands",
  "heeler-graph",
@@ -1921,7 +1921,7 @@ dependencies = [
 
 [[package]]
 name = "heeler-raw"
-version = "26.5.5"
+version = "26.6.0"
 dependencies = [
  "cc",
  "heeler-engine",
@@ -1933,7 +1933,7 @@ dependencies = [
 
 [[package]]
 name = "heeler-stitch"
-version = "26.5.5"
+version = "26.6.0"
 dependencies = [
  "heeler-engine",
  "rayon",
@@ -1942,7 +1942,7 @@ dependencies = [
 
 [[package]]
 name = "heeler-vision"
-version = "26.5.5"
+version = "26.6.0"
 dependencies = [
  "image",
  "ort",
