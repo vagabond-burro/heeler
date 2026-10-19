@@ -605,6 +605,13 @@ function drawChroma(
  * harmony families cannot drift from the row above them.*/
 const CHIP_SIZE = CHIP_METRICS;
 
+/** The height of the status row's tools, the selection scope's button
+ * and the Line Profile's, so the row is one height whichever scope is up
+ * and whatever each holds (the radius field's input stood taller than a
+ * chip, and the row stretched the profile's buttons to it). */
+const TOOL_H = 20;
+const TOOL_H_LARGE = 24;
+
 /** The widest the Line Profile reads the frame, in pixels. */
 const PROFILE_SAMPLE = 4096;
 /** The most samples the Line Profile takes along its path. */
@@ -870,8 +877,8 @@ export function drawEvScale(
  * Draw places a new path, Edit moves, adds and removes its points, Clear
  * takes it away, Band shows in red what the profile reads; then the
  * radius of that band, a number that drags. */
-function ProfileChips({ state, dispatch, metrics = CHIP_SIZE }: { state: State; dispatch: D; metrics?: React.CSSProperties }) {
-  const chip = { ...metrics, padding: "0 6px", display: "inline-flex", alignItems: "center", justifyContent: "center" };
+function ProfileChips({ state, dispatch, metrics = CHIP_SIZE, height = TOOL_H }: { state: State; dispatch: D; metrics?: React.CSSProperties; height?: number }) {
+  const chip = { ...metrics, height, boxSizing: "border-box" as const, padding: "0 6px", display: "inline-flex", alignItems: "center", justifyContent: "center" };
   const glyph = { width: 13, height: 13, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true, focusable: false };
   return (
     <>
@@ -946,7 +953,7 @@ function ProfileChips({ state, dispatch, metrics = CHIP_SIZE }: { state: State; 
       <span
         data-testid="spectrum-profile-radius-box"
         data-tip="Radius"
-        style={{ ...metrics, width: 38, display: "inline-flex", alignItems: "center", border: "1px solid var(--line-4)", boxSizing: "border-box" }}
+        style={{ ...metrics, height, width: 38, padding: 0, display: "inline-flex", alignItems: "center", border: "1px solid var(--line-4)", boxSizing: "border-box" }}
       >
         <ValueField
           param="profile_radius"
@@ -997,6 +1004,7 @@ export function Spectrums({
   // chrome is a size up. One box for every chip in here either way,
   // panel or window.
   const box = fill ? CHIP_METRICS_LARGE : CHIP_SIZE;
+  const toolH = fill ? TOOL_H_LARGE : TOOL_H;
   const glyph = fill ? 16 : 13;
   // Which scope, which channel and the EV graticule are remembered in
   // the shared UI preferences, so the pop-out opens on the scope the
@@ -1495,7 +1503,7 @@ path, not a region: its seat holds the path's own tools instead, where
 a narrow panel still has room for them (the owner, 2026-10-17).*/}
         {dispatch && kind === "profile" && (
           <div style={{ display: "flex", gap: 4 }} data-testid="spectrum-profile-tools">
-            <ProfileChips state={state} dispatch={dispatch} metrics={fill ? box : undefined} />
+            <ProfileChips state={state} dispatch={dispatch} metrics={box} height={toolH} />
           </div>
         )}
         {dispatch && kind !== "profile" && (
@@ -1519,13 +1527,15 @@ a narrow panel still has room for them (the owner, 2026-10-17).*/}
                   : "Read the scopes from the selected region only"
             }
             aria-label="Scopes read the selection only"
-            style={{ flex: "none", padding: "0 5px", display: "inline-flex", alignItems: "center", gap: 4 }}
+            // The Line Profile's tools' size, so the status row is one
+            // height whichever scope is up (ProfileChips).
+            style={{ ...box, height: toolH, boxSizing: "border-box", flex: "none", padding: "0 6px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
             onClick={() => dispatch({ type: "toggle_spectrum_selection" })}
           >
             {/* A mini histogram wrapped by a rectangle marquee (the owner's
 sketch of it): the thing this button does, in one picture -
 scopes, read inside the ants.*/}
-            <svg width={glyph - 2} height={glyph - 2} viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flex: "none" }}>
+            <svg width={13} height={13} viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flex: "none" }}>
               <rect x="1.5" y="1.5" width="13" height="13" stroke="currentColor" strokeWidth="1.4" strokeDasharray="2.4 1.9" />
               <g fill="currentColor" stroke="none">
                 <rect x="4" y="9" width="1.8" height="3.5" />

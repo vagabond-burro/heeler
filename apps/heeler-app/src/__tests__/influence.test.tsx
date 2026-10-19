@@ -11,10 +11,11 @@ vi.mock("../bridge", async (orig) => {
 
 import { invoke } from "@tauri-apps/api/core";
 import { initialState } from "../data";
-import { anyPickerArmed, inspectDocked, previewTarget, reduce, type Command, type State } from "../state";
+import { anyPickerArmed, inspectDocked, previewTarget, reduce, toolNode, type Command, type State } from "../state";
 import { tracePixel, type TraceStep } from "../bridge";
 import { InspectDock, InspectPanel } from "../ui/inspect";
 import { SimplePanel } from "../ui/simple";
+import { sectionOfNode } from "../ui/simpledata";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
 const invokeMock = invoke as unknown as ReturnType<typeof vi.fn>;
@@ -117,7 +118,7 @@ describe("Influence Mapping", () => {
     fireEvent.click(screen.getByTestId("inspect-isolate-exposure"));
     expect(dispatch).toHaveBeenLastCalledWith({ type: "toggle_influence_view", id: "exposure", mode: "isolate" });
     fireEvent.click(screen.getByTestId("inspect-select-exposure"));
-    expect(dispatch).toHaveBeenLastCalledWith({ type: "select_nodes", ids: ["exposure"] });
+    expect(dispatch).toHaveBeenCalledWith({ type: "select_nodes", ids: ["exposure"] });
     fireEvent.click(screen.getByTestId("inspect-close"));
     expect(dispatch).toHaveBeenLastCalledWith({ type: "close_inspect" });
   });
@@ -191,5 +192,63 @@ describe("the Inspect panel docked in the right panel", () => {
     const panel = screen.getByTestId("simple-panel");
     expect(panel).toContainElement(screen.getByTestId("inspect-split"));
     expect(panel).toContainElement(screen.getByTestId("divider-inspect-split"));
+  });
+});
+
+// 2026-10-18: "when a user clicks on an attribute or section name ... the
+// adjustments view automatically scrolls to center the section ... (expand
+// the section if collapsed)", with the accent outline the keyboard
+// navigator and the Assistant use.
+describe("an Inspect row in Develop", () => {
+  const steps = (ids: [string, string][]): TraceStep[] =>
+    ids.map(([id, type], i) => ({ id, node_type: type, enabled: true, input: i ? sample(0.2) : null, output: sample(i ? 0.3 : 0.2), coverage: id.includes("layer") ? 0.5 : null, moves: false }));
+
+  it("knows each node's section, and a layer's node its layer", () => {
+    const s = run(initialState(), { type: "add_layer", maskType: "radial" }, { type: "set_active_layer", id: null });
+    const exposure = toolNode(s, "adj")!;
+    expect(sectionOfNode(s, exposure.id)).toEqual({ section: "Exposure", layer: null });
+    expect(sectionOfNode(s, "layer_1_adj")).toEqual({ section: "Exposure", layer: "layer_1_adj" });
+    expect(sectionOfNode(s, "layer_1_mask")).toEqual({ section: null, layer: "layer_1_adj" });
+    expect(sectionOfNode(s, "no_such_node")).toBeNull();
+  });
+
+  it("a click opens the node's section, centered and outlined, selecting its layer first", async () => {
+    const s0 = { ...run(initialState(), { type: "add_layer", maskType: "radial" }, { type: "toggle_inspect_pick" }, { type: "inspect_at", x: 0.5, y: 0.5 }), mode: "simple" as const };
+    const exposure = toolNode({ ...s0, activeLayer: null }, "adj")!;
+    traceMock.mockResolvedValue(steps([["src", "heeler.image_source"], [exposure.id, "heeler.exposure"], ["layer_1_adj", "heeler.exposure"]]));
+    const dispatch = vi.fn();
+    render(<InspectPanel state={{ ...s0, activeLayer: null }} dispatch={dispatch} />);
+    await waitFor(() => expect(screen.getByTestId(`inspect-select-${exposure.id}`)).toBeInTheDocument());
+    // The status line's words: the colors in and out, the change, the mask,
+    // and where a click goes.
+    const hint = screen.getByTestId(`inspect-select-${exposure.id}`).getAttribute("data-hint")!;
+    expect(hint).toMatch(/in R \d+ G \d+ B \d+, out R \d+ G \d+ B \d+/);
+    expect(hint).toMatch(/brightness/);
+    expect(hint).toMatch(/click to open Exposure/);
+    expect(screen.getByTestId("inspect-select-layer_1_adj").getAttribute("data-hint")).toMatch(/mask lets 50% through here/);
+    fireEvent.click(screen.getByTestId(`inspect-select-${exposure.id}`));
+    const sent = dispatch.mock.calls.map(([c]) => c);
+    expect(sent).toContainEqual({ type: "open_section", title: "Exposure" });
+    expect(sent).toContainEqual({ type: "flash_control", section: "Exposure", param: null });
+    expect(sent).toContainEqual({ type: "set_panel_tab", tab: "adjust" });
+    expect(sent.some((c) => c.type === "set_active_layer")).toBe(false);
+    dispatch.mockClear();
+    fireEvent.click(screen.getByTestId("inspect-select-layer_1_adj"));
+    const layer = dispatch.mock.calls.map(([c]) => c);
+    const at = (t: string) => layer.findIndex((c) => c.type === t);
+    expect(layer).toContainEqual({ type: "set_active_layer", id: "layer_1_adj" });
+    expect(at("set_active_layer")).toBeLessThan(at("flash_control"));
+    expect(layer).toContainEqual({ type: "flash_control", section: "Exposure", param: null });
+  });
+
+  it("in Graph a click only selects the node", async () => {
+    const s0 = { ...run(initialState(), { type: "toggle_inspect_pick" }, { type: "inspect_at", x: 0.5, y: 0.5 }), mode: "advanced" as const };
+    const exposure = toolNode({ ...s0, activeLayer: null }, "adj")!;
+    traceMock.mockResolvedValue(steps([["src", "heeler.image_source"], [exposure.id, "heeler.exposure"]]));
+    const dispatch = vi.fn();
+    render(<InspectPanel state={s0} dispatch={dispatch} />);
+    await waitFor(() => expect(screen.getByTestId(`inspect-select-${exposure.id}`)).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId(`inspect-select-${exposure.id}`));
+    expect(dispatch.mock.calls.map(([c]) => c)).toEqual([{ type: "select_nodes", ids: [exposure.id] }]);
   });
 });

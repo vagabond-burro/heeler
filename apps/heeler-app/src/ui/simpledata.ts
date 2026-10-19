@@ -10,7 +10,7 @@ import { NEUTRAL_PARAMS, REGISTRY_DEFAULTS, PARAM_TEXT_DEFAULT, migrateNodes, ca
 import type { LayerMaskType, LayerToolKey } from "../state";
 import { CATEGORY_OF, TOOL_GROUP_DEFAULTS, CATEGORY_PIECES, denoisePieces, skyPieces, toCard, type Recipe, RECIPE_PREFIX } from "../recipes";
 import { buildTargets, type NavTarget, type SectionTargets } from "../keynav";
-import { layerGroupPrefix, isLayerNode } from "../layerids";
+import { layerAdjOfNode, layerGroupPrefix, isLayerNode } from "../layerids";
 
 type D = (c: Command) => void;
 
@@ -1522,4 +1522,22 @@ export function sectionExportCommand(state: State, sec: SectionSpec, on: boolean
     ...build,
     then: { type: "set_section_export", title: sec.title, tap: tap.tap, depth: tap.depth, on: true, ...(off.length ? { off } : {}) },
   };
+}
+
+/** Where a node lives in Develop's panel: the section that edits it, and
+ * for a layer's node the layer that has to be selected for that section
+ * to show it (a section edits the selected layer). A layer's mask, or a
+ * node no section edits, gives no section; a layer's still gives its
+ * layer. Sections hidden in Preferences are passed over. Inspect's rows
+ * open a node's section with it. */
+export function sectionOfNode(state: State, id: string): { section: string | null; layer: string | null } | null {
+  const find = (s: State) => SECTIONS.find((sec) => !sectionHidden(s, sec) && sectionNodeIds(s, sec).includes(id));
+  if (!isLayerNode(id)) {
+    const sec = find(state);
+    return sec ? { section: sec.title, layer: null } : null;
+  }
+  const layer = layerAdjOfNode(id);
+  if (!layer) return null;
+  const sec = find({ ...state, activeLayer: layer });
+  return { section: sec?.title ?? null, layer };
 }

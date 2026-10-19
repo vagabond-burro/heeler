@@ -7,6 +7,7 @@ import React, { useEffect, useRef, useState } from "react";
 import type { Command, InfluenceMode, NodeCard, State } from "../state";
 import { tracePixel, type TraceSample, type TraceStep } from "../bridge";
 import { NODE_CATALOG } from "../nodes";
+import { sectionOfNode } from "./simpledata";
 import { PICK_CURSOR } from "./cursors";
 import { norm, type ViewTransform } from "./overlays";
 import { isPrimaryPress } from "./pointerguard";
@@ -160,6 +161,59 @@ function changed(step: TraceStep): boolean {
   return Math.abs(a.luma - b.luma) > NO_CHANGE || Math.abs(a.r - b.r) > NO_CHANGE || Math.abs(a.g - b.g) > NO_CHANGE || Math.abs(a.b - b.b) > NO_CHANGE;
 }
 
+/** A row's name clicked: the node selected, and in Develop its section
+ * opened and scrolled to the middle of the panel with the accent outline
+ * the keyboard navigator and the Assistant use (flash_control), the
+ * layer it belongs to selected first, since a section edits the selected
+ * layer. A layer's mask selects its layer. */
+function openNode(state: State, dispatch: D, id: string) {
+  dispatch({ type: "select_nodes", ids: [id] });
+  if (state.mode !== "simple") return;
+  const where = sectionOfNode(state, id);
+  if (!where) return;
+  if (where.layer && where.layer !== state.activeLayer) dispatch({ type: "set_active_layer", id: where.layer });
+  if (!where.section) return;
+  dispatch({ type: "set_panel_tab", tab: "adjust" });
+  dispatch({ type: "open_section", title: where.section });
+  dispatch({ type: "flash_control", section: where.section, param: null });
+}
+
+/** The 0 to 255 channels of a sample as the screen shows them. */
+function rgbText(c: TraceSample): string {
+  const enc = (v: number) => {
+    const x = Math.min(1, Math.max(0, v));
+    return Math.round((x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055) * 255);
+  };
+  return `R ${enc(c.r)} G ${enc(c.g)} B ${enc(c.b)}`;
+}
+
+/** What the status line says over a row: the node and where it lives,
+ * its colors in and out at the point as the screen shows them, how far
+ * it moved the brightness, its mask's share there, and what a click
+ * does. */
+function rowHint(state: State, s: TraceStep): string {
+  const name = nameOf(state.nodes, s.id, s.node_type);
+  const kind = NODE_CATALOG.find((c) => c.type === s.node_type)?.name;
+  const where = state.mode === "simple" ? sectionOfNode(state, s.id) : null;
+  const parts = [kind && kind !== name ? `${name} (${kind})` : name];
+  if (!s.enabled) parts.push("switched off");
+  if (s.moves) parts.push("moves pixels: the point before it is where this pixel came from");
+  else if (s.input && s.output) {
+    const d = Math.round((s.output.luma - s.input.luma) * 1000) / 10;
+    parts.push(`in ${rgbText(s.input)}, out ${rgbText(s.output)}`);
+    parts.push(`brightness ${pct(s.input)} to ${pct(s.output)}${changed(s) ? ` (${d > 0 ? "+" : ""}${d})` : ", unchanged here"}`);
+  } else if (s.output) parts.push(`out ${rgbText(s.output)}`);
+  if (s.coverage !== null) parts.push(`its mask lets ${Math.round(s.coverage * 100)}% through here`);
+  parts.push(
+    where?.section
+      ? `click to open ${where.section}${where.layer ? ` on ${nameOf(state.nodes, where.layer, s.node_type)}` : ""}`
+      : where?.layer
+        ? `click to select ${nameOf(state.nodes, where.layer, s.node_type)}`
+        : "click to select the node",
+  );
+  return parts.join(" · ");
+}
+
 /** The Inspect panel: the picked point's path from the photograph to the
  * finished frame, each node with its input and output there, and the
  * influence views a click away. */
@@ -305,9 +359,9 @@ export function InspectPanel({ state, dispatch, docked = false }: {
           >
             <button
               data-testid={`inspect-select-${s.id}`}
-              data-hint={`Select ${nameOf(state.nodes, s.id, s.node_type)}`}
+              data-hint={rowHint(state, s)}
               style={{ minWidth: 0, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", background: "none", border: 0, padding: 0, color: "inherit", cursor: "pointer", fontSize: 11 }}
-              onClick={() => dispatch({ type: "select_nodes", ids: [s.id] })}
+              onClick={() => openNode(state, dispatch, s.id)}
             >
               {nameOf(state.nodes, s.id, s.node_type)}
               {!s.enabled && <span style={{ color: "var(--text-ghost)" }}> (off)</span>}

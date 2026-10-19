@@ -2,7 +2,7 @@
 // drawing it point by point, editing its points, and the hover shared by
 // the plot and the viewer.
 import { describe, expect, it, vi } from "vitest";
-import { act, render, renderHook, screen, fireEvent } from "@testing-library/react";
+import { act, cleanup, render, renderHook, screen, fireEvent } from "@testing-library/react";
 import { releaseHint, setHint, useHint, useStatusReadout } from "../ui/hints";
 import { initialState } from "../data";
 import { anyPickerArmed, reduce, type Command, type State } from "../state";
@@ -184,6 +184,9 @@ describe("Line Profile", () => {
     expect(tools.contains(radius)).toBe(true);
     expect([...tools.querySelectorAll("button, input")].indexOf(radius)).toBe(4);
     expect((radius as HTMLInputElement).value).toBe("0");
+    // The radius box is the row's height too, so it cannot stretch the
+    // buttons beside it.
+    expect(screen.getByTestId("spectrum-profile-radius-box").style.height).toBe(screen.getByTestId("spectrum-profile-draw").style.height);
     fireEvent.change(radius, { target: { value: "5" } });
     fireEvent.keyDown(radius, { key: "Enter" });
     expect(dispatch).toHaveBeenCalledWith({ type: "set_profile_radius", radius: 5 });
@@ -191,6 +194,22 @@ describe("Line Profile", () => {
     fireEvent.mouseMove(window, { clientX: 130 });
     fireEvent.mouseUp(window);
     expect(dispatch).toHaveBeenCalledWith({ type: "set_profile_radius", radius: 3 });
+    // The selection scope's button, in the same seat on the other scopes,
+    // is the path tools' size, so the row is one height whichever is up.
+    const drawBox = screen.getByTestId("spectrum-profile-draw").style;
+    setUiPref("spectrumKind", "histogram");
+    cleanup();
+    render(<Spectrums state={initialState()} dispatch={dispatch} />);
+    const selBox = screen.getByTestId("spectrum-selection").style;
+    expect(selBox.height).toBe(drawBox.height);
+    expect(selBox.height).not.toBe("");
+    expect(selBox.lineHeight).toBe(drawBox.lineHeight);
+    expect(selBox.fontSize).toBe(drawBox.fontSize);
+    expect(selBox.padding).toBe(drawBox.padding);
+    expect(selBox.lineHeight).not.toBe("");
+    cleanup();
+    setUiPref("spectrumKind", "profile");
+    render(<Spectrums state={initialState()} dispatch={dispatch} />);
     // Beside five controls in a narrow panel the row's own words stay on
     // one line, cut short, never a word a line.
     expect(screen.getByTestId("spectrum-readout").style.whiteSpace).toBe("nowrap");
