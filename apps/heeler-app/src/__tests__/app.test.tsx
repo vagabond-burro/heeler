@@ -2042,7 +2042,7 @@ describe("Heeler UI", () => {
   });
 
   it("the settings panel stays on screen instead of running off the edge", async () => {
-    const { panelPlacement } = await import("../ui/canvas");
+    const { panelPlacement } = await import("../ui/canvasplacement");
     const view = { x: 0, y: 0, zoom: 1 };
     const surface = { w: 1000, h: 700 };
 
