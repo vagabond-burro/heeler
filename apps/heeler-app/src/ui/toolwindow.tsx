@@ -15,17 +15,13 @@ import { useEffect, useRef, useState } from "react";
 import { logDebug } from "../log";
 import { initialState } from "../data";
 import type { Command, State } from "../state";
-import { curveModeOf, toolNode } from "../state";
-import { CurveEditor, Wheel } from "./editors";
+import { toolNode } from "../state";
 import { DOCK_CHANNEL, STATE_CHANNEL, STATE_REQUEST, TOOL_WINDOWS, applySnapshot, sendCommand, transport, type GraphSnapshot, type ToolWindowKind } from "../popout";
 import { DockButton, MacInset, WindowControls } from "./chrome";
 import { useHintSource } from "./hints";
 import { PopoutStatusRow } from "./popoutstatus";
-import { EqEditor } from "./eqeditor";
-import { Slider } from "./simple";
 import { SectionFace } from "./sectionface";
-import { SECTIONS } from "./simpledata";
-import { ColorConsoleBlock } from "./colorconsole";
+import { WINDOW_FIT, sectionNamed } from "./sectionfaceparts";
 import { isLayerNode } from "../layerids";
 import { useLiveFrame } from "./toolwindowparts";
 
@@ -83,150 +79,40 @@ function ToolBody({
 }) {
   const dispatch = (cmd: Command) => sendCommand(cmd);
   const frame = useLiveFrame(kind === "toneeq" || kind === "recolor");
-  if (kind === "colorconsole") {
-    // The node the panel edits: with a layer selected that is the
-    // layer's own Color Tune. Finding the first console in the graph
-    // popped the window out onto the MAIN chain's node while the panel
-    // worked the layer's, and an edit out here landed somewhere the
-    // user was not looking. Curves and Color Wheels already resolve
-    // theirs through toolNode.
-    const node = toolNode(snap, "colorconsole");
-    if (!node || (!node.enabled && !isLayerNode(node.id)))
-      return <ToolNotOn title={TOOL_SECTION[kind]} dispatch={dispatch} />;
-    // The window layout is the widget's own (the wheel takes
-    // the left side, the controls the right, Smoothing above the buttons).
-    return (
-      <ColorConsoleBlock
-        node={node}
-        dispatch={dispatch}
-        windowed
-        width={Math.max(420, stage.w - 36)}
-        height={Math.max(280, stage.h - 60)}
-        band={snap.consoleBand}
-        onBand={(id) => dispatch({ type: "set_console_band", id })}
-        pickArmed={snap.consolePick === node.id}
-        pickBand={snap.consolePickBand}
-        onTogglePick={(band) => dispatch({ type: "toggle_console_pick", id: node.id, band })}
-        customMax={snap.prefs.consoleCustomMax}
-        nameFormat={snap.prefs.consoleNameFormat}
-        onNameFormat={(fmt) => dispatch({ type: "set_prefs", prefs: { consoleNameFormat: fmt } })}
-      />
-    );
-  }
-  if (kind === "recolor") {
-    const node = snap.nodes.find((n) => n.type === "heeler.recolor");
-    if (!node || !node.enabled)
-      return <ToolNotOn title={TOOL_SECTION[kind]} dispatch={dispatch} />;
-    const w = Math.max(380, stage.w - 36);
-    // The reserve was sized for the old cell grid; the two menus plus
-    // the sliders need far less, and the leftover read as dead space
-    // above the plot (the owner's report).
-    const h = Math.max(240, stage.h - 140);
-    // The panel's face at window size, from the same definition
-    // (sectionface.tsx): Smoothing, the grid and curve, the Neutral guard,
-    // its strip and the pairs, in Develop's order.
-    return (
-      <div style={{ width: w }}>
-        <SectionFace
-          sec={SECTIONS.find((sec) => sec.title === "Recolor")!}
-          node={node}
-          dispatch={dispatch}
-          state={snap}
-          width={w}
-          graphHeight={h}
-          frame={frame ?? snap.images.find((i) => i.id === snap.activeImage)?.src}
-        />
-      </div>
-    );
-  }
-  if (kind === "toneeq") {
-    // Same layer rule as Color Tune's window: the layer's own Tone Equalizer,
-    // not the first tone_eq in the graph.
-    const node = toolNode(snap, "toneeq");
-    if (!node || (!node.enabled && !isLayerNode(node.id)))
-      return <ToolNotOn title={TOOL_SECTION[kind]} dispatch={dispatch} />;
-    // The whole point of the window: the same widget REDRAWN at window
-    // size, points and grab radii scaled with it, never a small plot
-    // stretched to a blur.
-    // Widget above, the surviving dials and the picker below: the
-    // same trio the panel shows, at window size.
-    const w = Math.max(360, stage.w - 36);
-    const h = Math.max(240, stage.h - 150);
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, width: w }}>
-        <EqEditor
-          node={node}
-          dispatch={dispatch}
-          width={w}
-          height={h}
-          histogramSrc={frame ?? snap.images.find((i) => i.id === snap.activeImage)?.src}
-          pickArmed={snap.toneEqPick === node.id}
-          hoverX={snap.toneEqPick === node.id ? snap.toneEqHoverX : null}
-          onTogglePick={() => dispatch({ type: "toggle_tone_eq_pick", id: node.id })}
-        />
-        <div>
-          <Slider label="Range shift" param="range_shift" node={node} dispatch={dispatch} />
-          <Slider label="Smoothing" param="smoothing" node={node} dispatch={dispatch} centered={false} />
-        </div>
-      </div>
-    );
-  }
-  if (kind === "curves") {
-    const node = toolNode(snap, "curves");
-    // Layer tools arm themselves on first touch; a global tool that is
-    // not enabled shows the switch instead of silently coming on.
-    if (!node || (!node.enabled && !isLayerNode(node.id)))
-      return <ToolNotOn title={TOOL_SECTION[kind]} dispatch={dispatch} />;
-    // The chip row and interp row take ~70px; the rest is plot. Redrawn
-    // at this size: points, strokes and grab radii scale with it.
-    const w = Math.max(320, stage.w - 36);
-    const h = Math.max(220, stage.h - 106);
-    return (
-      <CurveEditor
-        node={node}
-        dispatch={dispatch}
-        width={w}
-        height={h}
-        channelMode={curveModeOf(snap)}
-        clipboard={snap.curveClipboard}
-        histogramSrc={snap.images.find((i) => i.id === snap.activeImage)?.src}
-        // The eyedropper samples the photograph, which lives in the
-        // MAIN window's viewer; arming it from here is a command like
-        // any other, and the ghost point rides back in the snapshot.
-        pickArmed={snap.curvePick?.nodeId === node.id}
-        hoverX={snap.curvePick?.nodeId === node.id ? snap.curveHoverX : null}
-        onTogglePick={(ch) => dispatch({ type: "arm_curve_pick", nodeId: node.id, channel: ch })}
-      />
-    );
-  }
-  const node = toolNode(snap, "wheels");
-  if (!node || (!node.enabled && !isLayerNode(node.id)))
+  // Each window's node: with a layer selected that is the layer's own
+  // tool. Finding the first of its type in the graph popped a window out
+  // onto the MAIN chain's node while the panel worked the layer's, and an
+  // edit out here landed somewhere the user was not looking.
+  const node = kind === "recolor" ? snap.nodes.find((n) => n.type === "heeler.recolor") : toolNode(snap, kind);
+  // Layer tools arm themselves on first touch; a global tool that is not
+  // enabled shows the switch instead of silently coming on.
+  if (!node || (!node.enabled && (kind === "recolor" || !isLayerNode(node.id))))
     return <ToolNotOn title={TOOL_SECTION[kind]} dispatch={dispatch} />;
-  const ranges: [string, string][] = [
-    ["Shadows", "shadows"],
-    ["Mids", "midtones"],
-    ["Highs", "highlights"],
-  ];
-  // Fit the discs to the room: columns split the width, the readouts
-  // under a disc take ~70px, and nothing may leave the stage.
-  const size = Math.max(
-    120,
-    Math.min(Math.floor((stage.w - 40) / ranges.length) - 24, stage.h - 110),
-  );
+  const sec = sectionNamed(TOOL_SECTION[kind])!;
+  // The panel's face at window size, from the same definition
+  // (sectionface.tsx): the section's rows and widgets in Develop's order,
+  // the widgets REDRAWN at window size (points, strokes and grab radii
+  // scale with them), never a small plot stretched to a blur.
+  const fit = WINDOW_FIT[kind];
+  const w = Math.max(fit.minW, stage.w - 36);
+  const h = Math.max(fit.minH, stage.h - fit.reserve);
+  // The wheels fit to the room: columns split the width, the readouts
+  // and the help line under a disc take the reserve, and nothing may
+  // leave the stage.
+  const disc = kind === "wheels" ? Math.max(120, Math.min(Math.floor((stage.w - 40) / 3) - 24, stage.h - fit.reserve)) : undefined;
   return (
-    <div style={{ display: "flex", gap: 24, justifyContent: "center" }} data-testid={`toolwindow-${kind}`}>
-      {ranges.map(([label, range]) => (
-        <div key={range} style={{ width: size, display: "flex" }}>
-          <Wheel
-            name={label}
-            range={range}
-            node={node}
-            dispatch={dispatch}
-            showLum
-            size={size}
-          />
-        </div>
-      ))}
+    <div style={{ width: kind === "wheels" ? undefined : w }} data-testid={`toolwindow-${kind}`}>
+      <SectionFace
+        sec={sec}
+        node={node}
+        dispatch={dispatch}
+        state={snap}
+        width={w}
+        graphHeight={h}
+        discSize={disc}
+        frame={frame ?? snap.images.find((i) => i.id === snap.activeImage)?.src}
+        windowed={kind === "colorconsole"}
+      />
     </div>
   );
 }

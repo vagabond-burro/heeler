@@ -25,8 +25,7 @@ import { createPortal } from "react-dom";
 import { panePropsEqual } from "./viewmemo";
 import { SpectrumBar, Spectrums } from "./spectrum";
 import type { Backdrop, Category, Command, NodeCard, State, Wire } from "../state";
-import { FlipPhotoRow } from "./flipphoto";
-import { artMaskView, BACKDROP_COLORS, CAT_COLOR, NODE_H, NODE_W, duplicable, nameMatches, PARAM_OPTIONS, REGISTRY_DEFAULTS, hasParamRange, TYPE_NUM_PARAMS, PARAM_TEXT_DEFAULT, paramRange, publishedValue, publishedChoice, FLAG_PARAMS, ART_KINDS, isLayerEffect, artLayers, warpNodeById, isPlacedLayer, wireLacksPort, curveModeOf, LAYER_WARP, WIRE_GESTURE, exportWrittenName, exportWritesDepth, DEPTH_EXPORT_CONVENTION, DEPTH_MAP_CARD_CONVENTION, depthMapShowsDepth, PARAM_CHOICE_HINTS, maskIsOff, MASK_OFF_GESTURE, defaultGroupName, ungroupBlocked } from "../state";
+import { artMaskView, BACKDROP_COLORS, CAT_COLOR, NODE_H, NODE_W, duplicable, nameMatches, PARAM_OPTIONS, REGISTRY_DEFAULTS, hasParamRange, TYPE_NUM_PARAMS, PARAM_TEXT_DEFAULT, paramRange, publishedValue, publishedChoice, FLAG_PARAMS, ART_KINDS, isLayerEffect, artLayers, warpNodeById, isPlacedLayer, wireLacksPort, LAYER_WARP, WIRE_GESTURE, exportWrittenName, exportWritesDepth, DEPTH_EXPORT_CONVENTION, DEPTH_MAP_CARD_CONVENTION, depthMapShowsDepth, PARAM_CHOICE_HINTS, maskIsOff, MASK_OFF_GESTURE, defaultGroupName, ungroupBlocked } from "../state";
 import { GridWarpControls } from "./gridwarp";
 import { ShapeWarpControls } from "./shapewarp";
 import { FinishWarpControls } from "./finishwarp";
@@ -38,56 +37,17 @@ import { nodeKindLabel, nodeKindLocation } from "../nodekind";
 import { ResetIcon } from "./panelicons";
 import { bakeLut, catalogFolderImages, catalogImages, fileThumb, listSubfolders, loadThumbnail, lutInfo, nodeThumbFilter, nodeThumbs, pickImageFile, pickLutFile, type CatalogPhoto } from "../bridge";
 import { logMsg } from "../log";
-import { EqEditor } from "./eqeditor";
 import { SectionLooks } from "./sectionlooks";
 import { FilmBlock } from "./film";
 import { BwControls } from "./bwcontrols";
-import { PrintControls } from "./print";
 import { GrainFilmRow, GrainFrameRow } from "./grainfilm";
 import { SectionFace } from "./sectionface";
+import { faceSectionOf } from "./sectionfaceparts";
 import { ViewTransformFace } from "./viewface";
-import { ColorConsoleBlock } from "./colorconsole";
 import { ExportTick, LayerMaskExportRow, MaskExportTick } from "./exporttick";
 import { MASK_EXPORT_LABEL } from "./exporttickparts";
 import { TransformFields, UnbakeButton } from "./imagelayers";
 import { unbakeCarrierOf } from "./imagelayersparts";
-
-/** The inspector's Console face: band selection local to the panel. */
-function ConsoleInspector({ node, dispatch, width, appState }: { node: NodeCard; dispatch: D; width: number; appState?: State }) {
-  // With app state, the band is the SHARED one so the viewer's picker
-  // and every other face of this tool agree; the local fallback keeps
-  // stateless renders (the popped-out graph window, tests) working.
-  const [localBand, setLocalBand] = useState("r");
-  const band = appState ? appState.consoleBand : localBand;
-  return (
-    <>
-      {/* compact, same as the Adjustments panel: single-letter slider labels
-at panel width; only the pop-out gets full names. Smoothing above
-the widget, Develop's order.*/}
-      <Slider label="Smoothing" param="smoothing" node={node} dispatch={dispatch} centered={false} />
-      <ColorConsoleBlock
-        node={node}
-        dispatch={dispatch}
-        width={width}
-        band={band}
-        onBand={appState ? (id) => dispatch({ type: "set_console_band", id }) : setLocalBand}
-        pickArmed={appState?.consolePick === node.id}
-        pickBand={appState?.consolePickBand}
-        onTogglePick={
-          appState ? (band) => dispatch({ type: "toggle_console_pick", id: node.id, band }) : undefined
-        }
-        customMax={appState?.prefs.consoleCustomMax}
-        nameFormat={appState?.prefs.consoleNameFormat}
-        onNameFormat={
-          appState
-            ? (fmt) => dispatch({ type: "set_prefs", prefs: { consoleNameFormat: fmt } })
-            : undefined
-        }
-        compact
-      />
-    </>
-  );
-}
 
 import { GroupGlyph } from "./chrome";
 import { addNodeAt, addRecipeAt } from "./addnode";
@@ -97,12 +57,10 @@ import { CustomRecipeItems } from "./customrecipes";
 import { paletteRecipes } from "./nodepaletteparts";
 import { menuTree } from "../nodes";
 import { colorSetOf } from "../colorsets";
-import { DepthMaskBlock, DetailAdvanced, LayerOpacitySlider, MaskInvertRow, RadialShapePicker, RangeHistogram, RangeMaskTools, SectionExportTick, Slider } from "./simple";
-import { DETAIL_WEIGHT_PARAMS, MASK_ROWS, SECTIONS, nodeResetValues, sectionExportTap } from "./simpledata";
-import { LevelsEditor } from "./levels";
+import { DepthMaskBlock, LayerOpacitySlider, MaskInvertRow, RadialShapePicker, RangeHistogram, RangeMaskTools, SectionExportTick, Slider } from "./simple";
+import { MASK_ROWS, SECTIONS, nodeResetValues, sectionExportTap } from "./simpledata";
 import { LuminanceMaskControls } from "./lummask";
-import { BendWheel } from "./bend";
-import { CurveEditor, Wheel } from "./editors";
+import { Wheel } from "./editors";
 import { GradientNodeControls } from "./gradientstops";
 import { pxBox, useDismiss, useSpacePan, useViewportNav } from "./hooks";
 import { useClearsSibling } from "./layoutroom";
@@ -3370,7 +3328,9 @@ export function NodeParams({
   // A Finish warp (a Warp layer, an image layer's own warp) wears the
   // same grid and shapes, aimed at itself (finishwarp.tsx).
   const layerWarpFace = node.type === LAYER_WARP && !!appState && !!warpNodeById(appState, node.id);
-  const generic = !CUSTOM_PARAM_TYPES.has(node.type) && !node.isGroup && !warpFace && !shapeFace && !checkerFace && !layerWarpFace;
+  // The Develop section this node's face is drawn from, if any.
+  const faceSec = faceSectionOf(node.type);
+  const generic = !faceSec && !CUSTOM_PARAM_TYPES.has(node.type) && !node.isGroup && !warpFace && !shapeFace && !checkerFace && !layerWarpFace;
   // A mask's Invert and Depth mask, Develop's layer block components on
   // the node (features reach their nodes). Every mask carried both and the
   // Inspector showed neither: invert was hidden as the "mask pair's"
@@ -3625,15 +3585,6 @@ since a row of buttons reads as tabs (2026-09-15).*/}
 of reach ("the Mode should be below the Note and the
 browser opens below mode").*/}
             {node.type === "heeler.catalog" && <CatalogLine node={node} session={session} dispatch={dispatch} />}
-            {node.type === "heeler.color_bend" && (
-              <>
-                <div data-node={node.id} data-params="src_hue src_sat dst_hue dst_sat">
-                  <BendWheel node={node} dispatch={dispatch} />
-                </div>
-                <Slider label="Falloff" param="falloff" node={node} dispatch={dispatch} centered={false} />
-                <Slider label="Amount" param="amount" node={node} dispatch={dispatch} centered={false} />
-              </>
-            )}
             {node.type === "heeler.split_tone" && (
               <>
                 <div style={{ display: "flex", gap: 8 }} data-testid="inspector-splittone">
@@ -3727,62 +3678,6 @@ two controls Develop's treatment block has, on the node.*/}
                 <Slider label="Uniformity" param="uniformity" node={node} dispatch={dispatch} centered={false} />
               </>
             )}
-            {node.type === "heeler.color_balance" && (
-              <>
-                <div
-                  style={{ display: "flex", gap: 8 }}
-                  data-node={node.id}
-                  data-params={["shadows", "midtones", "highlights"].flatMap((r) => ["hue", "sat", "lum"].map((c) => `${r}_${c}`)).join(" ")}
-                >
-                  <Wheel name="Shadows" range="shadows" node={node} dispatch={dispatch} />
-                  <Wheel name="Mids" range="midtones" node={node} dispatch={dispatch} />
-                  <Wheel name="Highs" range="highlights" node={node} dispatch={dispatch} />
-                </div>
-                <div style={{ display: "flex", gap: 6, marginTop: 11 }}>
-                  <button
-                    className="chip"
-                    data-testid="wheels-reset"
-                    onClick={() =>
-                      dispatch({
-                        type: "set_params",
-                        id: node.id,
-                        values: Object.fromEntries(
-                          ["shadows", "midtones", "highlights"].flatMap((r) =>
-                            ["hue", "sat", "lum"].map((p) => [`${r}_${p}`, 0])
-                          )
-                        ),
-                      })
-                    }
-                  >
-                    Reset all
-                  </button>
-                  {/* A "Copy" chip with no onClick used to sit here. There
-                      is no paste for it to feed anywhere in the app, so
-                      out it went rather than promising a clipboard that
-                      does not exist. */}
-                </div>
-              </>
-            )}
-            {node.type === "heeler.curves" && (
-              <CurveEditor
-                node={node}
-                dispatch={dispatch}
-                width={widgetW}
-                histogramSrc={histSrc}
-                channelMode={appState ? curveModeOf(appState) : "rgb"}
-                clipboard={appState?.curveClipboard ?? null}
-                pickArmed={appState?.curvePick?.nodeId === node.id}
-                hoverX={appState?.curvePick?.nodeId === node.id ? appState.curveHoverX : null}
-                onTogglePick={
-                  appState
-                    ? (ch) => dispatch({ type: "arm_curve_pick", nodeId: node.id, channel: ch })
-                    : undefined
-                }
-              />
-            )}
-            {node.type === "heeler.color_console" && (
-              <ConsoleInspector node={node} dispatch={dispatch} width={widgetW} appState={appState} />
-            )}
             {/* The section looks, the same row the Develop section draws
                 (features reach their nodes): on the chain's own Tone Equalizer
                 and Recolor, not a layer's copy. */}
@@ -3792,64 +3687,52 @@ two controls Develop's treatment block has, on the node.*/}
             {appState && node.id === "toneeq" && node.type === "heeler.tone_eq" && (
               <SectionLooks section="Tone Equalizer" state={appState} dispatch={dispatch} seat="inspector" />
             )}
-            {/* Recolor's face is Develop's section, from the same definition
-                (sectionface.tsx): the rows and their widgets in one order. */}
-            {node.type === "heeler.recolor" && (
-              <SectionFace sec={SECTIONS.find((sec) => sec.title === "Recolor")!} node={node} dispatch={dispatch} state={appState} width={widgetW} frame={histSrc} />
+            {/* A Develop section's node wears the section's face, from the
+                same definition (sectionface.tsx): its rows that write to
+                this node and its widgets, in Develop's order. */}
+            {faceSec && (
+              <SectionFace
+                sec={faceSec}
+                node={node}
+                dispatch={dispatch}
+                state={appState}
+                viewState={depthState}
+                width={widgetW}
+                frame={histSrc}
+              />
             )}
-            {node.type === "heeler.tone_eq" && (
-              <>
-                {/* Sliders above the widget, Develop's order. */}
-                <Slider label="Range shift" param="range_shift" node={node} dispatch={dispatch} />
-                <Slider label="Smoothing" param="smoothing" node={node} dispatch={dispatch} centered={false} />
-                <EqEditor
-                  node={node}
-                  dispatch={dispatch}
-                  width={widgetW}
-                  height={170}
-                  histogramSrc={histSrc}
-                  pickArmed={appState?.toneEqPick === node.id}
-                  hoverX={appState?.toneEqPick === node.id ? appState.toneEqHoverX : null}
-                  onTogglePick={
-                    appState
-                      ? () => dispatch({ type: "toggle_tone_eq_pick", id: node.id })
-                      : undefined
+            {/* Graph's own: one chip that zeroes all three wheels. */}
+            {node.type === "heeler.color_balance" && (
+              <div style={{ display: "flex", gap: 6, marginTop: 11 }}>
+                <button
+                  className="chip"
+                  data-testid="wheels-reset"
+                  onClick={() =>
+                    dispatch({
+                      type: "set_params",
+                      id: node.id,
+                      values: Object.fromEntries(
+                        ["shadows", "midtones", "highlights"].flatMap((r) =>
+                          ["hue", "sat", "lum"].map((p) => [`${r}_${p}`, 0])
+                        )
+                      ),
+                    })
                   }
-                />
-              </>
+                >
+                  Reset all
+                </button>
+              </div>
             )}
             {node.type === "heeler.luminance_range_mask" && (
               <div data-node={node.id} data-params="invert">
                 <LuminanceMaskControls node={node} dispatch={dispatch} state={depthState ?? appState} width={widgetW} />
               </div>
             )}
-            {/* The histogram with its handles, the one Adjustments >
-                Levels draws, above the rows for typed values. */}
-            {node.type === "heeler.levels" && (
-              <div style={{ margin: "2px 0 6px" }}>
-                <LevelsEditor state={depthState ?? appState} node={node} dispatch={dispatch} width={widgetW} histogramSrc={histSrc} />
-              </div>
-            )}
-            {node.type === "heeler.levels" &&
-              // All five of Develop's Levels rows: the falloffs were
-              // real engine params with no reachable control here.
-              [
-                ["Black point", "black"],
-                ["White point", "white"],
-                ["Gamma", "gamma"],
-                ["Black falloff", "black_soft"],
-                ["White falloff", "white_soft"],
-              ].map(([label, p]) => (
-                <Slider key={p} label={label} param={p} node={node} dispatch={dispatch} centered={false} />
-              ))}
             {/* The treatment's controls, the same component Develop mounts (The
 report: no copies between Adjustments and the graph).*/}
             {node.type === "heeler.black_white" && (
               <BwControls bw={node} nodes={allNodes ?? appState?.nodes ?? []} dispatch={dispatch} state={appState} width={widgetW} />
             )}
-            {/* The print's controls, the same component Develop's Print section
-mounts. */}
-            {node.type === "heeler.paper" && <PrintControls node={node} dispatch={dispatch} />}
             {/* The Grain node's Film row, the same component Develop's Grain section
 mounts. */}
             {["heeler.grain", "heeler.noise"].includes(node.type) && (
@@ -3858,24 +3741,6 @@ mounts. */}
               </div>
             )}
             {node.type === "heeler.grain" && <GrainFilmRow grain={node} nodes={allNodes ?? appState?.nodes ?? []} dispatch={dispatch} />}
-            {node.type === "heeler.crop_rotate" &&
-              [
-                ["Straighten", "angle", true],
-                // Develop's Geometry row, the RAW editors' Transform vocabulary:
-                // negative widens, positive heightens.
-                ["Aspect", "aspect", true],
-                ["Crop width", "crop_w", false],
-                ["Crop height", "crop_h", false],
-                ["Crop left", "crop_x", false],
-                ["Crop top", "crop_y", false],
-              ].map(([label, p, centered]) => (
-                <Slider key={p as string} label={label as string} param={p as string} node={node} dispatch={dispatch} centered={centered as boolean} />
-              ))}
-            {node.type === "heeler.crop_rotate" && appState && (
-              <div data-node={node.id} data-params="flip_h flip_v turn">
-                <FlipPhotoRow nodes={appState.nodes} activeImage={appState.activeImage} dispatch={dispatch} />
-              </div>
-            )}
             {node.type === "heeler.brush_mask" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <div className="tnum" style={{ fontSize: 11, color: "var(--text-body)" }} data-testid="stroke-count">
@@ -3981,66 +3846,6 @@ hand.*/}
                   </>
                 );
               })()}
-            {node.type === "heeler.exposure" &&
-              // The full tonal set the Develop panel edits, chroma
-              // included: color_contrast was the one param the engine
-              // read that no graph control could reach (Develop has it
-              // as "Chroma"), which made masked chroma-contrast edits
-              // unbuildable from the canvas. Labels and the Contrast
-              // and Range headings match Develop's Exposure section,
-              // where contrast is "Luminance": the decomposed half of
-              // contrast that leaves chroma untouched.
-              (
-                [
-                  ["Exposure", "exposure"],
-                  ["Luminance", "contrast", "Contrast"],
-                  ["Chroma", "color_contrast"],
-                  ["Highlights", "highlights", "Range"],
-                  ["Shadows", "shadows"],
-                  ["Whites", "whites"],
-                  ["Blacks", "blacks"],
-                ] as [string, string, string?][]
-              ).map(([label, p, heading]) => (
-                <React.Fragment key={p}>
-                  {heading && (
-                    <div
-                      className="kicker"
-                      data-testid={`subsection-${heading.toLowerCase()}`}
-                      style={{ fontSize: 8, marginTop: 7, marginBottom: 1, opacity: 0.75 }}
-                    >
-                      {heading}
-                    </div>
-                  )}
-                  <Slider label={label} param={p} node={node} dispatch={dispatch} />
-                </React.Fragment>
-              ))}
-            {node.type === "heeler.standard_color" && (
-              <>
-                {/* Develop's Color rows, names included: "Temp", not
-                    Temperature, so the two surfaces read as one tool. */}
-                {[
-                  ["Temp", "temperature"],
-                  ["Tint", "tint"],
-                  ["Saturation", "saturation"],
-                  ["Vibrance", "vibrance"],
-                ].map(([label, p]) => (
-                  <Slider key={p} label={label} param={p} node={node} dispatch={dispatch} />
-                ))}
-              </>
-            )}
-            {node.type === "heeler.detail" && (
-              <>
-                {/* Develop's Detail, weights included, in Develop's order
-                    (the advanced weights sit above the three sliders
-                    there). Its own card since 2026-09-02. */}
-                <div data-node={node.id} data-params={DETAIL_WEIGHT_PARAMS}>
-                  <DetailAdvanced node={node} dispatch={dispatch} />
-                </div>
-                {["texture", "clarity", "dehaze"].map((p) => (
-                  <Slider key={p} label={p[0].toUpperCase() + p.slice(1)} param={p} node={node} dispatch={dispatch} />
-                ))}
-              </>
-            )}
             {foot.invert && <MaskInvertRow node={node} dispatch={dispatch} testid={`node-invert-${node.id}`} />}
             {footDepth && (
               <DepthMaskBlock

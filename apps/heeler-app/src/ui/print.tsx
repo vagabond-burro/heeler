@@ -32,6 +32,8 @@ export function PrintControls({ node, dispatch }: { node: NodeCard; dispatch: D 
         <button
           className="chip"
           data-testid="print-split"
+          data-node={node.id}
+          data-param="split"
           data-active={split || undefined}
           aria-pressed={split}
           aria-label="Split grade"

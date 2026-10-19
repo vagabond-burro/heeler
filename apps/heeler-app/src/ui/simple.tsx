@@ -56,10 +56,8 @@ import { panePropsEqual } from "./viewmemo";
 import type { Command, NodeCard, State } from "../state";
 import { NEUTRAL_PARAMS, BRUSH_TIPS, availableMaskTypes, PANEL_TABS, RADIAL_SHAPES, RANGE_PRESETS, SELECT_METHODS, SELECT_OPS, SHAPE_AMOUNT_LABEL, TEXTURED_TIPS, activeSelectionMask, layersOf, hardRange, paramRange, clampBlurStrength, toolNode, detailEqViewOn, visiblePanelTabs, sectionExportId, artLayers, artMaskOf } from "../state";
 import type { LayerMaskType, PanelTab, PickMode, PickTarget, SelectOp } from "../state";
-import { curveModeOf, photoFlips, photoTurn, pickMaskNode } from "../state";
-import { FlipPhotoRow } from "./flipphoto";
+import { photoFlips, photoTurn, pickMaskNode } from "../state";
 import { CATEGORY_PIECES, recipeParamDefault } from "../recipes";
-import { CurveEditor, Wheel } from "./editors";
 import { ExportTick, LayerMaskExportRow, MaskExportTick } from "./exporttick";
 import { OpIcon } from "./selecticons";
 import { BrushPreview } from "./brushpreview";
@@ -94,17 +92,12 @@ import { logDebug, logMsg } from "../log";
 import { AS_SHOT, averageColor, neutralize } from "../whitebalance";
 import { assignHints } from "../keynav";
 import { HintKey } from "./hintkey";
-import { BendBar, BendWheel } from "./bend";
-import { EqEditor } from "./eqeditor";
 import { EQ_PRESETS, serializeEqPoints } from "../eqcurve";
 import { BwControls } from "./bwcontrols";
-import { PrintControls } from "./print";
 import { GrainFilmRow, GrainFrameRow } from "./grainfilm";
-import { ZonesBlock } from "./zones";
 import { DepthPickButton, DepthShape } from "./depthband";
 import { SectionWidgets } from "./sectionface";
 import { SectionLooks } from "./sectionlooks";
-import { ColorConsoleBlock } from "./colorconsole";
 import { DepthProgressBar, NormalsChoice } from "./depthtool";
 import { depthFromFile, passesOf } from "./depthtoolparts";
 import { ObjectMattePanel } from "./mattetool";
@@ -126,10 +119,10 @@ import { linkedWith } from "../links";
 import { LinkIcon } from "./linkicon";
 import { isMac, modLabel } from "../platform";
 import { polishDevelopMask } from "../polishdoor";
-import { isLayerNode, maskOfLayer } from "../layerids";
+import { maskOfLayer } from "../layerids";
 import { MenuField } from "./menufield";
 import { SuggestField } from "./suggestfield";
-import { DETAIL_EFFECTS, DETAIL_EQ_BANDS, DETAIL_EQ_PARAMS, DETAIL_WEIGHTS, MASK_ROWS, ROW_TIPS, SECTIONS, SECTION_BLURBS, SOURCE_ROWS, type SectionSpec, buildFor, hiddenSectionCount, navSections, paramDefault, powerOnSection, previewNodes, sectionExportCommand, sectionExportLayer, sectionExportOffered, sectionHidden, sectionIsOn, sectionNodeIds, sectionPinHint, sliderHint, visibleSections } from "./simpledata";
+import { DETAIL_EFFECTS, DETAIL_EQ_BANDS, DETAIL_EQ_PARAMS, DETAIL_WEIGHTS, MASK_ROWS, ROW_TIPS, SECTIONS, SECTION_BLURBS, SOURCE_ROWS, type SectionSpec, buildFor, sectionHasWidget, hiddenSectionCount, navSections, paramDefault, powerOnSection, previewNodes, sectionExportCommand, sectionExportLayer, sectionExportOffered, sectionHidden, sectionIsOn, sectionNodeIds, sectionPinHint, sliderHint, visibleSections } from "./simpledata";
 
 /** Width of the tab context menu, shared by its style and its placement so
  * the two cannot disagree about how much room it needs. */
@@ -151,7 +144,7 @@ const TOOL_POPOUTS: Record<string, "wheels" | "curves" | "toneeq" | "recolor" | 
 
 /** The folded bar a popped-out tool leaves behind; clicking it is the
  * way back, same as the Color Bend's. */
-function ToolPopBar({
+export function ToolPopBar({
   tool,
   label,
   dispatch,
@@ -183,6 +176,39 @@ function ToolPopBar({
       </span>
       <span style={{ fontSize: 9 }}>in its own window</span>
     </button>
+  );
+}
+
+/** A small sub-section kicker above a row (Exposure's Contrast and
+ * Range), the same on every face of a section. */
+export function RowHeading({ heading }: { heading: string }) {
+  return (
+    <div
+      className="kicker"
+      data-testid={`subsection-${heading.toLowerCase().replace(/[^a-z]+/g, "-")}`}
+      style={{ fontSize: 8, marginTop: 7, marginBottom: 1, opacity: 0.75 }}
+    >
+      {heading}
+    </div>
+  );
+}
+
+/** The line under the Color Wheels. 10, matching Tone Equalizer's own
+ * point hint: the two lines do the same job one section apart. */
+export function WheelsHelp() {
+  return (
+    <div
+      data-testid="wheels-help"
+      style={{
+        fontSize: 10,
+        color: "var(--text-ghost)",
+        marginTop: 6,
+        lineHeight: 1.5,
+      }}
+    >
+      Drag a puck toward a hue to push that tonal range toward
+      it. The bar under each wheel is that range's brightness.
+    </div>
   );
 }
 
@@ -4986,10 +5012,10 @@ consistency)."*/}
                     // defaults (the rows above) and drops the placement and its picker.
                     // Zones has no reset of its own (2026-09-14): this one and Undo are the
                     // ways back.
-                    if (sec.zonesWidget) {
+                    if (sectionHasWidget(sec, "zones")) {
                       dispatch({ type: "arm_zone_place", zone: null });
                     }
-                    if (sec.printWidget) {
+                    if (sectionHasWidget(sec, "print")) {
                       dispatch({ type: "set_params", id: node.id, values: { ...NEUTRAL_PARAMS["heeler.paper"] }, text: { toner: "" } });
                     }
                     // Source's five profile rows live on the Tone Profile node, not the
@@ -5071,7 +5097,7 @@ consistency)."*/}
                     }
                     // Geometry's flips are its widget's, not rows: a
                     // Reset puts the photograph back the right way round.
-                    if (sec.flipWidget) {
+                    if (sectionHasWidget(sec, "flipPhoto")) {
                       const flips = photoFlips(state);
                       if (flips.h) dispatch({ type: "flip_photo", axis: "h" });
                       if (flips.v) dispatch({ type: "flip_photo", axis: "v" });
@@ -5105,7 +5131,7 @@ consistency)."*/}
                       if (eq && state.nodes.some((n) => n.id === eq.id))
                         dispatch({ type: "set_params", id: eq.id, values: { ...NEUTRAL_PARAMS["heeler.detail_eq"] } });
                     }
-                    if (sec.detailAdvanced) {
+                    if (sectionHasWidget(sec, "detailAdvanced")) {
                       dispatch({
                         type: "set_params",
                         id: node.id,
@@ -5206,116 +5232,27 @@ toggle to Adjustment sections").*/}
               <div
                 style={{ padding: "0 12px 9px", display: closed ? "none" : undefined }}
               >
-                {sec.title === "Curves" &&
-                  (() => {
-                    if (state.toolPopouts.curves)
-                      return <ToolPopBar tool="curves" label="Curves" dispatch={dispatch} />;
-                    // The section's own node is the curve now; when it does not exist yet
-                    // the section stubs to a switch before this ever renders. Drawn to the
-                    // panel's width: a fixed 272 left the plot's right edge shy of the
-                    // other controls. "its right edge is not flush with the
-                    // other controls."
-                    return (
-                      <div style={{ marginBottom: 8 }}>
-                        <CurveEditor
-                          node={node}
-                          dispatch={dispatch}
-                          width={Math.max(220, (width ?? 320) - 24)}
-                          channelMode={curveModeOf(state)}
-                          clipboard={state.curveClipboard}
-                          histogramSrc={
-                            state.images.find((i) => i.id === state.activeImage)?.src
-                          }
-                          pickArmed={state.curvePick?.nodeId === node.id}
-                          hoverX={
-                            state.curvePick?.nodeId === node.id ? state.curveHoverX : null
-                          }
-                          onTogglePick={(ch) =>
-                            dispatch({ type: "arm_curve_pick", nodeId: node.id, channel: ch })
-                          }
-                        />
-                      </div>
-                    );
-                  })()}
-                {sec.title === "Color Wheels" && state.toolPopouts.wheels && (
-                  <ToolPopBar tool="wheels" label="Color Wheels" dispatch={dispatch} />
+                {/* The section's own widgets above its rows (the curve
+                    editor, the Color Wheels, Color Bend's wheel, Detail's
+                    weights), drawn as every face of the section draws
+                    them (sectionface.tsx). */}
+                {sec.widgets?.before && (
+                  <SectionWidgets
+                    kinds={sec.widgets.before}
+                    node={node}
+                    dispatch={dispatch}
+                    state={state}
+                    width={Math.max(220, (width ?? 320) - 24)}
+                    frame={frame}
+                    engine={engine}
+                    panel
+                  />
                 )}
-                {sec.title === "Color Wheels" && !state.toolPopouts.wheels && (
-                  <>
-                    <div
-                      style={{ display: "flex", gap: 8, paddingTop: 4 }}
-                      data-testid="develop-wheels"
-                    >
-                      {(() => {
-                        // Same order and labels navSections uses, so the
-                        // letter shown is the letter that works.
-                        const wheels: [string, string][] = [
-                          ["Shadows", "shadows"],
-                          ["Mids", "midtones"],
-                          ["Highs", "highlights"],
-                        ];
-                        const hinting =
-                          state.keynav?.mode === "controls" &&
-                          state.keynav.section === "Color Wheels";
-                        const hints = hinting
-                          ? assignHints(wheels.map(([n]) => n))
-                          : [];
-                        return wheels.map(([label, range], i) => (
-                          <Wheel
-                            key={range}
-                            name={label}
-                            range={range}
-                            node={node}
-                            dispatch={dispatch}
-                            hint={hinting ? hints[i] : undefined}
-                            live={
-                              state.keynav?.mode === "adjust" &&
-                              state.keynav.target?.section === "Color Wheels" &&
-                              state.keynav.target?.param === `${range}_hue`
-                            }
-                          />
-                        ));
-                      })()}
-                    </div>
-                    {/* 10, matching Tone Equalizer's own point hint: the two lines do the same job
-one section apart, and this one was a pixel smaller for no reason.*/}
-                    <div
-                      data-testid="wheels-help"
-                      style={{
-                        fontSize: 10,
-                        color: "var(--text-ghost)",
-                        marginTop: 6,
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      Drag a puck toward a hue to push that tonal range toward
-                      it. The bar under each wheel is that range's brightness.
-                    </div>
-                  </>
-                )}
-                {sec.title === "Color Bend" &&
-                  // Handed to its own window, this folds to a bar rather
-                  // than vanishing, the same way the spectrums and the
-                  // graph do. The bar is the way back.
-                  (state.bendPoppedOut ? (
-                    <BendBar dispatch={dispatch} />
-                  ) : (
-                    <BendWheel
-                      node={node}
-                      dispatch={dispatch}
-                      frame={frame}
-                      engine={engine}
-                      masked={isLayerNode(node.id)}
-                    />
-                  ))}
                 {/* "a single Sharpening category with a toggle button to
 switch between Vivid and Hi Pass, and other hood that rewires the
 node graph."*/}
                 {sec.title === "Sharpening" && node && (
                   <SharpeningRecipeControl node={node} dispatch={dispatch} />
-                )}
-                {sec.detailAdvanced && (
-                  <DetailAdvanced node={node} dispatch={dispatch} />
                 )}
                 {sec.title === "Source" &&
                   (() => {
@@ -5579,9 +5516,9 @@ menu"). The graph inspector's Source node draws the same rows.*/}
                             dispatch={dispatch}
                             state={state}
                             width={Math.max(220, (width ?? 320) - 24)}
-                            frame={frame ?? state.images.find((i) => i.id === state.activeImage)?.src}
-                            cell={state.recolorCell}
-                            onCell={(c) => dispatch({ type: "set_recolor_cell", cell: c })}
+                            frame={frame}
+                            engine={engine}
+                            panel
                           />
                         )}
                         {i === 0 && sec.note && (
@@ -5592,15 +5529,7 @@ menu"). The graph inspector's Source node draws the same rows.*/}
                             {sec.note}
                           </div>
                         )}
-                        {r.heading && (
-                          <div
-                            className="kicker"
-                            data-testid={`subsection-${r.heading.toLowerCase().replace(/[^a-z]+/g, "-")}`}
-                            style={{ fontSize: 8, marginTop: 7, marginBottom: 1, opacity: 0.75 }}
-                          >
-                            {r.heading}
-                          </div>
-                        )}
+                        {r.heading && <RowHeading heading={r.heading} />}
                         <Slider
                           label={r.label}
                           param={r.param}
@@ -5636,9 +5565,9 @@ menu"). The graph inspector's Source node draws the same rows.*/}
                             dispatch={dispatch}
                             state={state}
                             width={Math.max(220, (width ?? 320) - 24)}
-                            frame={frame ?? state.images.find((i) => i.id === state.activeImage)?.src}
-                            cell={state.recolorCell}
-                            onCell={(c) => dispatch({ type: "set_recolor_cell", cell: c })}
+                            frame={frame}
+                            engine={engine}
+                            panel
                           />
                         )}
                       </React.Fragment>
@@ -5646,79 +5575,31 @@ menu"). The graph inspector's Source node draws the same rows.*/}
                   });
                 })()}
                 {sec.noiseAuto && <NoiseAutoButton state={state} dispatch={dispatch} />}
-                {sec.consoleWidget &&
-                  (() => {
-                    const n = sec.node(state);
-                    return n ? (
-                      <div style={{ margin: "2px 0 6px" }}>
-                        <ColorConsoleBlock
-                          node={n}
-                          dispatch={dispatch}
-                          width={Math.max(220, (width ?? 320) - 24)}
-                          band={state.consoleBand}
-                          onBand={(id) => dispatch({ type: "set_console_band", id })}
-                          pickArmed={state.consolePick === n.id}
-                          pickBand={state.consolePickBand}
-                          onTogglePick={(band) => dispatch({ type: "toggle_console_pick", id: n.id, band })}
-                          customMax={state.prefs.consoleCustomMax}
-                          nameFormat={state.prefs.consoleNameFormat}
-                          onNameFormat={(fmt) => dispatch({ type: "set_prefs", prefs: { consoleNameFormat: fmt } })}
-                          compact
-                        />
-                      </div>
-                    ) : null;
-                  })()}
-                {sec.levelsWidget &&
-                  (() => {
-                    const n = sec.node(state);
-                    return n ? (
-                      <div style={{ margin: "2px 0 6px" }}>
-                        <LevelsEditor
-                          state={state}
-                          node={n}
-                          dispatch={dispatch}
-                          width={Math.max(220, (width ?? 320) - 24)}
-                          histogramSrc={
-                            frame ??
-                            state.images.find((i) => i.id === state.activeImage)?.src
-                          }
-                        />
-                      </div>
-                    ) : null;
-                  })()}
+                {/* The section's own widgets under its rows (Color Tune's
+                    band strip and wheel, the Levels histogram, the Tone
+                    Equalizer's EQ, the Zone System, the paper, the
+                    flips), drawn as every face of the section draws them
+                    (sectionface.tsx). */}
+                {sec.widgets?.after && (
+                  <SectionWidgets
+                    kinds={sec.widgets.after}
+                    node={node}
+                    dispatch={dispatch}
+                    state={state}
+                    width={Math.max(220, (width ?? 320) - 24)}
+                    frame={frame}
+                    engine={engine}
+                    panel
+                  />
+                )}
                 {sec.depthTools === "flare" &&
                   (() => {
                     const n = sec.node(state);
                     return n ? <StreakRibbon state={state} dispatch={dispatch} node={n} /> : null;
                   })()}
                 {sec.detailEq && <DetailEqualizer state={state} dispatch={dispatch} width={width ?? 320} />}
-                {sec.zonesWidget && <ZonesBlock state={state} dispatch={dispatch} frame={frame} />}
-                {sec.printWidget && <PrintControls node={node} dispatch={dispatch} />}
                 {sec.grainFilmWidget && <GrainFrameRow grain={node} dispatch={dispatch} />}
                 {sec.grainFilmWidget && <GrainFilmRow grain={node} nodes={state.nodes} dispatch={dispatch} />}
-                {sec.eqWidget &&
-                  (() => {
-                    const n = sec.node(state);
-                    return n ? (
-                      <div style={{ margin: "2px 0 6px" }}>
-                        <EqEditor
-                          node={n}
-                          dispatch={dispatch}
-                          width={Math.max(220, (width ?? 320) - 24)}
-                          pickArmed={state.toneEqPick === n.id}
-                          hoverX={state.toneEqPick === n.id ? state.toneEqHoverX : null}
-                          onTogglePick={() => dispatch({ type: "toggle_tone_eq_pick", id: n.id })}
-                          // The LIVE frame, not the thumbnail: the histogram moves as the
-                          // points move, which is how each point teaches what it does (the
-                          // owner's ask). Thumbnail until the first engine frame lands.
-                          histogramSrc={
-                            frame ??
-                            state.images.find((i) => i.id === state.activeImage)?.src
-                          }
-                        />
-                      </div>
-                    ) : null;
-                  })()}
                 {sec.depthTools && sec.depthTools !== "halation" && (
                   <div style={{ display: "flex", gap: 6, margin: "2px 0 6px", alignItems: "center" }}>
                     {/* The View depth eye sits on EVERY section that reads the map, Depth Map
@@ -6035,7 +5916,6 @@ side it reads like a tab view").*/}
                       <KeyLightControls state={state} dispatch={dispatch} node={n} />
                     ) : null;
                   })()}
-                {sec.flipWidget && <FlipPhotoRow nodes={state.nodes} activeImage={state.activeImage} dispatch={dispatch} />}
                 {sec.gridWarpWidget && <GridWarpControls state={state} dispatch={dispatch} frame={frame} />}
                 {sec.shapeWarpWidget && <ShapeWarpControls state={state} dispatch={dispatch} frame={frame} />}
                 {sec.colorCheckerWidget && <ColorCheckerControls state={state} dispatch={dispatch} frame={frame} />}
