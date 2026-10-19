@@ -62,6 +62,10 @@ export interface FitInput {
   sizes: { library: number; ribbon: number; right: number };
   bounds: { library: [number, number]; ribbon: [number, number]; right: [number, number] };
   pinned: readonly FoldablePanel[];
+  /** the Inspect panel's column beside the canvas, in chrome px, or 0
+   * while it is not on the row; it neither shrinks nor folds here, so the
+   * other panels make the room */
+  inspect?: number;
 }
 
 export interface LayoutFit {
@@ -117,6 +121,7 @@ export function fitLayout(i: FitInput): LayoutFit {
     if (has.right) px += w.right * z + (i.mode === "canvas" ? 0 : DIVIDER);
     else if (i.mode !== "simple") px += SPINE; // the folded inspector's spine
     if (shown.export) px += w.right * z; // Export borrows the right panel's width
+    if (i.inspect && i.inspect > 0) px += i.inspect * z + DIVIDER; // Inspect's column and its seam
     return px;
   };
   const mins = { library: i.bounds.library[0], ribbon: i.bounds.ribbon[0], right: i.bounds.right[0] };

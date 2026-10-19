@@ -5301,7 +5301,7 @@
     "enabled": true,
     "params": {
      "band_center": 30,
-     "depth_band": 0,
+     "depth_band": false,
      "depth_band_soft": 0.1,
      "depth_black": 0,
      "depth_black_soft": 0,
@@ -5539,7 +5539,7 @@
     "enabled": true,
     "params": {
      "band_center": 30,
-     "depth_band": 0,
+     "depth_band": false,
      "depth_band_soft": 0.1,
      "depth_black": 0,
      "depth_black_soft": 0,

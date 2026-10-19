@@ -244,3 +244,29 @@ describe("a divider drag", () => {
     expect(fittedDragSize(s, "library", 40)).toBe(s.panelSizes.library + 40);
   });
 });
+
+// The fourth review: the Inspect panel's column sits on the row too, and
+// the fit has to count it, or a narrow window overflows with the center
+// believed safe.
+describe("the Inspect column", () => {
+  const inspect: Command[] = [{ type: "toggle_inspect_pick" }, { type: "inspect_at", x: 0.5, y: 0.5 }];
+
+  it("takes its width and seam out of the center's share", () => {
+    const zoom = 1.15;
+    const without = layoutFitOf(at(1920, zoom))!;
+    let s = at(1920, zoom, ...inspect);
+    // Reopened by hand while Inspect is open: the row holds all of them.
+    s = { ...s, browserOpen: true, ribbonOpen: true };
+    const withIt = layoutFitOf(s)!;
+    expect(without.center - withIt.center).toBeCloseTo(s.panelSizes.inspect * zoom + 5, 0);
+  });
+
+  it("folds the other panels to keep the center at its minimum", () => {
+    for (const [width, zoom] of [[1280, 1], [1440, 1.15], [1920, 1.5]] as const) {
+      let s = at(width, zoom, ...inspect);
+      s = { ...s, browserOpen: true, ribbonOpen: true };
+      const fit = layoutFitOf(s)!;
+      expect(fit.center, `${width} @ ${zoom}`).toBeGreaterThanOrEqual(fit.centerMin);
+    }
+  });
+});

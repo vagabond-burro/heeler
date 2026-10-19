@@ -4091,7 +4091,7 @@ export interface State {
   /** The Library and the thumbnail strip as Inspect found them: opening
    * the panel folds both away, and closing it puts them back as they
    * were. Session state. */
-  inspectRestore: { browserOpen: boolean; ribbonOpen: boolean } | null;
+  inspectRestore: { browserOpen: boolean; ribbonOpen: boolean; pinned: FoldablePanel[] } | null;
   /** Which Adjustments sections the panel lists: every one, the pinned
    * ones, or the ones switched on for this photograph. */
   sectionFilter: SectionFilter;
@@ -12686,7 +12686,7 @@ export function clampParam(
 /** Params that are 0/1 flags wearing number clothes (serializeGraph
  * turns them into real booleans for the engine). Quad edit needs the
  * list too: a toggle mirrors absolutely, only a slider moves by delta. */
-export const FLAG_PARAMS = ["invert", "color_grain", "heal", "antialias", "clip", "inner", "clamp", "depth_on", "depth_invert", "hue_curve_on", "split", "by_frame", "feather_guided", "mask_off"];
+export const FLAG_PARAMS = ["invert", "color_grain", "heal", "antialias", "clip", "inner", "clamp", "depth_on", "depth_invert", "depth_band", "hue_curve_on", "split", "by_frame", "feather_guided", "mask_off"];
 
 /** Commands whose nodes-change is loading machinery, not an edit: quad
  * edit must not mirror these onto the other photos. Everything else
@@ -13688,15 +13688,33 @@ export function reduce(s: State, cmd: Command): State {
 }
 
 /** The Inspect panel takes a column beside the canvas: as a point is first
- * inspected the Library and the thumbnail strip fold away, and when the
- * point goes (closed, another photograph, a new graph) they come back as
- * they were. */
+ * inspected the Library and the thumbnail strip fold away (a pin the
+ * window's fit held on either goes with it), and when the point goes
+ * (closed, another photograph, a new graph) each comes back as it was,
+ * pin and all. Only a panel Inspect folded and that is still folded comes
+ * back: one reopened by hand meanwhile is left as the user has it, and
+ * one that was closed stays closed. */
 function inspectMakesRoom(s: State, next: State): State {
+  const folds: [FoldablePanel, "browserOpen" | "ribbonOpen"][] = [["library", "browserOpen"], ["ribbon", "ribbonOpen"]];
   if (!s.inspectPoint && next.inspectPoint && !next.inspectRestore) {
-    return { ...next, inspectRestore: { browserOpen: next.browserOpen, ribbonOpen: next.ribbonOpen }, browserOpen: false, ribbonOpen: false };
+    const pinned = folds.map(([p]) => p).filter((p) => next.layoutPinned.includes(p));
+    return {
+      ...next,
+      inspectRestore: { browserOpen: next.browserOpen, ribbonOpen: next.ribbonOpen, pinned },
+      browserOpen: false,
+      ribbonOpen: false,
+      layoutPinned: next.layoutPinned.filter((p) => !pinned.includes(p)),
+    };
   }
   if (s.inspectPoint && !next.inspectPoint && next.inspectRestore) {
-    return { ...next, browserOpen: next.inspectRestore.browserOpen, ribbonOpen: next.inspectRestore.ribbonOpen, inspectRestore: null };
+    const was = next.inspectRestore;
+    let out: State = { ...next, inspectRestore: null };
+    for (const [panel, key] of folds) {
+      if (!was[key] || out[key]) continue;
+      out = { ...out, [key]: true };
+      if (was.pinned.includes(panel) && !out.layoutPinned.includes(panel)) out = { ...out, layoutPinned: [...out.layoutPinned, panel] };
+    }
+    return out;
   }
   return next;
 }
@@ -14585,6 +14603,8 @@ export function layoutFitOf(s: State, pinned: readonly FoldablePanel[] = s.layou
     sizes: { library: s.panelSizes.library, ribbon: s.panelSizes.ribbon, right: s.panelSizes.right },
     bounds: { library: b.library, ribbon: b.ribbon, right: b.right },
     pinned,
+    // The Inspect panel's column takes its share of the row while shown.
+    inspect: s.inspectPoint && inspectDocked(s) ? Math.min(b.inspect[1], Math.max(b.inspect[0], s.panelSizes.inspect)) : 0,
   });
 }
 

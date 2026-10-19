@@ -126,3 +126,32 @@ fn a_trace_does_not_attribute_a_transparent_border_to_the_photos_origin() {
     assert!(steps[1].input.is_none());
     assert_eq!(steps.last().unwrap().output.unwrap().r, 0.0);
 }
+
+/// The fourth review: under memory pressure a mover's coordinate map was
+/// refused and the trace lost every point before it without a word. The
+/// refusal is told now, and the trace goes on.
+#[test]
+fn a_refused_coordinate_map_is_told_not_swallowed() {
+    let ui = graph(serde_json::json!([
+        {"id":"src","type":"heeler.image_source","enabled":true,"params":{}},
+        {"id":"crop","type":"heeler.crop_rotate","enabled":true,"params":{"crop_x":0.5,"crop_w":0.5}},
+        {"id":"out","type":"heeler.output","enabled":true,"params":{}}
+    ]), &[("src","out","crop","in"), ("crop","out","out","in")]);
+    let sources = HashMap::from([("src".into(), SourceImage { image: Arc::new(ImageBuf::filled(200, 100, [0.2; 4])), version: 1, measured: false })]);
+    let g = build_graph(&ui, &Registry::builtin()).unwrap();
+    let mut exec = Executor::new();
+    let frames: HashMap<String, Value> = ["src", "crop", "out"].iter().map(|id| (id.to_string(), exec.render(&g, id, &sources).unwrap())).collect();
+    let mut notes = Vec::new();
+    let steps = memory::with_budget(1024, || {
+        trace_spine_noting(&ui, (0.5, 0.5), |id| frames.get(id).cloned(), |m| notes.push(m))
+    });
+    assert_eq!(notes.len(), 1, "{notes:?}");
+    assert!(notes[0].contains("crop"), "{notes:?}");
+    // The point after the crop still reads; the one before it is unknown.
+    assert!(steps.iter().find(|s| s.id == "crop").unwrap().output.is_some());
+    assert!(steps.iter().find(|s| s.id == "src").unwrap().output.is_none());
+    // With room, no note.
+    let mut quiet = Vec::new();
+    trace_spine_noting(&ui, (0.5, 0.5), |id| frames.get(id).cloned(), |m| quiet.push(m));
+    assert!(quiet.is_empty(), "{quiet:?}");
+}

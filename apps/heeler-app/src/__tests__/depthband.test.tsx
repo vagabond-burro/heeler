@@ -14,7 +14,7 @@ vi.mock("../bridge", async (orig) => {
 
 import { App } from "../app";
 import { initialState } from "../data";
-import { anyPickerArmed, reduce, type Command, type NodeCard, type State } from "../state";
+import { FLAG_PARAMS, anyPickerArmed, publishShape, reduce, type Command, type NodeCard, type State } from "../state";
 import { bandOf, bandWeight, widenBand } from "../ui/depthbins";
 import { DepthShape } from "../ui/depthband";
 import { depthWanted } from "../ui/depthtoolparts";
@@ -205,5 +205,14 @@ describe("the depth Band", () => {
     fireEvent.click(screen.getByTestId("art-depth-art_b1-mode-band"));
     expect(screen.getByTestId("art-depth-art_b1-band")).toBeInTheDocument();
     expect(screen.queryByTestId("art-depth-art_b1-levels-handle-gamma")).toBeNull();
+  });
+
+  // The fourth review: the Band is a flag like depth_on, so a recipe that
+  // publishes it offers Off and On, and Quad edit copies it whole rather
+  // than mirroring a difference.
+  it("is a flag wherever flags are treated as flags", () => {
+    expect(FLAG_PARAMS).toContain("depth_band");
+    const mask = { id: "m", type: "heeler.range_mask", name: "m", params: { depth_band: 0 } } as unknown as NodeCard;
+    expect(publishShape(mask, "depth_band")).toEqual({ kind: "menu", options: [{ label: "Off", value: 0 }, { label: "On", value: 1 }] });
   });
 });

@@ -164,7 +164,7 @@ describe("the Inspect panel's own column", () => {
     expect([s.browserOpen, s.ribbonOpen]).toEqual([false, false]);
     // Another point while open changes nothing about them.
     s = run(s, { type: "inspect_at", x: 0.2, y: 0.2 });
-    expect(s.inspectRestore).toEqual({ browserOpen: true, ribbonOpen: true });
+    expect(s.inspectRestore).toEqual({ browserOpen: true, ribbonOpen: true, pinned: [] });
     s = run(s, { type: "close_inspect" });
     expect([s.browserOpen, s.ribbonOpen, s.inspectRestore]).toEqual([true, true, null]);
     // One that was closed stays closed.
@@ -179,6 +179,28 @@ describe("the Inspect panel's own column", () => {
       expect(s.inspectPoint).toBeNull();
       expect([s.browserOpen, s.ribbonOpen]).toEqual([true, true]);
     }
+  });
+
+  // The fourth review: closing Inspect undid a panel reopened by hand
+  // while it was open, and folded a pinned Library past its pin.
+  it("leaves a panel reopened by hand as it is, and gives a pinned panel its pin back", () => {
+    // The Library was closed when Inspect opened; the user opens it by
+    // hand while Inspect is open. Closing Inspect leaves it open.
+    let s = inspecting({ ...initialState(), browserOpen: false, ribbonOpen: true });
+    s = run(s, { type: "toggle_browser" });
+    expect(s.browserOpen).toBe(true);
+    s = run(s, { type: "close_inspect" });
+    expect(s.browserOpen).toBe(true);
+    // The strip, folded by Inspect and still folded, comes back.
+    expect(s.ribbonOpen).toBe(true);
+    // A pin goes while Inspect has the Library folded.
+    s = inspecting({ ...s, browserOpen: true, layoutPinned: ["library"] });
+    expect(s.layoutPinned).not.toContain("library");
+    // Folded by Inspect and still folded, the pinned Library comes back
+    // pinned.
+    s = run(s, { type: "close_inspect" });
+    expect(s.browserOpen).toBe(true);
+    expect(s.layoutPinned).toContain("library");
   });
 
   it("remembers its side with the layout, the right by default", () => {

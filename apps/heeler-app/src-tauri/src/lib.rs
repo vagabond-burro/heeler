@@ -13840,8 +13840,13 @@ fn trace_sample(img: &ImageBuf, x: f32, y: f32) -> TraceSample {
 /// Map a point back through one geometry op on the op's own grid. The
 /// coordinate image takes the same kernel as the photograph, including
 /// flips, turns, lens distortion and warps. Only geometry is applied.
-fn trace_input_point(node: &UiNode, (w, h): (usize, usize), point: (f32, f32)) -> Option<(f32, f32)> {
-    let _paid = Job::admit(memory::bytes(w, h, 4, 4 * 3).ok()?, "pixel trace coordinates").ok()?;
+/// Ok(None) is a point on no pixel of the photograph (a transparent
+/// border); Err is memory refused for the coordinate image, which the
+/// trace reports rather than reading as "no pixel".
+fn trace_input_point(node: &UiNode, (w, h): (usize, usize), point: (f32, f32)) -> Result<Option<(f32, f32)>, String> {
+    let _paid = memory::bytes(w, h, 4, 4 * 3)
+        .and_then(|need| Job::admit(need, "pixel trace coordinates"))
+        .map_err(|e| e.to_string())?;
     let mut coords = ImageBuf::new(w, h);
     for (i, px) in coords.data.chunks_mut(4).enumerate() {
         px.copy_from_slice(&[(i % w) as f32 / w.saturating_sub(1).max(1) as f32,
@@ -13855,22 +13860,33 @@ fn trace_input_point(node: &UiNode, (w, h): (usize, usize), point: (f32, f32)) -
         connections: vec![UiConnection { from: ("src".into(), "out".into()), to: ("geometry".into(), "in".into()) }],
     };
     let sources = HashMap::from([("src".to_string(), SourceImage { image: Arc::new(coords), version: 0, measured: false })]);
-    let graph = build_graph(&ui, &Registry::builtin()).ok()?;
-    let value = Executor::new().render(&graph, "geometry", &sources).ok()?;
-    let image = value.as_image()?;
+    let Ok(graph) = build_graph(&ui, &Registry::builtin()) else { return Ok(None) };
+    let Ok(value) = Executor::new().render(&graph, "geometry", &sources) else { return Ok(None) };
+    let Some(image) = value.as_image() else { return Ok(None) };
     let x = (point.0.clamp(0.0, 1.0) * image.width.saturating_sub(1) as f32) as usize;
     let y = (point.1.clamp(0.0, 1.0) * image.height.saturating_sub(1) as f32) as usize;
     let pixel = image.pixel(x, y);
-    (pixel[3] > 0.0 && pixel[0].is_finite() && pixel[1].is_finite()).then_some((pixel[0], pixel[1]))
+    Ok((pixel[3] > 0.0 && pixel[0].is_finite() && pixel[1].is_finite()).then_some((pixel[0], pixel[1])))
 }
 
 /// Read each node on the picture's path at its own point. Walking back
 /// through every mover preserves the intermediate grids between crops
 /// and warps instead of reusing the photograph's coordinates there.
-fn trace_spine(
+// The tests' plain form, without a note. Not gated to test builds: the
+// source guards read the production code up to the first test gate.
+#[cfg_attr(not(test), allow(dead_code))]
+fn trace_spine(graph: &UiGraph, frame: (f32, f32), render: impl FnMut(&str) -> Option<Value>) -> Vec<TraceStep> {
+    trace_spine_noting(graph, frame, render, |_| {})
+}
+
+/// trace_spine, telling `note` when a mover's coordinate map could not be
+/// made (memory refused): the points upstream of it read as nothing, and
+/// the caller says why instead of leaving the rows blank without a word.
+fn trace_spine_noting(
     graph: &UiGraph,
     frame: (f32, f32),
     mut render: impl FnMut(&str) -> Option<Value>,
+    mut note: impl FnMut(String),
 ) -> Vec<TraceStep> {
     let spine = image_spine(graph);
     let node = |id: &str| graph.nodes.iter().find(|n| n.id == id);
@@ -13882,7 +13898,13 @@ fn trace_spine(
             point = point.and_then(|p| {
                 let input = render(spine.get(i.checked_sub(1)?)?)?;
                 let image = input.as_image()?;
-                trace_input_point(n, (image.width, image.height), p)
+                match trace_input_point(n, (image.width, image.height), p) {
+                    Ok(at) => at,
+                    Err(e) => {
+                        note(format!("Inspect: the points before {} could not be traced: {e}", n.id));
+                        None
+                    }
+                }
             });
         }
     }
@@ -13944,7 +13966,7 @@ async fn trace_pixel(
         let vision = vision_base(&app).ok();
         let mut exec = PreviewExecutor { app: &app, exec: Some(with_session(&app, |s|
             Ok(sampling_executor(s, vision.as_deref(), &graph, &image_id, &mut sources)))?) };
-        Ok(trace_spine(&graph, (x, y), |id| exec.render(&g, id, &sources).ok()))
+        Ok(trace_spine_noting(&graph, (x, y), |id| exec.render(&g, id, &sources).ok(), |m| emit_log(&app, "warn", m)))
     })
     .await
     .map_err(|e| e.to_string())?
