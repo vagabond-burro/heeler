@@ -13,7 +13,7 @@ vi.mock("../bridge", async (original) => ({
   saveGraph: native.save,
   renderThumbnail: native.thumb,
 }));
-vi.mock("../ui/chrome", () => ({ refreshLibrary: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("../ui/chromeparts", () => ({ refreshLibrary: vi.fn().mockResolvedValue(undefined) }));
 
 let commands: Command[] = [];
 let send: (c: Command) => void;

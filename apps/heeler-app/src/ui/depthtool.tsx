@@ -11,7 +11,7 @@ import { depthMap, filePasses, smartModelDownload, smartModelStatus, type SmartM
 import { logMsg } from "../log";
 import { reportToolError } from "./hints";
 import { ModelConsentCard } from "./modelconsent";
-import { publishBusy } from "./statusbar";
+import { publishBusy } from "./statusbarparts";
 import type { Command, State, NodeCard } from "../state";
 import { DEPTH_SHEET_DELAY_MS, depthEstimate, depthFailureNow, depthFromFile, depthGeometryKey, depthInlineShown, depthProgressNow, depthRecipeKey, depthWanted, dismissDepthFailure, failure, passesOf, publishFailure, publishProgress, recordDepthTiming, shiftInline, subscribeDepthProgress } from "./depthtoolparts";
 

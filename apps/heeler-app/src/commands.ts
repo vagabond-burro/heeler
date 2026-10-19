@@ -24,12 +24,12 @@ type D = React.Dispatch<Command>;
  * and the layer's pixel mask wears it. Through a dynamic import, as the
  * other desktop calls here, so this file keeps no bridge import. */
 function bakeSelectionThen(state: State, maskId: string, what: string, then: (version: string) => void): void {
-  void import("./ui/statusbar").then(({ publishBusy }) => publishBusy(`${what.toUpperCase()} \u00b7 baking the selection`));
+  void import("./ui/statusbarparts").then(({ publishBusy }) => publishBusy(`${what.toUpperCase()} \u00b7 baking the selection`));
   void import("./bridge")
     .then(({ bakeLayerMask }) => bakeLayerMask(state, maskId, ""))
     .then(then)
     .catch((err) => void import("./ui/hints").then(({ reportToolError }) => reportToolError(what, err)))
-    .finally(() => void import("./ui/statusbar").then(({ publishBusy }) => publishBusy(null)));
+    .finally(() => void import("./ui/statusbarparts").then(({ publishBusy }) => publishBusy(null)));
 }
 
 /** New Layer via Copy, after its gates: the desktop cuts the pixels
@@ -43,14 +43,14 @@ export function runLayerViaCopy(state: State, dispatch: D, selectionId: string):
   const what = "New Layer via Copy";
   const { source, carrier, above, name } = layerViaCopySource(state);
   const graphState = state.nodes.some((n) => n.id === ART_ID) ? state : reduce(state, { type: "art_add_layer", kind: "image" });
-  void import("./ui/statusbar").then(({ publishBusy }) => publishBusy(`${what.toUpperCase()} · copying the selection`));
+  void import("./ui/statusbarparts").then(({ publishBusy }) => publishBusy(`${what.toUpperCase()} · copying the selection`));
   // Under the bakes' progress dialog, Bake Warp's path (layeractions.ts
   // runBakeWarp): a canceled copy dispatches nothing.
   // Kept in each recovery bundle while Keep baked pictures in backups
   // is on: the dialog says so, the status line gives the size once the
   // file is written (bakedbackups.ts).
   const kept = state.prefs.keepBakedInBackups;
-  void import("./ui/opprogress")
+  void import("./ui/opprogressparts")
     .then(({ watchBake }) =>
       watchBake(
         "Copying the selection at full size",
@@ -79,7 +79,7 @@ export function runLayerViaCopy(state: State, dispatch: D, selectionId: string):
       dispatch({ type: "bump_preview" });
       void import("./ui/hints").then(({ reportToolError }) => reportToolError(what, err));
     })
-    .finally(() => void import("./ui/statusbar").then(({ publishBusy }) => publishBusy(null)));
+    .finally(() => void import("./ui/statusbarparts").then(({ publishBusy }) => publishBusy(null)));
 }
 
 /** What a command needs beyond state and dispatch: the things that live

@@ -5,7 +5,7 @@ import React, { useEffect, useState } from "react";
 import { denoiseMap, denoiseFullStatus, onDenoiseCacheChanged, modelsEpoch, onModelsChanged, type DenoiseFullStatus } from "../bridge";
 import { logMsg } from "../log";
 import { reportToolError } from "./hints";
-import { publishBusy } from "./statusbar";
+import { publishBusy } from "./statusbarparts";
 import { MODEL_DENOISE_ID, previewEdgeFor, type Command, type State } from "../state";
 
 export type D = React.Dispatch<Command>;

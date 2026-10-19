@@ -33,7 +33,7 @@ import { ModelConsentCard } from "./modelconsent";
 import { modLabel } from "../platform";
 import type { Command, NodeCard, State } from "../state";
 import { activeSelectionMask, artLayers, artMaskNode, removalPending, maskViewOverriddenBy } from "../state";
-import { publishBusy } from "./statusbar";
+import { publishBusy } from "./statusbarparts";
 import { parseSmartPoints, smartMarkersOn, smartPromptAt, subjectAim } from "../smartpoints";
 import { SMART_ICON_BUTTON, activeSmartMask, depthEyeHint, depthEyeModifier } from "./smarttoolparts";
 

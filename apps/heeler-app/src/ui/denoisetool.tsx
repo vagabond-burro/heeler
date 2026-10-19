@@ -10,7 +10,7 @@ import { denoiseMap, onDenoiseCacheChanged, onModelsChanged, onDenoiseProgress, 
 import { logMsg } from "../log";
 import { reportToolError } from "./hints";
 import { ModelConsentCard } from "./modelconsent";
-import { publishBusy } from "./statusbar";
+import { publishBusy } from "./statusbarparts";
 import { previewEdgeFor, type State } from "../state";
 import { type D, denoiseMark, denoiseWanted, landed, publish, status, useDenoiseStatus, useFullDenoiseStatus } from "./denoisetoolparts";
 

@@ -7,7 +7,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mockCancels, mockEmitProgress, mockResetOps } from "../bridge";
 import { CatalogDialog } from "../ui/catalogui";
-import { beginOp, clearAllOps, clearOp, OpProgressOverlay } from "../ui/opprogress";
+import { OpProgressOverlay } from "../ui/opprogress";
+import { beginOp, clearAllOps, clearOp } from "../ui/opprogressparts";
 
 // The event bus the Tauri listen path lands on, so a test can emit what
 // the Rust worker would. Faithful to Tauri: every listener on the
@@ -198,7 +199,7 @@ describe("relink from the thumbnail menu", () => {
       if (cmd === "relink_folder") return new Promise((r) => { release = r; });
       return [];
     });
-    const { relinkFrom } = await import("../ui/chrome");
+    const { relinkFrom } = await import("../ui/chromeparts");
     const { initialState } = await import("../data");
     const state = {
       ...initialState(),

@@ -9,7 +9,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import { reduce, type Command, type Confirm, type State } from "../state";
 import { MenuBar } from "../ui/chrome";
-import { ConfirmDialog, confirmCopy } from "../ui/catalogui";
+import { ConfirmDialog } from "../ui/catalogui";
+import { confirmCopy } from "../ui/cataloguiparts";
 
 const native = vi.hoisted(() => ({ invoke: vi.fn(async (_name: string, _args?: unknown): Promise<any> => []) }));
 vi.mock("@tauri-apps/api/core", () => native);

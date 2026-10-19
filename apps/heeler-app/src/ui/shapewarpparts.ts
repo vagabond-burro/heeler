@@ -8,7 +8,7 @@ import { rootDispatch } from "../rootdispatch";
 import { shapeOutline } from "./maskshapes";
 import { publishShapeWarpLive } from "../gridwarplive";
 import { composeShapeGesture, shapesFromNode, type WarpShape } from "../shapewarp";
-import { type SectionDrag } from "./gridwarp";
+import { type SectionDrag } from "./gridwarpparts";
 import { modLabel } from "../platform";
 import { type MeshGesture } from "../gridwarp";
 

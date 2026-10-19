@@ -15,10 +15,12 @@ import { useState } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { initialState } from "../data";
-import { BrowserPanel, Ribbon, ambiguousNote, loadSessionImages, takenNote } from "../ui/chrome";
+import { BrowserPanel, Ribbon } from "../ui/chrome";
+import { ambiguousNote, loadSessionImages, takenNote } from "../ui/chromeparts";
 import { reduce, trashConfirmAction, type Command, type ImageEntry, type State } from "../state";
 import { mockRemovalCalls, mockResetRemovalCalls, type FolderImage } from "../bridge";
-import { ConfirmDialog, confirmCopy } from "../ui/catalogui";
+import { ConfirmDialog } from "../ui/catalogui";
+import { confirmCopy } from "../ui/cataloguiparts";
 import { isMissingSource } from "../previewretry";
 
 const files: FolderImage[] = [

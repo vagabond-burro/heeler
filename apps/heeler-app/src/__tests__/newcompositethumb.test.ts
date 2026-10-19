@@ -6,7 +6,7 @@ const backend = vi.hoisted(() => ({ stack: vi.fn(), pano: vi.fn(), thumb: vi.fn(
 vi.mock("../bridge", async (original) => ({ ...await original<typeof import("../bridge")>(), createStack: backend.stack, createPano: backend.pano, loadThumbnail: backend.thumb }));
 import { serializeThumbnailGraph } from "../bridge";
 import { setThumbnailGraphs } from "../thumbs";
-import { mergeSelection, stitchSelection } from "../ui/chrome";
+import { mergeSelection, stitchSelection } from "../ui/chromeparts";
 import { handleApiAsync } from "../api";
 
 const row = (name: string, extra: Partial<ImageEntry>): ImageEntry => ({ id: "new", name, stars: 0, flag: "", edited: false, filter: "none", src: "", ...extra });

@@ -12,7 +12,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import * as bridge from "../bridge";
 import { initialState } from "../data";
-import { MenuBar, relinkFrom } from "../ui/chrome";
+import { MenuBar } from "../ui/chrome";
+import { relinkFrom } from "../ui/chromeparts";
 import { CatalogDialog } from "../ui/catalogui";
 import { mockSetRecentCatalogs, type RecentCatalog } from "../bridge";
 

@@ -27,7 +27,7 @@ import { looksFor, type LookSection, type SectionLook } from "../sectionlooks";
 import { lookPreviewState, type Command, type State } from "../state";
 import { depthProgressNow, depthRecipeKey, subscribeDepthProgress } from "./depthtoolparts";
 import { MenuField } from "./menufield";
-import { publishBusy } from "./statusbar";
+import { publishBusy } from "./statusbarparts";
 import { LOOK_HOVER_MS } from "./sectionlooksparts";
 
 type D = (cmd: Command) => void;

@@ -8,7 +8,7 @@
 
 import { loadCollection, type FolderImage } from "../bridge";
 import type { Command, State } from "../state";
-import { beginNavigation, currentNavigation, loadSessionImages, navStale, openFolderPlain } from "./chrome";
+import { beginNavigation, currentNavigation, loadSessionImages, navStale, openFolderPlain } from "./chromeparts";
 
 type D = (command: Command) => void;
 

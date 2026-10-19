@@ -22,7 +22,7 @@ import { DepthMaskBlock, MaskInvertRow, Slider } from "./simple";
 import { MASK_ROWS } from "./simpledata";
 import { SmartModePanel } from "./smarttool";
 import { activeSmartMask } from "./smarttoolparts";
-import { publishBusy } from "./statusbar";
+import { publishBusy } from "./statusbarparts";
 import { smartModelMissing, useSmartModels } from "./smartnodeparts";
 
 type D = React.Dispatch<Command>;

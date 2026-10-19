@@ -6,11 +6,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { initialState } from "../data";
-import { Viewer, zoomSegActive } from "../ui/viewer";
+import { Viewer } from "../ui/viewer";
+import { zoomSegActive } from "../ui/viewerparts";
 
 const readout = vi.hoisted(() => vi.fn());
-vi.mock("../ui/statusbar", async (original) => ({
-  ...(await original<typeof import("../ui/statusbar")>()),
+vi.mock("../ui/statusbarparts", async (original) => ({
+  ...(await original<typeof import("../ui/statusbarparts")>()),
   publishViewerReadout: readout,
 }));
 

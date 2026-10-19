@@ -72,7 +72,7 @@ export const UNBAKE_WARP_HINT =
 export function runBakeWarp(state: State, dispatch: Dispatch, id: string): void {
   const what = "Bake Warp";
   if (!bakeableWarp(state, id)) return;
-  void import("./ui/statusbar").then(({ publishBusy }) => publishBusy(`${what.toUpperCase()} · baking the warp`));
+  void import("./ui/statusbarparts").then(({ publishBusy }) => publishBusy(`${what.toUpperCase()} · baking the warp`));
   // Under the bake's progress dialog (2026-09-30: "Bake Warp was really
   // slow. I think a dialog should pop up with a progress bar"): shown
   // once the bake has run half a second, with Cancel. A canceled bake
@@ -82,7 +82,7 @@ export function runBakeWarp(state: State, dispatch: Dispatch, id: string): void 
   // the dialog says the picture travels with each recovery bundle and the
   // status line gives its size once written (bakedbackups.ts).
   const kept = state.prefs.keepBakedInBackups;
-  void import("./ui/opprogress")
+  void import("./ui/opprogressparts")
     .then(({ watchBake }) =>
       watchBake("Baking the warp at full size", () => import("./bridge").then(({ bakeWarpLayer }) => bakeWarpLayer(state, id)), kept ? BAKE_DIALOG_BACKUP_LINE : undefined),
     )
@@ -106,7 +106,7 @@ export function runBakeWarp(state: State, dispatch: Dispatch, id: string): void 
       dispatch({ type: "bump_preview" });
       void import("./ui/hints").then(({ reportToolError }) => reportToolError(what, err));
     })
-    .finally(() => void import("./ui/statusbar").then(({ publishBusy }) => publishBusy(null)));
+    .finally(() => void import("./ui/statusbarparts").then(({ publishBusy }) => publishBusy(null)));
 }
 
 export interface LayerActionItem {

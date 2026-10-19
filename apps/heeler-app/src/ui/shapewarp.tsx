@@ -34,7 +34,8 @@ import {
 } from "../shapewarp";
 import { RadialOverlay } from "./overlays";
 import { IDENTITY_VIEW, type ViewTransform } from "./overlaysparts";
-import { aimedDispatch, edgesCommand, PinchPad, TurnWheel, useWarpPreview, type WarpPair } from "./gridwarp";
+import { PinchPad, TurnWheel } from "./gridwarp";
+import { aimedDispatch, edgesCommand, useWarpPreview, type WarpPair } from "./gridwarpparts";
 import { TrackSlider, ValueField } from "./track";
 import { flashStatus } from "./hints";
 import { ROTATE_CURSOR, resizeCursorFor } from "./cursors";

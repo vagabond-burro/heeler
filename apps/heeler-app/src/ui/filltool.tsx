@@ -14,7 +14,7 @@ import { reportToolError } from "./hints";
 import { ModelConsentCard } from "./modelconsent";
 import { MODEL_FILL_GLYPH } from "./paneliconsparts";
 import { artMaskNode, type Command, type State } from "../state";
-import { publishBusy } from "./statusbar";
+import { publishBusy } from "./statusbarparts";
 import { activeFillLayer, fillLayers } from "./filltoolparts";
 
 type D = React.Dispatch<Command>;

@@ -2279,7 +2279,7 @@ describe("graph state semantics", () => {
     });
 
     it("a bright-sky pick commits a point instead of vanishing", async () => {
-      const { pickedCurvePoint } = await import("../ui/editors");
+      const { pickedCurvePoint } = await import("../ui/editorsparts");
       const identity: [number, number][] = [[0, 0], [1, 1]];
       // The owner's field case: a blown sky samples x ~1.0, the commit clamps
       // to 0.99, and the old proximity test saw the pinned x=1 corner 0.01
@@ -2295,12 +2295,12 @@ describe("graph state semantics", () => {
       const third = pickedCurvePoint(next, true, 0.5)!.curve;
       expect(third.map((p) => p[0])).toEqual([0, 0.5, 0.99, 1]);
       // The committed point sits on the curve, not off it.
-      const { curveValueAt } = await import("../ui/editors");
+      const { curveValueAt } = await import("../curvesampler");
       expect(third[1][1]).toBeCloseTo(curveValueAt(next, true, 0.5), 6);
     });
 
     it("the ghost point lands exactly on the curve", async () => {
-      const { curveValueAt } = await import("../ui/editors");
+      const { curveValueAt } = await import("../curvesampler");
       const pts: [number, number][] = [[0, 0], [0.5, 0.8], [1, 1]];
       // Endpoints and knots are exact in both interpolations.
       for (const smooth of [true, false]) {
@@ -2934,7 +2934,7 @@ describe("graph state semantics", () => {
 
   describe("region-of-interest at 1:1", () => {
     it("visibleRoi inverts zoom and pan into frame coordinates", async () => {
-      const { visibleRoi } = await import("../ui/viewer");
+      const { visibleRoi } = await import("../ui/viewerparts");
       const stage = { w: 800, h: 600 };
       const basebox = { w: 800, h: 600 };
       // 4x zoom, centered: a quarter of the frame plus the margin.

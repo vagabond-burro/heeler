@@ -19,22 +19,11 @@ import { modLabel } from "../platform";
 import type { Command, State } from "../state";
 import { polishLayerLine, transformDragOf } from "../state";
 import { transformKeysLine } from "./overlaysparts";
-import { gridWarpKeysLine } from "./gridwarp";
+import { gridWarpKeysLine } from "./gridwarpparts";
 import { shapeWarpKeysLine } from "./shapewarpparts";
+import { type ViewerReadout, busy, busySubs, readout, subs } from "./statusbarparts";
 
 type D = React.Dispatch<Command>;
-
-export type ViewerReadout = { zoom: string; res: string };
-
-let readout: ViewerReadout | null = null;
-const subs = new Set<(r: ViewerReadout | null) => void>();
-
-/** The viewer's zoom/resolution labels, published for the bar. Pass
- * null on unmount so a closed viewer leaves no stale numbers. */
-export function publishViewerReadout(r: ViewerReadout | null) {
-  readout = r;
-  subs.forEach((f) => f(readout));
-}
 
 function useViewerReadout(): ViewerReadout | null {
   const [v, setV] = useState(readout);
@@ -46,19 +35,6 @@ function useViewerReadout(): ViewerReadout | null {
     };
   }, []);
   return v;
-}
-
-// The model-work readout ("Could the status bar show a
-// progress read out if its working hard?"). Runners publish what
-// they are doing; the bar shows it in gold until they publish null.
-// Same module-store pattern as the viewer readout, so nothing
-// re-renders but the bar.
-let busy: string | null = null;
-const busySubs = new Set<(b: string | null) => void>();
-
-export function publishBusy(text: string | null) {
-  busy = text;
-  busySubs.forEach((f) => f(busy));
 }
 
 function useBusy(): string | null {

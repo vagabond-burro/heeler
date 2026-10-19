@@ -13,7 +13,8 @@ import { describe, expect, it } from "vitest";
 import { initialState } from "../data";
 import { serializeGraph } from "../bridge";
 import { reduce, type Command, type NodeCard, type State } from "../state";
-import { CurveEditor, pickedCurvePoint } from "../ui/editors";
+import { CurveEditor } from "../ui/editors";
+import { pickedCurvePoint } from "../ui/editorsparts";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
 

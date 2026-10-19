@@ -6,7 +6,7 @@ import { DenoiseRunner } from "../ui/denoisetool";
 import { denoiseMark, denoiseStatusNow, requestFullDenoise } from "../ui/denoisetoolparts";
 import * as bridge from "../bridge";
 import { DenoiseMethodRow } from "../ui/simple";
-import * as statusbar from "../ui/statusbar";
+import * as statusbar from "../ui/statusbarparts";
 
 afterEach(() => vi.restoreAllMocks());
 it("a remounted viewer checks its cached preview without announcing inference", async () => {

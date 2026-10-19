@@ -20,7 +20,8 @@ import {
 } from "../bridge";
 import { MacInset } from "./chrome";
 import { assistantConfig, assistantConfigVersion, assistantReady, subscribeAssistantConfig } from "../assistant";
-import { AssistantTab, clearAssistantConversation } from "./assistanttab";
+import { AssistantTab } from "./assistanttab";
+import { clearAssistantConversation } from "../assistantchat";
 import { onRevealAssistant } from "../assistantchat";
 import { MenuField } from "./menufield";
 import { PY_COLOR, type PyEntry, setActiveTab, setPyBusy, SCRATCH_KEY, type ScratchTab, activeTab, announceConsoleWindow, broadcastPy, echoEnabled, highlightPython, pushPy, pyBusy, pyEntries, pyListeners, pyNotify, pyVer, restoreScratch, runKeyName, setEcho, tabs } from "./consolestate";

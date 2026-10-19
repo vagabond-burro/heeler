@@ -102,16 +102,8 @@ import { handleKey, legend, moveWheel, quantize, stepFor } from "./keynav";
 import { COMMANDS, bindingMap, bindingOf, keyBelongsToFocus, popoutGraphCommand } from "./hotkeys";
 import { inScope, runCommand } from "./commands";
 import { navSections, powerOnSection, SECTIONS } from "./ui/simpledata";
-import {
-  TopBar,
-  TabRail,
-  BrowserPanel,
-  Ribbon,
-  openFolderRemembering,
-  refreshLibrary,
-  restoreCatalogSession,
-  revealActiveThumb,
-} from "./ui/chrome";
+import { TopBar, TabRail, BrowserPanel, Ribbon } from "./ui/chrome";
+import { openFolderRemembering, refreshLibrary, restoreCatalogSession, revealActiveThumb } from "./ui/chromeparts";
 import { Viewer } from "./ui/viewer";
 import { quadGestureBlendId, transformPreviewPlan } from "./ui/transformpreviewparts";
 // The pump's retry policy lives in its own module: exported from here
@@ -146,7 +138,7 @@ import { askCatalogUpgrade, noticeCatalogUpgradeDone } from "./catalogupgrade";
 import { CatalogUpgradePrompt } from "./ui/catalogupgrade";
 import { Splash } from "./ui/splash";
 import { StitchDialog } from "./ui/stitching";
-import { stackEventEffects } from "./ui/stackmerge";
+import { stackEventEffects } from "./stackprogress";
 import { ExportBar, ExportPanel } from "./ui/exportpanel";
 import { PolishPanel } from "./ui/polish";
 import { PanelDivider } from "./ui/divider";
@@ -156,7 +148,7 @@ import { NodePalette } from "./ui/nodepalette";
 import { clampRecents } from "./ui/nodepaletteparts";
 import { Preferences } from "./ui/preferences";
 import { CatalogDialog, ConfirmDialog } from "./ui/catalogui";
-import { mergeSelection, stitchSelection } from "./ui/chrome";
+import { mergeSelection, stitchSelection } from "./ui/chromeparts";
 import { addNodeAt } from "./ui/addnode";
 import { setHintOverrides, useHintSource } from "./ui/hints";
 import { StatusBar } from "./ui/statusbar";

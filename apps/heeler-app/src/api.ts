@@ -27,7 +27,7 @@ import {
 } from "./bridge";
 import { exportTargets, runExport } from "./export";
 import { exportHotkeys, importHotkeys } from "./hotkeys";
-import { applyFolderListing, refreshLibrary, thumbnailForNew } from "./ui/chrome";
+import { applyFolderListing, refreshLibrary, thumbnailForNew } from "./ui/chromeparts";
 import manifest from "./api-methods.json";
 
 /** The bridge's method list, shared with the batch door through

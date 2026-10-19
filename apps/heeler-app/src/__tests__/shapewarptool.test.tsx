@@ -12,7 +12,7 @@ import { ShapeWarpControls, ShapeWarpOverlay } from "../ui/shapewarp";
 import { shapeRing } from "../ui/shapewarpparts";
 import { NodeParams } from "../ui/graph";
 import { readShapeWarpLive } from "../gridwarplive";
-import type { WarpPair } from "../ui/gridwarp";
+import type { WarpPair } from "../ui/gridwarpparts";
 import { choose, menuRows, menuValue } from "./menuhelp";
 
 let commands: Command[] = [];

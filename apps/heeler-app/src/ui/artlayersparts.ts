@@ -5,7 +5,7 @@ import type { Command, NodeCard, State } from "../state";
 import { ART_FX, ART_KINDS, LAYER_WARP, imageLayerWarp, isPictureWarp, warpEditing, artMaskOf, paramRange, type MaskFromSelectionOp } from "../state";
 import { bakeLayerMask } from "../bridge";
 import { reportToolError } from "./hints";
-import { publishBusy } from "./statusbar";
+import { publishBusy } from "./statusbarparts";
 import { fmt as valueText } from "./trackparts";
 import { isImageLayer } from "./imagelayersparts";
 

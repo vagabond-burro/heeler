@@ -13,7 +13,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
-import { BAKE_DIALOG_DELAY_MS, BakeProgressDialog, EXPORT_CANCELED, EXPORT_OP, beginOp, clearAllOps, clearOp, opCanceled, retitleOp, watchExport } from "../ui/opprogress";
+import { BakeProgressDialog } from "../ui/opprogress";
+import { BAKE_DIALOG_DELAY_MS, EXPORT_CANCELED, EXPORT_OP, beginOp, clearAllOps, clearOp, opCanceled, retitleOp, watchExport } from "../ui/opprogressparts";
 import { mockResetOps } from "../bridge";
 import { runExport } from "../export";
 import { DEFAULT_EXPORT_SETTINGS } from "../state";

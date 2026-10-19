@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
 import { reduce, type Command, type PickArm, type State } from "./state";
-import { publishBusy } from "./ui/statusbar";
+import { publishBusy } from "./ui/statusbarparts";
 
 let nextToken = 0;
 let busyOwner: number | null = null;

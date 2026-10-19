@@ -13,7 +13,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { initialState } from "../data";
 import { evalEq } from "../eqcurve";
 import type { Command, CurveHandle, NodeCard } from "../state";
-import { CurveEditor, curveEqPoints, curvePath, curveValueAt, pickedCurvePoint } from "../ui/editors";
+import { CurveEditor } from "../ui/editors";
+import { pickedCurvePoint } from "../ui/editorsparts";
+import { curveEqPoints, curvePath, curveValueAt } from "../curvesampler";
 import { curveShape, curveTails, monotoneTangents } from "../curvesampler";
 
 afterEach(cleanup);

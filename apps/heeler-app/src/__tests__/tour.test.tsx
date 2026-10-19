@@ -22,7 +22,7 @@ import { checkTour, exampleNetworks, isHowTo, learnMore, nodesNamed, OFFER_LINE,
 import { instanceOf, STOP_BY_ID } from "../tourstops";
 import { connectTours, resetToursForTests, TourWalk, type Tour, type TourHost } from "../tourwalk";
 import { ConsolePanel } from "../ui/console";
-import { _resetAssistantTabForTests } from "../ui/assistanttab";
+import { _resetAssistantTabForTests } from "../ui/assistanttabparts";
 import set from "../tourquestions.json";
 import guideSet from "../assistantquestions.json";
 

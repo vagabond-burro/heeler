@@ -29,35 +29,12 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { assistantContextLength, assistantValidate, type AssistantValidation } from "../bridge";
 import { assistantConfig, assistantConfigVersion, subscribeAssistantConfig, validationWords } from "../assistant";
-import {
-  askAssistant,
-  chatSnapshot,
-  chatVersion,
-  clearAssistantConversation,
-  dismissVisionHint,
-  knownContext,
-  noteContext,
-  pendingOffer,
-  showTour,
-  stopAssistant,
-  subscribeChat,
-  _resetAssistantChatForTests,
-} from "../assistantchat";
+import { askAssistant, chatSnapshot, chatVersion, dismissVisionHint, knownContext, noteContext, pendingOffer, showTour, stopAssistant, subscribeChat, _resetAssistantChatForTests } from "../assistantchat";
 import { subscribeTourStatus, tourStatus, tourSteps, type FollowUp, type Tour } from "../tourwalk";
 import { OFFER_LINE } from "../tour";
 import { AssistantMarkdown } from "./assistantmarkdown";
 import { sendCommand } from "../popout";
-
-export { clearAssistantConversation };
-
-export function _resetAssistantTabForTests(): void {
-  _resetAssistantChatForTests();
-}
-
-/** A chapter opens in the Help viewer, in the main window. */
-export function openChapter(file: string): void {
-  sendCommand({ type: "open_docs", file });
-}
+import { openChapter } from "./assistanttabparts";
 
 /** Learn more: a chapter opens in Help, a question is asked. */
 function followUp(f: FollowUp): void {

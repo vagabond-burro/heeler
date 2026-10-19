@@ -25,7 +25,7 @@ import { FinishWarpControls } from "./finishwarp";
 import { bakeMaskRaster } from "../bridge";
 import { flashStatus, reportToolError } from "./hints";
 import { MASK_OFF_HINT, slashed } from "./masktoggleparts";
-import { publishBusy } from "./statusbar";
+import { publishBusy } from "./statusbarparts";
 import { modLabel } from "../platform";
 import { GradientControls, GradientPanel } from "./gradientstops";
 import { isByTone, readStops } from "./gradientstopsparts";

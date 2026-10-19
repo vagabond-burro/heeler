@@ -13,7 +13,7 @@ import { addToCollection, createCollection, mockResetCollections, mockSetSubtree
 import { initialState } from "../data";
 import { deleteCollectionStep, resetLibraryUndo } from "../libraryundo";
 import type { Command, State } from "../state";
-import { beginNavigation, editCollectionMembership } from "../ui/chrome";
+import { beginNavigation, editCollectionMembership } from "../ui/chromeparts";
 import { leaveCollection, openCollection, reloadCollection } from "../ui/collectionnav";
 import { wantThumb } from "../thumbs";
 

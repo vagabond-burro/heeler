@@ -29,7 +29,7 @@ import { noteFrameAspect } from "../imagelayers";
 import { shapesFromNode } from "../shapewarp";
 import { ArtLayersTab } from "../ui/artlayers";
 import { ShapeWarpOverlay } from "../ui/shapewarp";
-import type { WarpPair } from "../ui/gridwarp";
+import type { WarpPair } from "../ui/gridwarpparts";
 import { serializeGraph } from "../bridge";
 import { legacySelectionMask } from "./legacymask";
 import expectedDragged from "./fixtures/unbake-dragged.json";

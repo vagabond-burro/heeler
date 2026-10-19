@@ -19,7 +19,7 @@ import { ShapeWarpControls, ShapeWarpOverlay } from "../ui/shapewarp";
 import { shapeRing, shapeWarpKeysLine } from "../ui/shapewarpparts";
 import { ROTATE_CURSOR } from "../ui/cursors";
 import { readShapeGestureEcho } from "../gridwarplive";
-import type { WarpPair } from "../ui/gridwarp";
+import type { WarpPair } from "../ui/gridwarpparts";
 import type { ViewTransform } from "../ui/overlaysparts";
 
 const W = 400;

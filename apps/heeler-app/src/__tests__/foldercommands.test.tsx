@@ -10,7 +10,8 @@ import { App } from "../app";
 import { mockFolderCommands, mockRemovalCalls, mockResetRemovalCalls, mockSetFoldersMissing, mockSetRecentCatalogs, mockSetSubtreeCounts, mockSetSubtreeCountsHold } from "../bridge";
 import { initialState } from "../data";
 import { promptsFor, reduce, type State } from "../state";
-import { confirmCopy, isWithin } from "../ui/catalogui";
+import { confirmCopy } from "../ui/cataloguiparts";
+import { isWithin } from "../ui/collectionnav";
 import { _clearFlashForTests, currentFlash } from "../ui/hints";
 
 beforeEach(() => {

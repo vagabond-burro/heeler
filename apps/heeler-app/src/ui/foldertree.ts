@@ -13,7 +13,7 @@ import { logMsg } from "../log";
 import type { Command, State, TreeNode } from "../state";
 import { ancestorsBetween } from "../state";
 import { rememberedExpanded } from "../uiprefs";
-import { leafName, navStale, openFolderPlain, refreshLibrary } from "./chrome";
+import { leafName, navStale, openFolderPlain, refreshLibrary } from "./chromeparts";
 import { isWithin } from "./collectionnav";
 import { flashStatus } from "./hints";
 

@@ -10,7 +10,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import { parseEqPoints } from "../eqcurve";
 import { capturePreset, reduce, type Command, type State } from "../state";
-import { CURVE_PICK_REACH, Viewer } from "../ui/viewer";
+import { Viewer } from "../ui/viewer";
+import { CURVE_PICK_REACH } from "../ui/viewerparts";
 
 type Sample = { r: number; g: number; b: number; luma: number; luma_linear: number; hue: number; sat: number };
 const pending: { resolve: (sample: Sample) => void }[] = [];

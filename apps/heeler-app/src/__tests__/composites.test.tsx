@@ -13,7 +13,8 @@ import { initialState } from "../data";
 import type { Command, ImageEntry, State } from "../state";
 import { isComposite, isPano, isStack } from "../state";
 import { mockResetThumbnails, mockSetThumbnail } from "../bridge";
-import { Ribbon, compositeLabel, thumbnailForNew } from "../ui/chrome";
+import { Ribbon } from "../ui/chrome";
+import { compositeLabel, thumbnailForNew } from "../ui/chromeparts";
 
 const composite = (id: string, name: string): ImageEntry => ({
   id,

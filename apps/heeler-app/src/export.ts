@@ -9,7 +9,7 @@
 import type { ExportSettings, ImageEntry, State } from "./state";
 import { exportTo, loadGraph, pickExportFolder, serializeFreshGraph, serializeGraph, serializeLoadedGraph } from "./bridge";
 import { logDebug, logMsg } from "./log";
-import { EXPORT_CANCELED, EXPORT_OP, opCanceled, retitleOp } from "./ui/opprogress";
+import { EXPORT_CANCELED, EXPORT_OP, opCanceled, retitleOp } from "./ui/opprogressparts";
 
 // The settings shape lives in state.ts now, beside the batch-group
 // queue that stores one per tab; re-exported so nothing downstream

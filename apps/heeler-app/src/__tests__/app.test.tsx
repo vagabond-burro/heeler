@@ -157,7 +157,8 @@ describe("Heeler UI", () => {
     // spawn_blocking, and this probe pins that the frontend never waits
     // on the thumbnail pump to browse.
     const { mockSetThumbnail, mockSetThumbnailHold, mockResetThumbnails } = await import("../bridge");
-    const { Ribbon, loadSessionImages } = await import("../ui/chrome");
+    const { Ribbon } = await import("../ui/chrome");
+    const { loadSessionImages } = await import("../ui/chromeparts");
     mockResetThumbnails();
     let release!: () => void;
     mockSetThumbnailHold(new Promise<void>((r) => { release = r; }));
@@ -1268,7 +1269,7 @@ describe("Heeler UI", () => {
     });
 
     it("a custom ratio is parsed, and a typo is refused rather than applied", async () => {
-      const { parseAspect } = await import("../ui/chrome");
+      const { parseAspect } = await import("../state");
       expect(parseAspect("3:2")).toBeCloseTo(1.5);
       expect(parseAspect("5x4")).toBeCloseTo(1.25);
       expect(parseAspect("1.85")).toBeCloseTo(1.85);
@@ -2283,7 +2284,7 @@ describe("Heeler UI", () => {
     // The dialog flow itself needs Tauri's pickers, so this drives the
     // restore that runs after a switch directly against the reducer.
     const { saveSession } = await import("../bridge");
-    const { restoreCatalogSession } = await import("../ui/chrome");
+    const { restoreCatalogSession } = await import("../ui/chromeparts");
     const { reduce } = await import("../state");
     await saveSession("mock://trip", "mock://trip/day1", "mock_2");
     let s = initialState();

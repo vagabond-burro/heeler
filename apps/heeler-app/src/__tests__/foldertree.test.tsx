@@ -14,7 +14,7 @@ import { initialState } from "../data";
 import { catalogSaves } from "../savebarrier";
 import { rememberExpanded, rememberedExpanded } from "../uiprefs";
 import { reduce, type Command, type State, type TreeNode } from "../state";
-import { openFolderPlain, openFolderRemembering, relinkFrom } from "../ui/chrome";
+import { openFolderPlain, openFolderRemembering, relinkFrom } from "../ui/chromeparts";
 import { EXPAND_ALL_CAP, expandAllChildren, expandedPaths, newFolderIn, stopExpanding } from "../ui/foldertree";
 import { _clearFlashForTests, currentFlash } from "../ui/hints";
 

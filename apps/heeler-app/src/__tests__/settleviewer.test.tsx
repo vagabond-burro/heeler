@@ -2,10 +2,11 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import { frameLook, reduce } from "../state";
-import { Viewer, layoutSplit } from "../ui/viewer";
+import { Viewer } from "../ui/viewer";
+import { layoutSplit } from "../ui/viewerparts";
 const readout = vi.hoisted(() => vi.fn());
-vi.mock("../ui/statusbar", async (original) => ({
-  ...await original<typeof import("../ui/statusbar")>(), publishViewerReadout: readout,
+vi.mock("../ui/statusbarparts", async (original) => ({
+  ...await original<typeof import("../ui/statusbarparts")>(), publishViewerReadout: readout,
 }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); readout.mockClear(); });
 it("keeps Fit, the crop overlay and ROI placement when a 6024 pixel settle replaces the proxy", () => {

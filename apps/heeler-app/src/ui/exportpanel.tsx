@@ -6,7 +6,7 @@
 // thin bar rather than removing it, the same way the graph pop-out
 // leaves a bar behind, so the way back is where it was.
 
-import { EXPORT_OP, beginOp, clearOp, opCanceled } from "./opprogress";
+import { EXPORT_OP, beginOp, clearOp, opCanceled } from "./opprogressparts";
 import React, { useEffect, useState } from "react";
 import type { Command, ImageEntry, State } from "../state";
 import {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { layoutSplit } from "../ui/viewer";
+import { layoutSplit } from "../ui/viewerparts";
 
 const FIT = { w: 1060, h: 707 };
 const FRAME: [number, number] = [6000, 4000];

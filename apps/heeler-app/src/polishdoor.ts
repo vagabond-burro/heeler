@@ -32,12 +32,12 @@ export function polishDevelopMask(state: State, dispatch: D, maskId: string): vo
  * makes it, then polish_layer_mask opens the pass that Apply puts back on
  * the layer. */
 export function polishLayerMask(state: State, dispatch: D, maskId: string): void {
-  void import("./ui/statusbar").then(({ publishBusy }) => publishBusy("POLISH · loading the layer's mask"));
+  void import("./ui/statusbarparts").then(({ publishBusy }) => publishBusy("POLISH · loading the layer's mask"));
   void import("./bridge")
     .then(({ bakeMaskRaster }) => bakeMaskRaster(state, maskId))
     .then((version) => dispatch({ type: "polish_layer_mask", maskId, version }))
     .catch((err) => void import("./ui/hints").then(({ reportToolError }) => reportToolError("Polish mask", err)))
-    .finally(() => void import("./ui/statusbar").then(({ publishBusy }) => publishBusy(null)));
+    .finally(() => void import("./ui/statusbarparts").then(({ publishBusy }) => publishBusy(null)));
 }
 
 /** Select > Polish: Polish opens on what the ants trace. A selection that

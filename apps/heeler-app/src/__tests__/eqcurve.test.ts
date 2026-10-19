@@ -25,7 +25,7 @@ import {
   serializeEqPoints,
   type EqPoint,
 } from "../eqcurve";
-import { curveEqPoints } from "../ui/editors";
+import { curveEqPoints } from "../curvesampler";
 
 describe("the EQ curve", () => {
   const pts: EqPoint[] = [

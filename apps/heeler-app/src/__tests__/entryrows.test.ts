@@ -16,7 +16,7 @@ const invokeMock = vi.hoisted(() => vi.fn());
 vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
 
 import { bakeComposite, createPano, createStack, type FolderImage } from "../bridge";
-import { loadSessionImages } from "../ui/chrome";
+import { loadSessionImages } from "../ui/chromeparts";
 
 /** A row with every field the desktop sends set away from its default. */
 const FULL: FolderImage = {

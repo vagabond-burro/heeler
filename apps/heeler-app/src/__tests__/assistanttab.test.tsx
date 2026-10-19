@@ -22,7 +22,8 @@ import {
 } from "../assistant";
 import { CMD_CHANNEL, setTransport, type Transport } from "../popout";
 import { ConsolePanel } from "../ui/console";
-import { _resetAssistantTabForTests, clearAssistantConversation } from "../ui/assistanttab";
+import { _resetAssistantTabForTests } from "../ui/assistanttabparts";
+import { clearAssistantConversation } from "../assistantchat";
 
 type Handler = (args: Record<string, unknown> | undefined) => unknown;
 

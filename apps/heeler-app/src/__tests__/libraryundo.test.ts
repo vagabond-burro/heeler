@@ -8,7 +8,7 @@ import * as bridge from "../bridge";
 import { initialState } from "../data";
 import { canRedo, deleteCollectionStep, pruneLibrarySteps, redo, resetLibraryUndo, retainedLibrarySteps, undo } from "../libraryundo";
 import { reduce, type Command, type State } from "../state";
-import { beginNavigation } from "../ui/chrome";
+import { beginNavigation } from "../ui/chromeparts";
 
 beforeEach(() => {
   vi.restoreAllMocks();

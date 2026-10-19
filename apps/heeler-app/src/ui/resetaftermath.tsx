@@ -3,7 +3,7 @@ import type { Command, State } from "../state";
 import { freshGraphFor } from "../state";
 import { autosaves } from "../autosave";
 import { isTauri, renderThumbnail, resetImageEdits, saveGraph } from "../bridge";
-import { refreshLibrary } from "./chrome";
+import { refreshLibrary } from "./chromeparts";
 import { logMsg } from "../log";
 
 /** What each photograph's latest reset archived, by id, as the reset's

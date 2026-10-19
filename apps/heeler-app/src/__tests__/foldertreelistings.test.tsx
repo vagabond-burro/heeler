@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mockAddSubfolder, mockFailListing, mockResetSessions, mockSetFolderSession, mockSetSubfolderHold } from "../bridge";
 import { initialState } from "../data";
 import { reduce, type Command, type State, type TreeNode } from "../state";
-import { openFolderPlain, openFolderRemembering } from "../ui/chrome";
+import { openFolderPlain, openFolderRemembering } from "../ui/chromeparts";
 
 let undo: (() => void)[] = [];
 beforeEach(() => {

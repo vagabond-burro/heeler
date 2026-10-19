@@ -10,7 +10,8 @@ import { App } from "../app";
 import { describe, expect, it } from "vitest";
 import { initialState } from "../data";
 import { isFinalPrompt, promptsFor, reduce, type Command, type Confirm, type State } from "../state";
-import { ConfirmDialog, confirmCopy, humanBytes, trashFailure } from "../ui/catalogui";
+import { ConfirmDialog } from "../ui/catalogui";
+import { confirmCopy, humanBytes, trashFailure } from "../ui/cataloguiparts";
 
 const trash = (ids: string[]) => ({ kind: "trash_images", ids, names: ids } as const);
 

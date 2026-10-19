@@ -1,4 +1,4 @@
-import * as status from "../ui/statusbar";
+import * as status from "../ui/statusbarparts";
 import { describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import { capturePreset, reduce, type Command } from "../state";

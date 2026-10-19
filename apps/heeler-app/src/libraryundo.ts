@@ -23,7 +23,7 @@
 import { deleteCollection, restoreCollection, type DeletedCollection } from "./bridge";
 import { logMsg } from "./log";
 import type { Command, State } from "./state";
-import { currentNavigation, navStale, refreshLibrary } from "./ui/chrome";
+import { currentNavigation, navStale, refreshLibrary } from "./ui/chromeparts";
 import { leaveCollection, openCollection } from "./ui/collectionnav";
 
 type D = (command: Command) => void;

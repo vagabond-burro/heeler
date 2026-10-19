@@ -18,7 +18,7 @@ vi.mock("../bridge", async (original) => ({
 
 import type { Command } from "../state";
 import { beginThumbSession, resetThumbsForTests, setThumbnailGraphs, thumbQueueForTests, unwantThumb, wantThumb } from "../thumbs";
-import { loadSessionImages } from "../ui/chrome";
+import { loadSessionImages } from "../ui/chromeparts";
 
 const got: Command[] = [];
 const dispatch = (c: Command) => { got.push(c); };

@@ -23,7 +23,7 @@ import { BAKED_BACKUP_HINTS, BAKE_DIALOG_BACKUP_LINE, bakeBackupNotice, megabyte
 import { runBakeWarp } from "../layeractions";
 import { runCommand } from "../commands";
 import { _clearFlashForTests, currentFlash } from "../ui/hints";
-import { recoveryNote } from "../ui/catalogui";
+import { recoveryNote } from "../ui/cataloguiparts";
 import { ImageLayerControls } from "../ui/imagelayers";
 import { keptMissingLine } from "../ui/imagelayersparts";
 import { noteFrameAspect } from "../imagelayers";
@@ -40,8 +40,8 @@ vi.mock("../bridge", async (importOriginal) => {
 });
 // The dialog's words as the launchers hand them over.
 const watched = vi.hoisted(() => [] as (string | undefined)[]);
-vi.mock("../ui/opprogress", async (importOriginal) => {
-  const real = await importOriginal<typeof import("../ui/opprogress")>();
+vi.mock("../ui/opprogressparts", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../ui/opprogressparts")>();
   return {
     ...real,
     watchBake: (title: string, job: () => Promise<unknown>, note?: string) => {

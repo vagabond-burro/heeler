@@ -7,7 +7,7 @@ import { runBakeWarp } from "../layeractions";
 import { runLayerViaCopy } from "../commands";
 import { SectionLooks } from "../ui/sectionlooks";
 import { placeImageFile, placeCatalogImage } from "../ui/imagelayersparts";
-import { clearAllOps } from "../ui/opprogress";
+import { clearAllOps } from "../ui/opprogressparts";
 
 const bridge = vi.hoisted(() => ({ bake: vi.fn(), copy: vi.fn(), histogram: vi.fn(), depth: vi.fn(), probe: vi.fn() }));
 vi.mock("../bridge", async (original) => ({

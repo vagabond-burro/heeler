@@ -11,15 +11,7 @@ import { initialState } from "../data";
 import { compareLabels, reduce } from "../state";
 import { Viewer } from "../ui/viewer";
 import { choose, menuValue } from "./menuhelp";
-import {
-  bearing,
-  gridMask,
-  lineClip,
-  linePoint,
-  posOnAxis,
-  radialMask,
-  snapDeg,
-} from "../ui/splitview";
+import { bearing, gridMask, lineClip, linePoint, posOnAxis, radialMask, snapDeg } from "../ui/splitviewparts";
 
 describe("split geometry", () => {
   const dims = { w: 100, h: 50 };

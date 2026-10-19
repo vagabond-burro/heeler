@@ -13,7 +13,8 @@ import { initialState } from "../data";
 import { serializeGraph } from "../bridge";
 import { uiSettingsCommands, uiSettingsSnapshot } from "../settings";
 import { curveModeOf, reduce, type Command, type NodeCard, type State } from "../state";
-import { CurveEditor, inkView, storedFromInk } from "../ui/editors";
+import { CurveEditor } from "../ui/editors";
+import { inkView, storedFromInk } from "../ui/editorsparts";
 import { Preferences } from "../ui/preferences";
 import { NodeParams } from "../ui/graph";
 

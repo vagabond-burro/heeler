@@ -5,9 +5,9 @@ import React from "react";
 import type { Command, ImageEntry, State } from "../state";
 import { freshGraphFor } from "../state";
 import { STACK_SET_ASIDE, bakeComposite, loadGraph } from "../bridge";
-import { BAKE_CANCELED, watchBake } from "./opprogress";
+import { BAKE_CANCELED, watchBake } from "./opprogressparts";
 import { logMsg } from "../log";
-import { thumbnailForNew } from "./chrome";
+import { thumbnailForNew } from "./chromeparts";
 
 export type D = React.Dispatch<Command>;
 

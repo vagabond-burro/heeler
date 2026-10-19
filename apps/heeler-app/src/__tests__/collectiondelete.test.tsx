@@ -9,7 +9,7 @@ import { App } from "../app";
 import { mockResetCollections } from "../bridge";
 import { initialState } from "../data";
 import { libraryRedoFirst, libraryUndoFirst, resetLibraryUndo } from "../libraryundo";
-import { confirmCopy } from "../ui/catalogui";
+import { confirmCopy } from "../ui/cataloguiparts";
 
 type User = ReturnType<typeof userEvent.setup>;
 

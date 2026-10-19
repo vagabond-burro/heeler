@@ -251,7 +251,7 @@ describe("naming and deleting takes", () => {
   it("asks before it does it, and says what survives", async () => {
     // History is per-take and switching clears it, so there is no undo
     // behind this one.
-    const { confirmCopy } = await import("../ui/catalogui");
+    const { confirmCopy } = await import("../ui/cataloguiparts");
     const { promptsFor } = await import("../state");
     const action = { kind: "delete_take" as const, takeId: "take_2", name: "Warmer" };
     expect(promptsFor(action)).toBe(1);

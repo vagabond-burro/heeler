@@ -11,7 +11,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import { activeStackMerge, reduce, type StackMerge } from "../state";
 import { STACK_SET_ASIDE, type StackProgress } from "../bridge";
-import { STACK_QUOTES, StackMergeCanceled, StackMergeProgress, mergeLines, stackEventEffects, timeLeft } from "../ui/stackmerge";
+import { StackMergeCanceled, StackMergeProgress } from "../ui/stackmerge";
+import { STACK_QUOTES } from "../ui/stackmergeparts";
+import { mergeLines, stackEventEffects, timeLeft } from "../stackprogress";
 import { QUOTES } from "../ui/splashparts";
 import { Viewer } from "../ui/viewer";
 

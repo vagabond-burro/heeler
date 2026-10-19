@@ -3,7 +3,8 @@ import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { autosaves } from "../autosave";
 import { catalogSaves, flushRecoverySaves, trackedSave } from "../savebarrier";
-import { CatalogDialog, humanBytes, recoveryNote } from "../ui/catalogui";
+import { CatalogDialog } from "../ui/catalogui";
+import { humanBytes, recoveryNote } from "../ui/cataloguiparts";
 import { backupCatalog, createRecoveryBundle } from "../bridge";
 import { _clearFlashForTests, currentFlash } from "../ui/hints";
 
@@ -329,7 +330,7 @@ it("Preferences answers while a scheduled backup is still running", async () => 
 
 it("two navigations land the newer session record, the first save still in flight", async () => {
   (window as any).__TAURI_INTERNALS__ = { invoke: native.invoke };
-  const { applyFolderListing } = await import("../ui/chrome");
+  const { applyFolderListing } = await import("../ui/chromeparts");
   // The injected delay stands in for the slow volume: the first
   // navigation's save is running and unresolved when the second
   // navigation arms. The queue, not call order, is what makes the newer

@@ -20,7 +20,7 @@ import { useDialogFocus } from "./dialogfocus";
 import React, { useEffect, useRef, useState } from "react";
 import type { Command, State } from "../state";
 import { cancelOperation, resumePanoStitch } from "../bridge";
-import { useStageCenter } from "./stackmerge";
+import { useStageCenter } from "./stackmergeparts";
 import { STITCH_QUOTES, stitchLines } from "./stitchingparts";
 
 type D = React.Dispatch<Command>;

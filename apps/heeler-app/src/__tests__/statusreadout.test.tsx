@@ -6,7 +6,8 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { initialState } from "../data";
-import { publishViewerReadout, StatusBar } from "../ui/statusbar";
+import { StatusBar } from "../ui/statusbar";
+import { publishViewerReadout } from "../ui/statusbarparts";
 import type { State } from "../state";
 
 const bar = (state: State, over: Partial<Parameters<typeof StatusBar>[0]> = {}) =>

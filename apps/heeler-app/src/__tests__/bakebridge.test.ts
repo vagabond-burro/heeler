@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 import { bakeComposite, serializeLoadedGraph } from "../bridge";
-import { loadSessionImages } from "../ui/chrome";
+import { loadSessionImages } from "../ui/chromeparts";
 import { initialState } from "../data";
 import { freshGraphFor } from "../state";
 afterEach(() => { delete (window as any).__TAURI_INTERNALS__; invoke.mockReset(); });
