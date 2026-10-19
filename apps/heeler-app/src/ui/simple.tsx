@@ -26,7 +26,6 @@ const MASK_CHIP: React.CSSProperties = {
 
 import { SourceMenuRow } from "./sourcemenus";
 import { PROFILE_CHOICES, SOURCE_MENU_ROWS } from "./sourcemenusparts";
-import { GuardStrip } from "./guardstrip";
 import { capturePreset, maskBrushTarget, maskOverlayRgb, DEPTH_SIZES, snapDepthSize, MODEL_DENOISE_ID, denoiseMethodIsModel, denoiseSectionOn, depthMapMissing, maskViewOverriddenBy, maskPreviewNode, depthMaskShown, maskOverlayWanted, DEPTH_EXPORT_CONVENTION } from "../state";
 import { useDenoiseStatus, useFullDenoiseStatus, requestFullDenoise, retryDenoise, denoiseMark } from "./denoisetoolparts";
 import { TrackSlider, ValueField } from "./track";
@@ -102,9 +101,8 @@ import { BwControls } from "./bwcontrols";
 import { PrintControls } from "./print";
 import { GrainFilmRow, GrainFrameRow } from "./grainfilm";
 import { ZonesBlock } from "./zones";
-import { RecolorHost } from "./recolor";
-import { RecolorPairs } from "./recolorpairs";
 import { DepthPickButton, DepthShape } from "./depthband";
+import { SectionWidgets } from "./sectionface";
 import { SectionLooks } from "./sectionlooks";
 import { ColorConsoleBlock } from "./colorconsole";
 import { DepthProgressBar, NormalsChoice } from "./depthtool";
@@ -5570,51 +5568,22 @@ menu"). The graph inspector's Source node draws the same rows.*/}
                     // every render of the panel.
                     return (
                       <React.Fragment key={r.label}>
-                        {/* Recolor's graph, with the Neutral guard and its
-                            strip under it (2026-10-17: "Move the neutral
-                            guard below the graph"); Smoothing above. */}
-                        {sec.recolorWidget && !closed && r.param === "neutral_guard" &&
-                          (() => {
-                            const n = sec.node(state);
-                            return n ? (
-                              <div style={{ margin: "2px 0 6px" }}>
-                                <RecolorHost
-                                  state={state}
-                                  node={n}
-                                  allNodes={state.nodes}
-                                  clipboard={state.recolorClipboard}
-                                  dispatch={dispatch}
-                                  width={Math.max(220, (width ?? 320) - 24)}
-                                  frame={
-                                    frame ??
-                                    state.images.find((i) => i.id === state.activeImage)?.src
-                                  }
-                                  cell={state.recolorCell}
-                                  onCell={(c) => dispatch({ type: "set_recolor_cell", cell: c })}
-                                  pickArmed={state.recolorPick === n.id}
-                                  hoverX={state.recolorPick === n.id ? state.recolorHoverX : null}
-                                  onTogglePick={() => dispatch({ type: "toggle_recolor_pick", id: n.id })}
-                                  matchArmed={state.recolorMatch?.id === n.id}
-                                  onToggleMatch={() => dispatch({ type: "toggle_recolor_match", id: n.id })}
-                                  depthView={state.depthView}
-                                  depthRed={state.maskRed}
-                                  onToggleDepthView={(flavor) => dispatch({ type: "toggle_depth_view", flavor })}
-                                />
-                                {/* The Around row's one dial, seated with the
-                                    row it serves rather than among the node's
-                                    globals. */}
-                                {state.recolorCell.startsWith("around_") && (
-                                  <Slider
-                                    label="Around reach"
-                                    param="around_radius"
-                                    node={n}
-                                    dispatch={dispatch}
-                                    centered={false}
-                                  />
-                                )}
-                              </div>
-                            ) : null;
-                          })()}
+                        {/* The widgets this row carries, before its slider
+                            (Recolor's routing grid and curve above its
+                            Neutral guard), drawn as every face of the
+                            section draws them (sectionface.tsx). */}
+                        {!closed && r.widgets?.before && (
+                          <SectionWidgets
+                            kinds={r.widgets.before}
+                            node={target}
+                            dispatch={dispatch}
+                            state={state}
+                            width={Math.max(220, (width ?? 320) - 24)}
+                            frame={frame ?? state.images.find((i) => i.id === state.activeImage)?.src}
+                            cell={state.recolorCell}
+                            onCell={(c) => dispatch({ type: "set_recolor_cell", cell: c })}
+                          />
+                        )}
                         {i === 0 && sec.note && (
                           <div
                             data-testid={`section-note-${sec.title.toLowerCase().replace(/[^a-z]+/g, "-")}`}
@@ -5658,14 +5627,19 @@ menu"). The graph inspector's Source node draws the same rows.*/}
                             state.controlFlash?.param === r.param
                           }
                         />
-                        {/* The Neutral guard on the photograph, under its
-                            slider (guardstrip.tsx). */}
-                        {sec.recolorWidget && !closed && r.param === "neutral_guard" && (
-                          <GuardStrip state={state} node={target} cell={state.recolorCell} dispatch={dispatch} />
-                        )}
-                        {/* Color pairs: two picked colors' relationship. */}
-                        {sec.recolorWidget && !closed && r.param === "neutral_guard" && (
-                          <RecolorPairs state={state} node={target} dispatch={dispatch} width={width ?? 320} />
+                        {/* And after it: the Neutral guard's strip and the
+                            color pairs. */}
+                        {!closed && r.widgets?.after && (
+                          <SectionWidgets
+                            kinds={r.widgets.after}
+                            node={target}
+                            dispatch={dispatch}
+                            state={state}
+                            width={Math.max(220, (width ?? 320) - 24)}
+                            frame={frame ?? state.images.find((i) => i.id === state.activeImage)?.src}
+                            cell={state.recolorCell}
+                            onCell={(c) => dispatch({ type: "set_recolor_cell", cell: c })}
+                          />
                         )}
                       </React.Fragment>
                     );

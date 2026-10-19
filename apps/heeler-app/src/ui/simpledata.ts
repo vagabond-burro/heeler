@@ -247,6 +247,11 @@ export const DETAIL_EQ_BANDS: [string, string, string][] = [
  * for the face's data-params. */
 export const DETAIL_EQ_PARAMS = [...DETAIL_EQ_BANDS.map(([p]) => p), ...DETAIL_WEIGHTS.map(([w]) => w)].join(" ");
 
+/** A widget a section row can carry (SectionWidgets draws each):
+ * Recolor's routing grid and curve (with Around reach under it while an
+ * Around row is up), the Neutral guard's strip, and the color pairs. */
+export type SectionWidgetKind = "recolorGraph" | "guardStrip" | "recolorPairs";
+
 export interface SectionSpec {
   title: string;
   /** Which layer tool this section edits. Present means the section
@@ -268,6 +273,12 @@ export interface SectionSpec {
     /** The row is shown only while this holds (Noise Reduction's rows
      * follow its Method). */
     when?: (s: State) => boolean;
+    /** Widgets drawn with this row, before or after its slider. The one
+     * place a section's layout is said: Develop's panel, Graph's
+     * inspector and the tool window all draw the rows and these widgets in
+     * this order (SectionWidgets, SectionFace), so the faces cannot drift
+     * apart. */
+    widgets?: { before?: SectionWidgetKind[]; after?: SectionWidgetKind[] };
   }[];
   /** A line of plain words above the rows, for a section whose dials
    * need a sentence of context (Depth Map: whose settings these are). */
@@ -282,9 +293,6 @@ export interface SectionSpec {
   denoiseMethod?: boolean;
   /** Tone Equalizer's parametric EQ widget above the rows */
   eqWidget?: boolean;
-  /** Recolor's routing grid and curve widget, drawn just above its
-   * Neutral guard row */
-  recolorWidget?: boolean;
   /** the Color Tune's band strip and wheel above the rows */
   consoleWidget?: boolean;
   /** Lens: names the lensfun profile this photograph's lens matches
@@ -854,14 +862,19 @@ export const SECTIONS: SectionSpec[] = [
     // The channel-routing color EQ: after Color Bend, per the
     // design session.
     title: "Recolor",
-    recolorWidget: true,
     layerTool: "recolor",
     node: (s) => toolNode(s, "recolor"),
     rows: [
       { label: "Smoothing", param: "smoothing", centered: false },
-      // Drawn under the routing grid and curve, which render just above
-      // this row.
-      { label: "Neutral guard", param: "neutral_guard", centered: false },
+      // The routing grid and curve above the Neutral guard, its strip and
+      // the color pairs under it (2026-10-17: "Move the neutral guard
+      // below the graph").
+      {
+        label: "Neutral guard",
+        param: "neutral_guard",
+        centered: false,
+        widgets: { before: ["recolorGraph"], after: ["guardStrip", "recolorPairs"] },
+      },
     ],
   },
   {

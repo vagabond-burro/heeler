@@ -21,8 +21,16 @@ type D = (c: Command) => void;
 /** The chroma a pick must have to be a color at all: a gray has no hue
  * to pair. */
 const MIN_CHROMA = 0.02;
-/** The scope's outer ring, in OkLab chroma. */
-const SCOPE_C = 0.3;
+/** The scope's outer ring, in OkLab chroma, a pair's own: the more
+ * colorful of its two picks sits this share of the way out, so the colors
+ * fill the wheel instead of huddling at the middle (2026-10-19: "The
+ * circles don't move far off of origin"), with room left for Balance to
+ * carry one out by its whole half again. Set by the picks, not by where the
+ * dials move them, so the wheel holds still under a drag. */
+const SCOPE_FILL = 0.6;
+/** The least outer ring, so two nearly gray picks still read apart. */
+const SCOPE_C_MIN = 0.04;
+const scopeChroma = (pair: RecolorPair) => Math.max(SCOPE_C_MIN, Math.max(pair.a.c, pair.b.c) / SCOPE_FILL);
 /** How far a pick reads around the click, a share of the short side. */
 const PAIR_PICK_REACH = 0.01;
 
@@ -100,10 +108,11 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
   onEnd: () => void;
   index: number;
 }) {
-  const r = size / 2 - 6;
+  const r = size / 2 - 5;
+  const scopeC = scopeChroma(pair);
   const at = (h: number, c: number) => {
     const rad = (h * Math.PI) / 180;
-    const k = Math.min(1, c / SCOPE_C) * r;
+    const k = Math.min(1, c / scopeC) * r;
     return [size / 2 + k * Math.cos(rad), size / 2 - k * Math.sin(rad)];
   };
   const after = pairAfter(pair);
@@ -115,7 +124,7 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
     const dx = e.clientX - box.left - size / 2;
     const dy = size / 2 - (e.clientY - box.top);
     const h = wrap((Math.atan2(dy, dx) * 180) / Math.PI);
-    const c = (Math.hypot(dx, dy) / r) * SCOPE_C;
+    const c = (Math.hypot(dx, dy) / r) * scopeC;
     // Invert the same windowed arithmetic the rings draw. Overlapping
     // windows and the meeting limit make the old independent turns and
     // chroma ratios ambiguous; keep the closest current dial on a tie.
@@ -161,10 +170,10 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
           <circle
             cx={x}
             cy={y}
-            r={6}
+            r={4.5}
             fill="none"
             stroke={css(rgb)}
-            strokeWidth={2}
+            strokeWidth={1.6}
             style={{ cursor: "grab" }}
             data-testid={`recolor-pair-handle-${index}-${which}`}
             onPointerDown={(e) => {
@@ -178,8 +187,8 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
           <>
             <line x1={ax} y1={ay} x2={bx} y2={by} stroke="var(--text-ghost)" strokeDasharray="2 2" />
             <line x1={a2x} y1={a2y} x2={b2x} y2={b2y} stroke="var(--accent)" />
-            <circle cx={ax} cy={ay} r={3} fill={css(pair.a.rgb)} />
-            <circle cx={bx} cy={by} r={3} fill={css(pair.b.rgb)} />
+            <circle cx={ax} cy={ay} r={2.5} fill={css(pair.a.rgb)} />
+            <circle cx={bx} cy={by} r={2.5} fill={css(pair.b.rgb)} />
             {ring("a", a2x, a2y, pair.a.rgb)}
             {ring("b", b2x, b2y, pair.b.rgb)}
           </>
@@ -203,7 +212,7 @@ function PairDial({ label, value, min, max, hint, testid, onChange, onBegin, onE
 }) {
   return (
     <div className="srow" style={{ display: "flex", alignItems: "center", gap: 6 }} data-hint={hint}>
-      <span style={{ width: 78, flexShrink: 0 }}>{label}</span>
+      <span className="lbl" style={{ width: 66, flexShrink: 0 }}>{label}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <TrackSlider
           label={label}
@@ -218,7 +227,7 @@ function PairDial({ label, value, min, max, hint, testid, onChange, onBegin, onE
           onEnd={onEnd}
         />
       </div>
-      <span style={{ width: 30, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{value}</span>
+      <span className="val" style={{ width: 30 }}>{value}</span>
     </div>
   );
 }
@@ -314,7 +323,7 @@ export function RecolorPairs({ state, node, dispatch, width }: { state: State; n
               </div>
               {!folded.includes(i) && (
               <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                <PairScope pair={p} size={Math.min(110, Math.max(80, width / 3))} index={i} onChange={(patch) => set(i, patch)} onBegin={() => begin(i)} onEnd={end} />
+                <PairScope pair={p} size={Math.min(96, Math.max(72, width / 3.4))} index={i} onChange={(patch) => set(i, patch)} onBegin={() => begin(i)} onEnd={end} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <PairDial label="Separation" value={p.sep} min={-100} max={100} testid={`recolor-pair-sep-${i}`} hint="Turn the two hues apart, or toward each other" onChange={(v) => set(i, { sep: v })} onBegin={() => begin(i)} onEnd={end} />
                   <PairDial label="Balance" value={p.sat} min={-100} max={100} testid={`recolor-pair-sat-${i}`} hint="Move saturation toward the first color, or the second" onChange={(v) => set(i, { sat: v })} onBegin={() => begin(i)} onEnd={end} />

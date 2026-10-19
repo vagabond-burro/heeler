@@ -23,8 +23,8 @@ import { useHintSource } from "./hints";
 import { PopoutStatusRow } from "./popoutstatus";
 import { EqEditor } from "./eqeditor";
 import { Slider } from "./simple";
-import { RecolorBlock } from "./recolor";
-import { GuardStrip } from "./guardstrip";
+import { SectionFace } from "./sectionface";
+import { SECTIONS } from "./simpledata";
 import { ColorConsoleBlock } from "./colorconsole";
 import { isLayerNode } from "../layerids";
 import { useLiveFrame } from "./toolwindowparts";
@@ -122,35 +122,20 @@ function ToolBody({
     // the sliders need far less, and the leftover read as dead space
     // above the plot (the owner's report).
     const h = Math.max(240, stage.h - 140);
+    // The panel's face at window size, from the same definition
+    // (sectionface.tsx): Smoothing, the grid and curve, the Neutral guard,
+    // its strip and the pairs, in Develop's order.
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, width: w }}>
-        <RecolorBlock
+      <div style={{ width: w }}>
+        <SectionFace
+          sec={SECTIONS.find((sec) => sec.title === "Recolor")!}
           node={node}
-          allNodes={snap.nodes}
-          clipboard={snap.recolorClipboard}
           dispatch={dispatch}
+          state={snap}
           width={w}
-          height={h}
-          histogramSrc={frame ?? snap.images.find((i) => i.id === snap.activeImage)?.src}
-          cell={snap.recolorCell}
-          onCell={(c) => dispatch({ type: "set_recolor_cell", cell: c })}
-          pickArmed={snap.recolorPick === node.id}
-          hoverX={snap.recolorPick === node.id ? snap.recolorHoverX : null}
-          onTogglePick={() => dispatch({ type: "toggle_recolor_pick", id: node.id })}
-          matchArmed={snap.recolorMatch?.id === node.id}
-          onToggleMatch={() => dispatch({ type: "toggle_recolor_match", id: node.id })}
-          depthView={snap.depthView}
-          depthRed={snap.maskRed}
-          onToggleDepthView={(flavor) => dispatch({ type: "toggle_depth_view", flavor })}
+          graphHeight={h}
+          frame={frame ?? snap.images.find((i) => i.id === snap.activeImage)?.src}
         />
-        <div>
-          {snap.recolorCell.startsWith("around_") && (
-            <Slider label="Around reach" param="around_radius" node={node} dispatch={dispatch} centered={false} />
-          )}
-          <Slider label="Neutral guard" param="neutral_guard" node={node} dispatch={dispatch} centered={false} />
-          <GuardStrip state={snap} node={node} cell={snap.recolorCell} dispatch={dispatch} />
-          <Slider label="Smoothing" param="smoothing" node={node} dispatch={dispatch} centered={false} />
-        </div>
       </div>
     );
   }

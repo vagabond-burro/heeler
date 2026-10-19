@@ -32,7 +32,7 @@ Each pair shows its two colors, a small color wheel, and four dials. The arrow a
 - **Contrast** widens the brightness gap between them, the brighter one up and the darker one down by up to half a stop each. Negative narrows it until they match.
 - **Width** sets how far around each picked hue counts as that color, from 5 to 90 degrees. Two colors close together share some pixels between their ranges, and those pixels move less.
 
-On the wheel, the filled dots are the colors as picked and the rings are where the pair moves them. Drag a ring around the wheel to set the separation, or in and out to set the balance.
+On the wheel, the filled dots are the colors as picked and the rings are where the pair moves them. Each pair's wheel is scaled to its own colors, the more colorful of the two most of the way to the edge, so even two quiet colors spread across it. Drag a ring around the wheel to set the separation, or in and out to set the balance.
 
 Pairs read each pixel's hue the same way the hue curves do, under the Neutral guard and the Smoothing dial, and they compose with the curves, all reading the original pixel. A pair works on the colors Recolor receives, so it keeps its effect at Recolor's place in the graph rather than holding the relationship against later edits. Removing a pair, or setting its three dials to zero, puts those colors back.
 

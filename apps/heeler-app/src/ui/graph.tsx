@@ -8,7 +8,6 @@ import { SmartMaskFace } from "./smartnode";
 import { smartCardNote, useSmartModels } from "./smartnodeparts";
 import { SourceMenuRow } from "./sourcemenus";
 import { PROFILE_CHOICES, SOURCE_MENU_ROWS } from "./sourcemenusparts";
-import { GuardStrip } from "./guardstrip";
 import { FeatherFollowsToggle } from "./featherfollows";
 import { FEATHER_FOLLOWS_LABEL } from "./featherfollowsparts";
 import { KeyLightControls } from "./keylightgizmo";
@@ -45,14 +44,13 @@ import { FilmBlock } from "./film";
 import { BwControls } from "./bwcontrols";
 import { PrintControls } from "./print";
 import { GrainFilmRow, GrainFrameRow } from "./grainfilm";
-import { RecolorBlock } from "./recolor";
+import { SectionFace } from "./sectionface";
 import { ViewTransformFace } from "./viewface";
 import { ColorConsoleBlock } from "./colorconsole";
 import { ExportTick, LayerMaskExportRow, MaskExportTick } from "./exporttick";
 import { MASK_EXPORT_LABEL } from "./exporttickparts";
 import { TransformFields, UnbakeButton } from "./imagelayers";
 import { unbakeCarrierOf } from "./imagelayersparts";
-import type { RecolorCellId } from "../eqcurve";
 
 /** The inspector's Console face: band selection local to the panel. */
 function ConsoleInspector({ node, dispatch, width, appState }: { node: NodeCard; dispatch: D; width: number; appState?: State }) {
@@ -91,61 +89,6 @@ the widget, Develop's order.*/}
   );
 }
 
-/** The inspector's Recolor face: same grid and widget, cell selection
- * local to this panel (the viewer's picker follows the Develop
- * panel's cell, which is the shared one). */
-function RecolorInspector({
-  node,
-  dispatch,
-  width,
-  appState,
-  histogramSrc,
-}: {
-  node: NodeCard;
-  dispatch: D;
-  width: number;
-  appState?: State;
-  histogramSrc?: string;
-}) {
-  // The shared cell when app state is here (so the viewer picker's
-  // choice of cell shows in this widget); local otherwise.
-  const [localCell, setLocalCell] = useState<RecolorCellId>("hue_sat");
-  const cell = appState ? appState.recolorCell : localCell;
-  return (
-    <>
-      {/* Sliders above the widget, Develop's order. */}
-      <Slider label="Neutral guard" param="neutral_guard" node={node} dispatch={dispatch} centered={false} />
-      {appState && <GuardStrip state={appState} node={node} cell={cell} dispatch={dispatch} />}
-      <Slider label="Smoothing" param="smoothing" node={node} dispatch={dispatch} centered={false} />
-      <RecolorBlock
-        node={node}
-        allNodes={appState?.nodes ?? []}
-        clipboard={appState?.recolorClipboard ?? null}
-        dispatch={dispatch}
-        width={width}
-        height={160}
-        cell={cell}
-        onCell={appState ? (c) => dispatch({ type: "set_recolor_cell", cell: c }) : setLocalCell}
-        histogramSrc={histogramSrc}
-        pickArmed={appState?.recolorPick === node.id}
-        hoverX={appState?.recolorPick === node.id ? appState.recolorHoverX : null}
-        onTogglePick={
-          appState ? () => dispatch({ type: "toggle_recolor_pick", id: node.id }) : undefined
-        }
-        matchArmed={appState?.recolorMatch?.id === node.id}
-        onToggleMatch={
-          appState ? () => dispatch({ type: "toggle_recolor_match", id: node.id }) : undefined
-        }
-        depthView={appState?.depthView}
-        depthRed={appState?.maskRed}
-        onToggleDepthView={appState ? (flavor) => dispatch({ type: "toggle_depth_view", flavor }) : undefined}
-      />
-      {cell.startsWith("around_") && (
-        <Slider label="Around reach" param="around_radius" node={node} dispatch={dispatch} centered={false} />
-      )}
-    </>
-  );
-}
 import { GroupGlyph } from "./chrome";
 import { addNodeAt, addRecipeAt } from "./addnode";
 import { savableAsRecipe, type NodeRecipe } from "../noderecipes";
@@ -3849,8 +3792,10 @@ two controls Develop's treatment block has, on the node.*/}
             {appState && node.id === "toneeq" && node.type === "heeler.tone_eq" && (
               <SectionLooks section="Tone Equalizer" state={appState} dispatch={dispatch} seat="inspector" />
             )}
+            {/* Recolor's face is Develop's section, from the same definition
+                (sectionface.tsx): the rows and their widgets in one order. */}
             {node.type === "heeler.recolor" && (
-              <RecolorInspector node={node} dispatch={dispatch} width={widgetW} appState={appState} histogramSrc={histSrc} />
+              <SectionFace sec={SECTIONS.find((sec) => sec.title === "Recolor")!} node={node} dispatch={dispatch} state={appState} width={widgetW} frame={histSrc} />
             )}
             {node.type === "heeler.tone_eq" && (
               <>

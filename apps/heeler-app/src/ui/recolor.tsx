@@ -58,12 +58,12 @@ const ADJUST_HINT: Record<RecolorAdjust, string> = {
   vib: "Vibrance: saturation that lifts the muted colors first and leaves the vivid alone",
 };
 
-/** RecolorBlock with its histogram fed from the color the node's hue
- * rows key on (the same source the Black & White Hue curve draws),
- * falling back to the frame; a host with the app state mounts this. */
 /** The width the BY and ADJUST labels share, so their menus line up. */
 const ROUTE_LABEL_W = 40;
 
+/** RecolorBlock with its histogram fed from the color the node's hue
+ * rows key on (the same source the Black & White Hue curve draws),
+ * falling back to the frame; a host with the app state mounts this. */
 export function RecolorHost({
   state,
   frame,

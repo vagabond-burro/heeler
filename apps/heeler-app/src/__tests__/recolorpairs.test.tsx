@@ -78,7 +78,7 @@ describe("Recolor pairs", () => {
     const view = render(<RecolorPairs state={s} node={s.nodes.find((n) => n.id === id)!} dispatch={dispatch} width={320} />);
     fireEvent.click(screen.getByTestId("recolor-pairs-toggle"));
     const svg = screen.getByTestId("recolor-pair-scope-0");
-    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 320 / 3, height: 320 / 3 } as DOMRect);
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 320 / 3.4, height: 320 / 3.4 } as DOMRect);
     const handle = screen.getByTestId("recolor-pair-handle-0-a");
     const x = Number(handle.getAttribute("cx")), y = Number(handle.getAttribute("cy"));
     fireEvent(handle, new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
@@ -86,8 +86,10 @@ describe("Recolor pairs", () => {
     const stayed = parsePairs(s.nodes.find((n) => n.id === id)!.textParams?.pairs)[0];
     expect(stayed.sep).toBe(-100);
     expect(stayed.sat).toBe(0);
-    const size = 320 / 3, r = size / 2 - 6, rad = 95 * Math.PI / 180;
-    fireEvent(svg, new MouseEvent("pointermove", { bubbles: true, clientX: size / 2 + r * 0.4 * Math.cos(rad), clientY: size / 2 - r * 0.4 * Math.sin(rad) }));
+    // The wheel is the pair's own: its more colorful pick (0.12) sits 0.6
+    // of the way out, so 0.12 is at 0.6 of the radius.
+    const size = 320 / 3.4, r = size / 2 - 5, rad = 95 * Math.PI / 180;
+    fireEvent(svg, new MouseEvent("pointermove", { bubbles: true, clientX: size / 2 + r * 0.6 * Math.cos(rad), clientY: size / 2 - r * 0.6 * Math.sin(rad) }));
     const moved = pairAfter(parsePairs(s.nodes.find((n) => n.id === id)!.textParams?.pairs)[0]);
     expect(Math.abs(moved.a.h - 95)).toBeLessThan(0.1);
     expect(moved.a.c).toBeCloseTo(0.12, 5);
@@ -204,5 +206,32 @@ describe("Recolor pairs", () => {
     // And it opens again.
     fireEvent.click(screen.getByTestId("recolor-pair-fold-0"));
     expect(screen.queryByTestId("recolor-pair-sep-0")).not.toBeNull();
+  });
+
+  // 2026-10-19: "The circles don't move far off of origin so if feels like
+  // it uses lots of space", and the dials' labels stood larger than other
+  // sliders'.
+  it("spreads the pair across its own wheel, and labels its dials as the other sliders are", () => {
+    let s = run(initialState(), { type: "set_category", title: "Recolor", on: true });
+    const id = toolNode(s, "recolor")!.id;
+    // Two quiet colors, 0.06 and 0.04 chroma: on a fixed 0.3 wheel they sat
+    // a fifth of the way out.
+    const quiet = { ...pair(200, 40), a: { ...pair(200, 40).a, c: 0.06 }, b: { ...pair(200, 40).b, c: 0.04 } };
+    s = run(s, { type: "set_text_param", id, param: "pairs", value: JSON.stringify([quiet]) });
+    render(<RecolorPairs state={s} node={s.nodes.find((n) => n.id === id)!} dispatch={() => {}} width={320} />);
+    fireEvent.click(screen.getByTestId("recolor-pairs-toggle"));
+    const size = 320 / 3.4, r = size / 2 - 5;
+    const out = (which: "a" | "b") => {
+      const h = screen.getByTestId(`recolor-pair-handle-0-${which}`);
+      return Math.hypot(Number(h.getAttribute("cx")) - size / 2, Number(h.getAttribute("cy")) - size / 2) / r;
+    };
+    expect(out("a")).toBeCloseTo(0.6, 2);
+    expect(out("b")).toBeCloseTo(0.4, 2);
+    // The rings are the slimmer size.
+    expect(screen.getByTestId("recolor-pair-handle-0-a").getAttribute("r")).toBe("4.5");
+    // The dials' names and numbers wear the slider rows' classes.
+    const row = screen.getByTestId("recolor-pair-sep-0").closest(".srow")!;
+    expect(row.querySelector(".lbl")?.textContent).toBe("Separation");
+    expect(row.querySelector(".val")).not.toBeNull();
   });
 });
