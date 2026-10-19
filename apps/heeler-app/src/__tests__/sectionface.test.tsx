@@ -1,45 +1,140 @@
-// One section, one layout: Develop's panel and Graph's inspector draw a
-// section's rows and widgets from the same definition (SECTIONS), so the
-// Recolor node in Graph can no longer keep an old order of its own
-// (2026-10-19: "THe Neutral guard is still above graph and pairs are
-// missing. Whether in develop or graph, it should be using the same
-// template layout").
-import { render, cleanup } from "@testing-library/react";
+// One section, one layout: Develop's panel, Graph's inspector and the
+// popped-out tool windows draw a section's rows and widgets from the same
+// definition (SECTIONS), so no face can keep an order of its own
+// (2026-10-19, of Recolor: "THe Neutral guard is still above graph and
+// pairs are missing. Whether in develop or graph, it should be using the
+// same template layout"; then every other tool with a face in more than
+// one place).
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { initialState } from "../data";
-import { reduce, toolNode, type Command, type State } from "../state";
+import { reduce, type Command, type NodeCard, type State } from "../state";
+import { STATE_CHANNEL, graphSnapshot, setTransport, type ToolWindowKind, type Transport } from "../popout";
 import { SimplePanel } from "../ui/simple";
 import { Inspector } from "../ui/graph";
+import { ToolWindow } from "../ui/toolwindow";
 import { SECTIONS } from "../ui/simpledata";
+import { FACE_SECTIONS, faceSectionOf } from "../ui/sectionfaceparts";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  setTransport(null);
+});
 
-/** The face's pieces in the order they draw: its two dials, the routing
- * grid and curve, the guard's strip and the color pairs. */
-const MARKS = '[data-param="smoothing"], [data-param="neutral_guard"], [data-testid="section-widget-recolorGraph"], [data-testid="guard-strip"], [data-testid="recolor-pairs"]';
-const order = (root: Element | null) =>
-  [...(root?.querySelectorAll(MARKS) ?? [])]
-    .filter((e) => !e.parentElement?.closest('[data-param="smoothing"], [data-param="neutral_guard"]'))
-    .map((e) => (e.hasAttribute("data-param") ? `param:${e.getAttribute("data-param")}` : e.getAttribute("data-testid")));
+/** The face's pieces in the order they draw: each dial that writes to
+ * the node (data-param on a row) and each widget the definition names
+ * (section-widget-<kind>), outermost only, so a widget's own dials count
+ * as the widget. Develop's controls for other nodes (Detail's Unsharp on
+ * the sharpen node, Color's Treatment on the B&W node) are theirs. */
+function order(root: Element | null, node: NodeCard): string[] {
+  const marks = [...(root?.querySelectorAll('[data-param], [data-testid^="section-widget-"]') ?? [])].filter((e) =>
+    e.hasAttribute("data-param") ? e.closest("[data-node]")?.getAttribute("data-node") === node.id : true,
+  );
+  return marks
+    .filter((e) => !marks.some((o) => o !== e && o.contains(e)))
+    .map((e) => (e.hasAttribute("data-param") ? `param:${e.getAttribute("data-param")}` : e.getAttribute("data-testid")!));
+}
 
-describe("Recolor's face", () => {
-  it("is the same in Develop and in Graph, from one definition", () => {
-    const s = run(initialState(), { type: "set_category", title: "Recolor", on: true }, { type: "open_section", title: "Recolor" });
-    const node = toolNode(s, "recolor")!;
+/** The app with a section switched on and unfolded, and its node. */
+function opened(title: string): { s: State; node: NodeCard } {
+  const s = run(initialState(), { type: "set_category", title, on: true }, { type: "open_section", title });
+  const node = SECTIONS.find((sec) => sec.title === title)!.node(s)!;
+  return { s, node };
+}
 
-    render(<SimplePanel state={{ ...s, mode: "simple" }} dispatch={() => {}} width={320} />);
-    const develop = order(document.querySelector('[data-section="Recolor"]'));
-    cleanup();
+function developOrder(title: string): string[] {
+  const { s, node } = opened(title);
+  render(<SimplePanel state={{ ...s, mode: "simple" }} dispatch={() => {}} width={320} />);
+  const got = order(document.querySelector(`[data-section="${title}"]`), node);
+  cleanup();
+  return got;
+}
 
-    const { container } = render(<Inspector state={{ ...s, mode: "advanced", selection: [node.id] }} dispatch={() => {}} frame={null} />);
-    const graph = order(container.querySelector('[data-testid="section-face-recolor"]'));
+const faceId = (title: string) => `section-face-${title.toLowerCase().replace(/[^a-z]+/g, "-")}`;
 
-    // The guard's strip draws nothing without a picture to read (none in
-    // a test); its seat is the definition's, checked below.
-    expect(develop).toEqual(["param:smoothing", "section-widget-recolorGraph", "param:neutral_guard", "recolor-pairs"]);
-    expect(graph).toEqual(develop);
+function graphOrder(title: string): string[] {
+  const { s, node } = opened(title);
+  const { container } = render(<Inspector state={{ ...s, mode: "advanced", selection: [node.id] }} dispatch={() => {}} frame={null} />);
+  const got = order(container.querySelector(`[data-testid="${faceId(title)}"]`), node);
+  cleanup();
+  return got;
+}
+
+/** What each migrated section draws in Develop, said here once more so
+ * a change to the definition is a change someone meant. */
+const EXPECTED: Record<string, string[]> = {
+  Exposure: ["param:exposure", "param:contrast", "param:color_contrast", "param:highlights", "param:shadows", "param:whites", "param:blacks", "section-widget-zones"],
+  Color: ["param:temperature", "param:tint", "param:saturation", "param:vibrance"],
+  Levels: ["param:black", "param:white", "param:gamma", "param:black_soft", "param:white_soft", "section-widget-levels"],
+  Curves: ["section-widget-curveEditor"],
+  Print: ["section-widget-print"],
+  "Tone Equalizer": ["param:range_shift", "param:smoothing", "section-widget-toneEq"],
+  "Color Wheels": ["section-widget-colorWheels"],
+  "Color Tune": ["param:smoothing", "section-widget-colorConsole"],
+  "Color Bend": ["section-widget-bendWheel", "param:falloff", "param:amount"],
+  Recolor: ["param:smoothing", "section-widget-recolorGraph", "param:neutral_guard", "section-widget-guardStrip", "section-widget-recolorPairs"],
+  Detail: ["section-widget-detailAdvanced", "param:texture", "param:clarity", "param:dehaze"],
+  Geometry: ["param:angle", "param:aspect", "param:crop_w", "param:crop_h", "param:crop_x", "param:crop_y", "section-widget-flipPhoto"],
+};
+
+describe("a section's face", () => {
+  it("every node type with a face names a section that exists, and the list here covers each", () => {
+    for (const type of Object.keys(FACE_SECTIONS)) expect(faceSectionOf(type), type).toBeDefined();
+    expect(Object.keys(EXPECTED).sort()).toEqual(Object.values(FACE_SECTIONS).sort());
+  });
+
+  for (const title of Object.keys(EXPECTED)) {
+    it(`${title} is the same in Develop and in Graph, from one definition`, () => {
+      const develop = developOrder(title);
+      expect(develop).toEqual(EXPECTED[title]);
+      expect(graphOrder(title)).toEqual(develop);
+    });
+  }
+
+  it("Recolor's guard row names its strip and the pairs after it", () => {
     const guard = SECTIONS.find((sec) => sec.title === "Recolor")!.rows.find((r) => r.param === "neutral_guard")!;
     expect(guard.widgets).toEqual({ before: ["recolorGraph"], after: ["guardStrip", "recolorPairs"] });
   });
+});
+
+function fakeTransport(): Transport {
+  const subs = new Map<string, ((p: unknown) => void)[]>();
+  const t: Transport = {
+    send(channel, payload) {
+      [...(subs.get(channel) ?? [])].forEach((f) => f(payload));
+    },
+    subscribe(channel, fn) {
+      subs.set(channel, [...(subs.get(channel) ?? []), fn]);
+      return () => subs.set(channel, (subs.get(channel) ?? []).filter((f) => f !== fn));
+    },
+  };
+  setTransport(t);
+  return t;
+}
+
+/** Each tool window and the section it draws. */
+const WINDOWS: [ToolWindowKind, string][] = [
+  ["curves", "Curves"],
+  ["wheels", "Color Wheels"],
+  ["toneeq", "Tone Equalizer"],
+  ["recolor", "Recolor"],
+  ["colorconsole", "Color Tune"],
+];
+
+describe("a tool window's face", () => {
+  for (const [kind, title] of WINDOWS) {
+    it(`the ${title} window draws Develop's face`, async () => {
+      const { s, node } = opened(title);
+      const t = fakeTransport();
+      render(<ToolWindow kind={kind} />);
+      act(() => t.send(STATE_CHANNEL, graphSnapshot(s)));
+      const face = await screen.findByTestId(faceId(title));
+      // Color Tune's window seats Smoothing inside its own layout, in the
+      // column beside the wheel: the one row the window moves.
+      const develop = EXPECTED[title].filter((m) => !(kind === "colorconsole" && m === "param:smoothing"));
+      expect(order(face, node)).toEqual(develop);
+      if (kind === "colorconsole") expect(face.querySelector('[data-testid="console-smoothing"]')).not.toBeNull();
+    });
+  }
 });

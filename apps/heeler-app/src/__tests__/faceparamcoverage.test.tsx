@@ -61,7 +61,7 @@ const NOT_HAND_CONTROLS: Record<string, string> = {
 
 /** A face that shows a row only for some choice gets rendered once more
  * with that choice made, so the row is checked, not excused. */
-const VARIANTS: Record<string, { text?: Record<string, string>; state?: Partial<State> }[]> = {
+const VARIANTS: Record<string, { text?: Record<string, string>; state?: Partial<State>; params?: Record<string, number> }[]> = {
   // The Infrared fold (the four materials and Neutral), shown for an
   // infrared filter.
   "heeler.black_white": [{ text: { filter: "r72" } }],
@@ -69,6 +69,9 @@ const VARIANTS: Record<string, { text?: Record<string, string>; state?: Partial<
   "heeler.radial_mask": [{ text: { shape: "cross" } }],
   // Around's reach, while an Around cell is the one being edited.
   "heeler.recolor": [{ state: { recolorCell: "around_hue" } as Partial<State> }],
+  // The print's split pair, shown for a split grade, and the toner's
+  // two dials, shown once a toner is chosen.
+  "heeler.paper": [{ params: { split: 1 }, text: { toner: "selenium" } }],
 };
 
 /** An excuse key's type and param pattern: "heeler.blend.warp_*". */

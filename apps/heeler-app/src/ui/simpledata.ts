@@ -247,10 +247,46 @@ export const DETAIL_EQ_BANDS: [string, string, string][] = [
  * for the face's data-params. */
 export const DETAIL_EQ_PARAMS = [...DETAIL_EQ_BANDS.map(([p]) => p), ...DETAIL_WEIGHTS.map(([w]) => w)].join(" ");
 
-/** A widget a section row can carry (SectionWidgets draws each):
- * Recolor's routing grid and curve (with Around reach under it while an
- * Around row is up), the Neutral guard's strip, and the color pairs. */
-export type SectionWidgetKind = "recolorGraph" | "guardStrip" | "recolorPairs";
+/** A widget a section draws (SectionWidgets draws each): Recolor's
+ * routing grid and curve (with Around reach under it while an Around row
+ * is up), the Neutral guard's strip and the color pairs; the Tone
+ * Equalizer's EQ editor; Color Tune's band strip and wheel; the curve
+ * editor; the three Color Wheels and their help line; Color Bend's wheel;
+ * the Levels histogram; the Zone System's ruler; Detail's advanced
+ * weights; Geometry's flips; the Print's paper controls. */
+export type SectionWidgetKind =
+  | "recolorGraph"
+  | "guardStrip"
+  | "recolorPairs"
+  | "toneEq"
+  | "colorConsole"
+  | "curveEditor"
+  | "colorWheels"
+  | "bendWheel"
+  | "levels"
+  | "zones"
+  | "detailAdvanced"
+  | "flipPhoto"
+  | "print";
+
+/** Widgets drawn before a section's rows or after them. */
+export interface SectionWidgetSeats {
+  before?: SectionWidgetKind[];
+  after?: SectionWidgetKind[];
+}
+
+/** Every widget a section draws, wherever it sits: before or after its
+ * rows, or with one of them. */
+export function sectionWidgetKinds(sec: SectionSpec): SectionWidgetKind[] {
+  const seats = [sec.widgets, ...sec.rows.map((r) => r.widgets)];
+  return seats.flatMap((w) => [...(w?.before ?? []), ...(w?.after ?? [])]);
+}
+
+/** Whether a section draws this widget. Reset reads it for the params a
+ * widget owns. */
+export function sectionHasWidget(sec: SectionSpec, kind: SectionWidgetKind): boolean {
+  return sectionWidgetKinds(sec).includes(kind);
+}
 
 export interface SectionSpec {
   title: string;
@@ -278,8 +314,13 @@ export interface SectionSpec {
      * inspector and the tool window all draw the rows and these widgets in
      * this order (SectionWidgets, SectionFace), so the faces cannot drift
      * apart. */
-    widgets?: { before?: SectionWidgetKind[]; after?: SectionWidgetKind[] };
+    widgets?: SectionWidgetSeats;
   }[];
+  /** Widgets drawn before the first row and after the last, for the
+   * widgets that belong to the whole section rather than to one row (a
+   * section with no rows at all, like Curves, says its face here). The
+   * same one place as a row's `widgets`: every face draws them. */
+  widgets?: SectionWidgetSeats;
   /** A line of plain words above the rows, for a section whose dials
    * need a sentence of context (Depth Map: whose settings these are). */
   note?: string;
@@ -291,10 +332,6 @@ export interface SectionSpec {
    * the graph) or Model (the SCUNet answer blended in), with the
    * model's status line under it. */
   denoiseMethod?: boolean;
-  /** Tone Equalizer's parametric EQ widget above the rows */
-  eqWidget?: boolean;
-  /** the Color Tune's band strip and wheel above the rows */
-  consoleWidget?: boolean;
   /** Lens: names the lensfun profile this photograph's lens matches
    *. */
   lensProfile?: boolean;
@@ -302,10 +339,6 @@ export interface SectionSpec {
    * (src/ui/gridwarp.tsx). No slider rows: every number here is a
    * count, and the mesh itself is dragged in the viewport. */
   gridWarpWidget?: boolean;
-  /** Geometry: Photo > Flip Horizontal and Flip Vertical as switches
-   * (src/ui/flipphoto.tsx), the same component the crop node's
-   * inspector mounts. */
-  flipWidget?: boolean;
   /** Shape Warp: the list of shapes, the tool and mode, Amount, Twist
    * and Pinch on the picked shape, Edges (src/ui/shapewarp.tsx). */
   shapeWarpWidget?: boolean;
@@ -330,23 +363,10 @@ export interface SectionSpec {
   /** The depth sections: renders the view-depth eye (and Key Light's
    * invert chip) above the rows. */
   depthTools?: "depthmap" | "fog" | "keylight" | "dof" | "flare" | "halation";
-  /** Levels: the histogram with the three classic handles above the rows. */
-  levelsWidget?: boolean;
-  /** Exposure: the Zone System's ruler below the rows, since a placement
-   * sets the two dials above it (2026-09-14: "Move Zones into the
-   * Exposure section"). */
-  zonesWidget?: boolean;
-  /** Print: the paper's controls (src/ui/print.tsx), the same component
-   * the graph mounts on the Print node. No slider rows: the grade and
-   * the split pair swap places.*/
-  printWidget?: boolean;
   /** Grain: the Film row above the dials (src/ui/grainfilm.tsx), the
    * stock's grain as a starting point; the same component the graph
    * mounts on the Grain node.*/
   grainFilmWidget?: boolean;
-  /** Detail hosts the per-band and per-channel weighting for texture,
-   * clarity and dehaze. */
-  detailAdvanced?: boolean;
   /** Draw the Detail Equalizer's fold after the rows. */
   detailEq?: boolean;
 }
@@ -746,7 +766,10 @@ export const SECTIONS: SectionSpec[] = [
     title: "Exposure",
     layerTool: "adj",
     node: (s) => toolNode(s, "adj"),
-    zonesWidget: true,
+    // The Zone System's ruler below the rows, since a placement sets the
+    // two dials above it (2026-09-14: "Move Zones into the Exposure
+    // section").
+    widgets: { after: ["zones"] },
     rows: [
       { label: "Exposure", param: "exposure" },
       // Contrast, decomposed. The majors hard-wire one blend of
@@ -783,7 +806,8 @@ export const SECTIONS: SectionSpec[] = [
     // confusing."
     title: "Levels",
     layerTool: "levels",
-    levelsWidget: true,
+    // The histogram with the three classic handles, under the rows.
+    widgets: { after: ["levels"] },
     node: (s) => toolNode(s, "levels"),
     rows: [
       { label: "Black point", param: "black", centered: false },
@@ -799,6 +823,7 @@ export const SECTIONS: SectionSpec[] = [
     title: "Curves",
     layerTool: "curves",
     node: (s) => toolNode(s, "curves"),
+    widgets: { before: ["curveEditor"] },
     rows: [],
   },
   {
@@ -808,7 +833,9 @@ export const SECTIONS: SectionSpec[] = [
     // the section.
     title: "Print",
     layerTool: "paper",
-    printWidget: true,
+    // The paper's controls (src/ui/print.tsx). No slider rows: the grade
+    // and the split pair swap places.
+    widgets: { after: ["print"] },
     node: (s) => toolNode(s, "paper"),
     rows: [],
   },
@@ -822,7 +849,8 @@ export const SECTIONS: SectionSpec[] = [
     // highlights. The graph inspector is the expert face with all
     // nine.
     title: "Tone Equalizer",
-    eqWidget: true,
+    // The EQ widget under the two dials.
+    widgets: { after: ["toneEq"] },
     layerTool: "toneeq",
     node: (s) => toolNode(s, "toneeq"),
     // The sliders that survived the EQ redesign (kill sliders
@@ -836,13 +864,15 @@ export const SECTIONS: SectionSpec[] = [
     title: "Color Wheels",
     layerTool: "wheels",
     node: (s) => toolNode(s, "wheels"),
+    widgets: { before: ["colorWheels"] },
     rows: [],
   },
   {
     // Per-hue-family grading strips: the hue-indexed sibling of the
     // tonal Color Wheels above it.
     title: "Color Tune",
-    consoleWidget: true,
+    // The band strip and wheel under Smoothing.
+    widgets: { after: ["colorConsole"] },
     layerTool: "colorconsole",
     node: (s) => toolNode(s, "colorconsole"),
     rows: [{ label: "Smoothing", param: "smoothing", centered: false }],
@@ -853,6 +883,8 @@ export const SECTIONS: SectionSpec[] = [
     title: "Color Bend",
     layerTool: "bend",
     node: (s) => toolNode(s, "bend"),
+    // The wheel above its two dials.
+    widgets: { before: ["bendWheel"] },
     rows: [
       { label: "Falloff", param: "falloff", centered: false },
       { label: "Amount", param: "amount", centered: false },
@@ -881,7 +913,9 @@ export const SECTIONS: SectionSpec[] = [
     title: "Detail",
     layerTool: "detail",
     node: (s) => toolNode(s, "detail"),
-    detailAdvanced: true,
+    // The per-band and per-channel weighting for texture, clarity and
+    // dehaze, above the rows.
+    widgets: { before: ["detailAdvanced"] },
     detailEq: true,
     // Unsharp, Smoothing and the Equalizer are their own nodes, so the
     // section switch has to reach them as well.
@@ -1294,7 +1328,9 @@ export const SECTIONS: SectionSpec[] = [
   {
     title: "Geometry",
     node: (s) => s.nodes.find((n) => n.type === "heeler.crop_rotate"),
-    flipWidget: true,
+    // Photo > Flip Horizontal and Flip Vertical as switches
+    // (src/ui/flipphoto.tsx), under the rows.
+    widgets: { after: ["flipPhoto"] },
     rows: [
       { label: "Straighten", param: "angle" },
       // The RAW editors' Transform vocabulary: negative widens, positive heightens.
