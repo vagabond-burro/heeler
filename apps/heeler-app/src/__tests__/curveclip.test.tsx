@@ -14,7 +14,7 @@ import { curveModeOf, reduce, type Command, type NodeCard, type State } from "..
 import { CurveEditor, inkView } from "../ui/editors";
 import { RecolorBlock } from "../ui/recolor";
 import { NodeParams } from "../ui/graph";
-import { scaleRecolorPoints } from "../ui/curveclipboard";
+import { scaleRecolorPoints } from "../ui/curveclipboardparts";
 import { choose } from "./menuhelp";
 
 afterEach(cleanup);

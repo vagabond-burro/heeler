@@ -50,7 +50,8 @@ import { TrackSlider, ValueField } from "./track";
 import { framePhotoSize } from "./profilelineparts";
 import { setUiPref, uiPref } from "../uiprefs";
 import { HarmonyIcon, SpectrumIcon } from "./panelicons";
-import { CHIP_METRICS, CHIP_METRICS_LARGE, ChannelChips } from "./channelchips";
+import { ChannelChips } from "./channelchips";
+import { CHIP_METRICS, CHIP_METRICS_LARGE } from "./channelchipsparts";
 import { modLabel } from "../platform";
 import { useStatusReadout } from "./hints";
 

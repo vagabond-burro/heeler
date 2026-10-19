@@ -14,7 +14,7 @@
 
 import { useRef, useState } from "react";
 import { ColorField } from "./colorfield";
-import { previewCss, type GradStop } from "./gradientstops";
+import { previewCss, type GradStop } from "./gradientstopsparts";
 import { ValueField } from "./track";
 import { ribbonColorAt } from "./ribbonparts";
 

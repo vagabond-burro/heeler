@@ -155,7 +155,7 @@ describe("baking itself", () => {
         }),
       };
     });
-    const { runBake } = await import("../ui/bake");
+    const { runBake } = await import("../ui/bakeparts");
     const sent: Command[] = [];
     const made = await runBake(
       folder(),
@@ -189,7 +189,7 @@ describe("baking itself", () => {
       const actual = await vi.importActual<typeof import("../bridge")>("../bridge");
       return { ...actual, bakeComposite: baked, loadGraph: vi.fn(async () => null), saveGraph: vi.fn() };
     });
-    const { runBake } = await import("../ui/bake");
+    const { runBake } = await import("../ui/bakeparts");
     const made = await runBake(folder(), ["merge", "pano"], "dng", (() => {}) as never);
     expect(made).toEqual([]);
     // A full-resolution merge is expensive; there is no sense running
@@ -209,7 +209,7 @@ describe("baking itself", () => {
       const actual = await vi.importActual<typeof import("../bridge")>("../bridge");
       return { ...actual, bakeComposite: baked, loadGraph: vi.fn(async () => null), saveGraph: vi.fn() };
     });
-    const { runBake } = await import("../ui/bake");
+    const { runBake } = await import("../ui/bakeparts");
     const { getEntries } = await import("../log");
     const sent: Command[] = [];
     const made = await runBake(folder(), ["merge", "pano"], "dng", ((c: Command) => sent.push(c)) as never);
@@ -236,7 +236,7 @@ describe("baking itself", () => {
       const actual = await vi.importActual<typeof import("../ui/opprogress")>("../ui/opprogress");
       return { ...actual, watchBake: async (_t: string, job: () => Promise<unknown>) => { await job(); return null; } };
     });
-    const { runBake } = await import("../ui/bake");
+    const { runBake } = await import("../ui/bakeparts");
     const sent: Command[] = [];
     const made = await runBake(folder(), ["merge"], "dng", ((c: Command) => sent.push(c)) as never);
     expect(made.map((m) => m.id)).toEqual(["merge_baked"]);
@@ -251,7 +251,7 @@ describe("baking itself", () => {
       const actual = await vi.importActual<typeof import("../bridge")>("../bridge");
       return { ...actual, bakeComposite: vi.fn(async () => null), loadGraph: vi.fn(async () => null), saveGraph: vi.fn() };
     });
-    const { runBake } = await import("../ui/bake");
+    const { runBake } = await import("../ui/bakeparts");
     const { getEntries } = await import("../log");
     const before = getEntries().length;
     const made = await runBake(folder(), ["merge"], "dng", (() => {}) as never);
@@ -370,7 +370,7 @@ it("passes unsaved active and cached edits before baking without saving a copied
     ...await vi.importActual<typeof import("../bridge")>("../bridge"),
     bakeComposite: baked, loadGraph: loaded, saveGraph: saved,
   }));
-  const { runBake } = await import("../ui/bake");
+  const { runBake } = await import("../ui/bakeparts");
   const state = folder();
   const cached = { ...state.graphs.merge, nodes: structuredClone(state.nodes), wires: state.wires };
   cached.nodes[0].badge = "pending cached edit";

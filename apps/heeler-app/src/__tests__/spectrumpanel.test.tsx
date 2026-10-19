@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import { SpectrumBar, Spectrums, readout, type Frame } from "../ui/spectrum";
 import { CurveEditor } from "../ui/editors";
-import { CHANNEL_CHIPS, CHIP_METRICS, CHIP_METRICS_LARGE } from "../ui/channelchips";
+import { CHANNEL_CHIPS, CHIP_METRICS, CHIP_METRICS_LARGE } from "../ui/channelchipsparts";
 import { HARMONY_MODES } from "../harmony";
 import { reduce, type CurveChannel } from "../state";
 import {

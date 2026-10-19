@@ -9,7 +9,8 @@ import { initialState } from "../data";
 import { artMaskNode, graphHasNode, reduce, toolForMaskType, type Command, type FilePasses, type State } from "../state";
 import { availableMaskTypes, LAYER_MASK_TYPES } from "../state";
 import { LayersSection } from "../ui/simple";
-import { ObjectMattePanel, ObjectPickOverlay, activeMatteMask, layerLabel, matteNames } from "../ui/mattetool";
+import { ObjectMattePanel, ObjectPickOverlay } from "../ui/mattetool";
+import { activeMatteMask, layerLabel, matteNames } from "../ui/mattetoolparts";
 import { ArtLayersTab } from "../ui/artlayers";
 
 let mockPick: string | null = "Suzanne";

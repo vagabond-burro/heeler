@@ -3,7 +3,7 @@ import { addColorSet } from "../colorsets";
 import { hueMaskFeedBelowConversion, hueSourceNodeFor, serializeGraph, profileBelow } from "../bridge";
 import { initialState } from "../data";
 import { anyPickerArmed, previewTarget, reduce, type NodeCard, type State, type Wire, COLLISION_TOLERANCE_DEFAULT, collisionBins, mainConversion } from "../state";
-import { spectrumBarFill } from "../ui/eqeditor";
+import { spectrumBarFill } from "../ui/eqeditorparts";
 
 /** src -> bw -> bend -> profile -> output, the conversion above the
  * Color Set anchor so a set's hue mask sits below it. */

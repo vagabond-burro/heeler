@@ -33,7 +33,8 @@ import { TrackSlider, ValueField } from "./track";
 // the field moved to track.tsx (a leaf) so the Depth Lighting rig can
 // use it without a simple<->keylightgizmo cycle.
 export { ValueField };
-import { KeyLightControls, lightsOf, writeLights } from "./keylightgizmo";
+import { KeyLightControls } from "./keylightgizmo";
+import { lightsOf, writeLights } from "./keylightgizmoparts";
 import { DepthInvertIcon, EyedropperIcon, LightAddIcon, LightRigIcon, ResetIcon, ScopeIcon } from "./panelicons";
 import { publishBusy } from "./statusbar";
 import { flashStatus } from "./hints";
@@ -47,7 +48,7 @@ import { LevelsEditor } from "./levels";
 import { DEPTH_LEVELS_HINT, DEPTH_LEVELS_KEYS, useDepthBins } from "./depthbins";
 import { reportToolError } from "./hints";
 import { DabPreviewButton, MaskViewButton } from "./smarttool";
-import { hexToRgb255 } from "./colorfield";
+import { hexToRgb255 } from "./colorfieldparts";
 import React, { memo, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ColorSetsBlock } from "./colorsets";

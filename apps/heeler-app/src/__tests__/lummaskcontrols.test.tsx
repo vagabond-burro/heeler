@@ -28,8 +28,10 @@ import { initialState } from "../data";
 import { makeNode, specFor } from "../nodes";
 import { reduce, type Command, type NodeCard, type State } from "../state";
 import { NodeParams } from "../ui/graph";
-import { LEVELS_PAD, LevelsEditor, lumaOf, windowWeight } from "../ui/levels";
-import { LUMMASK_KEYS, LUMMASK_WINDOW, LuminanceMaskControls } from "../ui/lummask";
+import { LevelsEditor } from "../ui/levels";
+import { LEVELS_PAD, lumaOf, windowWeight } from "../ui/levelsparts";
+import { LuminanceMaskControls } from "../ui/lummask";
+import { LUMMASK_KEYS, LUMMASK_WINDOW } from "../ui/lummaskparts";
 
 const WIDTH = 272;
 const xAt = (v: number) => LEVELS_PAD + v * (WIDTH - LEVELS_PAD * 2);

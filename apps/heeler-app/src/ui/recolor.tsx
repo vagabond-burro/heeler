@@ -8,7 +8,8 @@ import React from "react";
 import { useHueSourceThumb } from "./huesource";
 import type { State } from "../state";
 import type { Command, NodeCard, RecolorClip } from "../state";
-import { CurveClipButtons, scaleRecolorPoints } from "./curveclipboard";
+import { CurveClipButtons } from "./curveclipboard";
+import { scaleRecolorPoints } from "./curveclipboardparts";
 import {
   RECOLOR_AXIS,
   RECOLOR_CELLS,
@@ -25,7 +26,8 @@ import {
   type RecolorCellId,
   type RecolorChannel,
 } from "../eqcurve";
-import { EqEditor, EQ_PLOT_INSET } from "./eqeditor";
+import { EqEditor } from "./eqeditor";
+import { EQ_PLOT_INSET } from "./eqeditorparts";
 import { DepthViewButton } from "./smarttool";
 import { SurfaceEditor } from "./surface";
 import { MenuField } from "./menufield";

@@ -6,58 +6,10 @@
 // fields its 11px.
 
 import React, { useEffect, useRef, useState } from "react";
-import { CROP_RATIOS, CROP_RATIO_NAME_MAX, cropRatioList, cropRatioNameReserved, cropRatioOk, type SavedCropRatio } from "../state";
+import { CROP_RATIO_NAME_MAX, cropRatioList, cropRatioNameReserved, cropRatioOk, type SavedCropRatio } from "../state";
 import { MenuField } from "./menufield";
 import { useDismiss } from "./hooks";
-
-/** The two numbers the W: H fields show for a ratio: a preset's own
- * (3 and 2), else the smallest whole pair that makes it (an original
- * frame of 6024 by 4016 is 3: 2), else the ratio to 1. Free shows
- * nothing. */
-/** How close a ratio must be to a preset to be that preset. It was 0.001,
- * which a saved 1366 by 768 (683:384) is from 16:9: it read as 16:9 and
- * leaving the fields put 16:9 back (the 26.5.1 review). */
-const SAME_RATIO = 1e-4;
-
-export function ratioPair(aspect: number | null, saved: SavedCropRatio[] = []): [string, string] {
-  if (aspect === null || !Number.isFinite(aspect) || aspect <= 0) return ["", ""];
-  for (const [label, ratio] of CROP_RATIOS) {
-    if (Math.abs(ratio - aspect) < SAME_RATIO) {
-      const [w, h] = label.split(":");
-      return [w, h];
-    }
-  }
-  // A saved ratio shows in its own lowest terms (1366 by 768 is 683:384),
-  // which the search below, capped at 32, would not find.
-  for (const r of saved) {
-    const own = resolutionRatio(r.w, r.h);
-    if (own && Math.abs(own.ratio - aspect) < SAME_RATIO) {
-      const [w, h] = own.label.split(":");
-      if (h !== "1" || Number.isInteger(r.w / r.h)) return [w, h];
-    }
-  }
-  for (let h = 1; h <= 32; h++) {
-    // Close enough to give the ratio back, not merely near it: 2.39 is
-    // not 43: 18.
-    const w = Math.round(aspect * h);
-    if (w >= 1 && Math.abs(w / h - aspect) < 1e-4) return [String(w), String(h)];
-  }
-  return [String(Number(aspect.toFixed(3))), "1"];
-}
-
-/** A resolution as a ratio: its label in lowest terms (1920 by 1080 is
- * 16:9, 1366 by 768 is 683:384) and its width over height. Sides that
- * are not whole numbers have no lowest terms, so they read as the ratio
- * to 1. Null unless both sides are positive. */
-export function resolutionRatio(w: number, h: number): { label: string; ratio: number } | null {
-  if (!(Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0)) return null;
-  const ratio = w / h;
-  if (!cropRatioOk(ratio)) return null;
-  if (!Number.isInteger(w) || !Number.isInteger(h)) return { label: `${Number(ratio.toFixed(4))}:1`, ratio };
-  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
-  const d = gcd(w, h);
-  return { label: `${w / d}:${h / d}`, ratio };
-}
+import { SAME_RATIO, ratioPair, resolutionRatio } from "./cropratioparts";
 
 /** A side of the ratio as typed: a positive number, or null. */
 function side(text: string): number | null {

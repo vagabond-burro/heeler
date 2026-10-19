@@ -33,7 +33,7 @@ const LEGACY: string[] = [
   "canvas.tsx",
   "catalogui.tsx",
   "catalogview.tsx",
-  "channelchips.tsx",
+  "channelchipsparts.ts",
   "chrome.tsx",
   "colorconsole.tsx",
   "colorsets.tsx",
@@ -84,7 +84,9 @@ const LEGACY: string[] = [
 describe("text sizes", () => {
   it("no ui file outside the legacy allowlist has an inline fontSize under 11px", () => {
     const offenders: string[] = [];
-    for (const file of readdirSync(UI).filter((f) => f.endsWith(".tsx"))) {
+    // .ts too: a style constant moved out of a component file (the Fast
+    // Refresh sweep's companions) must not leave the rule behind.
+    for (const file of readdirSync(UI).filter((f) => f.endsWith(".tsx") || f.endsWith(".ts"))) {
       const small = smallSizes(file);
       if (small.length > 0 && !LEGACY.includes(file)) {
         offenders.push(`${file} (${small.length} under 11px: ${small.join(", ")})`);

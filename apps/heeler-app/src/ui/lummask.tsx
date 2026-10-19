@@ -18,9 +18,11 @@
 
 import React from "react";
 import { type Command, type NodeCard, type State } from "../state";
-import { LevelsEditor, useLumaBins, type LevelsKeys, type LevelsWindow } from "./levels";
+import { LevelsEditor } from "./levels";
+import { useLumaBins } from "./levelsparts";
 import { useNodeInputThumb } from "./huesource";
 import { Slider } from "./simple";
+import { LUMMASK_KEYS, LUMMASK_WINDOW } from "./lummaskparts";
 
 const FIELDS: [string, string, string][] = [
   ["Low", "low", "Darkest tone the mask takes in full"],
@@ -29,9 +31,6 @@ const FIELDS: [string, string, string][] = [
 ];
 
 type D = React.Dispatch<Command>;
-
-export const LUMMASK_KEYS: LevelsKeys = { black: "low", white: "high" };
-export const LUMMASK_WINDOW: LevelsWindow = { feather: "feather", invert: "invert" };
 
 const LUMMASK_HINT =
   "Selects the tones between the two handles: drag them to move the band, the top handles to soften its edges; the lit part of the histogram is what the mask takes";

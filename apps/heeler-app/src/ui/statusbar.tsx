@@ -20,7 +20,7 @@ import type { Command, State } from "../state";
 import { polishLayerLine, transformDragOf } from "../state";
 import { transformKeysLine } from "./overlays";
 import { gridWarpKeysLine } from "./gridwarp";
-import { shapeWarpKeysLine } from "./shapewarp";
+import { shapeWarpKeysLine } from "./shapewarpparts";
 
 type D = React.Dispatch<Command>;
 

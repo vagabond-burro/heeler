@@ -22,13 +22,8 @@ import {
   presetSave,
   type ChartDef,
 } from "../bridge";
-import {
-  calibrationPreset,
-  ChartToolOverlay,
-  ColorCheckerControls,
-  DEFAULT_QUAD,
-  quadOf,
-} from "../ui/colorchecker";
+import { ChartToolOverlay, ColorCheckerControls } from "../ui/colorchecker";
+import { calibrationPreset, DEFAULT_QUAD, quadOf } from "../ui/colorcheckerparts";
 import { resetChartsForTests } from "../charts";
 import { ChartEditor } from "../ui/charteditor";
 import { choose, menuRows } from "./menuhelp";

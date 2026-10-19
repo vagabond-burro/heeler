@@ -14,7 +14,8 @@
 import React, { useEffect, useState } from "react";
 import type { ArtLayer, Command, ImageLayerSource, State } from "../state";
 import { artGroupMembers, artLayers, editOrigin, editWarpCommand, imageLayerWarp, layerBox, layerQuad, unbakeableWarp, warpEditing } from "../state";
-import { FinishWarpControls, editWarpWords } from "./finishwarp";
+import { FinishWarpControls } from "./finishwarp";
+import { editWarpWords } from "./finishwarpparts";
 import { imageLayerProbe, pickImageFile, type ImageLayerProbe } from "../bridge";
 import {
   applyPlacement,

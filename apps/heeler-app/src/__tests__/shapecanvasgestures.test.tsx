@@ -15,7 +15,8 @@ import { artLayers, imageLayerWarp, reduce, warpNodeFor, type Command, type Stat
 import { noteFrameAspect } from "../imagelayers";
 import { shapeShown, shapesFromNode, squareAxes, type WarpShape } from "../shapewarp";
 import { warpSpaceOf } from "../warpspace";
-import { ShapeWarpControls, ShapeWarpOverlay, shapeRing, shapeWarpKeysLine } from "../ui/shapewarp";
+import { ShapeWarpControls, ShapeWarpOverlay } from "../ui/shapewarp";
+import { shapeRing, shapeWarpKeysLine } from "../ui/shapewarpparts";
 import { ROTATE_CURSOR } from "../ui/cursors";
 import { readShapeGestureEcho } from "../gridwarplive";
 import type { WarpPair } from "../ui/gridwarp";

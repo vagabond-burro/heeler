@@ -13,8 +13,8 @@ import { initialState } from "../data";
 import { makeNode, specFor } from "../nodes";
 import { reduce, type Command, type NodeCard, type State } from "../state";
 import { Inspector, NodeEditor } from "../ui/graph";
-import { activeSmartMask } from "../ui/smarttool";
-import { smartCardNote, smartModelMissing } from "../ui/smartnode";
+import { activeSmartMask } from "../ui/smarttoolparts";
+import { smartCardNote, smartModelMissing } from "../ui/smartnodeparts";
 import * as bridge from "../bridge";
 
 let samInstalled = true;

@@ -4,7 +4,7 @@ import imageGuide from "../../../../docs/user-guide/finish/image-layer.md?raw";
 import warpGuide from "../../../../docs/user-guide/finish/warp-layer.md?raw";
 import "../app";
 import { toolbarWraps } from "../ui/finishnew";
-import { MASK_EXPORT_HINT } from "../ui/exporttick";
+import { MASK_EXPORT_HINT } from "../ui/exporttickparts";
 
 it("the toolbar copy describes the narrow-panel wrap the layout uses", () => {
   expect(toolbarWraps(160, 120, 65)).toBe(true);

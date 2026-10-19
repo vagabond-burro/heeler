@@ -7,10 +7,11 @@
 import React, { useEffect, useState } from "react";
 import { imageMetadata } from "../bridge";
 import { FLARE_PRESETS, suggestFlarePreset, toolNode, type Command, type NodeCard, type State } from "../state";
-import { lightsOf, writeLights } from "./keylightgizmo";
+import { lightsOf, writeLights } from "./keylightgizmoparts";
 import { RibbonEditor } from "./ribbon";
-import type { GradStop } from "./gradientstops";
+import type { GradStop } from "./gradientstopsparts";
 import { MenuField } from "./menufield";
+import { readStreakStops } from "./flareparts";
 
 type D = React.Dispatch<Command>;
 
@@ -138,7 +139,6 @@ export function FlarePanel({ state, dispatch, node }: { state: State; dispatch: 
   );
 }
 
-
 /** The anamorphic streak's color ribbon: a stop list from the source
  * (0) to the streak's end (100), the gradient layer's shape, edited
  * inline under the Anamorphic dials. Empty means the single streak
@@ -177,26 +177,4 @@ export function StreakRibbon({ state, dispatch, node }: { state: State; dispatch
       />
     </div>
   );
-}
-
-/** The streak's stops, or the single color as a two-stop ribbon.
- * In STORED order, not sorted: the editor's rows must stay under the
- * pointer while a stop is dragged past its neighbor (sorting on
- * every write swapped the rows mid-drag, which read as the control
- * misbehaving). The preview and the engine sort for themselves. */
-export function readStreakStops(raw: string | undefined, single: string): GradStop[] {
-  if (raw && raw.trim()) {
-    try {
-      const list = JSON.parse(raw) as GradStop[];
-      if (Array.isArray(list) && list.length >= 2) {
-        return list.map((s) => ({ pos: Number(s.pos) || 0, color: s.color ?? single, alpha: s.alpha ?? 100, mid: s.mid ?? 50 }));
-      }
-    } catch {
-      // Unreadable stops fall back to the single color.
-    }
-  }
-  return [
-    { pos: 0, color: single, alpha: 100, mid: 50 },
-    { pos: 100, color: single, alpha: 100, mid: 50 },
-  ];
 }

@@ -37,7 +37,7 @@
 // what it shows (layeractions.ts runBakeWarp).
 
 import type { Command, State, WarpKind } from "../state";
-import { artWarpOwner, editWarpCommand, isPictureWarp, layerBox, warpEditing, warpKindOf, warpNodeById } from "../state";
+import { artWarpOwner, editWarpCommand, isPictureWarp, warpEditing, warpKindOf, warpNodeById } from "../state";
 import { frameAspectFor } from "../imagelayers";
 import { GridWarpControls } from "./gridwarp";
 import { AddShapeButton, ShapeWarpControls } from "./shapewarp";
@@ -46,45 +46,12 @@ import { ValueField } from "./simple";
 import { SourceMenuRow } from "./sourcemenus";
 import { BAKE_WARP_GLYPH, MESH_WARP_GLYPH } from "./panelicons";
 import { BAKE_WARP_HINT, runBakeWarp } from "../layeractions";
+import { WARP_KIND_CHOICES, editWarpWords, pictureAspectOf } from "./finishwarpparts";
 
 type D = (cmd: Command) => void;
 
-/** The two types, in the order a warp is usually reached for. */
-export const WARP_KIND_CHOICES: { id: WarpKind; label: string; hint: string }[] = [
-  { id: "grid", label: "Grid", hint: "Bend with a grid of handles: drag them and the picture follows" },
-  { id: "shapes", label: "Shapes", hint: "Bend with shapes: move, twist or pinch the picture under each one" },
-];
-
 /** The Type menu fits its own labels, the Source menus' rule. */
 const KIND_FIT = WARP_KIND_CHOICES.map((c) => c.label);
-
-/** The picture's width over its height for a placed layer: its rest box
- * was fitted to the picture's shape, so the box's shape in pixels is the
- * picture's. */
-export function pictureAspectOf(state: State, carrier: string): number {
-  const box = layerBox(state, carrier);
-  const frame = frameAspectFor(state.activeImage) ?? 1;
-  return box.h > 0 ? (box.w * frame) / box.h : 1;
-}
-
-/** The Edit Warp button's name and hint, one wording for both seats (an
- * image layer's transform row, the graph inspector). */
-export function editWarpWords(editing: boolean, picture: boolean): { label: string; hint: string } {
-  return editing
-    ? {
-        label: "Done editing warp",
-        hint: "Keep the warp and close its controls (Enter). Escape puts it back the way it was",
-      }
-    : picture
-      ? {
-          label: "Edit warp",
-          hint: "Bend the picture itself on the canvas, with a grid or shapes, even past its own edges",
-        }
-      : {
-          label: "Edit warp",
-          hint: "Bend everything below this layer on the canvas, with a grid or shapes, shown where the layer's mask lets it through",
-        };
-}
 
 /** The glyph the Edit Warp button wears: the Warp layer's own picture. */
 export function EditWarpGlyph() {

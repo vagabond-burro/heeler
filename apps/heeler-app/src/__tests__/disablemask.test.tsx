@@ -27,7 +27,7 @@ import { layerActions, maskToggleItem } from "../layeractions";
 import { ArtLayersTab } from "../ui/artlayers";
 import { LayersSection } from "../ui/simple";
 import { Inspector } from "../ui/graph";
-import { MASK_OFF_HINT } from "../ui/masktoggle";
+import { MASK_OFF_HINT } from "../ui/masktoggleparts";
 import { App } from "../app";
 
 

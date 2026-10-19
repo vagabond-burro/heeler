@@ -1477,7 +1477,7 @@ describe("Heeler UI", () => {
 
   describe("bend tool", () => {
     it("the disc maps hue to angle and saturation to radius, both ways", async () => {
-      const { discPoint, pointToDisc } = await import("../ui/bend");
+      const { discPoint, pointToDisc } = await import("../ui/bendparts");
       // Center is zero saturation, whatever the hue.
       const c = discPoint(120, 0);
       expect(pointToDisc(c.x, c.y).sat).toBeCloseTo(0, 6);
@@ -1496,7 +1496,7 @@ describe("Heeler UI", () => {
 
     it("dragging the handles writes the source and destination", async () => {
       const user = userEvent.setup();
-      const { discPoint } = await import("../ui/bend");
+      const { discPoint } = await import("../ui/bendparts");
       render(<App />);
       const disc = screen.getByTestId("bend-disc");
       // The widget works in its own viewBox units, so pin the box to them.
@@ -1524,7 +1524,7 @@ describe("Heeler UI", () => {
 
     it("Clear puts the destination back on the source", async () => {
       const user = userEvent.setup();
-      const { discPoint } = await import("../ui/bend");
+      const { discPoint } = await import("../ui/bendparts");
       render(<App />);
       const disc = screen.getByTestId("bend-disc");
       disc.getBoundingClientRect = () =>
@@ -1550,7 +1550,7 @@ describe("Heeler UI", () => {
       // the section's slider rows and had no reset case, and the bend it kept
       // re-armed the bypassed node through armed.
       const user = userEvent.setup();
-      const { discPoint } = await import("../ui/bend");
+      const { discPoint } = await import("../ui/bendparts");
       render(<App />);
       const disc = screen.getByTestId("bend-disc");
       disc.getBoundingClientRect = () =>
@@ -1599,7 +1599,7 @@ describe("Heeler UI", () => {
     });
 
     it("plots density, so a dominant color does not flatten the rest", async () => {
-      const { densityField } = await import("../ui/bend");
+      const { densityField } = await import("../ui/bendparts");
       // One color piled up in a spot, another with a single sample.
       const many = Array.from({ length: 300 }, () => ({ x: 60, y: 60, r: 255, g: 0, b: 0 }));
       const one = [{ x: 140, y: 140, r: 0, g: 0, b: 255 }];
@@ -1623,7 +1623,7 @@ describe("Heeler UI", () => {
       /// was still splatted into a 208 buffer and read up out of it with
       /// nearest neighbor, which is four-pixel blocks at a pop-out's
       /// size. That is the smudge in his screenshot.
-      const { densityField } = await import("../ui/bend");
+      const { densityField } = await import("../ui/bendparts");
       const pts = [{ x: 104, y: 104, r: 255, g: 0, b: 0 }];
       const small = densityField(pts, 208);
       const big = densityField(pts, 832);
@@ -1650,7 +1650,7 @@ describe("Heeler UI", () => {
       /// BOTH directions, so a wheel one row too tall put that row up
       /// through the title bar. The fix is arithmetic, so it is tested
       /// as arithmetic.
-      const { fitWheel } = await import("../ui/bendwindow");
+      const { fitWheel } = await import("../ui/bendwindowparts");
       const CHROME = 27; // the row of chips above the disc
       expect(fitWheel(600, 800, CHROME)).toBe(600); // width-bound
       expect(fitWheel(900, 500, CHROME)).toBe(500 - CHROME); // height-bound
@@ -1665,7 +1665,7 @@ describe("Heeler UI", () => {
     });
 
     it("the reach is grabbed by its rim and cannot shrink out of reach", async () => {
-      const { MIN_FALLOFF } = await import("../ui/bend");
+      const { MIN_FALLOFF } = await import("../ui/bendparts");
       render(<App />);
       // The filled part is click-through, so it never swallows a drag
       // meant for the interior; only the rim resizes.
@@ -1691,7 +1691,7 @@ describe("Heeler UI", () => {
     });
 
     it("dragging the empty disc aims the source", async () => {
-      const { discPoint } = await import("../ui/bend");
+      const { discPoint } = await import("../ui/bendparts");
       render(<App />);
       const disc = screen.getByTestId("bend-disc");
       disc.getBoundingClientRect = () =>
@@ -1752,7 +1752,7 @@ describe("Heeler UI", () => {
     });
 
     it("the scatter degrades to nothing when the frame cannot be read", async () => {
-      const { sampleDisc } = await import("../ui/bend");
+      const { sampleDisc } = await import("../ui/bendparts");
       // jsdom has no canvas: this must return empty rather than throw, or
       // the whole panel fails to render.
       const img = document.createElement("img");

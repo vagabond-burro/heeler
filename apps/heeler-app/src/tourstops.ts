@@ -22,7 +22,7 @@ import type { Command, Mode, NodeCard, State, Wire } from "./state";
 import { artFindLayer, panelShown, artLayers, CROP_RATIOS, LAYER_TOOLS, mainConversion, toolNode, PANEL_TABS } from "./state";
 import { makeNode, NODE_CATALOG, nodeMenuPath, portData, portName, producesMask, MASK_IN_TYPES, RETIRED_TYPES, sectionOf, type NodeSpec, type PortSeat } from "./nodes";
 import { SECTIONS, sectionIsOn } from "./ui/simpledata";
-import { EXPORT_SIZES } from "./ui/exportpanel";
+import { EXPORT_SIZES } from "./ui/exportpanelparts";
 import { PREFS_CATEGORIES } from "./ui/preferencesparts";
 import { IR_MATERIALS } from "./film";
 import { isInfrared } from "./filters";

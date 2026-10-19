@@ -5,7 +5,8 @@
 
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { Markdown, docSlug } from "../ui/docsviewer";
+import { Markdown } from "../ui/docsviewer";
+import { docSlug } from "../ui/docsviewerparts";
 
 describe("anchored links in the guide", () => {
   it("a link to a heading on another page opens that page and carries the anchor", () => {

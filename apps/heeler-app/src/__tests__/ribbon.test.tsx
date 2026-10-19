@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { RibbonEditor } from "../ui/ribbon";
-import type { GradStop } from "../ui/gradientstops";
+import type { GradStop } from "../ui/gradientstopsparts";
 
 const two: GradStop[] = [
   { pos: 0, color: "#ff0000", alpha: 100, mid: 50 },

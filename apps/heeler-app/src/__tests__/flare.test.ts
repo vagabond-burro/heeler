@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
 import { initialState } from "../data";
 import { CATEGORY_PIECES, CHAIN_ORDER } from "../recipes";
 import { FLARE_PRESETS, LAYER_TOOLS, reduce, suggestFlarePreset, type Command, type State } from "../state";
-import { flareSourceOf, lightsOf } from "../ui/keylightgizmo";
-import { readStreakStops } from "../ui/flare";
+import { flareSourceOf, lightsOf } from "../ui/keylightgizmoparts";
+import { readStreakStops } from "../ui/flareparts";
 import { ribbonColorAt } from "../ui/ribbonparts";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);

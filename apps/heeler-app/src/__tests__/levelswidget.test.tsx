@@ -8,7 +8,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { initialState } from "../data";
 import type { Command, NodeCard } from "../state";
-import { LEVELS_PAD, LevelsEditor } from "../ui/levels";
+import { LevelsEditor } from "../ui/levels";
+import { LEVELS_PAD } from "../ui/levelsparts";
 import { DEPTH_LEVELS_KEYS } from "../ui/depthbins";
 
 const WIDTH = 272;

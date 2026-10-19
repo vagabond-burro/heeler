@@ -25,6 +25,7 @@ import { logMsg } from "../log";
 import { TrackSlider, ValueField } from "./track";
 import exportResolution from "../../../../crates/heeler-io/export-resolution.json";
 import { MenuField } from "./menufield";
+import { EXPORT_SIZES } from "./exportpanelparts";
 
 type D = React.Dispatch<Command>;
 
@@ -38,14 +39,6 @@ const EXPORT_FORMATS = [
   { id: "tiff32", label: "TIFF 32-bit float" },
   { id: "dng", label: "Linear DNG" },
   { id: "exr", label: "EXR (multi-channel)" },
-];
-
-/** The Size row's choices; the guided tours' export stops read them. */
-export const EXPORT_SIZES: [string, number | null][] = [
-  ["Full", null],
-  ["4096", 4096],
-  ["2048", 2048],
-  ["1024", 1024],
 ];
 
 /** The rail the panel lives behind. It is always there, open or shut,

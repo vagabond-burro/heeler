@@ -17,7 +17,7 @@ import {
   serializeRecolorSurfaces,
   type SurfaceId,
 } from "../eqcurve";
-import { EQ_PLOT_INSET } from "./eqeditor";
+import { EQ_PLOT_INSET } from "./eqeditorparts";
 
 type D = React.Dispatch<Command>;
 

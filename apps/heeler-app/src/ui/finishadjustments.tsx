@@ -2,21 +2,15 @@
 import { useEffect, useState } from "react";
 import type { Command, NodeCard, State } from "../state";
 import { ART_KINDS, curveModeOf, hardRange, paramRange } from "../state";
-import { nodeThumbs, serializeGraph } from "../bridge";
+import { nodeThumbs } from "../bridge";
 import { CurveEditor, Wheel } from "./editors";
 import { LevelsEditor } from "./levels";
 import { paramDefault } from "./simpledata";
 import { BwControls } from "./bwcontrols";
 import { TrackSlider, ValueField } from "./track";
+import { finishHistogramNode } from "./finishadjustmentsparts";
 
 type D = React.Dispatch<Command>;
-
-/** The input, decoded to scene light before the operation, renders as a
- * correctly encoded thumbnail. A full-stack preview would count edits
- * above this layer. In a browser without the engine there is no underlay. */
-export function finishHistogramNode(state: State, id: string): string | undefined {
-  return serializeGraph(state).connections.find(w => w.to[0] === id && w.to[1] === "in")?.from[0];
-}
 function useInputHistogram(state: State | undefined, node: NodeCard) {
   const [frame, setFrame] = useState<string>();
   const input = state && ["heeler.curves", "heeler.levels"].includes(node.type) ? finishHistogramNode(state, node.id) : undefined;

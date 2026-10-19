@@ -2,7 +2,8 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import { capturePreset, reduce, toolNode, type State, type Command } from "../state";
-import { DofFocusOverlay, KeyLightControls, lightsOf } from "../ui/keylightgizmo";
+import { DofFocusOverlay, KeyLightControls } from "../ui/keylightgizmo";
+import { lightsOf } from "../ui/keylightgizmoparts";
 import { LensCharacterBlock } from "../ui/lenscharacter";
 
 type Deferred<T> = { resolve: (value: T) => void; reject: (error: Error) => void };

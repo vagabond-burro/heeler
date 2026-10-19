@@ -21,6 +21,7 @@ import { hexToLabD50, labD50ToHex, labD50ToSrgb } from "../labconvert";
 import { ValueField } from "./track";
 import { flashStatus, reportToolError } from "./hints";
 import type { Command } from "../state";
+import { cellAddress } from "./charteditorparts";
 
 type D = React.Dispatch<Command>;
 
@@ -34,14 +35,6 @@ export interface CellTarget {
   /** sRGB-encoded display color for the cell's swatch. */
   rgb: [number, number, number];
   neutral: boolean;
-}
-
-/** The cell address, spreadsheet style: row letter, column number. */
-export function cellAddress(rows: number, cols: number, i: number): string {
-  const r = Math.floor(i / cols);
-  const c = i % cols;
-  void rows;
-  return `${String.fromCharCode(65 + r)}${c + 1}`;
 }
 
 const MIN_GRID = 1;

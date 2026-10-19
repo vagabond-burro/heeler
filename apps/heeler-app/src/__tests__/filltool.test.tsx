@@ -10,7 +10,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import { ART_ID, artLayers, artMaskOf, graphHasNode, reduce, type Command, type State } from "../state";
-import { activeFillLayer, fillLayers, FillRunner, FillToolButton } from "../ui/filltool";
+import { FillRunner, FillToolButton } from "../ui/filltool";
+import { activeFillLayer, fillLayers } from "../ui/filltoolparts";
 
 vi.mock("../bridge", async (importOriginal) => {
   const real = await importOriginal<typeof import("../bridge")>();
@@ -136,7 +137,7 @@ describe("the Smart mask on Finish layers", () => {
     // boundary.
     expect(art.groupBoundary!.some((b) => b.from === "crop" && b.to === mask.id && b.groupPort === "in2")).toBe(true);
     expect(s.wires.some((w) => w.from === "crop" && w.to === ART_ID && w.toPort === "in2")).toBe(true);
-    const { activeSmartMask } = await import("../ui/smarttool");
+    const { activeSmartMask } = await import("../ui/smarttoolparts");
     expect(activeSmartMask({ ...s, artActive: id })?.id).toBe(mask.id);
   });
 });

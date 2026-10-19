@@ -24,7 +24,7 @@ import {
   type Command,
   type State,
 } from "../state";
-import { type KeyLight } from "./keylightgizmo";
+import { type KeyLight } from "./keylightgizmoparts";
 import { logMsg } from "../log";
 import { MenuField } from "./menufield";
 

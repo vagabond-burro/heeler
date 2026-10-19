@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import type { Command, NodeCard } from "../state";
 import { nodeWantsDepth, reduce } from "../state";
 import { initialState } from "../data";
-import { STRENGTH_MAX, lightsOf, writeLights } from "../ui/keylightgizmo";
+import { STRENGTH_MAX, lightsOf, writeLights } from "../ui/keylightgizmoparts";
 
 const node = (lights: unknown[] | null, params: Record<string, number> = {}): NodeCard =>
   ({ id: "keylight", type: "heeler.key_light", name: "Depth Lighting", cat: "light", x: 0, y: 0, enabled: true, params, textParams: lights ? { lights: JSON.stringify(lights) } : {} }) as unknown as NodeCard;

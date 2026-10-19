@@ -4,7 +4,8 @@
 // separate fields [ x ] : [ y ]").
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { CropRatioBar, ratioPair } from "../ui/cropratio";
+import { CropRatioBar } from "../ui/cropratio";
+import { ratioPair } from "../ui/cropratioparts";
 import { choose, menuRows, menuValue } from "./menuhelp";
 
 const bar = (aspect: number | null, onRatio = vi.fn()) => {

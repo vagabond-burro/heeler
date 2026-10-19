@@ -1,8 +1,8 @@
 // ribbon.tsx's values and helpers that are not components, kept apart so
 // ribbon.tsx exports components alone and Vite can refresh it in place as
 // it is edited instead of reloading the window.
-import { hexToRgb255 } from "./colorfield";
-import { type GradStop } from "./gradientstops";
+import { hexToRgb255 } from "./colorfieldparts";
+import { type GradStop } from "./gradientstopsparts";
 
 /** The ribbon's color at `pos`, between its neighboring stops. */
 export function ribbonColorAt(stops: GradStop[], pos: number): string {

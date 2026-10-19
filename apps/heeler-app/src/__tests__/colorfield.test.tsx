@@ -6,7 +6,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { useState } from "react";
-import { ColorField, hexToHsv, hsvToHex } from "../ui/colorfield";
+import { ColorField } from "../ui/colorfield";
+import { hexToHsv, hsvToHex } from "../ui/colorfieldparts";
 
 function Host({ initial }: { initial: string }) {
   const [value, setValue] = useState(initial);

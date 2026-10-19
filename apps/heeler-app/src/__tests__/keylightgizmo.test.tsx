@@ -7,12 +7,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import { reduce, toolNode, type Command, type State } from "../state";
 import { choose, menuRows, menuValue } from "./menuhelp";
-import {
-  DofFocusOverlay,
-  KeyLightControls,
-  KeyLightGizmo,
-  lightsOf,
-} from "../ui/keylightgizmo";
+import { DofFocusOverlay, KeyLightControls, KeyLightGizmo } from "../ui/keylightgizmo";
+import { lightsOf } from "../ui/keylightgizmoparts";
 
 vi.mock("../bridge", async (importOriginal) => {
   const real = await importOriginal<typeof import("../bridge")>();

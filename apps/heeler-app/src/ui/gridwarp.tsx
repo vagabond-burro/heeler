@@ -41,7 +41,8 @@ import {
   type MeshGesture,
 } from "../gridwarp";
 import { IDENTITY_VIEW, type ViewTransform } from "./overlays";
-import { LinesRow, LineWidthRow, resolveLineColor, useAutoLineColor } from "./linecolor";
+import { LinesRow, LineWidthRow } from "./linecolor";
+import { resolveLineColor, useAutoLineColor } from "./linecolorparts";
 import { flashStatus } from "./hints";
 import { drawTriangle } from "./transformpreview";
 import type { Forward } from "../shapewarp";
@@ -75,10 +76,6 @@ export function heatColor(weight: number, selected: boolean, heat: State["gridWa
   return `rgb(${r},60,${b})`;
 }
 
-// The lines' color and its automatic choice live in linecolor.tsx,
-// shared with Shape Warp and the Radial gizmo; re-exported for the
-// tests and the callers that grew up here.
-export { resolveLineColor, useAutoLineColor } from "./linecolor";
 
 /** Client coordinates to the frame's normalized coordinates, the way
  * norm() maps them but without clamping to the frame: a handle is

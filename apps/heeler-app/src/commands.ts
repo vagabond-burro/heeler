@@ -8,8 +8,8 @@
 
 import type { Command, SelectRegion, State } from "./state";
 import { ART_ID, DEFAULT_PREFS, artMaskNode, DOC_SEL_ID, SELECT_METHODS, TEXTURED_TIPS, activeSelectionMask, selectShapeTarget, shapeActsOnNothing, shapeToolOf, photoFlipBlocked, photoTurnBlocked, ungroupBlocked, artFindLayer, artToolbarVisible, bakeable, editOrigin, layerPixelRegions, layerViaCopySource, reduce, clampGrainStep, removalPending, selectionHasContent, taggingTargets, trashConfirmAction, anyPickerArmed } from "./state";
-import { activeFillLayer } from "./ui/filltool";
-import { activeSmartMask } from "./ui/smarttool";
+import { activeFillLayer } from "./ui/filltoolparts";
+import { activeSmartMask } from "./ui/smarttoolparts";
 import { openPolish } from "./polishdoor";
 import { COMMANDS, type Scope } from "./hotkeys";
 import { SECTIONS } from "./ui/simpledata";

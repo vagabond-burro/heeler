@@ -6,12 +6,9 @@
 
 import React from "react";
 import type { Command, NodeCard } from "../state";
+import { FEATHER_FOLLOWS_HINT, FEATHER_FOLLOWS_LABEL } from "./featherfollowsparts";
 
 type D = React.Dispatch<Command>;
-
-export const FEATHER_FOLLOWS_LABEL = "Feather follows the picture";
-export const FEATHER_FOLLOWS_HINT =
-  "Soften the edge along the photograph's own edges: hair and fur keep their shape where the picture has an edge, a plain feather elsewhere";
 
 export function FeatherFollowsToggle({ node, dispatch, testid = "mask-feather-guided" }: { node: NodeCard; dispatch: D; testid?: string }) {
   const on = (node.params.feather_guided ?? 0) !== 0;

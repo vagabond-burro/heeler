@@ -4,7 +4,7 @@ import { initialState } from "../data";
 import { reduce, type Command } from "../state";
 import { serializeGraph } from "../bridge";
 import { NodeParams } from "../ui/graph";
-import { FEATHER_FOLLOWS_HINT } from "../ui/featherfollows";
+import { FEATHER_FOLLOWS_HINT } from "../ui/featherfollowsparts";
 
 afterEach(cleanup);
 it("the graph seat uses the same feather switch, hint and one-step undo", () => {

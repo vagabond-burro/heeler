@@ -21,7 +21,8 @@ import { noteFrameAspect } from "../imagelayers";
 import { shapesFromNode } from "../shapewarp";
 import { ArtLayersTab } from "../ui/artlayers";
 import { NodeParams } from "../ui/graph";
-import { addShapeCompact, ShapeWarpControls } from "../ui/shapewarp";
+import { ShapeWarpControls } from "../ui/shapewarp";
+import { addShapeCompact } from "../ui/shapewarpparts";
 
 const run = (s: State, ...cmds: Command[]): State => cmds.reduce(reduce, s);
 
