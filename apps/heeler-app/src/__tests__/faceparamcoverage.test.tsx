@@ -84,12 +84,17 @@ const excused = (type: string, p: string): boolean =>
     return t === type && matches(pat, p);
   });
 
-function faceParams(type: string, variant: { text?: Record<string, string>; state?: Partial<State> } = {}): Set<string> {
+function faceParams(type: string, variant: { text?: Record<string, string>; state?: Partial<State>; params?: Record<string, number> } = {}): Set<string> {
   const card = makeNode(specFor(type)!, "n1", 0, 0);
   const node: NodeCard = {
     ...card,
     // The Depth block folds away while off; on, its rows show.
-    params: { ...(DEFAULTS[type] ?? {}), ...(NEUTRAL_PARAMS[type] ?? {}), ...("depth_on" in (DEFAULTS[type] ?? {}) ? { depth_on: 1 } : {}) },
+    params: {
+      ...(DEFAULTS[type] ?? {}),
+      ...(NEUTRAL_PARAMS[type] ?? {}),
+      ...("depth_on" in (DEFAULTS[type] ?? {}) ? { depth_on: 1 } : {}),
+      ...(variant.params ?? {}),
+    },
     textParams: { ...(card.textParams ?? {}), ...(variant.text ?? {}) },
   };
   const s = initialState();
@@ -115,6 +120,9 @@ describe("every declared param has a seat on its node's face", () => {
       if (declared.length === 0) continue;
       const seen = faceParams(spec.type);
       for (const v of VARIANTS[spec.type] ?? []) faceParams(spec.type, v).forEach((p) => seen.add(p));
+      // The Depth block's Band shows its own controls in place of the
+      // Levels ramp: both faces count.
+      if ("depth_band" in (DEFAULTS[spec.type] ?? {})) faceParams(spec.type, { params: { depth_band: 1 } }).forEach((p) => seen.add(p));
       const missing = declared.filter((p) => !seen.has(p) && !excused(spec.type, p));
       if (missing.length) gaps.push(`${spec.type}: ${missing.join(", ")}`);
     }

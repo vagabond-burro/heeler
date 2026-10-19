@@ -1,5 +1,6 @@
 import { isPrimaryPress } from "./pointerguard";
 import { InspectLayer, InspectPanel } from "./inspect";
+import { DepthBandOverlay } from "./depthband";
 import { RecolorPairLayer } from "./recolorpairs";
 import { ProfileLineLayer } from "./profileline";
 import { usePickSessions } from "../picksession";
@@ -2135,6 +2136,8 @@ report: "interactive handles in the viewport").*/}
                   />
                 ) : null;
               })()}
+            {/* A click gives a mask its depth Band (depthband.tsx). */}
+            {state.depthBandPick && <DepthBandOverlay state={state} dispatch={dispatch} norm={(e, el) => norm(e, el, view)} />}
             {/* One click sets the Depth of Field focal plane. */}
             {state.dofPick &&
               (() => {

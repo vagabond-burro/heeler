@@ -97,9 +97,17 @@ pub(crate) fn depth_weight_mask(node: &Node, inputs: &[(String, Value)], mask: &
     // reads the result the other way, so the handles mean the same thing
     // either way round.
     let levels = crate::ops_depth::levels_of(node);
+    // Or the Band: one slice of depth, picked on the photograph, taking
+    // the effect while nearer and farther ease off. Invert reads it the
+    // other way, everything but the slice.
+    let band = crate::ops_depth::band_of(node);
     use rayon::prelude::*;
     mask.data.par_iter_mut().zip(plane.par_iter()).for_each(|(m, far)| {
-        let n = crate::ops_depth::plane_levels(levels, 1.0 - far.clamp(0.0, 1.0));
+        let near = 1.0 - far.clamp(0.0, 1.0);
+        let n = match band {
+            Some(b) => crate::ops_depth::band_weight(b, near),
+            None => crate::ops_depth::plane_levels(levels, near),
+        };
         *m *= if invert { 1.0 - n } else { n };
     });
 }
@@ -2730,6 +2738,53 @@ mod tests {
         depth_weight_mask(&node, &inputs, &mut soft);
         assert!(soft.value(0, 0) > 0.0 && soft.value(0, 0) < 0.2, "the knee keeps a little: {}", soft.value(0, 0));
         assert!((soft.value(1, 0) - hard.value(1, 0)).abs() < 1e-6, "far from the knee, the plain map");
+    }
+
+    /// The depth Band: a mask set on one slice of depth takes the full
+    /// effect within Range of Center, eases off across Falloff, and takes
+    /// nothing beyond; Invert takes everything but the slice; and a mask
+    /// with the Band off reads its Levels exactly as before.
+    #[test]
+    fn depth_band_takes_one_slice_of_depth() {
+        let mut node = make_node("heeler.range_mask");
+        node.params.insert("depth_on".into(), ParamValue::Bool(true));
+        node.params.insert("depth_band".into(), ParamValue::Bool(true));
+        node.params.insert("depth_center".into(), ParamValue::Number(0.5));
+        node.params.insert("depth_range".into(), ParamValue::Number(0.1));
+        node.params.insert("depth_band_soft".into(), ParamValue::Number(0.1));
+        // Nearness 0.5 (the center), 0.58 (inside Range), 0.65 (halfway
+        // through Falloff), 0.9 (beyond), 0.35 (halfway, the near side).
+        let nears = [0.5f32, 0.58, 0.65, 0.9, 0.35];
+        let mut plane = ImageBuf::new(nears.len(), 1);
+        for (i, n) in nears.iter().enumerate() {
+            let far = 1.0 - n;
+            plane.set_pixel(i, 0, [far, far, far, 1.0]);
+        }
+        let inputs = vec![("depth".to_string(), Value::Image(Arc::new(plane)))];
+        let run = |node: &Node| {
+            let mut m = MaskBuf::new(nears.len(), 1);
+            m.data.iter_mut().for_each(|v| *v = 1.0);
+            depth_weight_mask(node, &inputs, &mut m);
+            (0..nears.len()).map(|x| m.value(x, 0)).collect::<Vec<_>>()
+        };
+        let w = run(&node);
+        assert_close(w[0], 1.0);
+        assert_close(w[1], 1.0);
+        assert!((w[2] - 0.5).abs() < 1e-4, "halfway through the falloff: {}", w[2]);
+        assert_close(w[3], 0.0);
+        assert!((w[4] - 0.5).abs() < 1e-4, "the near side eases the same: {}", w[4]);
+        node.params.insert("depth_invert".into(), ParamValue::Bool(true));
+        let inv = run(&node);
+        for (a, b) in w.iter().zip(&inv) {
+            assert!((a + b - 1.0).abs() < 1e-5, "inverted is everything but the slice: {a} {b}");
+        }
+        // Band off: the Levels ramp, untouched by the band's settings.
+        node.params.insert("depth_invert".into(), ParamValue::Bool(false));
+        node.params.insert("depth_band".into(), ParamValue::Bool(false));
+        let ramp = run(&node);
+        for (x, n) in nears.iter().enumerate() {
+            assert!((ramp[x] - n).abs() < 1e-5, "the plain ramp reads nearness: {} {n}", ramp[x]);
+        }
     }
 
     /// A whole-frame mask in a 1:1 slice reads the PATCH's plane (the

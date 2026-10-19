@@ -322,6 +322,44 @@ pub struct DepthLevels {
     pub soft_w: f32,
 }
 
+/// A mask's depth Band: the effect on one slice of nearness, full within
+/// Range of Center and easing to none across Falloff beyond it, in place
+/// of the Levels ramp (Ramp | Band). Each mask keeps its own, so layers
+/// can each take a different depth of the one map.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DepthBand {
+    pub center: f32,
+    pub range: f32,
+    pub soft: f32,
+}
+
+/// The mask's Band, or None while it reads the Levels ramp.
+pub(crate) fn band_of(node: &Node) -> Option<DepthBand> {
+    if !crate::ops::p_bool(&node.params, "depth_band", false) {
+        return None;
+    }
+    Some(DepthBand {
+        center: p(&node.params, "depth_center", 0.5).clamp(0.0, 1.0),
+        range: p(&node.params, "depth_range", 0.1).clamp(0.0, 0.5),
+        soft: p(&node.params, "depth_band_soft", 0.1).clamp(0.0, 0.5),
+    })
+}
+
+/// How much of the effect a nearness takes under a Band: 1 within Range
+/// of Center, a smoothstep down to 0 across Falloff, 0 beyond. A Falloff
+/// of 0 is a hard edge.
+pub fn band_weight(band: DepthBand, near: f32) -> f32 {
+    let d = (near - band.center).abs();
+    if d <= band.range {
+        1.0
+    } else if band.soft <= 0.0 {
+        0.0
+    } else {
+        let t = ((d - band.range) / band.soft).clamp(0.0, 1.0);
+        1.0 - t * t * (3.0 - 2.0 * t)
+    }
+}
+
 /// The soft clip: a quadratic knee half k wide each side of the point.
 pub(crate) fn knee_low(n: f32, k: f32) -> f32 {
     if k <= 0.0 || n >= k {

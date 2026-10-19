@@ -103,6 +103,7 @@ import { ZonesBlock } from "./zones";
 import { RecolorHost } from "./recolor";
 import { RecolorPairs } from "./recolorpairs";
 import { InspectDock } from "./inspect";
+import { DepthPickButton, DepthShape } from "./depthband";
 import { SectionLooks } from "./sectionlooks";
 import { ColorConsoleBlock } from "./colorconsole";
 import { DepthProgressBar, depthFromFile, passesOf, NormalsChoice } from "./depthtool";
@@ -2176,6 +2177,9 @@ export function DepthMaskBlock({
       <div data-node={maskNode.id} data-param="depth_on" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
         <div style={{ fontSize: 11, color: "var(--text-body)" }}>Depth mask</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* The depth Band's picker, beside the eye (depthband.tsx): a
+              click on the subject gives this mask its slice of depth. */}
+          {showView && <DepthPickButton state={state} dispatch={dispatch} maskId={maskNode.id} testid={`${testid}-pick`} />}
           {on && showView && (
             <DepthViewButton
               depthView={state.depthView}
@@ -2213,17 +2217,28 @@ export function DepthMaskBlock({
         <>
           {/* The Levels widget on the depth map ("the exact same
 histogram widget as found in LEVELS ... No sliders").*/}
-          <div data-node={maskNode.id} data-params={Object.values(DEPTH_LEVELS_KEYS).join(" ")} style={{ margin: "2px 0 6px" }}>
-            <LevelsEditor
-              state={state}
-              node={maskNode}
+          <div style={{ margin: "2px 0 6px" }}>
+            <DepthShape
+              maskNode={maskNode}
               dispatch={dispatch}
               width={width ?? 272}
               bins={bins}
-              keys={DEPTH_LEVELS_KEYS}
-              falloff={true}
-              testPrefix={`${testid}-levels`}
-              hint={DEPTH_LEVELS_HINT}
+              testPrefix={testid}
+              levels={
+                <div data-node={maskNode.id} data-params={Object.values(DEPTH_LEVELS_KEYS).join(" ")}>
+                  <LevelsEditor
+                    state={state}
+                    node={maskNode}
+                    dispatch={dispatch}
+                    width={width ?? 272}
+                    bins={bins}
+                    keys={DEPTH_LEVELS_KEYS}
+                    falloff={true}
+                    testPrefix={`${testid}-levels`}
+                    hint={DEPTH_LEVELS_HINT}
+                  />
+                </div>
+              }
             />
           </div>
           <div data-node={maskNode.id} data-param="depth_invert" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>

@@ -182,6 +182,8 @@ export function depthWanted(s: State): boolean {
   // depth dial first" - the picker IS the depth dial's user, so its
   // arming asks for the plane exactly as the eye does.
   if (s.dofPick) return true;
+  // The depth Band's picker likewise: a click reads the plane.
+  if (s.depthBandPick) return true;
   // The Recolor picker on a Depth row is the same kind of arm as the
   // DoF one: with no depth cell saying anything yet, nobody else asks
   // for the plane, and every click failed into a quiet warning
@@ -197,7 +199,13 @@ export function depthWanted(s: State): boolean {
   ) {
     return true;
   }
-  return s.nodes.some(nodeWantsDepth);
+  // Group members too: a Finish layer's mask sits in the Finish group,
+  // and its Depth mask, looked for at the top level only, never asked
+  // for the plane (its Levels sat over an empty histogram, and a layer
+  // with nothing else reading depth rendered without it).
+  const anyWants = (ns: NodeCard[]): boolean =>
+    ns.some((n) => nodeWantsDepth(n) || (n.enabled && !!n.groupNodes && anyWants(n.groupNodes)));
+  return anyWants(s.nodes);
 }
 
 /** What the active photograph's file carries beside its pixels, once

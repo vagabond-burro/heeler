@@ -1455,6 +1455,13 @@ impl Registry {
                 num("depth_gamma", 1.0, 0.1, 10.0),
                 num("depth_black_soft", 0.0, 0.0, 100.0),
                 num("depth_white_soft", 0.0, 0.0, 100.0),
+                // The Band (Ramp | Band): the effect on one slice of depth, picked
+                // on the photograph, instead of the Levels ramp. Center, Range (half
+                // the width taking the full effect) and Falloff, on the nearness axis.
+                flag("depth_band", false),
+                num("depth_center", 0.5, 0.0, 1.0),
+                num("depth_range", 0.1, 0.0, 0.5),
+                num("depth_band_soft", 0.1, 0.0, 0.5),
                 num("luma_low", 0.0, 0.0, 1.0),
                 num("luma_high", 1.0, 0.0, 1.0),
                 num("sat_low", 0.0, 0.0, 1.0),
@@ -1622,6 +1629,13 @@ impl Registry {
                 num("depth_gamma", 1.0, 0.1, 10.0),
                 num("depth_black_soft", 0.0, 0.0, 100.0),
                 num("depth_white_soft", 0.0, 0.0, 100.0),
+                // The Band (Ramp | Band): the effect on one slice of depth, picked
+                // on the photograph, instead of the Levels ramp. Center, Range (half
+                // the width taking the full effect) and Falloff, on the nearness axis.
+                flag("depth_band", false),
+                num("depth_center", 0.5, 0.0, 1.0),
+                num("depth_range", 0.1, 0.0, 0.5),
+                num("depth_band_soft", 0.1, 0.0, 0.5),
                 // Editable geometry, as JSON. Paths and color keys with
                 // an operation each, rasterized fresh at whatever size is
                 // being rendered rather than baked into pixels.
@@ -1691,6 +1705,13 @@ impl Registry {
                 num("depth_gamma", 1.0, 0.1, 10.0),
                 num("depth_black_soft", 0.0, 0.0, 100.0),
                 num("depth_white_soft", 0.0, 0.0, 100.0),
+                // The Band (Ramp | Band): the effect on one slice of depth, picked
+                // on the photograph, instead of the Levels ramp. Center, Range (half
+                // the width taking the full effect) and Falloff, on the nearness axis.
+                flag("depth_band", false),
+                num("depth_center", 0.5, 0.0, 1.0),
+                num("depth_range", 0.1, 0.0, 0.5),
+                num("depth_band_soft", 0.1, 0.0, 0.5),
                 // The center may sit off the frame: a crop that leaves
                 // the subject outside carries the oval with it (the
                 // stroke remap, framemap.ts), and a slider starting at
@@ -1735,6 +1756,13 @@ impl Registry {
                 num("depth_gamma", 1.0, 0.1, 10.0),
                 num("depth_black_soft", 0.0, 0.0, 100.0),
                 num("depth_white_soft", 0.0, 0.0, 100.0),
+                // The Band (Ramp | Band): the effect on one slice of depth, picked
+                // on the photograph, instead of the Levels ramp. Center, Range (half
+                // the width taking the full effect) and Falloff, on the nearness axis.
+                flag("depth_band", false),
+                num("depth_center", 0.5, 0.0, 1.0),
+                num("depth_range", 0.1, 0.0, 0.5),
+                num("depth_band_soft", 0.1, 0.0, 0.5),
                 num("angle", 90.0, -180.0, 180.0),
                 // Off the frame too, after a crop (as center_x above).
                 num("position", 0.5, -1.0, 2.0),
@@ -2058,6 +2086,13 @@ impl Registry {
                 num("depth_gamma", 1.0, 0.1, 10.0),
                 num("depth_black_soft", 0.0, 0.0, 100.0),
                 num("depth_white_soft", 0.0, 0.0, 100.0),
+                // The Band (Ramp | Band): the effect on one slice of depth, picked
+                // on the photograph, instead of the Levels ramp. Center, Range (half
+                // the width taking the full effect) and Falloff, on the nearness axis.
+                flag("depth_band", false),
+                num("depth_center", 0.5, 0.0, 1.0),
+                num("depth_range", 0.1, 0.0, 0.5),
+                num("depth_band_soft", 0.1, 0.0, 0.5),
                 // The Cryptomatte layer the names belong to (a file may
                 // carry objects and materials), or empty for a plain
                 // channel named in `names`.
@@ -2098,6 +2133,13 @@ impl Registry {
                 num("depth_gamma", 1.0, 0.1, 10.0),
                 num("depth_black_soft", 0.0, 0.0, 100.0),
                 num("depth_white_soft", 0.0, 0.0, 100.0),
+                // The Band (Ramp | Band): the effect on one slice of depth, picked
+                // on the photograph, instead of the Levels ramp. Center, Range (half
+                // the width taking the full effect) and Falloff, on the nearness axis.
+                flag("depth_band", false),
+                num("depth_center", 0.5, 0.0, 1.0),
+                num("depth_range", 0.1, 0.0, 0.5),
+                num("depth_band_soft", 0.1, 0.0, 0.5),
                 strict_choice("mode", "click", &["click", "subject", "sky"]),
                 // JSON: [{"x":..,"y":..,"positive":true}, ...] in
                 // 0..1 normalized image coordinates.
@@ -2141,6 +2183,13 @@ impl Registry {
                 num("depth_gamma", 1.0, 0.1, 10.0),
                 num("depth_black_soft", 0.0, 0.0, 100.0),
                 num("depth_white_soft", 0.0, 0.0, 100.0),
+                // The Band (Ramp | Band): the effect on one slice of depth, picked
+                // on the photograph, instead of the Levels ramp. Center, Range (half
+                // the width taking the full effect) and Falloff, on the nearness axis.
+                flag("depth_band", false),
+                num("depth_center", 0.5, 0.0, 1.0),
+                num("depth_range", 0.1, 0.0, 0.5),
+                num("depth_band_soft", 0.1, 0.0, 0.5),
             ],
             inputs: vec![image_in(), depth_in()],
             outputs: vec![PortSpec::new("out", PortKind::Mask, false)],
@@ -2370,6 +2419,13 @@ impl Registry {
                 num("depth_gamma", 1.0, 0.1, 10.0),
                 num("depth_black_soft", 0.0, 0.0, 100.0),
                 num("depth_white_soft", 0.0, 0.0, 100.0),
+                // The Band (Ramp | Band): the effect on one slice of depth, picked
+                // on the photograph, instead of the Levels ramp. Center, Range (half
+                // the width taking the full effect) and Falloff, on the nearness axis.
+                flag("depth_band", false),
+                num("depth_center", 0.5, 0.0, 1.0),
+                num("depth_range", 0.1, 0.0, 0.5),
+                num("depth_band_soft", 0.1, 0.0, 0.5),
             ],
             inputs: vec![image_in(), depth_in()],
             outputs: vec![PortSpec::new("out", PortKind::Mask, false)],

@@ -1982,12 +1982,14 @@ export function hasMatteStrokes(strokes: unknown[] | undefined): boolean {
 }
 
 /** The farness under one normalized point of the frame, 0 near 1
- * far: the Depth of Field focus picker's one question. */
-export async function depthAt(state: State, x: number, y: number): Promise<number> {
+ * far: the Depth of Field focus picker's one question. A `patch` reads
+ * the median of that many of the plane's pixels each side instead, the
+ * depth Band's picker, so a click on an edge takes the subject's depth. */
+export async function depthAt(state: State, x: number, y: number, patch = 0): Promise<number> {
   if (!isTauri()) return 0.5;
   // The graph rides along because the plane is keyed by the Depth Map
   // section's recipe as well as the photograph.
-  return await call("depth_at", { graph: serializeGraph(state), imageId: state.activeImage, x, y });
+  return await call("depth_at", { graph: serializeGraph(state), imageId: state.activeImage, x, y, patch });
 }
 
 /** The preset library's listing: built-ins from inside the binary,

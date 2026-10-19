@@ -293,7 +293,7 @@ fn the_focus_picker_reads_the_depth_under_the_pointer_behind_a_crop() {
     ]));
     let plane = x_plane(200, 100);
     for from_file in [true, false] {
-        let far = depth_sample_on_frame(&ui, plane.clone(), from_file, 0.5, 0.5);
+        let far = depth_sample_on_frame(&ui, plane.clone(), from_file, 0.5, 0.5, 0);
         assert!((far - 0.75).abs() < 0.01, "from the file {from_file}: read {far}, the pointer is on 0.75");
     }
     // The wired Depth Map reads the photograph before the crop
@@ -305,7 +305,7 @@ fn the_focus_picker_reads_the_depth_under_the_pointer_behind_a_crop() {
         { "id": "depthmap", "type": "heeler.depth_map", "enabled": true, "params": {} },
         { "id": "output", "type": "heeler.output", "enabled": true, "params": {} }
     ]));
-    let far = depth_sample_on_frame(&seated, plane.clone(), false, 0.5, 0.5);
+    let far = depth_sample_on_frame(&seated, plane.clone(), false, 0.5, 0.5, 0);
     assert!((far - 0.75).abs() < 0.01, "a plane read before the crop: read {far}");
     // A grid warp ahead of the Depth Map keeps the crop in its picture
     // (the mesh is placed on the cropped frame): that plane is on the
@@ -317,11 +317,32 @@ fn the_focus_picker_reads_the_depth_under_the_pointer_behind_a_crop() {
         { "id": "depthmap", "type": "heeler.depth_map", "enabled": true, "params": {} },
         { "id": "output", "type": "heeler.output", "enabled": true, "params": {} }
     ]));
-    let far = depth_sample_on_frame(&warped, plane.clone(), false, 0.5, 0.5);
+    let far = depth_sample_on_frame(&warped, plane.clone(), false, 0.5, 0.5, 0);
     assert!((far - 0.5).abs() < 0.01, "a seated plane behind a warp: read {far}");
     // A file's own pass is whole-frame even with a Depth Map seated.
-    let far = depth_sample_on_frame(&seated, plane, true, 0.5, 0.5);
+    let far = depth_sample_on_frame(&seated, plane, true, 0.5, 0.5, 0);
     assert!((far - 0.75).abs() < 0.01, "a file's pass behind a seated map: read {far}");
+}
+
+/// The depth Band's picker reads the median of a small patch, so a click
+/// that lands on one stray pixel, a strand of hair against the sky, takes
+/// the depth around it; a patch of 0 is the focus picker's single pixel.
+#[test]
+fn the_band_picker_takes_the_median_of_a_patch() {
+    let ui = chain(serde_json::json!([
+        { "id": "src", "type": "heeler.image_source", "enabled": true, "params": {} },
+        { "id": "output", "type": "heeler.output", "enabled": true, "params": {} }
+    ]));
+    let mut img = ImageBuf::filled(21, 21, [0.3, 0.3, 0.3, 1.0]);
+    img.set_pixel(10, 10, [0.9, 0.9, 0.9, 1.0]);
+    let plane = Arc::new(img);
+    let one = depth_sample_on_frame(&ui, plane.clone(), true, 0.5, 0.5, 0);
+    assert!((one - 0.9).abs() < 1e-6, "the single pixel: {one}");
+    let patch = depth_sample_on_frame(&ui, plane.clone(), true, 0.5, 0.5, 3);
+    assert!((patch - 0.3).abs() < 1e-6, "the patch's median: {patch}");
+    // At the frame's corner the patch is cut to the plane, not refused.
+    let corner = depth_sample_on_frame(&ui, plane, true, 0.0, 0.0, 3);
+    assert!((corner - 0.3).abs() < 1e-6, "the corner: {corner}");
 }
 
 /// The white balance picker and a range mask's eyedropper read the

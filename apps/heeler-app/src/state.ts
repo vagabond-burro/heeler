@@ -1499,6 +1499,7 @@ const PICKER_RESET = {
   recolorPairPick: null,
   profileDraw: false,
   profileEdit: false,
+  depthBandPick: null,
 };
 
 /** Whether any picker is waiting on a click. */
@@ -1521,7 +1522,8 @@ export function anyPickerArmed(s: State): boolean {
     s.inspectPick ||
     s.recolorPairPick !== null ||
     s.profileDraw ||
-    s.profileEdit
+    s.profileEdit ||
+    s.depthBandPick !== null
   );
 }
 
@@ -2377,7 +2379,7 @@ export const NEUTRAL_PARAMS: Record<string, Record<string, number>> = {
   // The Color Set pair: identity is "select the default band, change
   // nothing". Declared here so a hand-placed or half-seeded node still
   // shows every control (withEveryParam backfills instances).
-  "heeler.hue_range_mask": { band_center: 30, hue_range: 60, hue_falloff: 30, depth_on: 0, depth_invert: 0, depth_black: 0, depth_white: 1, depth_gamma: 1, depth_black_soft: 0, depth_white_soft: 0 },
+  "heeler.hue_range_mask": { band_center: 30, hue_range: 60, hue_falloff: 30, depth_on: 0, depth_invert: 0, depth_black: 0, depth_white: 1, depth_gamma: 1, depth_black_soft: 0, depth_white_soft: 0, depth_band: 0, depth_center: 0.5, depth_range: 0.1, depth_band_soft: 0.1 },
   "heeler.color_grade": {
     hue_shift: 0,
     saturation: 0,
@@ -3813,6 +3815,10 @@ export interface State {
   /** Influence Mapping's Inspect picker is armed: a click on the frame
    * traces that pixel through the graph. */
   inspectPick: boolean;
+  /** The depth Band's picker, armed for this mask node: a click on the
+   * photograph centers the mask's Band on the depth there, a Shift-click
+   * widens it to take that depth in. */
+  depthBandPick: string | null;
   /** The point the Inspect panel traces, in 0..1 of the frame, or null
    * with the panel closed. View state, never saved. */
   inspectPoint: { x: number; y: number } | null;
@@ -5188,6 +5194,7 @@ export type Command =
   /** The point along the line under the cursor, or null. */
   | { type: "set_profile_hover"; t: number | null }
   /** Arm or put away the Inspect picker. */
+  | { type: "toggle_depth_band_pick"; mask: string }
   | { type: "toggle_inspect_pick" }
   /** Trace the pixel at this point of the frame (0..1). */
   | { type: "inspect_at"; x: number; y: number }
@@ -5829,6 +5836,10 @@ export const PARAM_RANGE: Record<string, [number, number]> = {
   depth_white_soft: [0, 100],
   depth_white: [0.01, 1],
   depth_gamma: [0.1, 10],
+  depth_band: [0, 1],
+  depth_center: [0, 1],
+  depth_range: [0, 0.5],
+  depth_band_soft: [0, 0.5],
   center_x: [0, 1],
   center_y: [0, 1],
   radius: [0.01, 1],
@@ -6129,6 +6140,11 @@ export const DEPTH_MASK_DEFAULTS: Record<string, number> = {
   depth_gamma: 1,
   depth_black_soft: 0,
   depth_white_soft: 0,
+  // The Band (Ramp | Band): off, a slice centered mid-depth.
+  depth_band: 0,
+  depth_center: 0.5,
+  depth_range: 0.1,
+  depth_band_soft: 0.1,
 };
 
 export const LAYER_MASK_DEFAULTS: Record<
@@ -7427,6 +7443,18 @@ function wireDepthTransitions(before: State, after: State): State {
     const wantsNow = nodeWantsDepth(n) && (!b || !nodeWantsDepth(b));
     if (enabledNow || wantsNow) targets.add(n.id);
   }
+  // A consumer inside a group, a Finish layer's mask in the Finish group,
+  // just starting to ask: the serializer wires its plane from the Depth
+  // Map (the graph's one), so what it needs here is that there is one.
+  // Without this a Finish layer's Depth mask, with nothing else reading
+  // depth, never had a Depth Map born and did nothing.
+  const members = (ns: NodeCard[]): NodeCard[] => ns.flatMap((n) => (n.groupNodes ? [...n.groupNodes, ...members(n.groupNodes)] : []));
+  const membersBefore = new Map(members(before.nodes).map((n) => [n.id, n]));
+  const memberAsks = members(after.nodes).some((n) => {
+    if (!DEPTH_IN_TYPES.has(n.type) || !nodeWantsDepth(n)) return false;
+    const b = membersBefore.get(n.id);
+    return !b || !nodeWantsDepth(b);
+  });
   // A Depth Map just born wires every consumer already asking.
   const born =
     !before.nodes.some((n) => n.type === "heeler.depth_map") &&
@@ -7436,7 +7464,7 @@ function wireDepthTransitions(before: State, after: State): State {
       if (DEPTH_IN_TYPES.has(n.type) && nodeWantsDepth(n)) targets.add(n.id);
     }
   }
-  if (targets.size === 0) return after;
+  if (targets.size === 0 && !memberAsks) return after;
   let nodes = after.nodes;
   let wires = after.wires;
   let dm = nodes.find((n) => n.type === "heeler.depth_map");
@@ -10611,6 +10639,10 @@ const MASK_DEPTH_KEYS = [
   "depth_gamma",
   "depth_black_soft",
   "depth_white_soft",
+  "depth_band",
+  "depth_center",
+  "depth_range",
+  "depth_band_soft",
 ] as const;
 
 /** A layer mask's brush polarity: 1 where painting HIDES (a Finish layer
@@ -13612,6 +13644,7 @@ const PICK_GRAPH_REPLACEMENTS = new Set<string>([
 const PICK_ARMS = [
   "curvePick", "wbPick", "toneEqPick", "recolorPick", "recolorMatch", "bwSeparate", "bwPick", "zonePlace",
   "csetDropper", "consolePick", "dofPick", "keyLightPick", "chartPlace", "inspectPick", "recolorPairPick", "profileDraw", "profileEdit",
+  "depthBandPick",
 ] as const;
 /** A dropper a pick session can name as the arm it answers through. Typed
  * from the list so a misspelt arm is a compile error, not a session that
@@ -18992,6 +19025,8 @@ function reduceInner(s: State, cmd: Command): State {
       return { ...s, profileBand: !s.profileBand };
     case "set_profile_hover":
       return s.profileHover === cmd.t ? s : { ...s, profileHover: cmd.t === null ? null : Math.min(1, Math.max(0, cmd.t)) };
+    case "toggle_depth_band_pick":
+      return s.depthBandPick === cmd.mask ? { ...s, depthBandPick: null } : { ...s, ...PICKER_RESET, depthBandPick: cmd.mask };
     case "toggle_inspect_pick":
       return s.inspectPick ? { ...s, inspectPick: false } : { ...s, ...PICKER_RESET, inspectPick: true };
     case "inspect_at":

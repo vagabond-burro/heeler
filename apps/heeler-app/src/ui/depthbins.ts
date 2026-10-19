@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { depthHistogram } from "../bridge";
-import type { State } from "../state";
+import type { NodeCard, State } from "../state";
 import { depthRecipeKey } from "./depthtool";
 import type { LevelsKeys } from "./levels";
 
@@ -59,4 +59,59 @@ export function useDepthBins(state: State, on: boolean, raw = false): number[] |
     };
   }, [on, mark, raw]);
   return bins;
+}
+
+/** A mask's depth Band (Ramp | Band), on the nearness axis the depth
+ * histogram is drawn on: 0 the farthest, 1 the nearest. */
+export interface DepthBand {
+  center: number;
+  /** half the width that takes the full effect */
+  range: number;
+  /** the width each side over which the effect eases to none */
+  soft: number;
+}
+
+/** The Band's params on a mask node, and their defaults (a slice
+ * centered mid-depth) for a mask that has never had one. */
+export const DEPTH_BAND_KEYS = { on: "depth_band", center: "depth_center", range: "depth_range", soft: "depth_band_soft" } as const;
+export const DEPTH_BAND_DEFAULT: DepthBand = { center: 0.5, range: 0.1, soft: 0.1 };
+
+export function bandOf(params: Record<string, number>): DepthBand {
+  const num = (k: string, d: number) => (Number.isFinite(params[k]) ? params[k] : d);
+  return {
+    center: Math.min(1, Math.max(0, num(DEPTH_BAND_KEYS.center, DEPTH_BAND_DEFAULT.center))),
+    range: Math.min(0.5, Math.max(0, num(DEPTH_BAND_KEYS.range, DEPTH_BAND_DEFAULT.range))),
+    soft: Math.min(0.5, Math.max(0, num(DEPTH_BAND_KEYS.soft, DEPTH_BAND_DEFAULT.soft))),
+  };
+}
+
+/** How much of the effect a nearness takes under the Band: the engine's
+ * band_weight (ops_depth.rs), so the editor draws what renders. */
+export function bandWeight(band: DepthBand, near: number): number {
+  const d = Math.abs(near - band.center);
+  if (d <= band.range) return 1;
+  if (band.soft <= 0) return 0;
+  const t = Math.min(1, Math.max(0, (d - band.range) / band.soft));
+  return 1 - t * t * (3 - 2 * t);
+}
+
+/** The Band widened just enough to take a nearness in at full effect,
+ * its falloff kept: a Shift-click's second pick. */
+export function widenBand(band: DepthBand, near: number): DepthBand {
+  // Already inside: the Band stands exactly as it was.
+  if (Math.abs(near - band.center) <= band.range) return band;
+  const lo = Math.min(band.center - band.range, near);
+  const hi = Math.max(band.center + band.range, near);
+  return { center: (lo + hi) / 2, range: Math.min(0.5, (hi - lo) / 2), soft: band.soft };
+}
+
+/** A node by id wherever it sits: the graph's top level, or inside a
+ * group, where a Finish layer's mask lives (in the Finish group). */
+export function nodeAnywhere(nodes: NodeCard[], id: string): NodeCard | undefined {
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    const inner = n.groupNodes ? nodeAnywhere(n.groupNodes, id) : undefined;
+    if (inner) return inner;
+  }
+  return undefined;
 }

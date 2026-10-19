@@ -33,6 +33,7 @@ import { DEPTH_LEVELS_HINT, DEPTH_LEVELS_KEYS, useDepthBins } from "./depthbins"
 import { TrackSlider, fmt as valueText } from "./track";
 import { ImageLayerControls, isImageLayer } from "./imagelayers";
 import { FinishEmptyList, FinishToolbar, IconButton, contentItems, adjustmentItems, UTILITY_ITEMS, IMAGE_ITEMS, type NewMenu } from "./finishnew";
+import { DepthPickButton, DepthShape } from "./depthband";
 
 type D = React.Dispatch<Command>;
 
@@ -1965,6 +1966,9 @@ away.*/}
           style={{ display: "flex", alignItems: "center", gap: 6, margin: "4px 0 2px" }}
         >
           <div style={{ fontSize: 10, letterSpacing: ".06em", color: "var(--text-dim)", textTransform: "uppercase", marginRight: 2 }}>Depth</div>
+          {/* The depth Band's picker (depthband.tsx), as Develop's layers
+              have it: a click on the subject gives the layer its slice. */}
+          <DepthPickButton state={state} dispatch={dispatch} maskId={mask.id} testid={`art-depth-${carrier.id}-pick`} />
           <IconButton
             testid={`art-depth-${carrier.id}-invert`}
             label="Invert depth"
@@ -1998,16 +2002,25 @@ away.*/}
           {/* The stack is padded 12px either side and the layer card
               9px, so the Levels width is the panel's less 42; undefined
               keeps the old default. */}
-          <LevelsEditor
-            state={state}
-            node={mask}
+          <DepthShape
+            maskNode={mask}
             dispatch={dispatch}
             width={width === undefined ? 272 : Math.max(220, width - 42)}
             bins={depthBins}
-            keys={DEPTH_LEVELS_KEYS}
-            falloff={true}
-            testPrefix={`art-depth-${carrier.id}-levels`}
-            hint={DEPTH_LEVELS_HINT}
+            testPrefix={`art-depth-${carrier.id}`}
+            levels={
+              <LevelsEditor
+                state={state}
+                node={mask}
+                dispatch={dispatch}
+                width={width === undefined ? 272 : Math.max(220, width - 42)}
+                bins={depthBins}
+                keys={DEPTH_LEVELS_KEYS}
+                falloff={true}
+                testPrefix={`art-depth-${carrier.id}-levels`}
+                hint={DEPTH_LEVELS_HINT}
+              />
+            }
           />
         </div>
       )}

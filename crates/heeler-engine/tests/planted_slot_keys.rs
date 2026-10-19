@@ -69,16 +69,16 @@ fn keys(g: &Graph, s: &HashMap<String, SourceImage>) -> [u64; 3] {
 fn planted_slot_keys_are_pinned() {
     let g = graph();
     let cases: [(&str, HashMap<String, SourceImage>, [u64; 3]); 4] = [
-        ("nothing planted", sources(false, None, false), [4371581857097913061, 10275381172048920720, 15299367817446202319]),
-        ("everything planted", sources(true, Some(false), true), [5270013868791001075, 4226895556898822380, 2616015882822297083]),
-        ("the plane measured", sources(true, Some(true), true), [5270013868791001075, 4226896656410450591, 2616014783310668872]),
+        ("nothing planted", sources(false, None, false), [15360892943466837378, 10275381172048920720, 15299367817446202319]),
+        ("everything planted", sources(true, Some(false), true), [1305413759917455692, 4226895556898822380, 2616015882822297083]),
+        ("the plane measured", sources(true, Some(true), true), [1305413759917455692, 4226896656410450591, 2616014783310668872]),
         ("planted at version 0", {
             let mut s = sources(true, Some(false), true);
             for slot in ["sm", "dm@depth", "kl@normal"] {
                 s.get_mut(slot).unwrap().version = 0;
             }
             s
-        }, [6796383947310787042, 12051243099088134873, 9084895613584890985]),
+        }, [15441957871128761733, 12051243099088134873, 9084895613584890985]),
     ];
     for (name, s, want) in cases {
         assert_eq!(keys(&g, &s), want, "{name}");
@@ -94,7 +94,7 @@ fn a_planted_as_slot_is_keyed_by_the_slot_it_names() {
     let without = Executor::key_of(&g, "sm", &s).unwrap();
     s.insert("other".into(), plant(0.9, 5, false));
     let with = Executor::key_of(&g, "sm", &s).unwrap();
-    assert_eq!([without, with], [15055192598223988918, 4369477483476002840]);
+    assert_eq!([without, with], [2964306275269874477, 5709225847342647771]);
 }
 
 /// Admission reads a planted plane's size into the mask it becomes.

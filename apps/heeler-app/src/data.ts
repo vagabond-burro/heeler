@@ -984,6 +984,7 @@ export function initialState(): State {
     halationView: false,
     detailEqView: null,
     inspectPick: false,
+    depthBandPick: null,
     recolorPairPick: null,
     profileDraw: false,
     profileEdit: false,

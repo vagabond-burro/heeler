@@ -2914,7 +2914,7 @@ const HIDDEN_PARAMS = new Set(["opacity", "invert", "points", "strokes", "mask_o
 
 /** The Depth mask block's params: one widget (DepthMaskBlock) writes
  * them all, so the generic rows leave them to it. */
-const DEPTH_BLOCK_PARAMS = new Set(["depth_on", "depth_invert", "depth_black", "depth_white", "depth_gamma", "depth_black_soft", "depth_white_soft"]);
+const DEPTH_BLOCK_PARAMS = new Set(["depth_on", "depth_invert", "depth_black", "depth_white", "depth_gamma", "depth_black_soft", "depth_white_soft", "depth_band", "depth_center", "depth_range", "depth_band_soft"]);
 
 /** Which of Develop's mask block rows a mask node's face adds at its
  * foot: Invert where the type declares one (the Luminance Mask and the

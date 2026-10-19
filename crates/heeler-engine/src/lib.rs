@@ -52,7 +52,7 @@ pub mod stack;
 
 pub use buffers::{ImageBuf, MaskBuf, Value};
 pub use executor::{applied_mask_weight, EngineError, ExecStats, Executor, SourceImage, MASK_OFF_PARAM, MASK_WEIGHT_PARAM, PLANTED_AS};
-pub use ops_depth::{dof_reach, key_light_reach, plane_levels, DepthLevels};
+pub use ops_depth::{band_weight, dof_reach, key_light_reach, plane_levels, DepthBand, DepthLevels};
 pub use ops_stylize::grain_reach;
 pub use ops_recolor::{chroma_histogram, chroma_histogram_with_params, guard_gate, GUARD_HIST_BINS, GUARD_HIST_MAX, recolor_around_lookup};
 pub use ops_field::{edge_field_reach, guided_filter_reach, morphology_reach};

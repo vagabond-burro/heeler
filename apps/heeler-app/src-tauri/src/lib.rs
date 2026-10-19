@@ -7023,6 +7023,7 @@ async fn depth_at(
     image_id: String,
     x: f64,
     y: f64,
+    patch: Option<usize>,
 ) -> Result<f32, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let base = vision_base(&app)?;
@@ -7048,7 +7049,7 @@ async fn depth_at(
         // x and y are the frame's fractions (the viewer's pointer); the
         // plane is read on that frame, the one the depth view shows.
         let from_file = with_session(&app, |s| Ok(depth_from_file_in_session(s, &image_id)))?;
-        Ok(depth_sample_on_frame(&graph, raster, from_file, x, y))
+        Ok(depth_sample_on_frame(&graph, raster, from_file, x, y, patch.unwrap_or(0)))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -7057,8 +7058,11 @@ async fn depth_at(
 /// depth_at's reading: the farness under a point of the frame, the
 /// plane taken onto the frame first (depth_plane_on_frame), Levels
 /// applied. `from_file` is a file's own depth pass, whole-frame by
-/// origin whatever the Depth Map's seat.
-fn depth_sample_on_frame(graph: &UiGraph, plane: Arc<ImageBuf>, from_file: bool, x: f64, y: f64) -> f32 {
+/// origin whatever the Depth Map's seat. A `patch` above 0 reads the
+/// median of the square that many plane pixels each side of the point,
+/// so a pick on an edge or a strand of hair takes the subject's depth
+/// rather than the background's just past it (the depth Band's picker).
+fn depth_sample_on_frame(graph: &UiGraph, plane: Arc<ImageBuf>, from_file: bool, x: f64, y: f64, patch: usize) -> f32 {
     let seat = depth_seat_geometry(graph, if from_file { None } else { depth_input_key(graph, "", None) });
     let raster = match terminal_of(graph) {
         Some(t) => depth_plane_on_frame(graph, &t, &seat, plane),
@@ -7066,7 +7070,24 @@ fn depth_sample_on_frame(graph: &UiGraph, plane: Arc<ImageBuf>, from_file: bool,
     };
     let px = ((x.clamp(0.0, 1.0) * (raster.width - 1) as f64).round()) as usize;
     let py = ((y.clamp(0.0, 1.0) * (raster.height - 1) as f64).round()) as usize;
-    levelled_depth_sample(graph, raster.data[(py * raster.width + px) * 4])
+    if patch == 0 {
+        return levelled_depth_sample(graph, raster.data[(py * raster.width + px) * 4]);
+    }
+    let r = patch.min(32);
+    let mut seen: Vec<f32> = Vec::with_capacity((2 * r + 1) * (2 * r + 1));
+    for yy in py.saturating_sub(r)..=(py + r).min(raster.height - 1) {
+        for xx in px.saturating_sub(r)..=(px + r).min(raster.width - 1) {
+            let v = raster.data[(yy * raster.width + xx) * 4];
+            if v.is_finite() {
+                seen.push(v);
+            }
+        }
+    }
+    if seen.is_empty() {
+        return levelled_depth_sample(graph, raster.data[(py * raster.width + px) * 4]);
+    }
+    seen.sort_by(|a, b| a.total_cmp(b));
+    levelled_depth_sample(graph, seen[seen.len() / 2])
 }
 
 /// One matte refinement: render the selection's classical BASE (regions only:
@@ -8171,8 +8192,19 @@ fn lens_before_crop(mut ui: UiGraph) -> UiGraph {
 
 /// The Depth block's params, which a layer mask of any kind carries
 /// itself: they stay on a converted mask rather than in its frozen base.
-const MASK_DEPTH_KEYS: [&str; 7] =
-    ["depth_on", "depth_invert", "depth_black", "depth_white", "depth_gamma", "depth_black_soft", "depth_white_soft"];
+const MASK_DEPTH_KEYS: [&str; 11] = [
+    "depth_on",
+    "depth_invert",
+    "depth_black",
+    "depth_white",
+    "depth_gamma",
+    "depth_black_soft",
+    "depth_white_soft",
+    "depth_band",
+    "depth_center",
+    "depth_range",
+    "depth_band_soft",
+];
 
 /// A saved live selection on a Finish layer as the pixel mask it opens
 /// as (2026-09-30: "drop the live mask, make To Mask a pixel mask"). The
