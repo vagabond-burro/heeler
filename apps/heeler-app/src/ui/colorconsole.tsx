@@ -43,6 +43,7 @@ function BandSlider({
   label,
   shortLabel,
   compact = false,
+  windowed = false,
   value,
   range,
   centered = true,
@@ -54,6 +55,9 @@ function BandSlider({
   /** what renders when the panel is narrow; aria keeps the full name */
   shortLabel?: string;
   compact?: boolean;
+  /** in the tool window: the panel's label and value size, outside the
+   * panel's zoom (.srow.windowed) */
+  windowed?: boolean;
   value: number;
   range: [number, number];
   centered?: boolean;
@@ -83,7 +87,7 @@ function BandSlider({
     onChange(lo + t * (hi - lo));
   };
   return (
-    <div className="srow" data-testid={testid} style={compact ? { gridTemplateColumns: "14px 1fr 34px" } : undefined}>
+    <div className={windowed ? "srow windowed" : "srow"} data-testid={testid} style={compact ? { gridTemplateColumns: "14px 1fr 34px" } : undefined}>
       <div className="lbl" data-hint={compact ? label : undefined}>
         {compact ? (shortLabel ?? label[0]) : label}
       </div>
@@ -745,6 +749,7 @@ export function ColorConsoleBlock({
         label="Hue"
         shortLabel="H"
         compact={compact}
+        windowed={windowed}
         value={active.hue ?? 0}
         range={[-60, 60]}
         testid="console-hue"
@@ -755,6 +760,7 @@ export function ColorConsoleBlock({
         label="Saturation"
         shortLabel="S"
         compact={compact}
+        windowed={windowed}
         value={active.sat ?? 0}
         range={[-100, 100]}
         testid="console-sat"
@@ -765,6 +771,7 @@ export function ColorConsoleBlock({
         label="Vibrance"
         shortLabel="V"
         compact={compact}
+        windowed={windowed}
         value={active.vib ?? 0}
         range={[-100, 100]}
         testid="console-vib"
@@ -775,6 +782,7 @@ export function ColorConsoleBlock({
         label="Luminance"
         shortLabel="L"
         compact={compact}
+        windowed={windowed}
         value={active.lum ?? 0}
         range={[-2, 2]}
         testid="console-lum"
@@ -787,6 +795,7 @@ export function ColorConsoleBlock({
             label="Width"
             shortLabel="W"
             compact={compact}
+            windowed={windowed}
             value={active.width ?? DEFAULT_WIDTH}
             range={[5, 120]}
             centered={false}
@@ -818,6 +827,7 @@ export function ColorConsoleBlock({
     const smoothing = (
       <BandSlider
         label="Smoothing"
+        windowed
         value={node.params.smoothing ?? 50}
         range={[0, 100]}
         centered={false}

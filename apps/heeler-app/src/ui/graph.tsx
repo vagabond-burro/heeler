@@ -3698,30 +3698,8 @@ two controls Develop's treatment block has, on the node.*/}
                 state={appState}
                 viewState={depthState}
                 width={widgetW}
-                frame={histSrc}
+                frame={frame}
               />
-            )}
-            {/* Graph's own: one chip that zeroes all three wheels. */}
-            {node.type === "heeler.color_balance" && (
-              <div style={{ display: "flex", gap: 6, marginTop: 11 }}>
-                <button
-                  className="chip"
-                  data-testid="wheels-reset"
-                  onClick={() =>
-                    dispatch({
-                      type: "set_params",
-                      id: node.id,
-                      values: Object.fromEntries(
-                        ["shadows", "midtones", "highlights"].flatMap((r) =>
-                          ["hue", "sat", "lum"].map((p) => [`${r}_${p}`, 0])
-                        )
-                      ),
-                    })
-                  }
-                >
-                  Reset all
-                </button>
-              </div>
             )}
             {node.type === "heeler.luminance_range_mask" && (
               <div data-node={node.id} data-params="invert">

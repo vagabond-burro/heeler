@@ -427,6 +427,12 @@ barely readable font size").*/
 .art-empty-row:hover, .art-empty-row:focus-visible { background: var(--hover-bg); }
 .listbox { border: 1px solid var(--line-4); border-radius: var(--radius-btn); overflow-y: auto; max-height: 192px; display: flex; flex-direction: column; }
 .srow .val { font-size: 11px; color: #c2c7cb; text-align: right; font-variant-numeric: tabular-nums; }
+/* A slider row in a tool window, which sits outside the panel's .ui-zoom:
+   its name and value take the panel's size (11px under the app zoom),
+   and their columns grow with them, so the track is what gives up the
+   room (Color Tune's window). */
+.srow.windowed { grid-template-columns: calc(78px * var(--chrome-zoom)) 1fr calc(42px * var(--chrome-zoom)); }
+.srow.windowed .lbl, .srow.windowed .val { font-size: calc(11px * var(--chrome-zoom)); }
 .strack { position: relative; height: 12px; display: flex; align-items: center; cursor: ew-resize; }
 .strack .rail { position: absolute; left: 0; right: 0; height: 3px; background: var(--slider-track); }
 .strack .center { position: absolute; left: 50%; top: 0; width: 1px; height: 12px; background: #2f3538; }

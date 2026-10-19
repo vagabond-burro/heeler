@@ -253,7 +253,8 @@ export const DETAIL_EQ_PARAMS = [...DETAIL_EQ_BANDS.map(([p]) => p), ...DETAIL_W
  * Equalizer's EQ editor; Color Tune's band strip and wheel; the curve
  * editor; the three Color Wheels and their help line; Color Bend's wheel;
  * the Levels histogram; the Zone System's ruler; Detail's advanced
- * weights; Geometry's flips; the Print's paper controls. */
+ * weights; Geometry's flips; the Print's paper controls; Color's white
+ * balance row. */
 export type SectionWidgetKind =
   | "recolorGraph"
   | "guardStrip"
@@ -267,7 +268,8 @@ export type SectionWidgetKind =
   | "zones"
   | "detailAdvanced"
   | "flipPhoto"
-  | "print";
+  | "print"
+  | "whiteBalance";
 
 /** Widgets drawn before a section's rows or after them. */
 export interface SectionWidgetSeats {
@@ -324,7 +326,6 @@ export interface SectionSpec {
   /** A line of plain words above the rows, for a section whose dials
    * need a sentence of context (Depth Map: whose settings these are). */
   note?: string;
-  hasAuto?: boolean;
   /** Noise Reduction's measured Auto: estimates the source's noise
    * floor and SETS both sliders, visibly, one undo step. */
   noiseAuto?: boolean;
@@ -790,7 +791,9 @@ export const SECTIONS: SectionSpec[] = [
     title: "Color",
     layerTool: "color",
     node: (s) => toolNode(s, "color"),
-    hasAuto: true,
+    // The white balance row (Auto, As Shot, the eyedropper) under the
+    // rows.
+    widgets: { after: ["whiteBalance"] },
     bwHost: true,
     alsoToggles: (s) => [toolNode(s, "bw")],
     rows: [
