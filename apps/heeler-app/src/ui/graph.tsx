@@ -26,8 +26,6 @@ import { createPortal } from "react-dom";
 import { panePropsEqual } from "./viewmemo";
 import { SpectrumBar, Spectrums } from "./spectrum";
 import type { Backdrop, Category, Command, NodeCard, State, Wire } from "../state";
-import { inspectDocked } from "../state";
-import { InspectDock } from "./inspect";
 import { FlipPhotoRow } from "./flipphoto";
 import { artMaskView, BACKDROP_COLORS, CAT_COLOR, NODE_H, NODE_W, duplicable, nameMatches, PARAM_OPTIONS, REGISTRY_DEFAULTS, hasParamRange, TYPE_NUM_PARAMS, PARAM_TEXT_DEFAULT, paramRange, publishedValue, publishedChoice, FLAG_PARAMS, ART_KINDS, isLayerEffect, artLayers, warpNodeById, isPlacedLayer, wireLacksPort, curveModeOf, LAYER_WARP, WIRE_GESTURE, exportWrittenName, exportWritesDepth, DEPTH_EXPORT_CONVENTION, DEPTH_MAP_CARD_CONVENTION, depthMapShowsDepth, PARAM_CHOICE_HINTS, maskIsOff, MASK_OFF_GESTURE, defaultGroupName, ungroupBlocked } from "../state";
 import { GridWarpControls } from "./gridwarp";
@@ -4359,11 +4357,9 @@ function InspectorImpl({
         </div>
       </div>
 
-      {/* Everything between the header and the docked Inspect pane, given
-          the room that is left: the node's own controls scroll inside it
-          and the pane keeps the panel's foot, so dragging its seam moves
-          the pane's top. Without it the pane hung under content of a
-          fixed height and a drag moved its bottom, off the window. */}
+      {/* Everything under the header, given the room the panel has: the
+          node's own controls scroll inside it, and the panel keeps its
+          height whatever a node shows. */}
       <div data-testid="inspector-body" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflowY: "auto" }}>
       {/* The spectrums, directly under the header. "The Spectrums
 should be at the top, attributes from the selected node will appear
@@ -4671,9 +4667,6 @@ Develop shows under the Depth mask: one node, two seats.*/}
 
       </div>
 
-      {/* The Inspect panel, docked at the foot as in Develop, in the window
-          that has the viewer the point was picked on. */}
-      {hasViewer && inspectDocked(state) && <InspectDock state={state} dispatch={dispatch} />}
     </div>
   );
 }

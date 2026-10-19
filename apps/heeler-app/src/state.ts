@@ -2812,13 +2812,11 @@ export function freshExportGroup(
   };
 }
 
-/** Whether the Inspect panel sits at the foot of a right panel on screen:
- * Develop's (unless Polish has the seat) or Graph's Inspector at home.
- * Anywhere else it floats over the viewer, as it was. */
+/** Whether the Inspect panel takes its column beside the canvas: in
+ * Develop and in Graph, unless the Library has the whole window. In
+ * Finish it floats over the viewer. */
 export function inspectDocked(state: State): boolean {
-  if (state.mode === "simple") return !state.polishOpen;
-  if (state.mode === "advanced") return state.inspectorHome === "main";
-  return false;
+  return (state.mode === "simple" || state.mode === "advanced") && !state.ribbonExpanded;
 }
 
 /** The panel geometry a fresh launch shows, and what Reset layout puts
@@ -2832,7 +2830,8 @@ export const DEFAULT_PANEL_SIZES = {
   // here is only ever what a drag left behind.
   rightSplit: 0,
   selectionSplit: 0,
-  inspectSplit: 0,
+  // The Inspect panel's column beside the canvas.
+  inspect: 280,
   // About eight rows: roughly what the old 45vh cap gave on a laptop,
   // so nothing jumps for anyone who never drags the seam.
   libraryTree: 180,
@@ -2865,6 +2864,8 @@ export interface UiLayout {
   /** Which Adjustments sections the panel lists: every one, the pinned
    * ones, or the ones switched on for this photograph. */
   sectionFilter: SectionFilter;
+  /** The side of the canvas the Inspect panel takes. */
+  inspectSide: "left" | "right";
   popouts: {
     graph: boolean;
     spectrums: boolean;
@@ -2888,6 +2889,7 @@ export function layoutSnapshot(s: State): UiLayout {
     panelTabBottom: s.panelTabBottom,
     selectionSplitMin: s.selectionSplitMin,
     sectionFilter: s.sectionFilter,
+    inspectSide: s.inspectSide,
     popouts: {
       graph: s.graphPoppedOut,
       spectrums: s.spectrumsPoppedOut,
@@ -4065,8 +4067,8 @@ export interface State {
     rightSplit: number;
     /** height of the automatic selection split; zero means default */
     selectionSplit: number;
-    /** height of the docked Inspect pane; zero means default */
-    inspectSplit: number;
+    /** width of the Inspect panel's column beside the canvas */
+    inspect: number;
     /** height of the folder TREE box in the library panel.
      *
      * "The position of Collections should not move based on
@@ -4082,9 +4084,14 @@ export interface State {
    * tool is armed or a layer is clicked, the selection itself untouched.
    * Session state, never part of the saved layout. */
   selectionSplitClosed: boolean;
-  /** the docked Inspect pane folded to its bar, its height remembered
-   * for the way back. Session state, never part of the saved layout. */
-  inspectSplitMin: boolean;
+  /** Which side of the canvas the Inspect panel's column takes: left of
+   * the Adjustments panel (the default) or right of the thumbnail strip.
+   * Saved with the layout. */
+  inspectSide: "left" | "right";
+  /** The Library and the thumbnail strip as Inspect found them: opening
+   * the panel folds both away, and closing it puts them back as they
+   * were. Session state. */
+  inspectRestore: { browserOpen: boolean; ribbonOpen: boolean } | null;
   /** Which Adjustments sections the panel lists: every one, the pinned
    * ones, or the ones switched on for this photograph. */
   sectionFilter: SectionFilter;
@@ -5091,7 +5098,7 @@ export type Command =
   | { type: "set_select_tolerance"; tolerance: number }
   | { type: "set_select_magnet_sense"; sense: number }
   | { type: "reset_select_settings" }
-  | { type: "toggle_inspect_split" }
+  | { type: "set_inspect_side"; side: "left" | "right" }
   | { type: "toggle_selection_split" }
   | { type: "close_selection_split" }
   | { type: "set_select_smooth"; smooth: number }
@@ -5253,7 +5260,7 @@ export type Command =
   | { type: "set_crop_aspect"; aspect: number | null }
   | {
       type: "set_panel_size";
-      panel: "library" | "right" | "graphViewer" | "ribbon" | "rightSplit" | "selectionSplit" | "inspectSplit" | "libraryTree";
+      panel: "library" | "right" | "graphViewer" | "ribbon" | "rightSplit" | "selectionSplit" | "inspect" | "libraryTree";
       size: number;
     }
   | { type: "toggle_section"; title: string }
@@ -13677,7 +13684,21 @@ function syncToolGroups(prev: State, next: State, cmd: Command): State {
 }
 
 export function reduce(s: State, cmd: Command): State {
-  return endLibraryRedo(s, reduceWith(s, cmd, true), cmd);
+  return inspectMakesRoom(s, endLibraryRedo(s, reduceWith(s, cmd, true), cmd));
+}
+
+/** The Inspect panel takes a column beside the canvas: as a point is first
+ * inspected the Library and the thumbnail strip fold away, and when the
+ * point goes (closed, another photograph, a new graph) they come back as
+ * they were. */
+function inspectMakesRoom(s: State, next: State): State {
+  if (!s.inspectPoint && next.inspectPoint && !next.inspectRestore) {
+    return { ...next, inspectRestore: { browserOpen: next.browserOpen, ribbonOpen: next.ribbonOpen }, browserOpen: false, ribbonOpen: false };
+  }
+  if (s.inspectPoint && !next.inspectPoint && next.inspectRestore) {
+    return { ...next, browserOpen: next.inspectRestore.browserOpen, ribbonOpen: next.inspectRestore.ribbonOpen, inspectRestore: null };
+  }
+  return next;
 }
 
 /** A new edit ends the chance to redo a library step, as it ends the
@@ -14531,7 +14552,7 @@ function panelSizeBounds(s: State): Record<keyof typeof DEFAULT_PANEL_SIZES, [nu
     ribbon: ribbonBounds(s.prefs),
     rightSplit: [120, 900],
     selectionSplit: [120, 700],
-    inspectSplit: [120, 700],
+    inspect: [240, 560],
     // Down to three rows and up to most of a tall panel. The floor is a
     // height, not a row count, so a deep tree still scrolls rather than
     // vanishing.
@@ -18130,8 +18151,8 @@ function reduceInner(s: State, cmd: Command): State {
     // when restoring from minimized."
     case "toggle_selection_split":
       return { ...s, selectionSplitMin: !s.selectionSplitMin };
-    case "toggle_inspect_split":
-      return { ...s, inspectSplitMin: !s.inspectSplitMin };
+    case "set_inspect_side":
+      return cmd.side === "left" || cmd.side === "right" ? { ...s, inspectSide: cmd.side } : s;
     // The panel's door (2026-09-22): the select tool goes away and the
     // panel with it, and NOTHING else moves. It used to step off the
     // selection layer as well, and set_active_layer drops the layer's
@@ -19972,6 +19993,7 @@ function reduceInner(s: State, cmd: Command): State {
       if (typeof l.panelTabBottom === "string" && tabs.includes(l.panelTabBottom)) next = { ...next, panelTabBottom: l.panelTabBottom };
       if (bool(l.selectionSplitMin)) next = { ...next, selectionSplitMin: l.selectionSplitMin };
       if (typeof l.sectionFilter === "string" && SECTION_FILTERS.includes(l.sectionFilter)) next = { ...next, sectionFilter: l.sectionFilter };
+      if (l.inspectSide === "left" || l.inspectSide === "right") next = { ...next, inspectSide: l.inspectSide };
       const p = l.popouts;
       if (p && typeof p === "object") {
         if (bool(p.graph)) next = reduceInner(next, { type: "set_graph_popped_out", out: p.graph });

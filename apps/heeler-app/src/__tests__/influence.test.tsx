@@ -1,7 +1,7 @@
 // Influence Mapping on the app side: the Inspect picker and point, the
 // influence views as frame view state, and the panel's trace.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("../bridge", async (orig) => {
@@ -11,10 +11,9 @@ vi.mock("../bridge", async (orig) => {
 
 import { invoke } from "@tauri-apps/api/core";
 import { initialState } from "../data";
-import { anyPickerArmed, inspectDocked, previewTarget, reduce, toolNode, type Command, type State } from "../state";
+import { anyPickerArmed, inspectDocked, layoutSnapshot, previewTarget, reduce, toolNode, type Command, type State } from "../state";
 import { tracePixel, type TraceStep } from "../bridge";
-import { InspectDock, InspectPanel } from "../ui/inspect";
-import { SimplePanel } from "../ui/simple";
+import { InspectColumn, InspectPanel } from "../ui/inspect";
 import { sectionOfNode } from "../ui/simpledata";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
@@ -142,56 +141,97 @@ describe("the Inspect rows in a narrow panel", () => {
   });
 });
 
-// 2026-10-18: "move that to the bottom of the right panel in its own
-// resizable view? Kind of like the selection and brush tools do".
-describe("the Inspect panel docked in the right panel", () => {
-  const inspecting = () => run(initialState(), { type: "toggle_inspect_pick" }, { type: "inspect_at", x: 0.5, y: 0.5 });
+// 2026-10-18: "Lets make inspector its own panel. Add a button to
+// position it either on the right or left side of the canvas ... and
+// remember the last preferred location. When its enabled, check the
+// status of the Library and Thumbnail strip. Collapse either if open.
+// When the inspector closes, restore those views".
+describe("the Inspect panel's own column", () => {
+  const inspecting = (s = initialState()) => run(s, { type: "toggle_inspect_pick" }, { type: "inspect_at", x: 0.5, y: 0.5 });
 
-  it("docks where a right panel is on screen, and floats anywhere else", () => {
+  it("takes a column in Develop and Graph, and floats in Finish or over an expanded Library", () => {
     const s = initialState();
     expect(inspectDocked({ ...s, mode: "simple" })).toBe(true);
-    expect(inspectDocked({ ...s, mode: "simple", polishOpen: true })).toBe(false);
-    expect(inspectDocked({ ...s, mode: "advanced", inspectorHome: "main" })).toBe(true);
-    expect(inspectDocked({ ...s, mode: "advanced", inspectorHome: "graph" })).toBe(false);
+    expect(inspectDocked({ ...s, mode: "simple", polishOpen: true })).toBe(true);
+    expect(inspectDocked({ ...s, mode: "advanced", inspectorHome: "graph" })).toBe(true);
     expect(inspectDocked({ ...s, mode: "canvas" })).toBe(false);
+    expect(inspectDocked({ ...s, mode: "simple", ribbonExpanded: true })).toBe(false);
   });
 
-  it("shows while a point is inspected, folds to a bar and back, and its seam sets its height", () => {
+  it("folds the Library and the strip away while open, and puts them back as they were", () => {
+    let s = { ...initialState(), browserOpen: true, ribbonOpen: true };
+    s = inspecting(s);
+    expect([s.browserOpen, s.ribbonOpen]).toEqual([false, false]);
+    // Another point while open changes nothing about them.
+    s = run(s, { type: "inspect_at", x: 0.2, y: 0.2 });
+    expect(s.inspectRestore).toEqual({ browserOpen: true, ribbonOpen: true });
+    s = run(s, { type: "close_inspect" });
+    expect([s.browserOpen, s.ribbonOpen, s.inspectRestore]).toEqual([true, true, null]);
+    // One that was closed stays closed.
+    s = inspecting({ ...s, browserOpen: false, ribbonOpen: true });
+    s = run(s, { type: "close_inspect" });
+    expect([s.browserOpen, s.ribbonOpen]).toEqual([false, true]);
+    // A photograph switch closes Inspect, and puts them back too.
+    s = inspecting({ ...s, browserOpen: true, ribbonOpen: true });
+    const other = s.images.find((i) => i.id !== s.activeImage);
+    if (other) {
+      s = run(s, { type: "select_image", id: other.id });
+      expect(s.inspectPoint).toBeNull();
+      expect([s.browserOpen, s.ribbonOpen]).toEqual([true, true]);
+    }
+  });
+
+  it("remembers its side with the layout, the right by default", () => {
+    let s = initialState();
+    expect(s.inspectSide).toBe("right");
+    s = run(s, { type: "set_inspect_side", side: "left" });
+    const saved = layoutSnapshot(s);
+    expect(saved.inspectSide).toBe("left");
+    const back = run(initialState(), { type: "restore_layout", layout: saved });
+    expect(back.inspectSide).toBe("left");
+    expect(run(initialState(), { type: "restore_layout", layout: { ...saved, inspectSide: "middle" as never } }).inspectSide).toBe("right");
+    // Its width is a panel size, kept within bounds.
+    expect(run(s, { type: "set_panel_size", panel: "inspect", size: 9999 }).panelSizes.inspect).toBe(560);
+  });
+
+  it("the column holds the panel, and its header moves it, picks and closes with pictures", () => {
     traceMock.mockResolvedValue([]);
     const dispatch = vi.fn();
-    const { rerender } = render(<InspectDock state={initialState()} dispatch={dispatch} />);
-    expect(screen.queryByTestId("inspect-split")).toBeNull();
-    let s = inspecting();
-    rerender(<InspectDock state={s} dispatch={dispatch} />);
-    const pane = screen.getByTestId("inspect-split");
-    expect(pane.style.height).toBe("260px");
-    expect(pane).toContainElement(screen.getByTestId("inspect-panel"));
-    expect(screen.getByTestId("inspect-panel")).toHaveAttribute("data-docked", "true");
-    expect(screen.getByTestId("inspect-panel").style.position).toBe("");
-    fireEvent.click(screen.getByTestId("inspect-minimize"));
-    expect(dispatch).toHaveBeenLastCalledWith({ type: "toggle_inspect_split" });
-    s = run(s, { type: "toggle_inspect_split" });
-    rerender(<InspectDock state={s} dispatch={dispatch} />);
-    expect(screen.queryByTestId("inspect-split")).toBeNull();
-    fireEvent.click(screen.getByTestId("inspect-split-bar"));
-    expect(dispatch).toHaveBeenLastCalledWith({ type: "toggle_inspect_split" });
-    // A dragged height is kept, within its bounds, and the pane wears it.
-    s = run(s, { type: "toggle_inspect_split" }, { type: "set_panel_size", panel: "inspectSplit", size: 340 });
-    expect(s.panelSizes.inspectSplit).toBe(340);
-    expect(run(s, { type: "set_panel_size", panel: "inspectSplit", size: 20 }).panelSizes.inspectSplit).toBe(120);
-    rerender(<InspectDock state={s} dispatch={dispatch} />);
-    expect(screen.getByTestId("inspect-split").style.height).toBe("340px");
-    // Closing Inspect takes the pane away.
-    rerender(<InspectDock state={run(s, { type: "close_inspect" })} dispatch={dispatch} />);
-    expect(screen.queryByTestId("inspect-split")).toBeNull();
+    const { rerender } = render(<InspectColumn state={initialState()} dispatch={dispatch} width={300} />);
+    expect(screen.queryByTestId("inspect-column")).toBeNull();
+    const s = inspecting();
+    rerender(<InspectColumn state={s} dispatch={dispatch} width={300} />);
+    const column = screen.getByTestId("inspect-column");
+    expect(column.style.width).toBe("300px");
+    expect(column).toContainElement(screen.getByTestId("inspect-panel"));
+    for (const id of ["inspect-repick", "inspect-side", "inspect-close", "inspect-heat-luma", "inspect-heat-color", "inspect-heat-both"]) {
+      const b = screen.getByTestId(id);
+      expect(b.textContent).toBe("");
+      expect(b.querySelector("svg")).not.toBeNull();
+      expect(b.getAttribute("aria-label")).toBeTruthy();
+    }
+    fireEvent.click(screen.getByTestId("inspect-side"));
+    expect(dispatch).toHaveBeenLastCalledWith({ type: "set_inspect_side", side: "left" });
   });
 
-  it("sits at the foot of Develop's panel", () => {
+  it("sits in the canvas row, left of Adjustments by default and right of the strip when moved", async () => {
     traceMock.mockResolvedValue([]);
-    render(<SimplePanel state={{ ...inspecting(), mode: "simple" }} dispatch={() => {}} width={320} />);
+    const { App } = await import("../app");
+    render(<App />);
+    const live = () => (window as unknown as { __heeler: { state: () => State; dispatch: (c: Command) => void } }).__heeler;
+    await act(async () => {
+      live().dispatch({ type: "toggle_inspect_pick" });
+      live().dispatch({ type: "inspect_at", x: 0.5, y: 0.5 });
+    });
+    const column = await screen.findByTestId("inspect-column");
     const panel = screen.getByTestId("simple-panel");
-    expect(panel).toContainElement(screen.getByTestId("inspect-split"));
-    expect(panel).toContainElement(screen.getByTestId("divider-inspect-split"));
+    expect(column.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(panel).not.toContainElement(column);
+    await act(async () => live().dispatch({ type: "set_inspect_side", side: "left" }));
+    const moved = screen.getByTestId("inspect-column");
+    expect(moved.getAttribute("data-side")).toBe("left");
+    // Opened, it folded the strip and the Library away.
+    expect([live().state().browserOpen, live().state().ribbonOpen]).toEqual([false, false]);
   });
 });
 

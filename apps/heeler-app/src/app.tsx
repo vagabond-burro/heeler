@@ -17,7 +17,7 @@ import { DocsViewer } from "./ui/docsviewer";
 import { BakeProgressDialog, OpProgressOverlay } from "./ui/opprogress";
 import { handleApiAsync } from "./api";
 import { onTauriEvent } from "./taurievents";
-import { CONTROL_FLASH_MS, maskOverlayWanted, previewEdgeFor, previewTarget, reduce } from "./state";
+import { CONTROL_FLASH_MS, inspectDocked, maskOverlayWanted, previewEdgeFor, previewTarget, reduce } from "./state";
 import type { BootStep, Command, State } from "./state";
 import { initialState } from "./data";
 import { uiSettingsCommands, uiSettingsSnapshot } from "./settings";
@@ -125,6 +125,7 @@ const SETTLE_DELAY_MS = 600;
 const LOOK_REST_MS = 250;
 import { QuadEditView } from "./ui/quadedit";
 import { SimplePanel } from "./ui/simple";
+import { InspectColumn } from "./ui/inspect";
 import { framePixels } from "./ui/spectrumparts";
 import { NodeEditor, Inspector, InspectorBar, GroupDialog } from "./ui/graph";
 import { CanvasMode } from "./ui/canvas";
@@ -1993,6 +1994,20 @@ drag.*/}
           />
         )}
 
+        {/* The Inspect panel's column (inspect.tsx InspectColumn), on the
+            left of the canvas when moved there: right of the thumbnail
+            strip, its seam on the canvas side. */}
+        {inspectDocked(state) && state.inspectPoint && state.inspectSide === "left" && (
+          <>
+            <InspectColumn state={state} dispatch={dispatch} width={state.panelSizes.inspect} />
+            <PanelDivider
+              vertical
+              testid="divider-inspect"
+              onDelta={(d) => dispatch({ type: "set_panel_size", panel: "inspect", size: stateRef.current.panelSizes.inspect + d })}
+            />
+          </>
+        )}
+
         {/* Expanded, the thumbnail panel has the window and there is no
             photograph on screen to show. */}
         {state.mode === "simple" && !state.ribbonExpanded && (
@@ -2023,6 +2038,18 @@ drag.*/}
               maskUrl={polishMask}
               multiFrames={multiFrames}
             />
+            )}
+            {/* On the right, the default: left of the Adjustments panel (or
+                Graph's Inspector), its seam on the canvas side. */}
+            {inspectDocked(state) && state.inspectPoint && state.inspectSide === "right" && (
+              <>
+                <PanelDivider
+                  vertical
+                  testid="divider-inspect"
+                  onDelta={(d) => dispatch({ type: "set_panel_size", panel: "inspect", size: stateRef.current.panelSizes.inspect - d })}
+                />
+                <InspectColumn state={state} dispatch={dispatch} width={state.panelSizes.inspect} />
+              </>
             )}
             <PanelDivider
               vertical
@@ -2132,6 +2159,18 @@ torn down: DONE puts the adjustments back exactly as they were.*/}
                 </>
               )}
             </div>
+            {/* On the right, the default: left of the Adjustments panel (or
+                Graph's Inspector), its seam on the canvas side. */}
+            {inspectDocked(state) && state.inspectPoint && state.inspectSide === "right" && (
+              <>
+                <PanelDivider
+                  vertical
+                  testid="divider-inspect"
+                  onDelta={(d) => dispatch({ type: "set_panel_size", panel: "inspect", size: stateRef.current.panelSizes.inspect - d })}
+                />
+                <InspectColumn state={state} dispatch={dispatch} width={state.panelSizes.inspect} />
+              </>
+            )}
             {/* Only one window shows the inspector at a time. Popped
                 out, the graph window takes it and this side folds to a
                 spine; clicking that brings it back here and folds the

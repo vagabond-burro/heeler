@@ -104,7 +104,6 @@ import { GrainFilmRow, GrainFrameRow } from "./grainfilm";
 import { ZonesBlock } from "./zones";
 import { RecolorHost } from "./recolor";
 import { RecolorPairs } from "./recolorpairs";
-import { InspectDock } from "./inspect";
 import { DepthPickButton, DepthShape } from "./depthband";
 import { SectionLooks } from "./sectionlooks";
 import { ColorConsoleBlock } from "./colorconsole";
@@ -6548,10 +6547,6 @@ back, and a dragged height survives the fold.*/}
             </div>
           </>
         ))}
-
-      {/* The Inspect panel, docked under everything else while a point
-          is inspected (inspect.tsx). */}
-      <InspectDock state={state} dispatch={dispatch} />
 
       {tabMenu && (
         <div

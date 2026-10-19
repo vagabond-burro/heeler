@@ -3,7 +3,7 @@
 // Inspecting never changes the edit: the point, the panel and the
 // influence views are view state, and the trace is a cache read
 // against the frame on screen.
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { Command, InfluenceMode, NodeCard, State } from "../state";
 import { tracePixel, type TraceSample, type TraceStep } from "../bridge";
 import { NODE_CATALOG } from "../nodes";
@@ -11,7 +11,6 @@ import { sectionOfNode } from "./simpledata";
 import { PICK_CURSOR } from "./cursors";
 import { norm, type ViewTransform } from "./overlaysparts";
 import { isPrimaryPress } from "./pointerguard";
-import { PanelDivider } from "./divider";
 
 type D = (c: Command) => void;
 
@@ -21,9 +20,6 @@ const HEAT_MODES: [Exclude<InfluenceMode, "isolate">, string, string][] = [
   ["color", "Color", "Where the node moves color, apart from brightness"],
   ["both", "Both", "Brightness and color changes together"],
 ];
-
-/** The docked pane's height before anyone drags its seam. */
-const INSPECT_SPLIT_DEFAULT = 260;
 
 /** A change under this, in display units, reads as none: a little
  * under half an 8-bit level. */
@@ -46,6 +42,34 @@ function rowGrid(withMask: boolean): React.CSSProperties {
 
 /** A number column: right-aligned, its digits the same width. */
 const NUMBER: React.CSSProperties = { textAlign: "right", color: "var(--text-faint)", fontVariantNumeric: "tabular-nums" };
+
+/** The heatmap's three readings as pictures: a sun for brightness,
+ * three overlapping discs for color, and the two together. */
+function HeatGlyph({ mode }: { mode: Exclude<InfluenceMode, "isolate"> }) {
+  const sun = (
+    <>
+      <circle cx="8" cy="8" r="3" />
+      <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" />
+    </>
+  );
+  const color = (
+    <>
+      <circle cx="6" cy="6.5" r="3.2" />
+      <circle cx="10" cy="6.5" r="3.2" />
+      <circle cx="8" cy="10" r="3.2" />
+    </>
+  );
+  return (
+    <svg width={13} height={13} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" aria-hidden="true" focusable="false">
+      {mode === "luma" ? sun : mode === "color" ? color : (
+        <>
+          <g transform="translate(-2.5 -2.5) scale(0.7)">{sun}</g>
+          <g transform="translate(5 5) scale(0.62)">{color}</g>
+        </>
+      )}
+    </svg>
+  );
+}
 
 /** A row's view buttons: pictures with their names on hover, so the
  * node's name and its numbers keep the row's room. */
@@ -280,23 +304,37 @@ export function InspectPanel({ state, dispatch, docked = false }: {
           className="chip"
           data-testid="inspect-repick"
           data-active={state.inspectPick}
-          data-hint="Pick another point"
-          style={{ fontSize: 11, padding: "1px 7px", marginLeft: "auto" }}
+          aria-pressed={state.inspectPick}
+          aria-label="Pick another point"
+          data-tip="Pick"
+          data-hint="Pick another point on the photograph"
+          style={{ ...ICON_CHIP, padding: "1px 5px", marginLeft: "auto" }}
           onClick={() => dispatch({ type: "toggle_inspect_pick" })}
         >
-          Pick
+          {/* The toolbar's Inspect crosshair. */}
+          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="6" />
+            <path d="M12 2v5M12 17v5M2 12h5M17 12h5" />
+          </svg>
         </button>
         {docked && (
           <button
             className="chip"
-            data-testid="inspect-minimize"
-            aria-label="Fold Inspect to a bar"
-            data-hint="Fold Inspect to a bar at the foot of the panel; the point and its trace stay"
-            style={{ fontSize: 11, padding: "1px 6px", display: "inline-flex", alignItems: "center" }}
-            onClick={() => dispatch({ type: "toggle_inspect_split" })}
+            data-testid="inspect-side"
+            aria-label={state.inspectSide === "right" ? "Move Inspect to the left of the photograph" : "Move Inspect to the right of the photograph"}
+            data-tip={state.inspectSide === "right" ? "Move left" : "Move right"}
+            data-hint={state.inspectSide === "right" ? "Move Inspect to the left of the photograph, beside the thumbnail strip" : "Move Inspect to the right of the photograph, beside the Adjustments panel"}
+            style={{ ...ICON_CHIP, padding: "1px 5px" }}
+            onClick={() => dispatch({ type: "set_inspect_side", side: state.inspectSide === "right" ? "left" : "right" })}
           >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <path d="M6 9l6 6 6-6" />
+            {/* A frame with the panel's strip on the side it moves to. */}
+            <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} aria-hidden="true" focusable="false">
+              <rect x="1.5" y="2.5" width="13" height="11" rx="1" />
+              {state.inspectSide === "right" ? (
+                <rect x="2.5" y="3.5" width="4" height="9" fill="currentColor" stroke="none" />
+              ) : (
+                <rect x="9.5" y="3.5" width="4" height="9" fill="currentColor" stroke="none" />
+              )}
             </svg>
           </button>
         )}
@@ -304,30 +342,36 @@ export function InspectPanel({ state, dispatch, docked = false }: {
           className="chip"
           data-testid="inspect-close"
           aria-label="Close Inspect"
+          data-tip="Close"
           data-hint="Close Inspect and return to the photograph"
-          style={{ fontSize: 11, padding: "1px 7px" }}
+          style={{ ...ICON_CHIP, padding: "1px 5px" }}
           onClick={() => dispatch({ type: "close_inspect" })}
         >
-          ×
+          <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" aria-hidden="true" focusable="false">
+            <path d="M4 4l8 8M12 4l-8 8" />
+          </svg>
         </button>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-        <span style={{ color: "var(--text-ghost)" }}>Heatmap shows</span>
+        <span style={{ color: "var(--text-ghost)" }}>Heatmap</span>
         <div className="zoom-seg" role="group" aria-label="What the heatmap shows" style={{ border: "1px solid var(--line-4)" }}>
           {HEAT_MODES.map(([m, label, hint]) => (
             <button
               key={m}
               data-testid={`inspect-heat-${m}`}
               data-active={heat === m}
+              aria-pressed={heat === m}
+              aria-label={label}
+              data-tip={label}
               data-hint={hint}
-              style={{ fontSize: 11, padding: "1px 6px" }}
+              style={{ padding: "1px 6px", display: "inline-flex", alignItems: "center" }}
               onClick={() => {
                 setHeat(m);
                 // A heatmap already up follows the chooser.
                 if (view && view.mode !== "isolate") dispatch({ type: "toggle_influence_view", id: view.id, mode: m });
               }}
             >
-              {label}
+              <HeatGlyph mode={m} />
             </button>
           ))}
         </div>
@@ -453,69 +497,30 @@ export function InspectPanel({ state, dispatch, docked = false }: {
   );
 }
 
-/** The Inspect panel docked at the foot of the right panel, the way the
- * selection's split is (2026-10-18: "move that to the bottom of the right
- * panel in its own resizable view? Kind of like the selection and brush
- * tools do"): a seam above it to drag, its height remembered, and a fold
- * to a bar and back. Shown while a point is being inspected. */
-export function InspectDock({ state, dispatch }: { state: State; dispatch: D }) {
-  const pane = useRef<HTMLDivElement>(null);
+/** The Inspect panel in its own column beside the canvas (2026-10-18:
+ * "Lets make inspector its own panel ... on the right or left side of the
+ * canvas ... and remember the last preferred location"): left of the
+ * Adjustments panel, the default, or right of the thumbnail strip. The
+ * app places it and the seam that sizes it; the header's side button
+ * moves it. Shown while a point is inspected. */
+export function InspectColumn({ state, dispatch, width }: { state: State; dispatch: D; width: number }) {
   if (!state.inspectPoint) return null;
-  if (state.inspectSplitMin) {
-    return (
-      <button
-        data-testid="inspect-split-bar"
-        data-hint="Bring the Inspect panel back up"
-        onClick={() => dispatch({ type: "toggle_inspect_split" })}
-        style={{
-          all: "unset",
-          cursor: "pointer",
-          flex: "none",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "5px 12px",
-          borderTop: "1px solid var(--line-2)",
-          background: "var(--bg-panel-head)",
-        }}
-      >
-        <span className="kicker" style={{ flex: 1 }}>Inspect</span>
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2" aria-hidden="true">
-          <path d="M18 15l-6-6-6 6" />
-        </svg>
-      </button>
-    );
-  }
   return (
-    <>
-      <PanelDivider
-        vertical={false}
-        testid="divider-inspect-split"
-        grip
-        onDelta={(d) =>
-          dispatch({
-            type: "set_panel_size",
-            panel: "inspectSplit",
-            // The seam sits above the pane, so a drag down shrinks it.
-            // Measured, not remembered, as the selection split's is.
-            size: (pane.current?.offsetHeight ?? 0) - d,
-          })
-        }
-      />
-      <div
-        ref={pane}
-        data-testid="inspect-split"
-        style={{
-          flex: "none",
-          height: state.panelSizes.inspectSplit > 0 ? state.panelSizes.inspectSplit : INSPECT_SPLIT_DEFAULT,
-          overflowY: "auto",
-          display: "flex",
-          flexDirection: "column",
-          borderTop: "1px solid var(--line-2)",
-        }}
-      >
-        <InspectPanel state={state} dispatch={dispatch} docked />
-      </div>
-    </>
+    <div
+      className="ui-zoom"
+      data-testid="inspect-column"
+      data-side={state.inspectSide}
+      style={{
+        width,
+        flex: "none",
+        minHeight: 0,
+        overflowY: "auto",
+        background: "var(--bg-panel)",
+        borderLeft: state.inspectSide === "right" ? "1px solid var(--line-hard)" : undefined,
+        borderRight: state.inspectSide === "left" ? "1px solid var(--line-hard)" : undefined,
+      }}
+    >
+      <InspectPanel state={state} dispatch={dispatch} docked />
+    </div>
   );
 }
