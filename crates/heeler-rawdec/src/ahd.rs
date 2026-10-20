@@ -84,7 +84,7 @@ impl Lab {
         let cbrt = (0..0x10000)
             .map(|i| {
                 let r = i as f32 / 65535.0;
-                if r > 0.008856 { r.powf(1.0 / 3.0) } else { 7.787f32.mul_add(r, 16.0 / 116.0) }
+                if r > 0.008856 { r.powf(1.0 / 3.0) } else { crate::fmadd(7.787, r, 16.0 / 116.0) }
             })
             .collect();
         Lab { xyz_cam, cbrt }
@@ -97,11 +97,11 @@ impl Lab {
         let mut xyz = [0.5f32; 3];
         for i in 0..3 {
             for c in 0..3 {
-                xyz[i] = self.xyz_cam[i][c].mul_add(rgb[c] as f32, xyz[i]);
+                xyz[i] = crate::fmadd(self.xyz_cam[i][c], rgb[c] as f32, xyz[i]);
             }
         }
         let f = xyz.map(|v| self.cbrt[(v as i32).clamp(0, 65535) as usize]);
-        [(64.0 * 116.0f32.mul_add(f[1], -16.0)) as i16, (64.0 * 500.0 * (f[0] - f[1])) as i16, (64.0 * 200.0 * (f[1] - f[2])) as i16]
+        [(64.0 * crate::fmadd(116.0, f[1], -16.0)) as i16, (64.0 * 500.0 * (f[0] - f[1])) as i16, (64.0 * 200.0 * (f[1] - f[2])) as i16]
     }
 }
 

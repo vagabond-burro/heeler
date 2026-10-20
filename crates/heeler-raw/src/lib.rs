@@ -36,7 +36,7 @@ pub const JPEG_LINKED: bool = matches!(env!("HEELER_RAW_JPEG").as_bytes(), b"1")
 /// what `examples/dngprobe.rs` prints them next to.
 pub const ZLIB_LINKED: bool = matches!(env!("HEELER_RAW_ZLIB").as_bytes(), b"1");
 
-mod gain_map;
+use heeler_rawdec::gain_map;
 mod gpr;
 #[cfg(feature = "rust-decoder")]
 pub mod rust_path;
@@ -356,7 +356,7 @@ pub fn libraw_mosaic(bytes: &[u8]) -> Result<(usize, usize, Vec<u16>), RawError>
 }
 
 /// Applies a DNG's GainMap opcodes (OpcodeList2) to the unpacked sensor
-/// data, which LibRaw itself does not (src/gain_map.rs). Bayer CFA images
+/// data, which LibRaw itself does not (heeler-rawdec's gain_map). Bayer CFA images
 /// only: a linear DNG's maps, and the lists applied after demosaic
 /// (OpcodeList3), are not read. Returns how many maps were applied.
 ///

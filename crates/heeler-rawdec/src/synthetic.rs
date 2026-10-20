@@ -145,7 +145,8 @@ pub struct Spec<'a> {
     pub neutral: [f64; 3],
     /// ColorMatrix1 (illuminant A) and ColorMatrix2 (D65).
     pub matrices: [[f64; 9]; 2],
-    /// OpcodeList3 bytes, if any.
+    /// OpcodeList2 and OpcodeList3 bytes, if any.
+    pub opcodes2: Option<Vec<u8>>,
     pub opcodes3: Option<Vec<u8>>,
     pub pixel: &'a dyn Fn(usize, usize) -> u16,
 }
@@ -168,6 +169,7 @@ impl Default for Spec<'_> {
                 [1.0085, -0.5130, -0.1153, -0.3525, 1.0115, 0.3980, -0.0151, 0.0328, 0.7332],
                 [0.8087, -0.2542, -0.1151, -0.3882, 1.2350, 0.1689, -0.0857, 0.1516, 0.6408],
             ],
+            opcodes2: None,
             opcodes3: None,
             pixel: &|_, _| 0,
         }
@@ -276,6 +278,9 @@ pub fn cfa_dng(s: &Spec) -> Vec<u8> {
     if let Some(a) = s.active {
         e.push((50829, 4, 4, long(&a)));
     }
+    if let Some(o) = &s.opcodes2 {
+        e.push((51009, 7, o.len() as u32, o.clone()));
+    }
     if let Some(o) = &s.opcodes3 {
         e.push((51022, 7, o.len() as u32, o.clone()));
     }
@@ -328,4 +333,48 @@ pub fn cfa_dng(s: &Spec) -> Vec<u8> {
         out.extend_from_slice(p);
     }
     out
+}
+
+/// One DNG opcode's bytes: its ID, version 1.3, flags 0, and parameters.
+fn opcode(id: u32, params: &[u8]) -> Vec<u8> {
+    let mut op = Vec::new();
+    for v in [id, 0x0103_0000, 0, params.len() as u32] {
+        op.extend_from_slice(&v.to_be_bytes());
+    }
+    op.extend_from_slice(params);
+    op
+}
+
+/// A GainMap opcode: an area (top, left, bottom, right), a first plane
+/// and plane count, row and column pitches, and a grid of `points` (rows,
+/// columns) by `map_planes` gains spread evenly over the whole image.
+pub fn gain_map(area: [u32; 4], planes: [u32; 2], pitch: [u32; 2], points: [u32; 2], map_planes: u32, gains: &[f32]) -> Vec<u8> {
+    let mut p = Vec::new();
+    for v in [area[0], area[1], area[2], area[3], planes[0], planes[1], pitch[0], pitch[1], points[0], points[1]] {
+        p.extend_from_slice(&v.to_be_bytes());
+    }
+    let spacing = |n: u32| if n > 1 { 1.0 / (n - 1) as f64 } else { 1.0 };
+    for v in [spacing(points[0]), spacing(points[1]), 0.0, 0.0] {
+        p.extend_from_slice(&v.to_be_bytes());
+    }
+    p.extend_from_slice(&map_planes.to_be_bytes());
+    for g in gains {
+        p.extend_from_slice(&g.to_be_bytes());
+    }
+    opcode(9, &p)
+}
+
+/// A FixVignetteRadial opcode: k0 to k4 and the center (fractions).
+pub fn vignette(k: [f64; 5], cx: f64, cy: f64) -> Vec<u8> {
+    let p: Vec<u8> = k.iter().chain(&[cx, cy]).flat_map(|v| v.to_be_bytes()).collect();
+    opcode(3, &p)
+}
+
+/// An opcode list of `ops`.
+pub fn opcode_list(ops: &[Vec<u8>]) -> Vec<u8> {
+    let mut l = (ops.len() as u32).to_be_bytes().to_vec();
+    for op in ops {
+        l.extend_from_slice(op);
+    }
+    l
 }

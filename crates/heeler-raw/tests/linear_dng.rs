@@ -22,6 +22,10 @@ fn pixel(y: usize, x: usize) -> [u16; 3] {
 #[test]
 #[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
 fn a_linear_dngs_rows_are_libraws_develop_to_the_bit() {
+    // With the rust-decoder feature the module reads the file's facts in
+    // Rust (rust_facts), held here to LibRaw's develop with LibRaw's color.
+    #[cfg(feature = "rust-decoder")]
+    heeler_raw::rust_path::set_libraw_color(true);
     for orientation in [1u16, 6, 8, 3] {
         let bytes = synthetic_dng(150, 101, 64, 48, orientation, pixel);
         for highlight in [0, 2] {

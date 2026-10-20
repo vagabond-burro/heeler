@@ -8,5 +8,13 @@ license.workspace = true
 
 [dependencies]
 heeler-engine = { path = "../heeler-engine" }
+# Deflate-compressed DNG pieces (src/deflate.rs).
+miniz_oxide = "0.8"
 rayon = "1"
 thiserror.workspace = true
+
+[features]
+# Two roundings for every multiply-add, as the x86-64 and MSVC builds of
+# LibRaw compute them, on any machine: for checking those platforms'
+# develop on an aarch64 one (see fmadd).
+unfused = []

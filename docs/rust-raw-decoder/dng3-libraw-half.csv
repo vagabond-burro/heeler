@@ -1,0 +1,263 @@
+file,maker,camera,format,megapixels,decoder,half,runs,status,total_ms,open_ms,unpack_ms,develop_ms,out_width,out_height
+Converted DNG/Canon EOS 5D Mark III/5G4A9394-compressed-lossless.DNG,Converted DNG,Canon EOS 5D Mark III,DNG-LJ92-CFA,5.61,libraw,1,5,ok,305.30,0.07,241.12,64.49,2898,1935
+Converted DNG/Canon EOS 5D Mark III/5G4A9394-compressed-lossy.DNG,Converted DNG,Canon EOS 5D Mark III,DNG-LossyJPEG,22.12,libraw,1,5,ok,209.98,0.06,97.24,112.68,5760,3840
+Converted DNG/Canon EOS 5D Mark III/5G4A9394-uncompressed.DNG,Converted DNG,Canon EOS 5D Mark III,DNG-Uncompressed-CFA,5.61,libraw,1,5,ok,83.09,0.06,18.82,64.22,2898,1935
+Converted DNG/Canon EOS 5D Mark III/5G4A9395-compressed-lossless.DNG,Converted DNG,Canon EOS 5D Mark III,DNG-LJ92-Linear,10.45,libraw,1,5,ok,353.32,0.07,300.09,53.00,3960,2640
+Converted DNG/Canon EOS 5D Mark III/5G4A9395-compressed-lossy.DNG,Converted DNG,Canon EOS 5D Mark III,DNG-LossyJPEG,10.45,libraw,1,5,ok,96.19,0.06,42.59,53.57,3960,2640
+Converted DNG/Canon EOS 5D Mark III/5G4A9395-uncompressed.DNG,Converted DNG,Canon EOS 5D Mark III,DNG-Uncompressed-Linear,10.45,libraw,1,5,ok,71.27,0.06,18.41,52.80,3960,2640
+Apple/iPhone 12 Pro/IMG_1361.DNG,Apple,iPhone 12 Pro,DNG-LJ92-Linear,12.19,libraw,1,5,ok,454.37,0.09,363.08,91.26,3024,4032
+Apple/iPhone 6s Plus/IMG_0853.DNG,Apple,iPhone 6s Plus,DNG-LJ92-CFA,3.05,libraw,1,5,ok,158.75,0.06,122.18,36.23,2016,1512
+Apple/iPhone 7 Plus/IMG_0739.DNG,Apple,iPhone 7 Plus,DNG-LJ92-CFA,3.05,libraw,1,5,ok,156.76,0.05,120.31,36.38,2016,1512
+Apple/iPhone 8/RAW_2018_11_07_14_43_14_820_noflash.dng,Apple,iPhone 8,DNG-LJ92-CFA,3.05,libraw,1,5,ok,156.26,0.05,119.76,36.31,2016,1512
+Apple/iPhone SE/A4973FFB-9CBD-4ED8-805D-E30F4AE08A95.dng,Apple,iPhone SE,DNG-LJ92-CFA,3.05,libraw,1,5,ok,154.67,0.05,118.35,36.25,2016,1512
+Apple/iPhone XS/IMG_1105.dng,Apple,iPhone XS,DNG-LJ92-CFA,3.05,libraw,1,5,ok,158.65,0.05,122.46,36.20,2016,1512
+Arashi Vision/Insta360 One X/IMG_20201122_142733_00_015.dng,Arashi Vision,Insta360 One X,DNG-Uncompressed-CFA,4.62,libraw,1,5,ok,68.27,0.04,15.06,53.15,1520,3040
+Autel/Model 323/MAX_0005.DNG,Autel,Model 323,DNG-Uncompressed-CFA,3.00,libraw,1,5,ok,44.28,0.02,9.71,34.53,2000,1500
+Autel Robotics/XB015/MAX_0001.DNG,Autel Robotics,XB015,DNG-Uncompressed-CFA,2.25,libraw,1,5,ok,33.22,0.04,7.26,25.88,2000,1125
+Blackmagic/Blackmagic Pocket Cinema Camera 4k/4k_DCI_uncompressed.dng,Blackmagic,Blackmagic Pocket Cinema Camera 4k,DNG-Uncompressed-CFA,2.25,libraw,1,5,ok,75.84,0.06,49.84,25.90,2064,1088
+Blackmagic/Blackmagic Pocket Cinema Camera 4k/BMPCC_4k_DCI_3-1.dng,Blackmagic,Blackmagic Pocket Cinema Camera 4k,DNG-LJ92-CFA,2.25,libraw,1,5,ok,109.74,0.06,83.85,25.74,2064,1088
+Blackmagic/Blackmagic Pocket Cinema Camera 4k/BMPCC_4k_DCI_4-1.dng,Blackmagic,Blackmagic Pocket Cinema Camera 4k,DNG-LJ92-CFA,2.25,libraw,1,5,ok,91.10,0.06,65.33,25.78,2064,1088
+Blackmagic/Blackmagic Pocket Cinema Camera 4k/BMPCC_4k_DCI_lossless.dng,Blackmagic,Blackmagic Pocket Cinema Camera 4k,DNG-LJ92-CFA,2.25,libraw,1,5,ok,109.88,0.06,83.94,25.96,2064,1088
+Blackmagic/Blackmagic Pocket Cinema Camera 4k/BMPCC_4k_DCI_uncompressed.dng,Blackmagic,Blackmagic Pocket Cinema Camera 4k,DNG-Uncompressed-CFA,2.25,libraw,1,5,ok,75.64,0.06,49.74,25.89,2064,1088
+Blackmagic/Micro Cinema Camera/CAM1_2000-01-01_1659_C0002_000100.dng,Blackmagic,Micro Cinema Camera,DNG-LJ92-CFA,0.54,libraw,1,5,ok,25.59,0.05,19.25,6.31,976,552
+Blackmagic/Micro Cinema Camera/CAM1_2000-01-01_1707_C0003_000100.dng,Blackmagic,Micro Cinema Camera,DNG-LJ92-CFA,0.54,libraw,1,5,ok,28.74,0.06,22.37,6.27,976,552
+Blackmagic/Pocket Cinema Camera/Blackmagic_Pocket_Cinema_Camera_1_2016-09-17_0053_C0022_000007.dng,Blackmagic,Pocket Cinema Camera,DNG-LJ92-CFA,0.54,libraw,1,5,ok,28.47,0.05,22.19,6.31,976,556
+Blackmagic/URSA 4K/Blackmagic URSA_1_1999-12-31_2153_C0003_000001.dng,Blackmagic,URSA 4K,DNG-LJ92-CFA,2.21,libraw,1,5,ok,110.50,0.06,85.17,25.41,2016,1096
+Blackmagic Design/Pocket Cinema Camera 6k Pro/A010_04101355_S068.dng,Blackmagic Design,Pocket Cinema Camera 6k Pro,DNG-Uncompressed-CFA,5.31,libraw,1,5,ok,176.25,0.07,115.59,60.67,3072,1728
+Canon/Canon DIGITAL IXUS 60/CRW_2069.DNG,Canon,Canon DIGITAL IXUS 60,DNG-Uncompressed-CFA,1.51,libraw,1,5,ok,47.39,0.04,29.93,17.37,1420,1064
+Canon/Canon DIGITAL IXUS 95 IS/CRW_2593_01.DNG,Canon,Canon DIGITAL IXUS 95 IS,DNG-Uncompressed-CFA,2.54,libraw,1,5,ok,87.40,0.05,57.87,29.32,1842,1380
+Canon/Canon PowerShot A3100 IS/CRW_3338.DNG,Canon,Canon PowerShot A3100 IS,DNG-Uncompressed-CFA,3.05,libraw,1,5,ok,102.83,0.04,67.51,35.00,2018,1513
+Canon/Canon PowerShot A3300 IS/CRW_1140.DNG,Canon,Canon PowerShot A3300 IS,DNG-Uncompressed-CFA,4.00,libraw,1,5,ok,132.89,0.04,86.84,45.81,2312,1730
+Canon/Canon PowerShot A410/CANON_A410_CHDK_CRW_0741.DNG,Canon,Canon PowerShot A410,DNG-Uncompressed-CFA,0.81,libraw,1,5,ok,26.47,0.03,16.94,9.45,1044,776
+Canon/Canon PowerShot A480/CRW_0010.DNG,Canon,Canon PowerShot A480,DNG-Uncompressed-CFA,2.58,libraw,1,5,ok,89.09,0.04,59.58,29.65,1860,1386
+Canon/Canon PowerShot A540/CANON_A540_CHDK_CRW_0010.DNG,Canon,Canon PowerShot A540,DNG-Uncompressed-CFA,1.51,libraw,1,5,ok,46.64,0.04,29.48,17.47,1420,1064
+Canon/Canon PowerShot A550/CRW_0006.DNG,Canon,Canon PowerShot A550,DNG-Uncompressed-CFA,1.81,libraw,1,5,ok,58.13,0.04,37.09,20.77,1556,1164
+Canon/Canon PowerShot A560/IMG_2641.DNG,Canon,Canon PowerShot A560,DNG-Uncompressed-CFA,1.81,libraw,1,5,ok,59.40,0.04,38.63,20.91,1554,1162
+Canon/Canon PowerShot A570 IS/CRW_1918.DNG,Canon,Canon PowerShot A570 IS,DNG-Uncompressed-CFA,1.81,libraw,1,5,ok,57.33,0.04,36.34,20.91,1554,1162
+Canon/Canon PowerShot A640/CRW_0440.DNG,Canon,Canon PowerShot A640,DNG-Uncompressed-CFA,2.53,libraw,1,5,ok,78.21,0.04,49.27,29.05,1834,1378
+Canon/Canon PowerShot D10/CANON_D10_CHDK_CRW_0626.DNG,Canon,Canon PowerShot D10,DNG-Uncompressed-CFA,3.08,libraw,1,5,ok,101.71,0.04,66.37,35.42,2036,1515
+Canon/Canon PowerShot ELPH 130 IS/CANON_IXUS140_ELPH130_CHDK_CRW_5645.DNG,Canon,Canon PowerShot ELPH 130 IS,DNG-Uncompressed-CFA,4.05,libraw,1,5,ok,136.70,0.04,90.30,46.55,2327,1741
+Canon/Canon PowerShot ELPH 160/RAW_CANON_POWERSHOT_IXUS160_CHDK.DNG,Canon,Canon PowerShot ELPH 160,DNG-Uncompressed-CFA,5.06,libraw,1,5,ok,174.77,0.05,116.42,58.31,2596,1950
+Canon/Canon PowerShot ELPH 180/CANON_IXUS175_ELPH180_CHDK_CRW_0194.DNG,Canon,Canon PowerShot ELPH 180,DNG-Uncompressed-CFA,5.03,libraw,1,5,ok,168.48,0.05,110.98,57.62,2587,1944
+Canon/Canon PowerShot ELPH 180/CRW_0334.DNG,Canon,Canon PowerShot ELPH 180,DNG-Uncompressed-CFA,5.03,libraw,1,5,ok,172.02,0.05,114.24,57.73,2587,1944
+Canon/Canon PowerShot ELPH 310 HS/CRW_9720.DNG,Canon,Canon PowerShot ELPH 310 HS,DNG-Uncompressed-CFA,3.09,libraw,1,5,ok,109.57,0.05,73.96,35.68,2036,1518
+Canon/Canon PowerShot S2 IS/IMG_1739.DNG,Canon,Canon PowerShot S2 IS,DNG-Uncompressed-CFA,1.28,libraw,1,5,ok,39.23,0.03,24.86,14.34,1306,978
+Canon/Canon PowerShot S3IS/CRW_8531.DNG,Canon,Canon PowerShot S3IS,DNG-Uncompressed-CFA,1.51,libraw,1,5,ok,34.23,0.03,5.08,29.11,1420,1064
+Canon/EOS 5D Mark III/M24-1221_000202.dng,Canon,EOS 5D Mark III,DNG-LJ92-CFA,0.52,libraw,1,5,ok,27.27,0.03,21.21,6.02,960,540
+Canon/EOS 5D Mark III/compress.dng,Canon,EOS 5D Mark III,DNG-LJ92-CFA,0.39,libraw,1,5,ok,21.67,0.02,16.99,4.58,960,409
+Canon/EOS 5D Mark III/hdrmerge-bayer-fp16-uncompressed.dng,Canon,EOS 5D Mark III,DNG-Uncompressed-CFA,5.61,libraw,1,5,ok,82.23,0.06,17.81,64.34,2898,1935
+Canon/EOS 5D Mark III/hdrmerge-bayer-fp16-w-pred-deflate.dng,Canon,EOS 5D Mark III,DNG-Deflate-CFA,5.61,libraw,1,5,ok,263.24,0.06,198.76,64.22,2898,1935
+Canon/EOS 5D Mark III/hdrmerge-bayer-fp24-uncompressed.dng,Canon,EOS 5D Mark III,DNG-Uncompressed-CFA,5.61,libraw,1,5,ok,90.55,0.06,26.10,64.56,2898,1935
+Canon/EOS 5D Mark III/hdrmerge-bayer-fp24-w-pred-deflate.dng,Canon,EOS 5D Mark III,DNG-Deflate-CFA,5.61,libraw,1,5,ok,382.28,0.06,318.03,64.18,2898,1935
+Canon/EOS 5D Mark III/hdrmerge-bayer-fp32-uncompressed.dng,Canon,EOS 5D Mark III,DNG-Uncompressed-CFA,5.61,libraw,1,5,ok,77.54,0.05,13.26,64.30,2898,1935
+Canon/EOS 5D Mark III/hdrmerge-bayer-fp32-w-pred-deflate.dng,Canon,EOS 5D Mark III,DNG-Deflate-CFA,5.61,libraw,1,5,ok,476.20,0.06,411.89,64.18,2898,1935
+Canon/EOS 60D/M14-1451_000085_cDNG_compressed.dng,Canon,EOS 60D,DNG-LJ92-CFA,0.13,libraw,1,5,ok,6.43,0.02,4.88,1.53,480,270
+Canon/EOS 7D Mark II/0P9A0410-Enhanced-NR.dng,Canon,EOS 7D Mark II,DNG-LJ92-CFA,5.04,libraw,1,5,ok,273.17,0.06,214.94,57.98,2748,1835
+Canon/EOS-1D X/CROPGX2R4019-topaz-denoiseraw.dng,Canon,EOS-1D X,DNG-Uncompressed-Linear,0.41,libraw,1,5,ok,2.95,0.03,0.72,2.15,644,644
+Canon/IXY 220F/canon_ixy_220f.DNG,Canon,IXY 220F,DNG-Uncompressed-CFA,4.09,libraw,1,5,ok,141.53,0.05,94.40,47.00,2340,1749
+Canon/PowerShot A3200 IS/RAW_CANON_POWERSHOT_A3200IS_CHDK.DNG,Canon,PowerShot A3200 IS,DNG-Uncompressed-CFA,3.50,libraw,1,5,ok,117.78,0.04,77.43,40.38,2160,1620
+Canon/PowerShot A720 IS/IMG_8329.DNG,Canon,PowerShot A720 IS,DNG-Uncompressed-CFA,2.03,libraw,1,5,ok,65.75,0.04,42.28,23.38,1646,1233
+Canon/PowerShot G1 X/CRW_0004.DNG,Canon,PowerShot G1 X,DNG-Uncompressed-CFA,3.65,libraw,1,5,ok,130.31,0.04,88.53,41.77,2202,1656
+Canon/PowerShot G7 X/CANON_G7X_CHDK_CRW_6740.DNG,Canon,PowerShot G7 X,DNG-Uncompressed-CFA,4.99,libraw,1,5,ok,171.97,0.04,115.02,57.14,2736,1824
+Canon/PowerShot S100/CRW_1369.DNG,Canon,PowerShot S100,DNG-Uncompressed-CFA,3.08,libraw,1,5,ok,102.57,0.05,64.39,37.99,1523,2024
+Canon/PowerShot SD450/RAW_CANON_POWERSHOT_SD450_CHDK_V0.9.7-725.DNG,Canon,PowerShot SD450,DNG-Uncompressed-CFA,1.28,libraw,1,5,ok,40.14,0.03,25.26,14.83,1308,980
+Canon/PowerShot SX10 IS/CRW_1627.DNG,Canon,PowerShot SX10 IS,DNG-Uncompressed-CFA,2.54,libraw,1,5,ok,82.03,0.04,53.05,29.14,1842,1380
+Canon/PowerShot SX100 IS/CRW_0964_01.DNG,Canon,PowerShot SX100 IS,DNG-Uncompressed-CFA,2.03,libraw,1,5,ok,65.59,0.04,42.00,23.40,1646,1233
+Canon/PowerShot SX130 IS/CRW_8815.DNG,Canon,PowerShot SX130 IS,DNG-Uncompressed-CFA,3.00,libraw,1,5,ok,103.10,0.04,68.60,34.45,2000,1500
+Canon/PowerShot SX160 IS/CANON_SX160IS_CHDK_CRW_5152.DNG,Canon,PowerShot SX160 IS,DNG-Uncompressed-CFA,4.05,libraw,1,5,ok,137.35,0.04,90.70,46.54,2328,1740
+Canon/PowerShot SX20 IS/CRW_6489.DNG,Canon,PowerShot SX20 IS,DNG-Uncompressed-CFA,3.02,libraw,1,5,ok,100.25,0.04,65.44,34.69,2004,1506
+Canon/PowerShot SX220 HS/CRW_7733.DNG,Canon,PowerShot SX220 HS,DNG-Uncompressed-CFA,3.10,libraw,1,5,ok,106.91,0.04,71.37,35.76,2036,1522
+Canon/PowerShot SX230 HS/CRW_5894.DNG,Canon,PowerShot SX230 HS,DNG-Uncompressed-CFA,3.09,libraw,1,5,ok,103.71,0.05,68.00,35.53,2036,1518
+Canon/PowerShot SX240 HS/CRW_5797.DNG,Canon,PowerShot SX240 HS,DNG-Uncompressed-CFA,3.10,libraw,1,5,ok,103.90,0.04,68.03,35.67,2040,1518
+Canon/PowerShot SX260 HS/CRW_3027.DNG,Canon,PowerShot SX260 HS,DNG-Uncompressed-CFA,3.10,libraw,1,5,ok,105.09,0.05,69.14,35.54,2040,1518
+Canon/PowerShot SX30 IS/CRW_0763.DNG,Canon,PowerShot SX30 IS,DNG-Uncompressed-CFA,3.55,libraw,1,5,ok,121.50,0.04,80.88,40.76,2184,1627
+Canon/PowerShot SX40 HS/CRW_6037.DNG,Canon,PowerShot SX40 HS,DNG-Uncompressed-CFA,3.10,libraw,1,5,ok,105.22,0.04,69.77,35.46,2036,1522
+Canon/PowerShot SX50 HS/CRW_4061.DNG,Canon,PowerShot SX50 HS,DNG-Uncompressed-CFA,3.20,libraw,1,5,ok,103.69,0.05,67.31,36.86,2088,1531
+Canon/PowerShot SX510 HS/RAW_CANON_POWERSHOT_SX510HS.DNG,Canon,PowerShot SX510 HS,DNG-Uncompressed-CFA,3.10,libraw,1,5,ok,103.05,0.05,67.42,35.58,2036,1522
+Canon/PowerShot SX530 HS/CRW_4494.DNG,Canon,PowerShot SX530 HS,DNG-Uncompressed-CFA,4.09,libraw,1,5,ok,140.14,0.05,92.84,47.15,2336,1750
+Canon/PowerShot SX60 HS/Canon-SX60HS-CHDK-RAW.DNG,Canon,PowerShot SX60 HS,DNG-Uncompressed-CFA,4.08,libraw,1,5,ok,136.89,0.04,89.95,46.93,2332,1750
+Canon/PowerShot SX710 HS/CANON_SX710HS_CHDK_CRW_0716.DNG,Canon,PowerShot SX710 HS,DNG-Uncompressed-CFA,5.16,libraw,1,5,ok,178.38,0.04,119.35,59.08,2624,1966
+DJI/DJI Osmo Action/DJI_0254.DNG,DJI,DJI Osmo Action,DNG-Uncompressed-CFA,3.00,libraw,1,5,ok,46.98,0.06,9.65,37.27,2000,1500
+DJI/FC220/DJI_0004.DNG,DJI,FC220,DNG-Uncompressed-CFA,3.00,libraw,1,5,ok,45.34,0.05,9.70,35.64,2000,1500
+DJI/FC350/DJI_0040.DNG,DJI,FC350,DNG-Uncompressed-CFA,2.25,libraw,1,5,ok,33.24,0.04,7.27,25.95,2000,1125
+DJI/FC4382/DJI_20250506184749_0011_D.DNG,DJI,FC4382,DNG-LJ92-CFA,3.05,libraw,1,5,ok,153.01,0.05,117.81,34.94,2016,1512
+DJI/FC6310/DJI_0220.DNG,DJI,FC6310,DNG-Uncompressed-CFA,4.99,libraw,1,5,ok,74.81,0.07,16.02,58.72,2736,1824
+DJI/FC7303/DJI_0109.DNG,DJI,FC7303,DNG-Uncompressed-CFA,3.00,libraw,1,5,ok,46.66,0.06,9.63,37.00,2000,1500
+DJI/FC7303/DJI_0765.DNG,DJI,FC7303,DNG-Uncompressed-CFA,2.25,libraw,1,5,ok,35.23,0.06,7.21,27.98,2000,1125
+DJI/FC9287/DJI_20250528104510_0025_D.DNG,DJI,FC9287,DNG-LJ92-CFA,9.44,libraw,1,5,ok,547.83,0.06,439.20,107.89,4096,2304
+Eyedeas/E1/EYED0651.DNG,Eyedeas,E1,DNG-Uncompressed-CFA,4.04,libraw,1,5,ok,63.10,0.05,12.97,50.17,1740,2320
+FIMI/X8SE/IMG_20180808_081040_0001.DNG,FIMI,X8SE,DNG-Uncompressed-CFA,2.07,libraw,1,5,ok,30.45,0.02,6.66,23.72,1920,1080
+Fujifilm/X100S/fujifilm-x100s-daylight-DSCF9505.dng,Fujifilm,X100S,DNG-LJ92-CFA,4.07,libraw,1,5,ok,219.54,0.08,170.09,49.27,2468,1648
+Google/Pixel 2 XL/IMG_20180109_080629.dng,Google,Pixel 2 XL,DNG-Uncompressed-CFA,3.05,libraw,1,5,ok,48.35,0.06,10.21,38.11,2016,1512
+Google/Pixel 3a/IMG_20190918_164153.dng,Google,Pixel 3a,DNG-LJ92-CFA,3.05,libraw,1,5,ok,162.68,0.06,124.72,37.90,2016,1512
+Google/Pixel 4 XL/IMG_20191023_125156.dng,Google,Pixel 4 XL,DNG-LJ92-CFA,2.57,libraw,1,5,ok,141.77,0.06,109.75,31.93,1850,1387
+Google/Pixel 4a/PXL_20201121_100251397.dng,Google,Pixel 4a,DNG-LJ92-CFA,3.05,libraw,1,5,ok,171.49,0.06,133.09,38.03,2016,1512
+Google/Pixel 6 Pro/PXL_20220910_093206982.dng,Google,Pixel 6 Pro,DNG-LJ92-CFA,3.13,libraw,1,5,ok,170.16,0.05,130.94,39.03,2040,1536
+Google/Pixel 7 Pro/PXL_20221204_063131635.dng,Google,Pixel 7 Pro,DNG-LJ92-CFA,2.84,libraw,1,5,ok,159.62,0.05,123.95,35.34,1941,1462
+Google/Pixel 8 Pro/PXL_20240415_103400204.RAW-02.ORIGINAL.dng,Google,Pixel 8 Pro,DNG-LJ92-CFA,12.53,libraw,1,5,ok,785.26,0.06,516.10,269.09,4080,3072
+HMD Global/Nokia 7 plus/IMG_20190612_120131.dng,HMD Global,Nokia 7 plus,DNG-Uncompressed-CFA,3.05,libraw,1,5,ok,48.18,0.06,10.12,37.95,2016,1512
+HTC/HTC 10/IMAG1305.dng,HTC,HTC 10,DNG-Uncompressed-CFA,3.00,libraw,1,5,ok,48.03,0.07,10.35,37.63,2000,1500
+HUAWEI/ANE-LX1/IMG_20200920_112515.dng,HUAWEI,ANE-LX1,DNG-Uncompressed-CFA,3.98,libraw,1,5,ok,62.94,0.06,13.28,49.56,2304,1728
+HUAWEI/AUM-L29/IMG_20181222_154757.dng,HUAWEI,AUM-L29,DNG-Uncompressed-CFA,3.28,libraw,1,5,ok,52.09,0.06,11.00,41.14,2104,1560
+HUAWEI/BLA-L29/IMG_20180119_175851.dng,HUAWEI,BLA-L29,DNG-Uncompressed-CFA,2.95,libraw,1,5,ok,47.03,0.06,9.87,37.09,1984,1488
+HUAWEI/CLT-L09/IMG_20191010_085409.dng,HUAWEI,CLT-L09,DNG-Uncompressed-CFA,9.98,libraw,1,5,ok,155.59,0.09,32.76,122.74,3648,2736
+HUAWEI/DLI-L22/IMG_20171028_150510.dng,HUAWEI,DLI-L22,DNG-Uncompressed-CFA,3.28,libraw,1,5,ok,52.14,0.06,10.97,40.99,2104,1560
+HUAWEI/EML-L09/IMG_20190316_130857_(2).dng,HUAWEI,EML-L09,DNG-Uncompressed-CFA,2.95,libraw,1,5,ok,46.88,0.06,9.88,36.90,1984,1488
+HUAWEI/EML-L29/IMG_20190507_233457.dng,HUAWEI,EML-L29,DNG-Uncompressed-CFA,2.95,libraw,1,5,ok,46.67,0.06,9.74,36.78,1984,1488
+HUAWEI/EVA-AL00/IMG_20171015_200142.dng,HUAWEI,EVA-AL00,DNG-Uncompressed-CFA,2.95,libraw,1,5,ok,47.01,0.06,9.90,37.05,1984,1488
+HUAWEI/EVA-L09/Huawai_P9_Leica.dng,HUAWEI,EVA-L09,DNG-Uncompressed-CFA,2.95,libraw,1,5,ok,47.03,0.06,9.93,37.04,1984,1488
+HUAWEI/FRD-L09/IMG_20180520_132951.dng,HUAWEI,FRD-L09,DNG-Uncompressed-CFA,2.95,libraw,1,5,ok,47.05,0.06,9.86,37.09,1984,1488
+HUAWEI/HRY-LX1/IMG_20190427_200711.dng,HUAWEI,HRY-LX1,DNG-Uncompressed-CFA,3.24,libraw,1,5,ok,51.64,0.06,10.71,40.76,2080,1560
+HUAWEI/HUAWEI NXT-L29/IMG_20190508_113343.dng,HUAWEI,HUAWEI NXT-L29,DNG-Uncompressed-CFA,3.98,libraw,1,5,ok,62.17,0.06,13.25,48.93,2304,1728
+HUAWEI/PRA-LX1/IMG_20180330_171432.dng,HUAWEI,PRA-LX1,DNG-Uncompressed-CFA,2.95,libraw,1,5,ok,46.84,0.06,9.82,36.95,1984,1488
+HUAWEI/SNE-LX1/IMG_20191221_095657.dng,HUAWEI,SNE-LX1,DNG-Uncompressed-CFA,4.92,libraw,1,5,ok,83.08,0.07,16.20,66.83,1920,2560
+HUAWEI/VKY-L09/IMG_20180429_160450.dng,HUAWEI,VKY-L09,DNG-Uncompressed-CFA,2.95,libraw,1,5,ok,46.85,0.06,9.83,36.92,1984,1488
+HUAWEI/VOG-L29/IMG_20190330_123314.dng,HUAWEI,VOG-L29,DNG-Uncompressed-CFA,2.00,libraw,1,5,ok,32.05,0.06,6.70,25.30,1632,1224
+HUAWEI/VTR-L09/IMG_20180307_120152.dng,HUAWEI,VTR-L09,DNG-Uncompressed-CFA,2.95,libraw,1,5,ok,46.99,0.06,9.88,37.04,1984,1488
+HUAWEI/WAS-LX1A/IMG_20180416_193350.dng,HUAWEI,WAS-LX1A,DNG-Uncompressed-CFA,2.95,libraw,1,5,ok,49.77,0.06,9.84,39.87,1488,1984
+Hasselblad/L1D-20c/DJI_0017.DNG,Hasselblad,L1D-20c,DNG-Uncompressed-CFA,4.99,libraw,1,5,ok,76.72,0.05,16.47,60.37,2736,1824
+Hasselblad/L2D-20c/DJI_0023.DNG,Hasselblad,L2D-20c,DNG-Uncompressed-CFA,5.22,libraw,1,5,ok,80.33,0.06,17.16,63.09,2640,1978
+KanDao/QooCam/KD3D_20190310_123825_000001.DNG,KanDao,QooCam,DNG-Uncompressed-CFA,2.33,libraw,1,5,ok,34.32,0.04,7.48,26.80,2160,1080
+KanDao/QooCam/KDRaw_Q360_20190310_125715_000001.dng,KanDao,QooCam,DNG-LJ92-CFA,2.33,libraw,1,5,ok,132.04,0.05,105.17,26.80,2160,1080
+KanDao/QooCam/Q360_20190310_123437_000001.DNG,KanDao,QooCam,DNG-Uncompressed-CFA,2.33,libraw,1,5,ok,34.34,0.04,7.53,26.77,2160,1080
+KanDao/QooCam 8K/Q360_20210330_100513_00000D.DNG,KanDao,QooCam 8K,DNG-Uncompressed-CFA,7.37,libraw,1,5,ok,108.40,0.04,23.75,84.71,1920,3840
+LG/D855/IMG_2017_07_16_13_10_47.dng,LG,D855,DNG-Uncompressed-CFA,3.25,libraw,1,5,ok,47.24,0.04,10.36,36.82,2082,1560
+LG/H815/20161227_150823.dng,LG,H815,DNG-Uncompressed-CFA,3.97,libraw,1,5,ok,127.57,0.04,82.18,45.35,2656,1494
+LG/LG-F800K/20171028_174609.dng,LG,LG-F800K,DNG-Uncompressed-CFA,4.06,libraw,1,5,ok,126.97,0.05,80.21,46.66,2328,1746
+LG/LG-H850/LGG5_Camera_Front.dng,LG,LG-H850,DNG-Uncompressed-CFA,2.00,libraw,1,5,ok,33.59,0.06,6.68,26.93,1224,1632
+LG/LG-H870/20180705_215945.dng,LG,LG-H870,DNG-Uncompressed-CFA,3.24,libraw,1,5,ok,101.81,0.05,64.58,37.17,2080,1560
+LG/LG-H910/opn_20190921_065338_0.dng,LG,LG-H910,DNG-Uncompressed-CFA,4.06,libraw,1,5,ok,63.98,0.06,13.43,50.46,2328,1746
+LG/Nexus 5X/IMG_20170214_170637_637.dng,LG,Nexus 5X,DNG-Uncompressed-CFA,3.05,libraw,1,5,ok,48.77,0.07,10.42,38.29,2016,1512
+LG/US996/IMG_20170821_025047.dng,LG,US996,DNG-Uncompressed-CFA,4.06,libraw,1,5,ok,64.70,0.07,13.56,51.06,2328,1746
+LG/VS995/0313171232.dng,LG,VS995,DNG-Uncompressed-CFA,4.06,libraw,1,5,ok,129.78,0.04,82.94,46.71,2328,1746
+Leica/CL/L1080510_2018_CL-35-135-Chateau_Thy__Chateau_Ham.DNG,Leica,CL,DNG-Uncompressed-CFA,6.04,libraw,1,5,ok,206.86,0.06,137.76,69.24,3008,2008
+Leica/M (Typ 240)/ADG_RPUsubmit_compressed_L1006373.DNG,Leica,M (Typ 240),DNG-LJ92-CFA,5.98,libraw,1,5,ok,338.64,0.05,269.71,68.75,2992,2000
+Leica/M (Typ 240)/ADG_RPUsubmit_uncompressed_L1006374.DNG,Leica,M (Typ 240),DNG-Uncompressed-CFA,5.98,libraw,1,5,ok,88.65,0.05,20.02,68.57,2992,2000
+Leica/M Monochrom/L1000622.DNG,Leica,M Monochrom,DNG-Uncompressed-Linear,18.11,libraw,1,5,ok,121.56,0.04,14.48,106.98,5216,3472
+Leica/M Monochrom (Typ 246)/M2462362.DNG,Leica,M Monochrom (Typ 246),DNG-LJ92-Linear,23.94,libraw,1,5,ok,383.31,0.05,240.26,142.87,5984,4000
+Leica/M10/f5381888.dng,Leica,M10,DNG-LJ92-CFA,5.97,libraw,1,5,ok,335.48,0.06,267.20,68.33,2992,1996
+Leica/M8/L1030132.DNG,Leica,M8,DNG-Uncompressed-CFA,2.59,libraw,1,5,ok,71.88,0.07,42.06,29.63,1960,1319
+Leica/M9/L1049390.DNG,Leica,M9,DNG-Uncompressed-CFA,4.53,libraw,1,5,ok,128.21,0.08,76.13,51.99,2608,1736
+Leica/M9 Digital Camera/L1049391.DNG,Leica,M9 Digital Camera,DNG-Uncompressed-CFA,4.53,libraw,1,5,ok,66.25,0.04,14.49,51.77,2608,1736
+Leica/Q (Typ 116)/L1070048.DNG,Leica,Q (Typ 116),DNG-Uncompressed-CFA,6.04,libraw,1,5,ok,212.52,0.05,143.19,69.27,3008,2008
+Leica/Q2/L1000750.DNG,Leica,Q2,DNG-Uncompressed-CFA,11.82,libraw,1,5,ok,407.55,0.05,273.41,133.99,4196,2816
+Leica/SL (Typ 601)/20160915_Lechtaler_001.DNG,Leica,SL (Typ 601),DNG-Uncompressed-CFA,6.04,libraw,1,5,ok,213.91,0.06,145.97,68.54,3008,2008
+Leica/X2/L1021324.DNG,Leica,X2,DNG-Uncompressed-CFA,4.04,libraw,1,5,ok,132.49,0.05,86.20,46.15,2472,1636
+Leica Camera AG/LEICA M10-R/M10R0324.DNG,Leica Camera AG,LEICA M10-R,DNG-LJ92-CFA,10.25,libraw,1,5,ok,567.56,0.06,449.82,117.55,3936,2604
+Leica Camera AG/LEICA SL2/L1020010.DNG,Leica Camera AG,LEICA SL2,DNG-Uncompressed-CFA,11.77,libraw,1,5,ok,419.63,0.06,284.41,135.15,4196,2806
+Light/L16/L16_00148.dng,Light,L16,DNG-Uncompressed-Linear,64.59,libraw,1,5,ok,493.26,0.04,174.39,325.33,9280,6960
+MADV/QJXJ01FJ/IMG_20190326_134416.DNG,MADV,QJXJ01FJ,DNG-Uncompressed-CFA,5.97,libraw,1,5,ok,87.64,0.03,19.12,68.44,3456,1728
+Microsoft/Lumia 950 XL Dual SIM/Microsoft_-_Lumia_950XL.dng,Microsoft,Lumia 950 XL Dual SIM,DNG-Uncompressed-CFA,4.67,libraw,1,5,ok,153.60,0.06,95.56,58.21,2496,1872
+Nikon/D80/DSC_0143.dng,Nikon,D80,DNG-LJ92-CFA,2.54,libraw,1,5,ok,135.47,0.10,106.09,29.28,1950,1305
+Nikon/LS-5000/F014-07.dng,Nikon,LS-5000,DNG-Uncompressed-Linear,19.39,libraw,1,5,ok,164.85,0.07,35.35,129.43,5354,3622
+Nokia/Lumia 1020/RAW_NOKIA_LUMIA_1020.DNG,Nokia,Lumia 1020,DNG-Uncompressed-CFA,9.58,libraw,1,5,ok,313.28,0.05,194.78,118.44,3576,2680
+Nokia/Lumia 930/WP_20180612_19_16_03_Raw__highres.dng,Nokia,Lumia 930,DNG-Uncompressed-CFA,4.06,libraw,1,5,ok,138.04,0.06,87.70,50.65,2688,1512
+OnePlus/ONEPLUS A3003/IMG_20170316_134557.dng,OnePlus,ONEPLUS A3003,DNG-Uncompressed-CFA,4.07,libraw,1,5,ok,60.02,0.07,13.21,46.76,2328,1748
+OnePlus/ONEPLUS A5000/IMG_20171224_201301.dng,OnePlus,ONEPLUS A5000,DNG-Uncompressed-CFA,4.07,libraw,1,5,ok,59.88,0.06,13.05,46.83,2328,1748
+OnePlus/ONEPLUS A6003/IMG_20201019_093659.dng,OnePlus,ONEPLUS A6003,DNG-Uncompressed-CFA,4.07,libraw,1,5,ok,58.53,0.06,12.74,45.62,2328,1748
+OnePlus/One/IMG_20150729_201116.dng,OnePlus,One,DNG-Uncompressed-CFA,3.28,libraw,1,5,ok,114.78,0.05,71.07,44.05,1560,2104
+Panasonic/DMC-LX1/P1080763.dng,Panasonic,DMC-LX1,DNG-LJ92-CFA,2.09,libraw,1,5,ok,111.87,0.06,87.82,23.99,1928,1085
+Parrot/Anafi/100000190019.DNG,Parrot,Anafi,DNG-Uncompressed-CFA,5.37,libraw,1,5,ok,84.55,0.06,17.83,66.67,2672,2008
+Parrot/Bebop 2/Bebop2_20170330115857+0200.dng,Parrot,Bebop 2,DNG-Uncompressed-CFA,3.40,libraw,1,5,ok,57.68,0.05,10.98,46.66,1660,2048
+Parrot/Bebop Drone/Bebop_Drone_2015-11-07T180428+0000_C10611.dng,Parrot,Bebop Drone,DNG-Uncompressed-CFA,3.40,libraw,1,5,ok,57.57,0.05,10.86,46.72,1660,2048
+Pentax/645D/645D2839.DNG,Pentax,645D,DNG-LJ92-CFA,10.08,libraw,1,5,ok,653.70,0.06,537.90,115.58,3664,2750
+Pentax/645Z/IMGP2836.DNG,Pentax,645Z,DNG-LJ92-CFA,12.82,libraw,1,5,ok,710.86,0.06,563.98,146.53,4134,3100
+Pentax/K-01/_IGP2068.DNG,Pentax,K-01,DNG-LJ92-CFA,4.04,libraw,1,5,ok,222.39,0.06,176.06,46.23,2468,1636
+Pentax/K-1/IMGP8551.DNG,Pentax,K-1,DNG-LJ92-CFA,9.09,libraw,1,5,ok,461.41,0.06,357.34,104.39,3688,2466
+Pentax/K-1/IMGP8555.DNG,Pentax,K-1,DNG-LJ92-CFA,9.09,libraw,1,5,ok,483.85,0.12,379.73,103.98,3688,2466
+Pentax/K-1 Mark II/_IMG2387.DNG,Pentax,K-1 Mark II,DNG-LJ92-CFA,9.09,libraw,1,5,ok,466.09,0.07,361.64,104.07,3688,2466
+Pentax/K-1 Mark II/_IMG2390.DNG,Pentax,K-1 Mark II,DNG-LJ92-CFA,9.09,libraw,1,5,ok,469.58,0.13,365.65,104.17,3688,2466
+Pentax/K-1 Mark II/_K1I9779.DNG,Pentax,K-1 Mark II,DNG-LJ92-CFA,9.09,libraw,1,5,ok,477.06,0.07,373.48,103.75,3688,2466
+Pentax/K-1 Mark II/_K1I9783.DNG,Pentax,K-1 Mark II,DNG-LJ92-CFA,9.09,libraw,1,5,ok,484.64,0.12,381.35,103.63,3688,2466
+Pentax/K-1 Mark II/_K1I9784.DNG,Pentax,K-1 Mark II,DNG-LJ92-CFA,9.09,libraw,1,5,ok,475.04,0.13,371.28,103.79,3688,2466
+Pentax/K-1 Mark II/_K1I9786.DNG,Pentax,K-1 Mark II,DNG-LJ92-CFA,3.89,libraw,1,5,ok,212.99,0.06,168.09,44.45,2416,1610
+Pentax/K-3/IMGP6916.DNG,Pentax,K-3,DNG-LJ92-CFA,6.06,libraw,1,5,ok,320.36,0.07,251.30,69.24,3014,2012
+Pentax/K-3 II/20170430-121325.dng,Pentax,K-3 II,DNG-LJ92-CFA,6.06,libraw,1,5,ok,319.66,0.07,250.13,69.42,3014,2012
+Pentax/K-3 II/IMGP0668.DNG,Pentax,K-3 II,DNG-LJ92-CFA,6.06,libraw,1,5,ok,363.51,0.06,294.13,68.90,3014,2012
+Pentax/K-3 Mark III/_IMG0114.DNG,Pentax,K-3 Mark III,DNG-LJ92-CFA,6.47,libraw,1,5,ok,335.81,0.06,261.75,73.99,3112,2080
+Pentax/K-3 Mark III Monochrome/K3III.DNG,Pentax,K-3 Mark III Monochrome,DNG-LJ92-Linear,25.89,libraw,1,5,ok,421.20,0.05,268.21,153.87,6224,4160
+Pentax/K-30/_IGP4042.DNG,Pentax,K-30,DNG-LJ92-CFA,4.04,libraw,1,5,ok,211.22,0.06,164.95,46.20,2468,1636
+Pentax/K-5/_MAR0543.DNG,Pentax,K-5,DNG-LJ92-CFA,4.06,libraw,1,5,ok,224.47,0.06,177.62,46.61,2475,1642
+Pentax/K-5 II/IMGP2032.DNG,Pentax,K-5 II,DNG-LJ92-CFA,4.06,libraw,1,5,ok,243.97,0.06,197.16,46.59,2475,1642
+Pentax/K-5 II s/_JAK3776.DNG,Pentax,K-5 II s,DNG-LJ92-CFA,4.06,libraw,1,5,ok,224.80,0.06,178.23,46.53,2475,1642
+Pentax/K-50/IMGP1385.DNG,Pentax,K-50,DNG-LJ92-CFA,4.04,libraw,1,5,ok,208.37,0.06,162.08,46.24,2468,1636
+Pentax/K-500/Pentax_-_K-500.DNG,Pentax,K-500,DNG-LJ92-CFA,4.04,libraw,1,5,ok,217.13,0.06,171.51,45.84,2468,1636
+Pentax/K-7/IMGP6297.DNG,Pentax,K-7,DNG-LJ92-CFA,3.66,libraw,1,5,ok,223.42,0.06,181.23,41.67,2342,1561
+Pentax/K-70/IMGP0771.DNG,Pentax,K-70,DNG-LJ92-CFA,6.06,libraw,1,5,ok,322.90,0.13,253.76,69.02,3011,2012
+Pentax/K-70/IMGP6855.DNG,Pentax,K-70,DNG-LJ92-CFA,6.06,libraw,1,5,ok,292.87,0.06,223.24,69.00,3011,2012
+Pentax/K-S1/IMGP4743.DNG,Pentax,K-S1,DNG-LJ92-CFA,5.03,libraw,1,5,ok,263.62,0.07,205.70,57.53,2744,1832
+Pentax/K-S2/IMGP3368.DNG,Pentax,K-S2,DNG-LJ92-CFA,5.03,libraw,1,5,ok,247.92,0.07,190.34,57.14,2744,1832
+Pentax/K-x/IMGP6431.DNG,Pentax,K-x,DNG-LJ92-CFA,3.09,libraw,1,5,ok,168.48,0.06,133.28,35.38,2154,1434
+Pentax/K10D/IMGP5398.DNG,Pentax,K10D,DNG-Uncompressed-CFA,2.55,libraw,1,5,ok,85.56,0.06,56.89,29.06,1948,1308
+Pentax/K200D/IMGP2292.DNG,Pentax,K200D,DNG-Uncompressed-CFA,2.55,libraw,1,5,ok,88.74,0.05,59.37,29.33,1948,1308
+Pentax/K20D/RAW_Pentax_K20.DNG,Pentax,K20D,DNG-Uncompressed-CFA,3.66,libraw,1,5,ok,129.00,0.06,86.90,41.97,2344,1562
+Pentax/KP/IMGP0236.DNG,Pentax,KP,DNG-LJ92-CFA,6.08,libraw,1,5,ok,323.00,0.06,253.59,69.32,3014,2016
+Pentax/MX-1/pentax_mx1_raw2.dng,Pentax,MX-1,DNG-Uncompressed-CFA,3.02,libraw,1,5,ok,103.10,0.05,68.74,34.73,2008,1505
+Pentax/PENTAX K-r/IMGP4425.DNG,Pentax,PENTAX K-r,DNG-LJ92-CFA,3.09,libraw,1,5,ok,164.36,0.06,129.45,35.35,2154,1434
+Pentax/Q/IMGP0647.DNG,Pentax,Q,DNG-Uncompressed-CFA,3.00,libraw,1,5,ok,101.66,0.06,67.19,34.52,2000,1500
+Pentax/Q7/IMGP1691.DNG,Pentax,Q7,DNG-Uncompressed-CFA,3.00,libraw,1,5,ok,98.99,0.06,64.50,34.43,2000,1500
+Plustek/OpticFilm 8100/SF8_processed_-_Mon_Jun_17_19-45-39_2019.dng,Plustek,OpticFilm 8100,DNG-Uncompressed-Linear,4.67,libraw,1,5,ok,31.71,0.05,3.93,27.74,2592,1800
+Plustek/OpticFilm 8200i SE/AristaUltra_400_Test1.dng,Plustek,OpticFilm 8200i SE,DNG-Uncompressed-Linear,17.06,libraw,1,5,ok,115.06,0.07,14.26,100.71,5040,3384
+RaspberryPi/RP_imx477/pi.dng,RaspberryPi,RP_imx477,DNG-Uncompressed-CFA,3.08,libraw,1,5,ok,103.26,0.04,68.27,35.15,2028,1520
+RaspberryPi/RP_imx477/pi_hq_picamera.dng,RaspberryPi,RP_imx477,DNG-Uncompressed-CFA,3.08,libraw,1,5,ok,105.25,0.04,69.87,35.26,2028,1520
+RaspberryPi/RP_imx477/pi_hq_raspistill.dng,RaspberryPi,RP_imx477,DNG-Uncompressed-CFA,3.08,libraw,1,5,ok,103.07,0.04,67.73,35.30,2028,1520
+Realme/RMX1851/IMG_OCT_20191005_163311.dng,Realme,RMX1851,DNG-Uncompressed-CFA,4.07,libraw,1,5,ok,64.33,0.07,13.61,50.73,2328,1748
+Ricoh/GR/R0003611.DNG,Ricoh,GR,DNG-LJ92-CFA,4.05,libraw,1,5,ok,211.93,0.06,165.48,46.38,2472,1640
+Ricoh/GR DIGITAL 2/RAW_RICOH_GR2.DNG,Ricoh,GR DIGITAL 2,DNG-Uncompressed-CFA,2.51,libraw,1,5,ok,85.07,0.05,56.33,28.69,1828,1372
+Ricoh/GR II/R0000443.DNG,Ricoh,GR II,DNG-LJ92-CFA,2.59,libraw,1,5,ok,206.19,0.06,176.25,29.89,1976,1312
+Ricoh/GR III/R0000357.DNG,Ricoh,GR III,DNG-LJ92-CFA,6.06,libraw,1,5,ok,325.96,0.06,257.58,69.07,3010,2012
+Ricoh/GR IIIx/R0001005.DNG,Ricoh,GR IIIx,DNG-LJ92-CFA,6.06,libraw,1,5,ok,312.11,0.06,243.48,68.81,3010,2012
+Ricoh/GXR/R0017428.DNG,Ricoh,GXR,DNG-Uncompressed-CFA,2.52,libraw,1,5,ok,87.44,0.06,56.43,31.04,1374,1836
+Ricoh/RICOH GX200/R0014336-20180515-ss620-ap4.6-fl5-iso64.DNG,Ricoh,RICOH GX200,DNG-Uncompressed-CFA,3.02,libraw,1,5,ok,105.43,0.06,70.45,34.63,2007,1507
+Samsung/G920F/LRM_20170316_152407.dng,Samsung,G920F,DNG-Uncompressed-CFA,4.00,libraw,1,5,ok,64.60,0.08,13.46,50.87,2664,1500
+Samsung/G935F/20170403_104110.dng,Samsung,G935F,DNG-Uncompressed-CFA,2.29,libraw,1,5,ok,36.83,0.07,7.85,28.91,2016,1134
+Samsung/GX10/_G107701.DNG,Samsung,GX10,DNG-Uncompressed-CFA,2.55,libraw,1,5,ok,87.31,0.07,57.85,29.28,1948,1308
+Samsung/GX20/_G205027.DNG,Samsung,GX20,DNG-Uncompressed-CFA,3.66,libraw,1,5,ok,121.97,0.06,80.34,41.72,2344,1562
+Samsung/Galaxy S21 Ultra/20230712_115041.dng,Samsung,Galaxy S21 Ultra,DNG-LJ92-Linear,12.00,libraw,1,5,ok,400.67,0.05,339.89,60.71,4000,3000
+Samsung/Galaxy S22 Ulra/20221225_114402.dng,Samsung,Galaxy S22 Ulra,DNG-LJ92-Linear,12.00,libraw,1,5,ok,409.52,0.05,348.58,60.76,4000,3000
+Samsung/Galaxy S22 Ultra/20230531_111518.dng,Samsung,Galaxy S22 Ultra,DNG-LJ92-Linear,9.98,libraw,1,5,ok,315.45,0.04,264.99,50.54,3648,2736
+Samsung/Galaxy S23/20230414_115131.dng,Samsung,Galaxy S23,DNG-LJ92-Linear,49.94,libraw,1,5,ok,1654.19,0.05,1403.26,251.49,8160,6120
+Samsung/Galaxy S23/20230715_154550.dng,Samsung,Galaxy S23,DNG-LJ92-Linear,9.01,libraw,1,5,ok,289.43,0.05,244.59,44.79,4000,2252
+Samsung/Galaxy S23 Ultra/20230817_120455.dng,Samsung,Galaxy S23 Ultra,DNG-LJ92-Linear,9.98,libraw,1,5,ok,338.90,0.05,288.73,50.35,3648,2736
+Samsung/Galaxy S23 Ultra/20231214_130645.dng,Samsung,Galaxy S23 Ultra,DNG-LJ92-Linear,49.94,libraw,1,5,ok,1659.72,0.09,1408.97,252.31,8160,6120
+Samsung/Galaxy S23+/20231227_172938.dng,Samsung,Galaxy S23+,DNG-LJ92-Linear,49.94,libraw,1,5,ok,1370.90,0.05,1005.92,365.31,6120,8160
+Samsung/SAMSUNG-SM-G930A/20180105_103031.dng,Samsung,SAMSUNG-SM-G930A,DNG-Uncompressed-CFA,2.29,libraw,1,5,ok,36.26,0.06,7.62,28.57,2016,1134
+Samsung/SM-G930F/20200125_130015.dng,Samsung,SM-G930F,DNG-Uncompressed-CFA,3.05,libraw,1,5,ok,47.97,0.06,10.19,37.71,2016,1512
+Samsung/SM-G930T/20180602_132834.dng,Samsung,SM-G930T,DNG-Uncompressed-CFA,3.05,libraw,1,5,ok,48.28,0.07,10.17,38.16,2016,1512
+Samsung/SM-G950F/2018-06-08_12.48.51.dng,Samsung,SM-G950F,DNG-Uncompressed-CFA,3.05,libraw,1,5,ok,48.25,0.07,10.25,37.92,2016,1512
+Samsung/SM-G950U/20170828_141409.dng,Samsung,SM-G950U,DNG-Uncompressed-CFA,2.29,libraw,1,5,ok,38.07,0.06,7.64,30.36,1134,2016
+Samsung/SM-G955F/20180202_091722.dng,Samsung,SM-G955F,DNG-Uncompressed-CFA,3.05,libraw,1,5,ok,48.28,0.06,10.20,37.93,2016,1512
+Samsung/SM-G960F/20191119_101508.dng,Samsung,SM-G960F,DNG-Uncompressed-CFA,3.05,libraw,1,5,ok,50.90,0.07,10.29,40.51,1512,2016
+Samsung/SM-G965F/Samsung_SM-G965F_4-3_ratio_f2.4.dng,Samsung,SM-G965F,DNG-Uncompressed-CFA,3.05,libraw,1,5,ok,48.08,0.07,10.09,37.85,2016,1512
+Samsung/SM-G973F/20191114_225157.dng,Samsung,SM-G973F,DNG-Uncompressed-CFA,3.05,libraw,1,5,ok,51.07,0.07,10.21,40.78,1512,2016
+Samsung/SM-G973U/20200402_181931.dng,Samsung,SM-G973U,DNG-unknown,0.00,libraw,1,5,error: libraw: Unsupported file format or not RAW file (-2),0.00,0.00,0.00,0.00,0,0
+Samsung/SM-S901E/20250305_173647.dng,Samsung,SM-S901E,DNG-JXL-Linear,0.00,libraw,1,5,error: libraw: Unsupported file format or not RAW file (-2),0.00,0.00,0.00,0.00,0,0
+Sigma/fp/A002_647_20240229_000001_4k_12bit.DNG,Sigma,fp,DNG-Uncompressed-CFA,2.09,libraw,1,5,ok,70.81,0.05,45.69,25.18,1928,1085
+Sigma/fp/A002_648_20240229_000001_4k_10bit.DNG,Sigma,fp,DNG-Uncompressed-CFA,2.09,libraw,1,5,ok,66.75,0.05,41.48,25.15,1928,1085
+Sigma/fp/A002_650_20240229_000001_4k_8bit.DNG,Sigma,fp,DNG-Uncompressed-CFA,2.09,libraw,1,5,ok,61.43,0.08,36.05,25.34,1928,1085
+Sigma/fp/A002_651_20240229_000001_2k_12bit.DNG,Sigma,fp,DNG-Uncompressed-CFA,0.53,libraw,1,5,ok,18.56,0.04,11.96,6.52,968,545
+Sigma/fp/A002_652_20240229_000001_2k_10bit.DNG,Sigma,fp,DNG-Uncompressed-CFA,0.53,libraw,1,5,ok,17.34,0.04,10.73,6.57,968,545
+Sigma/fp/A002_653_20240229_000001_2k_8bit.DNG,Sigma,fp,DNG-Uncompressed-CFA,0.53,libraw,1,5,ok,15.17,0.08,8.44,6.53,968,545
+Sigma/fp/SDIM4591.DNG,Sigma,fp,DNG-LJ92-CFA,6.13,libraw,1,5,ok,325.36,0.05,250.89,74.78,3032,2021
+Sigma/fp L/SDIM0915.DNG,Sigma,fp L,DNG-LJ92-CFA,15.12,libraw,1,5,ok,789.45,0.06,604.91,184.89,4768,3172
+Sigma/sd Quattro/sample3.DNG,Sigma,sd Quattro,DNG-Uncompressed-Linear,19.70,libraw,1,5,ok,438.59,0.06,339.17,99.27,5448,3616
+XIAOYI/YDXJ 2/ydxj0065.dng,XIAOYI,YDXJ 2,DNG-LJ92-CFA,3.00,libraw,1,5,ok,170.17,0.04,136.06,34.41,2000,1500
+XIAOYI/YI 4K/YDXJ0026.DNG,XIAOYI,YI 4K,DNG-LJ92-CFA,2.07,libraw,1,5,ok,116.99,0.04,93.14,23.59,1920,1080
+XIAOYI/YIAC 3/YIAC0075.DNG,XIAOYI,YIAC 3,DNG-LJ92-CFA,3.00,libraw,1,5,ok,180.71,0.04,146.16,34.48,2000,1500
+Xiaomi/HM NOTE 1LTE/IMG_2016.07.31_15.48.08.dng,Xiaomi,HM NOTE 1LTE,DNG-Uncompressed-CFA,3.28,libraw,1,5,ok,102.19,0.03,64.87,37.49,2104,1560
+Xiaomi/M2010J19CG/IMG_20201224_141323.dng,Xiaomi,M2010J19CG,DNG-Uncompressed-CFA,3.00,libraw,1,5,ok,47.35,0.06,9.93,37.25,2000,1500
+Xiaomi/MI 8/IMG_20200101_174326.dng,Xiaomi,MI 8,DNG-LJ92-CFA,2.29,libraw,1,5,ok,122.35,0.05,93.96,28.35,2016,1134
+Xiaomi/MI MAX/IMG_2019_10_27_14_47_40.dng,Xiaomi,MI MAX,DNG-Uncompressed-CFA,4.09,libraw,1,5,ok,128.28,0.03,80.69,46.62,2336,1752
+Xiaomi/Mi 9 Lite/IMG_20200324_073611.dng,Xiaomi,Mi 9 Lite,DNG-Uncompressed-CFA,3.00,libraw,1,5,ok,49.92,0.06,9.99,39.96,1500,2000
+Xiaomi/Redmi Note 7/IMG_20190615_155524.dng,Xiaomi,Redmi Note 7,DNG-Uncompressed-CFA,3.00,libraw,1,5,ok,47.63,0.06,10.01,37.51,2000,1500
+Xiaomi/Redmi Note 8T/IMG_20200715_094601.dng,Xiaomi,Redmi Note 8T,DNG-Uncompressed-CFA,3.00,libraw,1,5,ok,47.58,0.06,10.00,37.52,2000,1500
+YI TECHNOLOGY/M1/PC070001.DNG,YI TECHNOLOGY,M1,DNG-Uncompressed-CFA,5.07,libraw,1,5,ok,169.44,0.05,111.15,58.07,2600,1951
+Yuneec/CGO3/YUN00038.dng,Yuneec,CGO3,DNG-LJ92-CFA,3.00,libraw,1,5,ok,158.86,0.04,125.03,34.26,2000,1500
+Yuneec/CGO3P/YUN00007.dng,Yuneec,CGO3P,DNG-Uncompressed-CFA,3.00,libraw,1,5,ok,43.70,0.04,9.45,33.99,2000,1500
+asus/ASUS_I01WD/P_20190922_161212.dng,asus,ASUS_I01WD,DNG-Uncompressed-CFA,3.31,libraw,1,5,ok,52.21,0.06,10.90,41.14,2112,1568
+asus/ASUS_Z01KD/2018-12-02_07.39.26-1.dng,asus,ASUS_Z01KD,DNG-Uncompressed-CFA,2.87,libraw,1,5,ok,44.10,0.05,9.13,34.95,1468,1958
+bq/Aquaris U Plus/IMG_20180217_111328_894.dng,bq,Aquaris U Plus,DNG-Uncompressed-CFA,4.04,libraw,1,5,ok,68.44,0.07,13.60,54.76,1740,2320
+moto g8plus/moto g8plus/IMG_20200621_212547364.dng,moto g8plus,moto g8plus,DNG-unknown,0.00,libraw,1,5,error: libraw: Unsupported file format or not RAW file (-2),0.00,0.00,0.00,0.00,0,0
+motorola/Moto G (5S) Plus/IMG_20180328_152254.dng,motorola,Moto G (5S) Plus,DNG-Uncompressed-CFA,3.28,libraw,1,5,ok,52.01,0.06,11.03,40.88,2104,1560
+motorola/Nexus 6/DSC_0017.DNG,motorola,Nexus 6,DNG-Uncompressed-CFA,3.28,libraw,1,5,ok,51.68,0.06,10.91,40.83,2104,1560
+motorola/moto g(7) play/IMG_20191114_091702382.dng,motorola,moto g(7) play,DNG-Uncompressed-CFA,3.28,libraw,1,5,ok,51.79,0.06,11.02,40.88,2104,1560

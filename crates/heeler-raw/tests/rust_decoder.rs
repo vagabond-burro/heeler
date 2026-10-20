@@ -17,7 +17,7 @@ use heeler_rawdec::synthetic::{cfa_dng, scene, Spec};
 use heeler_rawdec::Opts;
 
 fn opts(o: DevelopOpts) -> Opts {
-    Opts { half_size: o.half_size, fixed_white: o.fixed_white, camera_wb: o.camera_wb, camera_matrix: o.camera_matrix, highlight: o.highlight, demosaic: o.demosaic }
+    Opts { half_size: o.half_size, fixed_white: o.fixed_white, camera_wb: o.camera_wb, camera_matrix: o.camera_matrix, highlight: o.highlight, demosaic: o.demosaic, libraw_color: true }
 }
 
 /// Held while a test turns heeler-raw's process-wide routing to LibRaw
@@ -101,6 +101,27 @@ fn a_black_pattern_a_linearization_table_and_margins_develop_as_libraw_does() {
 }
 
 #[test]
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
+fn lens_shading_opcodes_develop_as_heeler_raw_applies_them_around_libraw() {
+    use heeler_rawdec::synthetic::{gain_map, opcode_list, vignette};
+    // OpcodeList2: a smooth map on every site and a stronger one on one
+    // color (pitch 2). OpcodeList3: a vignette, then a map on each color.
+    let grid: Vec<f32> = (0..12).map(|i| 1.0 + 0.15 * (i % 4) as f32 + 0.1 * (i / 4) as f32).collect();
+    let list2 = opcode_list(&[gain_map([0, 0, 52, 76], [0, 1], [1, 1], [3, 4], 1, &grid), gain_map([1, 0, 52, 76], [0, 1], [2, 2], [2, 2], 1, &[1.4, 1.0, 1.2, 1.6])]);
+    let per_color: Vec<f32> = (0..2 * 2 * 3).map(|i| 1.0 + 0.05 * i as f32).collect();
+    let list3 = opcode_list(&[vignette([0.3, 0.1, 0.0, 0.0, 0.0], 0.45, 0.55), gain_map([0, 0, 52, 76], [0, 3], [1, 1], [2, 2], 3, &per_color)]);
+    for orientation in [1u16, 6] {
+        let px = |y: usize, x: usize| scene(y, x) / 2;
+        let bytes = cfa_dng(&Spec { width: 76, height: 52, tile: Some((32, 16)), orientation, opcodes2: Some(list2.clone()), opcodes3: Some(list3.clone()), pixel: &px, ..Spec::default() });
+        same_as_libraw(&format!("lens shading, orientation {orientation}"), &bytes);
+    }
+    // An odd height: the half-size image the stage 3 maps are read over
+    // counts the part block.
+    let bytes = cfa_dng(&Spec { width: 71, height: 41, tile: None, opcodes3: Some(list3.clone()), pixel: &scene, ..Spec::default() });
+    same_as_libraw("lens shading, odd sizes", &bytes);
+}
+
+#[test]
 fn a_stopped_develop_ends_canceled() {
     let bytes = cfa_dng(&Spec { width: 76, pixel: &scene, ..Spec::default() });
     let stop = AtomicBool::new(true);
@@ -149,14 +170,6 @@ fn files_outside_the_verified_develop_are_left_to_libraw() {
     assert!(declined(&bytes, Opts { demosaic: 0, ..base }), "another demosaic");
     assert!(declined(&bytes, Opts { highlight: 5, ..base }), "a highlight rebuild");
     assert!(declined(&bytes, Opts { camera_wb: false, ..base }), "no camera white balance");
-    // OpcodeList3 with a FixVignetteRadial, which heeler-raw applies
-    // around LibRaw's develop.
-    let mut list = 1u32.to_be_bytes().to_vec();
-    for v in [3u32, 0x01030000, 0, 56] {
-        list.extend_from_slice(&v.to_be_bytes());
-    }
-    list.extend(std::iter::repeat_n(0, 56));
-    assert!(declined(&cfa_dng(&Spec { opcodes3: Some(list), ..plain }), base), "lens shading opcodes");
     // Exactly two tiles across, each JPEG line a tile row: LibRaw reads
     // that layout two tile rows a line, and keeps such files.
     assert!(declined(&cfa_dng(&Spec { width: 64, height: 48, tile: Some((32, 16)), pixel: &scene, ..Spec::default() }), base), "a layout LibRaw reads its own way");
@@ -177,6 +190,7 @@ fn with_the_feature_heeler_raw_develops_verified_files_in_rust() {
     let _routing = ROUTING.lock().unwrap_or_else(|e| e.into_inner());
     // The synthetic file's camera is on no list: LibRaw's.
     heeler_raw::rust_path::set_enabled(true);
+    heeler_raw::rust_path::set_libraw_color(true);
     assert!(!heeler_raw::rust_path::takes(&bytes, DevelopOpts::default()), "an unverified camera stays on LibRaw");
     heeler_rawdec::set_verified_only(false);
     assert!(heeler_raw::rust_path::takes(&bytes, DevelopOpts::default()));
@@ -194,5 +208,33 @@ fn with_the_feature_heeler_raw_develops_verified_files_in_rust() {
     assert!(matches!(heeler_raw::decode_sensor_until(&bytes, DevelopOpts::default(), &stop), Err(heeler_raw::RawError::Cancelled)));
     // A develop the Rust path does not do goes to LibRaw.
     assert!(!heeler_raw::rust_path::takes(&bytes, DevelopOpts { demosaic: 11, ..DevelopOpts::default() }));
+    heeler_raw::rust_path::set_libraw_color(false);
     heeler_rawdec::set_verified_only(true);
+}
+
+/// The DNG color model, for a shot whose white is the daylight
+/// calibration's own, is LibRaw's daylight matrix: the develop differs
+/// from LibRaw's by rounding alone. Under tungsten it weights in the
+/// tungsten calibration and so differs, keeping white white.
+#[test]
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
+fn the_dng_color_model_is_libraws_matrix_for_a_daylight_white() {
+    let spec = |neutral| Spec { width: 76, pixel: &scene, neutral, ..Spec::default() };
+    let matrices = Spec::default().matrices;
+    let white = |m: &[f64; 9], xyz: [f64; 3]| [0, 1, 2].map(|i| m[3 * i] * xyz[0] + m[3 * i + 1] * xyz[1] + m[3 * i + 2] * xyz[2]);
+    let norm = |v: [f64; 3]| v.map(|x| x / v[1]);
+    let d65 = norm(white(&matrices[1], [0.95047, 1.0, 1.08883]));
+    let bytes = cfa_dng(&spec(d65));
+    let o = DevelopOpts { half_size: true, ..DevelopOpts::default() };
+    let theirs = libraw(&bytes, o);
+    let (mine, _) = heeler_rawdec::develop::develop(&bytes, &Opts { libraw_color: false, ..opts(o) }, None).unwrap();
+    let worst = mine.rgb.iter().zip(&theirs.rgb).map(|(&a, &b)| (a as i32 - b as i32).abs()).max().unwrap();
+    assert!(worst <= 2, "daylight: differs from LibRaw by up to {worst}");
+    // Standard A's white: the model leans to ColorMatrix1.
+    let a = norm(white(&matrices[0], [1.09850, 1.0, 0.35585]));
+    let bytes = cfa_dng(&spec(a));
+    let theirs = libraw(&bytes, o);
+    let (mine, _) = heeler_rawdec::develop::develop(&bytes, &Opts { libraw_color: false, ..opts(o) }, None).unwrap();
+    let worst = mine.rgb.iter().zip(&theirs.rgb).map(|(&a, &b)| (a as i32 - b as i32).abs()).max().unwrap();
+    assert!(worst >= 8, "tungsten: the model should differ from the daylight matrix, by {worst}");
 }

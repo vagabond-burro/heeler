@@ -26,13 +26,17 @@ pub struct Dng {
     pub height: usize,
     pub bits: u32,
     pub compression: u32,
+    /// 32803 a CFA mosaic, 34892 linear (LinearRaw).
     pub photometric: u32,
     pub samples: u32,
     /// SampleFormat: 1 unsigned integers, 3 floating point.
     pub sample_format: u32,
+    /// The TIFF Predictor (1 none).
+    pub predictor: u32,
     pub pieces: Pieces,
     /// CFARepeatPatternDim and CFAPattern, mapped through CFAPlaneColor
-    /// to 0 red, 1 green, 2 blue (another color is kept as 3 and up).
+    /// to 0 red, 1 green, 2 blue (another color is kept as 3 and up);
+    /// none for a linear image.
     pub cfa_dim: (usize, usize),
     pub cfa: Vec<u8>,
     pub cfa_layout: u32,
@@ -54,7 +58,12 @@ pub struct Dng {
     pub illuminant: [u32; 3],
     pub analog_balance: Option<Vec<f64>>,
     pub forward_matrix: [Option<Vec<f64>>; 3],
-    pub opcodes: [bool; 3],
+    /// OpcodeList1, 2 and 3 as the raw image's directory holds them
+    /// (empty for a list it lacks).
+    pub opcodes: [Vec<u8>; 3],
+    /// Whether the profile has hue and saturation tables or a look table
+    /// (ProfileHueSatMapData1/2, ProfileLookTableData).
+    pub profile_tables: bool,
     pub baseline_exposure: f64,
 }
 
@@ -77,10 +86,12 @@ impl Dng {
         if version.len() != 4 {
             return Err(Error::Corrupt("DNGVersion"));
         }
+        // The raw image: a CFA mosaic, or a linear (demosaiced) one.
         let raw = ifds
             .iter()
-            .find(|i| uint(&t, i, 254).unwrap_or(0) == 0 && uint(&t, i, 262) == Some(32803))
-            .ok_or(Error::Unsupported("no CFA raw image"))?;
+            .find(|i| uint(&t, i, 254).unwrap_or(0) == 0 && matches!(uint(&t, i, 262), Some(32803 | 34892)))
+            .ok_or(Error::Unsupported("no raw image"))?;
+        let photometric = uint(&t, raw, 262).unwrap_or(0);
         let ascii = |ifd: &Ifd, tag| ifd.get(tag).and_then(|e| t.ascii(&e)).unwrap_or_default();
         // Profile tags live in IFD0; a few writers repeat them in the raw
         // directory, which then wins, as it is the image's own.
@@ -105,16 +116,20 @@ impl Dng {
         if pieces.spans.iter().any(|&(o, n)| o.checked_add(n).is_none_or(|e| e > bytes.len())) {
             return Err(Error::Corrupt("a tile or strip past the end of the file"));
         }
-        let cfa_dim = match raw.get(33421).and_then(|e| t.uints(&e)).as_deref() {
-            Some(&[r, c]) => (r as usize, c as usize),
-            _ => return Err(Error::Corrupt("CFARepeatPatternDim")),
+        let (cfa_dim, cfa) = if photometric == 32803 {
+            let cfa_dim = match raw.get(33421).and_then(|e| t.uints(&e)).as_deref() {
+                Some(&[r, c]) => (r as usize, c as usize),
+                _ => return Err(Error::Corrupt("CFARepeatPatternDim")),
+            };
+            let pattern = raw.get(33422).and_then(|e| t.uints(&e)).ok_or(Error::Corrupt("CFAPattern"))?;
+            let planes = raw.get(50710).and_then(|e| t.uints(&e)).unwrap_or_else(|| vec![0, 1, 2]);
+            if pattern.len() != cfa_dim.0 * cfa_dim.1 || pattern.is_empty() {
+                return Err(Error::Corrupt("CFAPattern"));
+            }
+            (cfa_dim, pattern.iter().map(|&p| planes.get(p as usize).map(|&c| c.min(255) as u8).ok_or(Error::Corrupt("CFAPattern"))).collect::<Result<Vec<_>, _>>()?)
+        } else {
+            ((0, 0), Vec::new())
         };
-        let pattern = raw.get(33422).and_then(|e| t.uints(&e)).ok_or(Error::Corrupt("CFAPattern"))?;
-        let planes = raw.get(50710).and_then(|e| t.uints(&e)).unwrap_or_else(|| vec![0, 1, 2]);
-        if pattern.len() != cfa_dim.0 * cfa_dim.1 || pattern.is_empty() {
-            return Err(Error::Corrupt("CFAPattern"));
-        }
-        let cfa = pattern.iter().map(|&p| planes.get(p as usize).map(|&c| c.min(255) as u8).ok_or(Error::Corrupt("CFAPattern"))).collect::<Result<Vec<_>, _>>()?;
         let active = match raw.get(50829).and_then(|e| t.uints(&e)).as_deref() {
             Some(&[a, b, c, d]) => (a as usize, b as usize, c as usize, d as usize),
             _ => (0, 0, height, width),
@@ -142,9 +157,10 @@ impl Dng {
             height,
             bits,
             compression: uint(&t, raw, 259).unwrap_or(1),
-            photometric: 32803,
+            photometric,
             samples,
             sample_format: uint(&t, raw, 339).unwrap_or(1),
+            predictor: uint(&t, raw, 317).unwrap_or(1),
             pieces,
             cfa_dim,
             cfa,
@@ -175,7 +191,8 @@ impl Dng {
             ],
             analog_balance: profile(50727),
             forward_matrix: three(50964, 50965, 52532),
-            opcodes: [raw.get(51008).is_some(), raw.get(51009).is_some(), raw.get(51022).is_some()],
+            opcodes: [51008u16, 51009, 51022].map(|tag| raw.get(tag).and_then(|e| t.bytes(&e)).map(<[u8]>::to_vec).unwrap_or_default()),
+            profile_tables: [50938u16, 50939, 50982].iter().any(|&tag| raw.get(tag).is_some() || ifd0.get(tag).is_some()),
             baseline_exposure: profile(50730).and_then(|v| v.first().copied()).unwrap_or(0.0),
         })
     }
@@ -226,7 +243,7 @@ impl Dng {
     }
 
     /// The color at (row, col) of the raw image, the pattern anchored at
-    /// the active area's top left.
+    /// the active area's top left. For a CFA image only.
     pub fn color_at(&self, row: usize, col: usize) -> u8 {
         let (r, c) = ((row + self.cfa_dim.0 - self.active.0 % self.cfa_dim.0) % self.cfa_dim.0, (col + self.cfa_dim.1 - self.active.1 % self.cfa_dim.1) % self.cfa_dim.1);
         self.cfa[r * self.cfa_dim.1 + c]

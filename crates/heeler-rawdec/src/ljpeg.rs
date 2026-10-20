@@ -363,19 +363,26 @@ pub fn decode(data: &[u8], mut line: impl FnMut(usize, &[u16])) -> Result<Frame,
     if f.point_transform != 0 {
         return Err(Error::Unsupported("a lossless point transform"));
     }
-    let (w, n) = (f.width, f.components);
-    let samples = w * n;
-    if f.restart != 0 && f.restart % w != 0 {
+    if f.restart != 0 && f.restart % f.width != 0 {
         return Err(Error::Unsupported("a restart interval that is not whole lines"));
     }
-    let restart_lines = if f.restart == 0 { usize::MAX } else { f.restart / w };
     let huff: Vec<&Huffman> = f.table.iter().map(|&t| tables[t].as_ref().unwrap()).collect();
-    let mut bits = Bits { data, at: f.data, acc: 0, count: 0, marker: false };
+    lines(&f, &huff, data, f.data, 0, f.height, &mut line)?;
+    Ok(f)
+}
+
+/// Decodes `count` lines from byte `at` of `data`, the first of them
+/// line `y0`, which starts the scan or a restart interval.
+fn lines(f: &Frame, huff: &[&Huffman], data: &[u8], at: usize, y0: usize, count: usize, line: &mut impl FnMut(usize, &[u16])) -> Result<(), Error> {
+    let (w, n) = (f.width, f.components);
+    let samples = w * n;
+    let restart_lines = if f.restart == 0 { usize::MAX } else { f.restart / w };
+    let mut bits = Bits { data, at, acc: 0, count: 0, marker: false };
     let mut prev = vec![0u16; samples];
     let mut cur = vec![0u16; samples];
     let initial = 1u16 << (f.precision - f.point_transform - 1);
     let mut since_restart = 0usize;
-    for y in 0..f.height {
+    for y in y0..y0 + count {
         if since_restart == restart_lines {
             bits.restart()?;
             since_restart = 0;
@@ -430,7 +437,49 @@ pub fn decode(data: &[u8], mut line: impl FnMut(usize, &[u16])) -> Result<Frame,
         std::mem::swap(&mut prev, &mut cur);
         since_restart += 1;
     }
-    Ok(f)
+    Ok(())
+}
+
+/// Decodes a scan with restart markers at whole lines across the cores,
+/// each restart interval from its own marker, into `out` (height lines of
+/// width times components samples), the same samples `decode` hands over.
+/// None when the scan has no restart markers, or not one an interval.
+pub fn decode_intervals(data: &[u8], out: &mut [u16]) -> Result<Option<Frame>, Error> {
+    use rayon::prelude::*;
+    let (f, tables) = headers(data)?;
+    if f.point_transform != 0 || f.restart == 0 || f.restart % f.width != 0 {
+        return Ok(None);
+    }
+    let samples = f.width * f.components;
+    if out.len() < f.height * samples {
+        return Err(Error::Corrupt("a scan larger than its buffer"));
+    }
+    let per = f.restart / f.width;
+    let intervals = f.height.div_ceil(per);
+    // Where each interval's codes start: the scan's, then just past each
+    // restart marker (a 0xff byte before 0xd0 to 0xd7; stuffed bytes are
+    // 0xff 0x00).
+    let mut starts = Vec::with_capacity(intervals);
+    starts.push(f.data);
+    let mut i = f.data;
+    while starts.len() < intervals && i + 1 < data.len() {
+        if data[i] == 0xff && (0xd0..=0xd7).contains(&data[i + 1]) {
+            starts.push(i + 2);
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    if starts.len() != intervals {
+        return Ok(None);
+    }
+    let huff: Vec<&Huffman> = f.table.iter().map(|&t| tables[t].as_ref().unwrap()).collect();
+    out[..f.height * samples].par_chunks_mut(per * samples).zip(starts.par_iter()).enumerate().try_for_each(|(k, (chunk, &at))| {
+        let y0 = k * per;
+        let count = per.min(f.height - y0);
+        lines(&f, &huff, data, at, y0, count, &mut |y, l: &[u16]| chunk[(y - y0) * samples..][..samples].copy_from_slice(l))
+    })?;
+    Ok(Some(f))
 }
 
 /// Decodes a scan whose lines can be rebuilt independently (predictor 1,
@@ -728,6 +777,24 @@ mod tests {
         let mut got = Vec::new();
         decode(&data, |_, l| got.push(l.to_vec())).unwrap();
         assert_eq!(got, lines);
+    }
+
+    #[test]
+    fn restart_intervals_decode_side_by_side_as_in_order() {
+        // An interval of one line and of three (the last one short), under
+        // predictors that read the line above.
+        for (per, predictor) in [(1usize, 1u8), (3, 1), (1, 6), (3, 4)] {
+            let (w, h, comps) = (40usize, 13usize, 3usize);
+            let lines = pattern(w, comps, h, 14);
+            let data = encode(&lines, w, comps, 14, predictor, w * per);
+            let mut serial = Vec::new();
+            decode(&data, |_, l| serial.extend_from_slice(l)).unwrap();
+            let mut par = vec![0u16; w * comps * h];
+            assert!(decode_intervals(&data, &mut par).unwrap().is_some());
+            assert_eq!(par, serial, "{per} lines an interval, predictor {predictor}");
+        }
+        let plain = encode(&pattern(8, 2, 4, 12), 8, 2, 12, 1, 0);
+        assert!(decode_intervals(&plain, &mut vec![0; 64]).unwrap().is_none(), "no restart markers");
     }
 
     #[test]

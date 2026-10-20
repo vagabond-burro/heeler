@@ -1938,6 +1938,7 @@ name = "heeler-rawdec"
 version = "26.6.0"
 dependencies = [
  "heeler-engine",
+ "miniz_oxide",
  "rayon",
  "thiserror 2.0.21",
 ]

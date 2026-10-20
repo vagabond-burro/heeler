@@ -21,8 +21,23 @@ pub fn enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
 }
 
+static LIBRAW_COLOR: AtomicBool = AtomicBool::new(false);
+
+/// Whether the Rust path develops with LibRaw's color (the daylight
+/// ColorMatrix alone) rather than the DNG specification's color model
+/// (false, the default): for the harnesses that hold the rest of the
+/// develop to LibRaw's to the bit. Process-wide.
+pub fn set_libraw_color(on: bool) {
+    LIBRAW_COLOR.store(on, Ordering::Relaxed);
+}
+
+pub(crate) fn libraw_color() -> bool {
+    LIBRAW_COLOR.load(Ordering::Relaxed)
+}
+
 pub(crate) fn opts(o: DevelopOpts) -> heeler_rawdec::Opts {
-    heeler_rawdec::Opts { half_size: o.half_size, fixed_white: o.fixed_white, camera_wb: o.camera_wb, camera_matrix: o.camera_matrix, highlight: o.highlight, demosaic: o.demosaic }
+    let libraw_color = libraw_color();
+    heeler_rawdec::Opts { half_size: o.half_size, fixed_white: o.fixed_white, camera_wb: o.camera_wb, camera_matrix: o.camera_matrix, highlight: o.highlight, demosaic: o.demosaic, libraw_color }
 }
 
 /// Whether the Rust path develops `bytes` with `o`.

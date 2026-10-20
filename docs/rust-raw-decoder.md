@@ -60,7 +60,7 @@ Files that already bypass LibRaw, wholly or in part:
   `heeler-raw/src/linear_dng.rs` on the banded export path, with LibRaw's
   open for the metadata.
 - DNG gain maps: LibRaw supplies the opcode bytes, Rust applies them
-  (gain_map.rs) around LibRaw's develop.
+  (heeler-rawdec's gain_map) around LibRaw's develop.
 - GoPro GPR: the VC-5 tile is decoded first (gpr.rs, a vendored C library),
   then LibRaw develops the DNG it becomes.
 - An LGPL-2.1 Rust decoder: an optional `heeler-io` feature for the
@@ -294,11 +294,10 @@ Why this order:
    for Bayer data (lossless JPEG and uncompressed) are the simplest. It
    also builds everything the other formats share: the TIFF reader, the
    lossless JPEG decoder read from many points at once, and the develop.
-2. The rest of DNG: the phones whose lens shading sits in opcode lists
-   (77 corpus files are declined today for that alone; `gain_map.rs`
-   already applies those maps in Rust and moves across), linear DNG (its
-   develop is already Rust, only its metadata still comes from LibRaw), and
-   Deflate.
+2. The rest of DNG (done in Phase 3, below): the phones whose lens
+   shading sits in opcode lists (77 corpus files were declined for that
+   alone), linear DNG (its develop was already Rust, only its metadata
+   came from LibRaw), and Deflate.
 3. ARW and CR2: common, documented, Bayer, and both mostly develop, so
    they reach the target on the develop alone. Both need the camera tables
    decision.
@@ -562,14 +561,151 @@ develop bins 2 by 2 blocks straight from the mosaic.
 
 ### Not yet done
 
-- Windows and Linux: the bit-exact claim holds on Apple's arm64; the other
-  platforms are covered by the tolerance above but have not been measured.
-- The 64 files from cameras whose DNGs the rules accept but which are not
-  verified, and the 77 phone and drone DNGs with lens shading opcodes
-  (`gain_map.rs` moves across next).
-- `heeler-io`'s banded export (`keep_develop`) still develops through
-  `decode_sensor_with` and so takes the Rust path with the feature; its
-  separate linear DNG path is unchanged.
+Phase 3 below takes up these: Windows and Linux, the unverified cameras,
+the lens shading opcodes, and the linear DNG path.
+
+## Phase 3: the rest of DNG, and the DNG color model
+
+### What was built
+
+- The develop's color is the DNG specification's model (chapter 6, as
+  `color::camera_to_xyz_d50` implements it) for each shot's white: the
+  profile's two calibrations weighted by that white's color temperature,
+  through the ForwardMatrix, else the ColorMatrix with a Bradford
+  adaptation, then to sRGB with each row normalized so the shot's white
+  stays white (`color::srgb_from_balanced`, `develop::develop_matrix`).
+  Two guards: a profile with hue and saturation or look tables is taken
+  through its ColorMatrix (such a ForwardMatrix can leave most of the
+  color to the tables, which are not applied yet), and so is a profile
+  whose ForwardMatrix develops the 24 ColorChecker Classic patches more
+  than 5 CIEDE2000 (mean) from its own ColorMatrix (`FORWARD_AGREEMENT`):
+  the hand-made profiles of some compacts and phones, whose ForwardMatrix
+  does not describe the camera. A non-diagonal CameraCalibration, which
+  LibRaw's reading could not take, is part of the model and accepted.
+- Lens shading: the GainMap and FixVignetteRadial opcode code moved from
+  heeler-raw to `heeler-rawdec::gain_map` (heeler-raw still applies it
+  around LibRaw's develop), its CFA pass across the cores, and a per-pixel
+  form (`PixelGains`) the develop applies between the highlights and the
+  matrix, where heeler-raw applies it around LibRaw. heeler-rawdec is now
+  an ordinary dependency of heeler-raw; the `rust-decoder` feature still
+  decides the routing alone.
+- Floating-point DNGs (HDR merges): Deflate (`deflate.rs`, the
+  floating-point predictor 3, 34894 and 34895, from the TIFF technical
+  note and the DNG specification; inflating with `miniz_oxide`) and
+  uncompressed, 16, 24 and 32 bits. A sample's whole part is LibRaw's
+  integer while the frame's brightest lies in 4096 to 32767, the defaults
+  LibRaw documents for its float conversion; outside that LibRaw
+  rescales, and such a file goes to LibRaw.
+- Linear DNGs: heeler-raw's linear module (heeler-io's banded loader) now
+  reads its facts from the file in Rust with the feature
+  (`linear_dng::rust_facts`, every field LibRaw reads, checked against
+  LibRaw's on the corpus) and decodes its pieces with heeler-rawdec, so it
+  no longer opens the file in LibRaw. It now also takes strips and
+  uncompressed pieces: the Samsung phones (one strip with a restart
+  marker every line, decoded interval by interval across the cores,
+  `ljpeg::decode_intervals`, which single-strip Bayer DNGs use too) and
+  three-sample uncompressed files.
+- `fmadd`: every multiply-add the develop shares with LibRaw's arithmetic
+  goes through one helper, fused on aarch64 (where clang contracts them)
+  and not elsewhere, with an `unfused` feature to check the other case on
+  an aarch64 machine.
+
+### What LibRaw does, measured further
+
+- With one ColorMatrix in the file, LibRaw uses its values as they are;
+  with two or more, rounded to single precision (every corpus DNG but
+  one, a drone's, follows this). It matters only to the comparisons:
+  the shipped develop uses the DNG model.
+- For some cameras LibRaw develops with matrices of its own a few float
+  steps from the file's. The corpus comparison now gives LibRaw's matrix
+  to both develops (`develop::develop_with`), so it holds the decode and
+  develop to LibRaw and not where the color comes from, which is the
+  model's and is tested on its own. That alone lets several cameras
+  join the verified list.
+- At half size the stage 3 opcodes are read over the half-size image's
+  own size (whole 2 by 2 blocks).
+
+### Verification
+
+- `rustdiff --any` over every DNG the rules accept: 213 matched LibRaw at
+  every stage, 14 did not (the Pentax, Samsung GX and Ricoh GX200
+  ActiveArea readings and the Leica SL2 crop of Phase 2), and 3 were
+  reported damaged (and go to LibRaw). The verified list
+  (`verified.rs`) is the 173 cameras all of whose files matched, the 70
+  of Phase 2 among them. `rust_decoder_corpus.rs` holds 204 corpus DNGs
+  from those cameras to LibRaw to the bit, lens shading files and float
+  files included.
+- The linear module, its facts read in Rust: the 13 corpus linear DNGs it
+  takes develop as LibRaw does, to the bit, under Clip and Blend
+  (`rust_decoder_corpus.rs`). The single-sample (monochrome) and scanner
+  files and those with a crop stay on LibRaw; the JPEG XL one is
+  heeler-io's, as before.
+- Synthetic files for each new case: lens shading in both lists, every
+  orientation, odd sizes (`rust_decoder.rs`); Deflate and float
+  conversions, restart intervals (heeler-rawdec's own tests).
+
+### Windows and Linux
+
+No x86-64 machine, emulator or cross target was at hand, so the platform
+difference that matters was reproduced here: x86-64 builds of LibRaw (and
+MSVC's) do not fuse multiply-adds, as clang does on aarch64. LibRaw built
+with `-ffp-contract=off` and the Rust develop with `heeler-rawdec/unfused`
+agree to the bit on every synthetic test and on all 204 corpus DNGs; the
+fused Rust develop against that LibRaw fails, so the flag took. The
+unfused helper also keeps x86-64 from calling a software fused
+multiply-add. Not covered: GCC on aarch64 Linux, which contracts more
+widely than clang (expect differences of a level or two, within the
+tolerance above), and an actual build and run on Windows and Linux.
+
+### Color
+
+The DNG model against LibRaw's daylight matrix on the 204 files the Rust
+path takes, as the 24 Classic patches move (`colorcheck shift`, mean
+CIEDE2000 a file): median 0.73, 90th percentile 2.51; 13 files move more
+than 3. The largest are what the model is for (tungsten whites, 2300 to
+3900 K) or profiles whose two calibrations disagree (a phone at 20.8,
+the two drones at 6 to 8). The Xiaomi file was looked at side by side:
+LibRaw's rendering is gray-green, the model's has natural grass and the
+flowers' color. 138 files go through the ColorMatrix, 66 through the
+ForwardMatrix.
+
+### Speed
+
+The 204 verified files, both decoders in one binary, the median of 5
+timed develops each, with the DNG model and lens shading in the Rust
+develop (LibRaw's side includes heeler-raw's gain maps). CSVs in
+`docs/rust-raw-decoder/dng3-*.csv`.
+
+| Size | Format | Files | LibRaw s | Rust s | Ratio | LibRaw unpack s | Rust unpack s | LibRaw develop s | Rust develop s |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Full | DNG-Uncompressed-CFA | 148 | 25.62 | 7.29 | 0.28 | 6.27 | 0.19 | 19.34 | 7.09 |
+| Full | DNG-LJ92-CFA | 53 | 21.35 | 4.98 | 0.23 | 11.73 | 1.32 | 9.62 | 3.65 |
+| Full | DNG-Deflate-CFA | 3 | 1.49 | 0.29 | 0.19 | 0.91 | 0.07 | 0.58 | 0.22 |
+| Full | all | 204 | 48.46 | 12.56 | 0.26 | 18.91 | 1.58 | 29.54 | 10.96 |
+| Half | DNG-Uncompressed-CFA | 148 | 12.44 | 0.73 | 0.06 | 6.28 | 0.17 | 6.16 | 0.56 |
+| Half | DNG-LJ92-CFA | 53 | 14.89 | 1.48 | 0.10 | 11.67 | 1.24 | 3.22 | 0.24 |
+| Half | DNG-Deflate-CFA | 3 | 1.12 | 0.08 | 0.07 | 0.93 | 0.07 | 0.19 | 0.01 |
+| Half | all | 204 | 28.45 | 2.29 | 0.08 | 18.88 | 1.48 | 9.57 | 0.81 |
+
+Every camera is under the 0.50 target; the slowest at full size is 0.41
+(a medium-format drone camera), at half size 0.38 (a 60D file of a few
+kilobytes). The linear module, its rows whole against LibRaw's develop
+(`LinearDng` with its Rust facts): the Samsung phones at 0.27 to 0.37 of
+LibRaw's time (one strip, now read across the cores), the tiled files at
+0.08 to 0.11, the uncompressed ones at 0.25 to 1.0 (the small ones gain
+least: the module reads a frame twice, once for its brightest sample and
+once for the rows).
+
+### Not yet done
+
+- The profile's hue and saturation tables and look table (the model
+  stops at the matrices), and a third calibration (DNG 1.6).
+- DNGs that stay on LibRaw develop with LibRaw's color, so a camera off
+  the verified list does not yet get the model.
+- The Pentax, Samsung GX, Ricoh GX200 and Leica SL2 readings of the
+  active area; files with AsShotWhiteXY and no AsShotNeutral; monochrome
+  and scanner linear DNGs; lossy JPEG DNGs.
+- An actual build and run on Windows and Linux.
 
 ## Color sources, measured
 

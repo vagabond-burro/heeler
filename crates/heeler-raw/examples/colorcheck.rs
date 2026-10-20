@@ -39,42 +39,27 @@
 //!
 //!   colorcheck spectral DATA_DIR CAMERA_JSON RAW DNG
 //!
+//! `shift`: for each DNG the Rust develop takes (paths, or the corpus at
+//! HEELER_RAW_CORPUS), how far its color (the DNG model for the shot's
+//! white) moves the 24 Classic patch colors from where LibRaw's daylight
+//! matrix develops them: each patch's color as LibRaw renders it is
+//! taken back to white-balanced camera RGB through LibRaw's matrix and
+//! forward through the model's, and the two are compared by CIEDE2000.
+//! One line a file (mean and largest, the path the model took, the white's
+//! color temperature), then the files' distribution.
+//!
+//!   colorcheck shift [paths]
+//!
 //! The reference tables in this file are standard data: X-Rite's
-//! published chart values, and the CIE daylight basis functions S0, S1
+//! published Digital SG values (the Classic's are heeler-rawdec's), and the CIE daylight basis functions S0, S1
 //! and S2 (CIE 15).
 use std::io::Write;
 
-use heeler_rawdec::color::{apply, bradford, camera_to_xyz_d50, invert3, mul3, D50, XYZ_FROM_SRGB};
+use heeler_rawdec::color::{apply, bradford, camera_to_xyz_d50, de2000, invert3, lab, mul3, xyz_of_lab, CLASSIC_LAB, D50, XYZ_FROM_SRGB};
 use heeler_rawdec::dng::Dng;
 
 type M3 = [[f64; 3]; 3];
 
-const CLASSIC_LAB: [[f64; 3]; 24] = [
-    [37.54, 14.37, 14.92],
-    [64.66, 19.27, 17.50],
-    [49.32, -3.82, -22.54],
-    [43.46, -12.74, 22.72],
-    [54.94, 9.61, -24.79],
-    [70.48, -32.26, -0.37],
-    [62.73, 35.83, 56.50],
-    [39.43, 10.75, -45.17],
-    [50.57, 48.64, 16.67],
-    [30.10, 22.54, -20.87],
-    [71.77, -24.13, 58.19],
-    [71.51, 18.24, 67.37],
-    [28.37, 15.42, -49.80],
-    [54.38, -39.72, 32.27],
-    [42.43, 51.05, 28.62],
-    [81.80, 2.67, 80.41],
-    [50.63, 51.28, -14.12],
-    [49.57, -29.71, -28.32],
-    [95.19, -1.03, 2.93],
-    [81.29, -0.57, 0.44],
-    [66.89, -0.75, -0.06],
-    [50.76, -0.13, 0.14],
-    [35.63, -0.46, -0.48],
-    [20.64, 0.07, -0.46],
-];
 const SG_LAB: [[f64; 3]; 140] = [
     [96.55, -0.91, 0.57],
     [6.43, -0.06, -0.41],
@@ -222,64 +207,6 @@ const DAYLIGHT_BASIS: [[f64; 81]; 3] = [
     [38.5, 36.75, 35.0, 39.2, 43.4, 44.85, 46.3, 45.1, 43.9, 40.5, 37.1, 36.9, 36.7, 36.3, 35.9, 34.25, 32.6, 30.25, 27.9, 26.1, 24.3, 22.2, 20.1, 18.15, 16.2, 14.7, 13.2, 10.9, 8.6, 7.35, 6.1, 5.15, 4.2, 3.05, 1.9, 0.95, 0.0, -0.8, -1.6, -2.55, -3.5, -3.5, -3.5, -4.65, -5.8, -6.5, -7.2, -7.9, -8.6, -9.05, -9.5, -10.2, -10.9, -10.8, -10.7, -11.35, -12.0, -13.0, -14.0, -13.8, -13.6, -12.8, -12.0, -12.65, -13.3, -13.1, -12.9, -11.75, -10.6, -11.1, -11.6, -11.9, -12.2, -11.2, -10.2, -9.0, -7.8, -9.5, -11.2, -10.8, -10.4],
     [3.0, 2.1, 1.2, 0.05, -1.1, -0.8, -0.5, -0.6, -0.7, -0.95, -1.2, -1.9, -2.6, -2.75, -2.9, -2.85, -2.8, -2.7, -2.6, -2.6, -2.6, -2.2, -1.8, -1.65, -1.5, -1.4, -1.3, -1.25, -1.2, -1.1, -1.0, -0.75, -0.5, -0.4, -0.3, -0.15, 0.0, 0.1, 0.2, 0.35, 0.5, 1.3, 2.1, 2.65, 3.2, 3.65, 4.1, 4.4, 4.7, 4.9, 5.1, 5.9, 6.7, 7.0, 7.3, 7.95, 8.6, 9.2, 9.8, 10.0, 10.2, 9.25, 8.3, 8.95, 9.6, 9.05, 8.5, 7.75, 7.0, 7.3, 7.6, 7.8, 8.0, 7.35, 6.7, 5.95, 5.2, 6.3, 7.4, 7.1, 6.8],
 ];
-
-
-fn lab(xyz: [f64; 3]) -> [f64; 3] {
-    let f = |t: f64| if t > 216.0 / 24389.0 { t.cbrt() } else { (24389.0 / 27.0 * t + 16.0) / 116.0 };
-    let (fx, fy, fz) = (f(xyz[0] / D50[0]), f(xyz[1] / D50[1]), f(xyz[2] / D50[2]));
-    [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
-}
-
-fn xyz_of_lab(l: [f64; 3]) -> [f64; 3] {
-    let fy = (l[0] + 16.0) / 116.0;
-    let (fx, fz) = (fy + l[1] / 500.0, fy - l[2] / 200.0);
-    let g = |f: f64| if f.powi(3) > 216.0 / 24389.0 { f.powi(3) } else { (116.0 * f - 16.0) * 27.0 / 24389.0 };
-    [g(fx) * D50[0], g(fy) * D50[1], g(fz) * D50[2]]
-}
-
-/// CIEDE2000 (Sharma, Wu and Dalal, 2005), kL = kC = kH = 1.
-fn de2000(a: [f64; 3], b: [f64; 3]) -> f64 {
-    use std::f64::consts::PI;
-    let (l1, a1, b1, l2, a2, b2) = (a[0], a[1], a[2], b[0], b[1], b[2]);
-    let cbar = ((a1 * a1 + b1 * b1).sqrt() + (a2 * a2 + b2 * b2).sqrt()) / 2.0;
-    let g = 0.5 * (1.0 - (cbar.powi(7) / (cbar.powi(7) + 25f64.powi(7))).sqrt());
-    let (a1p, a2p) = ((1.0 + g) * a1, (1.0 + g) * a2);
-    let (c1p, c2p) = ((a1p * a1p + b1 * b1).sqrt(), (a2p * a2p + b2 * b2).sqrt());
-    let hue = |b: f64, a: f64| if b == 0.0 && a == 0.0 { 0.0 } else { let h = b.atan2(a).to_degrees(); if h < 0.0 { h + 360.0 } else { h } };
-    let (h1p, h2p) = (hue(b1, a1p), hue(b2, a2p));
-    let dl = l2 - l1;
-    let dc = c2p - c1p;
-    let dh = if c1p * c2p == 0.0 {
-        0.0
-    } else if (h2p - h1p).abs() <= 180.0 {
-        h2p - h1p
-    } else if h2p - h1p > 180.0 {
-        h2p - h1p - 360.0
-    } else {
-        h2p - h1p + 360.0
-    };
-    let dhh = 2.0 * (c1p * c2p).sqrt() * (dh.to_radians() / 2.0).sin();
-    let lbar = (l1 + l2) / 2.0;
-    let cbarp = (c1p + c2p) / 2.0;
-    let hbarp = if c1p * c2p == 0.0 {
-        h1p + h2p
-    } else if (h1p - h2p).abs() <= 180.0 {
-        (h1p + h2p) / 2.0
-    } else if h1p + h2p < 360.0 {
-        (h1p + h2p + 360.0) / 2.0
-    } else {
-        (h1p + h2p - 360.0) / 2.0
-    };
-    let t = 1.0 - 0.17 * ((hbarp - 30.0) * PI / 180.0).cos() + 0.24 * ((2.0 * hbarp) * PI / 180.0).cos() + 0.32 * ((3.0 * hbarp + 6.0) * PI / 180.0).cos()
-        - 0.20 * ((4.0 * hbarp - 63.0) * PI / 180.0).cos();
-    let dtheta = 30.0 * (-((hbarp - 275.0) / 25.0).powi(2)).exp();
-    let rc = 2.0 * (cbarp.powi(7) / (cbarp.powi(7) + 25f64.powi(7))).sqrt();
-    let sl = 1.0 + 0.015 * (lbar - 50.0).powi(2) / (20.0 + (lbar - 50.0).powi(2)).sqrt();
-    let sc = 1.0 + 0.045 * cbarp;
-    let sh = 1.0 + 0.015 * cbarp * t;
-    let rt = -(2.0 * dtheta * PI / 180.0).sin() * rc;
-    ((dl / sl).powi(2) + (dc / sc).powi(2) + (dhh / sh).powi(2) + rt * (dc / sc) * (dhh / sh)).sqrt()
-}
 
 /// LibRaw's develop matrix as a camera (white balanced) to XYZ D50 matrix:
 /// its camera to linear sRGB, sRGB to XYZ (D65), adapted to D50.
@@ -443,7 +370,9 @@ fn main() {
         Some("mark") => mark(&args),
         Some("chart") => measure_chart(&args),
         Some("spectral") => spectral(&args),
-        _ => eprintln!("colorcheck preview|mark|chart|spectral ... (see the file's header)"),
+        Some("shift") => shift(&args),
+        Some("forward") => forward(&args),
+        _ => eprintln!("colorcheck preview|mark|chart|spectral|shift ... (see the file's header)"),
     }
 }
 
@@ -669,5 +598,100 @@ fn spectral(args: &[String]) {
             }
         }
         report("fit to sensitivities (held out)", &score(&est, &refs));
+    }
+}
+
+fn dngs(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+            let p = e.path();
+            let name = e.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue;
+            }
+            if p.is_dir() {
+                stack.push(p);
+            } else if name.to_ascii_uppercase().ends_with(".DNG") {
+                out.push(p);
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+fn shift(args: &[String]) {
+    let paths: Vec<std::path::PathBuf> = if args.len() > 1 {
+        args[1..].iter().map(std::path::PathBuf::from).collect()
+    } else {
+        dngs(std::path::Path::new(&std::env::var_os("HEELER_RAW_CORPUS").expect("paths or HEELER_RAW_CORPUS")))
+    };
+    let d65 = apply(&XYZ_FROM_SRGB, [1.0; 3]);
+    let to_srgb = mul3(&invert3(&XYZ_FROM_SRGB).unwrap(), &bradford(D50, d65));
+    let from_srgb = mul3(&bradford(d65, D50), &XYZ_FROM_SRGB);
+    // The patches in linear sRGB, as a develop's output holds them.
+    let patches: Vec<[f64; 3]> = CLASSIC_LAB.iter().map(|&l| apply(&to_srgb, xyz_of_lab(l))).collect();
+    let base = heeler_rawdec::Opts { half_size: true, fixed_white: false, camera_wb: true, camera_matrix: true, highlight: 0, demosaic: -1, libraw_color: true };
+    let mut means = Vec::new();
+    let mut cameras: std::collections::BTreeMap<String, Vec<f64>> = Default::default();
+    let root = std::env::var_os("HEELER_RAW_CORPUS").map(std::path::PathBuf::from).unwrap_or_default();
+    for path in paths {
+        let Ok(bytes) = std::fs::read(&path) else { continue };
+        let (Ok(lib), Ok(dng)) = (heeler_rawdec::plan(&bytes, &base), heeler_rawdec::plan(&bytes, &heeler_rawdec::Opts { libraw_color: false, ..base })) else { continue };
+        let f64m = |m: &[[f32; 3]; 3]| m.map(|r| r.map(|v| v as f64));
+        let Some(back) = invert3(&f64m(&lib.rgb_cam)) else { continue };
+        let ours = f64m(&dng.rgb_cam);
+        let d: Vec<f64> = patches.iter().map(|&c| {
+            let moved = apply(&ours, apply(&back, c));
+            de2000(lab(apply(&from_srgb, c)), lab(apply(&from_srgb, moved)))
+        }).collect();
+        let mean = d.iter().sum::<f64>() / d.len() as f64;
+        let max = d.iter().copied().fold(0.0, f64::max);
+        let n = lib.dng.as_shot_neutral.clone().unwrap_or_default();
+        let neutral = [n[0], n[1], n[2]];
+        // The white's color temperature, roughly: the neutral through the
+        // daylight ColorMatrix.
+        let kelvin = lib.dng.color_matrix().and_then(|m| invert3(&m)).map_or(0.0, |inv| {
+            let w = apply(&inv, neutral);
+            let s = w[0] + w[1] + w[2];
+            heeler_rawdec::color::cct(w[0] / s, w[1] / s)
+        });
+        let way = if lib.dng.forward_matrix[0].is_some() && !lib.dng.profile_tables && forward_vs_color(&lib.dng).is_some_and(|(m, _)| m <= 5.0) { "forward" } else { "color" };
+        let name = path.strip_prefix(&root).unwrap_or(&path).display().to_string();
+        println!("{name}\t{way}\t{kelvin:.0} K\tmean {mean:.2}\tmax {max:.2}");
+        means.push(mean);
+        cameras.entry(format!("{} {}", lib.dng.make, lib.dng.model)).or_default().push(mean);
+    }
+    means.sort_by(f64::total_cmp);
+    let q = |p: f64| means.get(((means.len() as f64 - 1.0) * p).round() as usize).copied().unwrap_or(0.0);
+    println!("{} files from {} cameras: mean shift median {:.2}, p90 {:.2}, largest {:.2}", means.len(), cameras.len(), q(0.5), q(0.9), q(1.0));
+}
+
+/// How far a DNG profile's ForwardMatrix path develops the 24 Classic
+/// patches from its ColorMatrix path, for the shot's white (CIEDE2000,
+/// mean and largest); None without a ForwardMatrix.
+fn forward_vs_color(d: &Dng) -> Option<(f64, f64)> {
+    let n = d.as_shot_neutral.as_deref().filter(|n| n.len() == 3)?;
+    let neutral = [n[0], n[1], n[2]];
+    d.forward_matrix[0].as_ref()?;
+    let cm = dng_to_xyz(d, neutral, false)?;
+    let fm = dng_to_xyz(d, neutral, true)?;
+    let back = invert3(&cm)?;
+    let dist: Vec<f64> = CLASSIC_LAB.iter().map(|&l| de2000(l, lab(apply(&fm, apply(&back, xyz_of_lab(l)))))).collect();
+    Some((dist.iter().sum::<f64>() / 24.0, dist.iter().copied().fold(0.0, f64::max)))
+}
+
+fn forward(args: &[String]) {
+    let root = std::path::PathBuf::from(std::env::var_os("HEELER_RAW_CORPUS").expect("HEELER_RAW_CORPUS"));
+    let paths: Vec<std::path::PathBuf> = if args.len() > 1 { args[1..].iter().map(std::path::PathBuf::from).collect() } else { dngs(&root) };
+    for path in paths {
+        let Ok(bytes) = std::fs::read(&path) else { continue };
+        let Ok(d) = Dng::parse(&bytes) else { continue };
+        if let Some((mean, max)) = forward_vs_color(&d) {
+            let name = path.strip_prefix(&root).unwrap_or(&path).display().to_string();
+            println!("{mean:.2}\t{max:.2}\t{}\t{name}", if d.profile_tables { "tables" } else { "-" });
+        }
     }
 }

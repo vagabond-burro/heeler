@@ -11,6 +11,8 @@
 //! --quick compares the output of the full-size Clip develop only.
 //! --where prints, for the full-size Clip develop, how many differing
 //! pixels lie in the border band and inside, and the first few.
+//! --any takes every file the develop's rules accept, not only the
+//! verified cameras'.
 use heeler_raw::DevelopOpts;
 use heeler_rawdec::Opts;
 
@@ -84,19 +86,25 @@ fn diff(a: &[u16], b: &[u16]) -> Diff {
 }
 
 fn opts_of(o: DevelopOpts) -> Opts {
-    Opts { half_size: o.half_size, fixed_white: o.fixed_white, camera_wb: o.camera_wb, camera_matrix: o.camera_matrix, highlight: o.highlight, demosaic: o.demosaic }
+    Opts { half_size: o.half_size, fixed_white: o.fixed_white, camera_wb: o.camera_wb, camera_matrix: o.camera_matrix, highlight: o.highlight, demosaic: o.demosaic, libraw_color: true }
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let quick = args.iter().any(|a| a == "--quick");
     let wher = args.iter().any(|a| a == "--where");
+    if args.iter().any(|a| a == "--any") {
+        heeler_rawdec::set_verified_only(false);
+    }
+    // heeler-raw's own entry points answer for LibRaw here.
+    #[cfg(feature = "rust-decoder")]
+    heeler_raw::rust_path::set_enabled(false);
     let mut tally: std::collections::BTreeMap<String, usize> = Default::default();
     for path in files(&args) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let name = path.to_string_lossy().into_owned();
         let base = DevelopOpts::default();
-        let plan = match heeler_rawdec::plan(&bytes, &opts_of(base)) {
+        let mut plan = match heeler_rawdec::plan(&bytes, &opts_of(base)) {
             Ok(p) => p,
             Err(e) => {
                 *tally.entry(format!("declined: {e}")).or_default() += 1;
@@ -105,6 +113,10 @@ fn main() {
         };
         let mut notes = Vec::new();
         let mut exact = true;
+        // The develop's matrix is not what this compares (LibRaw's own
+        // tables can round a camera's matrix apart from the file's): the
+        // outputs below are developed with LibRaw's.
+        let libraw_matrix = heeler_raw::linear_dng::libraw_facts(&bytes, base).ok().map(|f| f.rgb_cam.map(|r| [r[0], r[1], r[2]]));
         if !quick {
             // The develop matrix, to the bit.
             if let Ok(f) = heeler_raw::linear_dng::libraw_facts(&bytes, base) {
@@ -157,7 +169,11 @@ fn main() {
         for &(half, highlight) in cases {
             let o = DevelopOpts { half_size: half, highlight, ..base };
             let theirs = heeler_raw::decode_sensor_with(&bytes, o).unwrap();
-            let (mine, _) = match heeler_rawdec::develop(&bytes, &opts_of(o), None) {
+            let mut with = plan.clone();
+            if let Some(m) = libraw_matrix {
+                with.rgb_cam = m;
+            }
+            let (mine, _) = match heeler_rawdec::develop::develop_with(&bytes, &with, &opts_of(o), None) {
                 Ok(m) => m,
                 Err(e) => {
                     notes.push(format!("develop {half} h{highlight}: {e}"));

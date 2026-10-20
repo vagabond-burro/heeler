@@ -8,7 +8,9 @@
 //! The numbers follow LibRaw's develop of the same file, which is what
 //! Heeler developed these files with before: its integer black level,
 //! its white level lowered to the frame's brightest sample when that is
-//! within a quarter of it, its scaling and clipping, its matrix.
+//! within a quarter of it, its scaling and clipping. The color is the DNG
+//! specification's model for the shot's white (or, for the comparisons,
+//! LibRaw's daylight matrix).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -17,6 +19,7 @@ use rayon::prelude::*;
 
 use crate::ahd::{self, Mosaic, Out};
 use crate::dng::Dng;
+use crate::gain_map::{self, PixelGains};
 use crate::{Error, Opts};
 
 /// LibRaw's default threshold for lowering the white level to the
@@ -44,20 +47,12 @@ pub struct Plan {
     pub cam_mul: [f32; 4],
     pub rgb_cam: [[f32; 3]; 3],
     pub flip: u8,
-}
-
-/// Opcode IDs in a DNG opcode list (big-endian: a count, then each
-/// opcode's ID, version, flags, size and parameters).
-fn opcode_ids(list: &[u8]) -> Option<Vec<u32>> {
-    let be = |at: usize| list.get(at..at + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]));
-    let n = be(0)? as usize;
-    let mut at = 4;
-    let mut ids = Vec::with_capacity(n.min(64));
-    for _ in 0..n {
-        ids.push(be(at)?);
-        at = at.checked_add(16)?.checked_add(be(at + 12)? as usize)?;
-    }
-    Some(ids)
+    /// OpcodeList2's GainMaps, applied to the mosaic before the black is
+    /// taken off, and OpcodeList3's GainMaps and FixVignetteRadials,
+    /// applied to each pixel between the highlights and the color matrix:
+    /// the lens shading phones, drones and some cameras write.
+    pub gains2: Vec<gain_map::GainMap>,
+    pub stage3: Vec<gain_map::Stage3>,
 }
 
 impl Plan {
@@ -65,13 +60,17 @@ impl Plan {
     /// leaves the file to LibRaw.
     pub fn new(bytes: &[u8], opts: &Opts) -> Result<Plan, Error> {
         let dng = Dng::parse(bytes)?;
-        if !matches!(dng.compression, 1 | 7) {
-            return Err(Error::Unsupported("a DNG compression other than none or lossless JPEG"));
+        if dng.photometric != 32803 {
+            return Err(Error::Unsupported("not a CFA image"));
         }
-        if dng.sample_format != 1 {
-            return Err(Error::Unsupported("floating-point samples"));
+        // Integers uncompressed or in lossless JPEG; floats (HDR merges)
+        // uncompressed or Deflated with the floating-point predictor.
+        match (dng.sample_format, dng.compression, dng.predictor) {
+            (1, 1 | 7, _) if (8..=16).contains(&dng.bits) => {}
+            (3, 1, 1) | (3, 8, 3 | 34894 | 34895) if matches!(dng.bits, 16 | 24 | 32) && dng.linearization.is_none() => {}
+            _ => return Err(Error::Unsupported("a sample format, depth or compression not read here")),
         }
-        if dng.samples != 1 || dng.cfa_layout != 1 || dng.cfa_dim != (2, 2) || !(8..=16).contains(&dng.bits) {
+        if dng.samples != 1 || dng.cfa_layout != 1 || dng.cfa_dim != (2, 2) {
             return Err(Error::Unsupported("not a one-sample 2 by 2 Bayer mosaic"));
         }
         // An odd top or left edge of the active area moves in a row or a
@@ -101,29 +100,13 @@ impl Plan {
         if dng.black_delta_h.iter().chain(&dng.black_delta_v).any(|&d| d != 0.0) {
             return Err(Error::Unsupported("black level deltas"));
         }
-        // A diagonal camera calibration or analog balance scales the
-        // matrix's rows, which the develop matrix normalizes away; any
-        // other calibration is declined.
+        // With LibRaw's color, a diagonal camera calibration or analog
+        // balance scales the matrix's rows, which the develop matrix
+        // normalizes away; any other calibration is declined. The DNG
+        // model takes any.
         let diagonal = |m: &Option<Vec<f64>>| m.as_deref().is_none_or(|m| m.len() == 9 && (0..9).all(|k| k % 4 == 0 || m[k] == 0.0));
-        if !dng.camera_calibration.iter().all(diagonal) {
+        if opts.libraw_color && !dng.camera_calibration.iter().all(diagonal) {
             return Err(Error::Unsupported("a camera calibration that mixes colors"));
-        }
-        // GainMap (9) in OpcodeList2, GainMap or FixVignetteRadial (3) in
-        // OpcodeList3: heeler-raw applies those around LibRaw's develop.
-        // Every other opcode Heeler's develop leaves alone.
-        let t_ = crate::tiff::Tiff::new(bytes).ok_or(Error::Unsupported("not a TIFF"))?;
-        for ifd in t_.ifds() {
-            if ifd.get(254).and_then(|e| t_.uint(&e)) != Some(0) && ifd.get(254).is_some() {
-                continue;
-            }
-            for (tag, applied) in [(51009u16, &[9u32][..]), (51022, &[3, 9][..])] {
-                if let Some(e) = ifd.get(tag) {
-                    let ids = t_.bytes(&e).and_then(opcode_ids).ok_or(Error::Corrupt("an opcode list"))?;
-                    if ids.iter().any(|id| applied.contains(id)) {
-                        return Err(Error::Unsupported("lens shading opcodes"));
-                    }
-                }
-            }
         }
         if dng.compression == 7 {
             // LibRaw reads a tile whose JPEG line, times its components,
@@ -151,9 +134,7 @@ impl Plan {
         // The reciprocal in single precision, as LibRaw takes it.
         let inv = |v: f64| 1.0f32 / v as f32;
         let cam_mul = [inv(neutral[0]), inv(neutral[1]), inv(neutral[2]), inv(neutral[1])];
-        let cm = dng.color_matrix().ok_or(Error::Unsupported("no color matrix"))?.map(|r| r.map(|v| v as f32 as f64));
-        let (m, _) = crate::color::srgb_from_camera(&cm).ok_or(Error::Unsupported("a singular color matrix"))?;
-        let rgb_cam = m.map(|row| row.map(|v| v as f32));
+        let rgb_cam = develop_matrix(&dng, [neutral[0], neutral[1], neutral[2]], opts.libraw_color)?.map(|row| row.map(|v| v as f32));
         let (br, bc) = dng.black_dim;
         // The black pattern over its own period and the CFA's, so one
         // lookup serves both.
@@ -163,7 +144,11 @@ impl Plan {
         }
         let black = (0..rows).flat_map(|i| (0..cols).map(move |j| (i, j))).map(|(i, j)| dng.black_at(i, j)).collect();
         let white = dng.white.first().copied().unwrap_or(65535.0).clamp(1.0, 65535.0) as u32;
-        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern, black, black_rows: rows, black_cols: cols, white, cam_mul, rgb_cam, flip: dng.flip(), dng })
+        // Other opcodes are left alone, as heeler-raw leaves them around
+        // LibRaw's develop.
+        let gains2 = gain_map::parse_list(&dng.opcodes[1]);
+        let stage3 = gain_map::parse_list3(&dng.opcodes[2]);
+        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern, black, black_rows: rows, black_cols: cols, white, cam_mul, rgb_cam, flip: dng.flip(), gains2, stage3, dng })
     }
 
     /// The output's size (turned when the file says so).
@@ -180,7 +165,19 @@ impl Plan {
         let (ow, oh) = self.output_size(half);
         // The unpack's buffers are gone before the demosaic's arrive.
         let working = self.parallel_bytes()?.max(if half { 0 } else { self.demosaic_extra() });
-        memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES])
+        memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES, self.pixel_gains(half).bytes()])
+    }
+
+    /// The image the stage 3 opcodes see: the active area, or at half size
+    /// its whole 2 by 2 blocks (the half-size image's own size).
+    fn stage3_size(&self, half: bool) -> (usize, usize) {
+        if half { (self.width / 2, self.height / 2) } else { (self.width, self.height) }
+    }
+
+    /// OpcodeList3 worked out for the develop's image.
+    pub fn pixel_gains(&self, half: bool) -> PixelGains {
+        let (w, h) = self.stage3_size(half);
+        PixelGains::new(&self.stage3, w as u32, h as u32, 3)
     }
 
     /// Whether the unpack reads each piece's code stream across the cores
@@ -190,10 +187,21 @@ impl Plan {
         self.dng.compression == 7 && self.dng.pieces.spans.len() < rayon::current_num_threads()
     }
 
+    /// Whether the samples are floats.
+    pub fn float(&self) -> bool {
+        self.dng.sample_format == 3
+    }
+
     /// What reading one piece across the cores holds: its samples, the
     /// differences each worker reads (a piece's worth, and a little more
     /// where pieces are read again), and the code stream unstuffed.
     fn parallel_bytes(&self) -> Result<usize, memory::MemoryError> {
+        if self.float() {
+            // A piece at a time a worker: its floats and its inflated bytes.
+            let d = &self.dng;
+            let piece = memory::bytes(d.pieces.width, d.pieces.height, 1, 4 + d.bits as usize / 8)?;
+            return memory::bytes(rayon::current_num_threads().min(d.pieces.spans.len()), 1, 1, piece);
+        }
         if !self.parallel_pieces() {
             return Ok(0);
         }
@@ -207,6 +215,47 @@ impl Plan {
     /// worker.
     pub fn demosaic_extra(&self) -> usize {
         rayon::current_num_threads() * ahd::worker_bytes()
+    }
+}
+
+/// How far (mean CIEDE2000 over the Classic chart's patches) a profile's
+/// ForwardMatrix may develop colors from its own ColorMatrix before the
+/// ForwardMatrix is taken for a placeholder. Profiles made with care agree
+/// within about 3; some hand-made and phone profiles carry a ForwardMatrix
+/// that does not describe the camera.
+const FORWARD_AGREEMENT: f64 = 5.0;
+
+/// The develop matrix by the DNG specification's color model for the
+/// shot's white: the profile's two calibrations weighted by that white's
+/// color temperature, through the ForwardMatrix where the profile has one
+/// that agrees with its ColorMatrix (FORWARD_AGREEMENT), else through the
+/// ColorMatrix. A profile that also has hue and saturation or look tables
+/// is taken through its ColorMatrix too, since such a profile's
+/// ForwardMatrix can leave most of the color to the tables, which this
+/// develop does not apply.
+fn dng_color(dng: &Dng, neutral: [f64; 3]) -> Result<[[f64; 3]; 3], Error> {
+    let profile = dng.profile();
+    let by_color = crate::color::Profile { forward_matrix: [None, None], ..profile.clone() };
+    let color = crate::color::camera_to_xyz_d50(&by_color, neutral).ok_or(Error::Unsupported("no usable color matrix"))?;
+    let forward = (profile.forward_matrix[0].is_some() && !dng.profile_tables)
+        .then(|| crate::color::camera_to_xyz_d50(&profile, neutral))
+        .flatten()
+        .filter(|f| crate::color::disagreement(&color, f).is_some_and(|d| d <= FORWARD_AGREEMENT));
+    crate::color::srgb_from_balanced(&forward.unwrap_or(color), neutral).ok_or(Error::Unsupported("a color matrix that loses the white"))
+}
+
+/// The camera (white-balanced) to linear sRGB matrix a develop of `dng`
+/// multiplies by, for the camera white `neutral`: the DNG model's, or with
+/// `libraw_color` LibRaw's (the daylight ColorMatrix alone; where the file
+/// has more than one, its values in single precision, as LibRaw then
+/// holds them, which the corpus bears out on every file but one).
+pub fn develop_matrix(dng: &Dng, neutral: [f64; 3], libraw_color: bool) -> Result<[[f64; 3]; 3], Error> {
+    if libraw_color {
+        let single = dng.color_matrix.iter().filter(|m| m.is_some()).count() > 1;
+        let cm = dng.color_matrix().ok_or(Error::Unsupported("no color matrix"))?.map(|r| r.map(|v| if single { v as f32 as f64 } else { v }));
+        Ok(crate::color::srgb_from_camera(&cm).ok_or(Error::Unsupported("a singular color matrix"))?.0)
+    } else {
+        dng_color(dng, neutral)
     }
 }
 
@@ -279,6 +328,40 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
     let across = d.width.div_ceil(pw);
     let lin = d.linearization.as_deref().filter(|t| !t.is_empty());
     let origin = |i: usize| ((i / across) * ph, (i % across) * pw);
+    if p.float() {
+        // Floats, a piece a worker, each sample's whole part taken; LibRaw
+        // takes them so while the frame's brightest lies within 4096 to
+        // 32767 (its float conversion's defaults) and rescales otherwise,
+        // which leaves such a file to it.
+        let little = bytes.starts_with(b"II");
+        let max = d.pieces.spans.par_iter().enumerate().map(|(i, &(at, len))| -> Result<f32, Error> {
+            stopped(stop)?;
+            let data = &bytes[at..at + len];
+            let v = if d.compression == 8 { crate::deflate::floats(data, pw, ph, d.bits, d.predictor)? } else { crate::deflate::uncompressed_floats(data, pw, ph, d.bits, little)? };
+            let (r0, c0) = origin(i);
+            let (rows, cols) = ((v.len() / pw).min(d.height.saturating_sub(r0)), pw.min(d.width - c0));
+            if r0 + v.len() / pw < (r0 + ph).min(d.height) {
+                return Err(Error::Corrupt("a piece shorter than its rows"));
+            }
+            let mut max = 0f32;
+            let mut line = vec![0u16; pw];
+            for tr in 0..rows {
+                for (dst, &x) in line.iter_mut().zip(&v[tr * pw..tr * pw + cols]) {
+                    if !(x >= 0.0 && x <= 65535.0) {
+                        return Err(Error::Unsupported("float samples outside 0 to 65535"));
+                    }
+                    max = max.max(x);
+                    *dst = x as u16;
+                }
+                put_run(out, p, r0 + tr, c0, &line[..cols], None);
+            }
+            Ok(max)
+        }).try_reduce(|| 0f32, |a, b| Ok(a.max(b)))?;
+        if !(4096.0..=32767.0).contains(&max) {
+            return Err(Error::Unsupported("float samples LibRaw would rescale"));
+        }
+        return Ok(cfa);
+    }
     if d.compression == 1 {
         // Uncompressed: every row of every piece found by arithmetic, so
         // the rows go side by side even when the file is one strip.
@@ -331,12 +414,14 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
     };
     if p.parallel_pieces() {
         // Fewer pieces than cores (often one strip): each piece's code
-        // stream read across the cores, then its rows placed side by side.
+        // stream read across the cores (each restart interval from its own
+        // marker, or pieces that fall into step), then its rows placed side
+        // by side.
         let mut samples = memory::vector(pw * ph, 0u16, "RAW lossless JPEG samples")?;
         for (i, &(at, len)) in d.pieces.spans.iter().enumerate() {
             stopped(stop)?;
             let data = &bytes[at..at + len];
-            if crate::ljpeg::decode_parallel(data, &mut samples)?.is_none() {
+            if crate::ljpeg::decode_intervals(data, &mut samples)?.is_none() && crate::ljpeg::decode_parallel(data, &mut samples)?.is_none() {
                 decode_piece(i, data)?;
                 continue;
             }
@@ -354,7 +439,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
 
 /// One row of uncompressed samples: 8 bits a byte, 16 in the file's byte
 /// order, any other depth packed most significant bit first.
-fn unpack_row(row: &[u8], bits: usize, little: bool, line: &mut [u16]) {
+pub fn unpack_row(row: &[u8], bits: usize, little: bool, line: &mut [u16]) {
     match bits {
         8 => line.iter_mut().zip(row).for_each(|(v, &b)| *v = b as u16),
         16 => {
@@ -485,7 +570,7 @@ pub fn blend(px: [u16; 3], clip: i32) -> [u16; 3] {
             lab[i][c] = acc;
         }
         for c in 1..3 {
-            sum[i] = lab[i][c].mul_add(lab[i][c], sum[i]);
+            sum[i] = crate::fmadd(lab[i][c], lab[i][c], sum[i]);
         }
     }
     let chratio = (sum[1] / sum[0]).sqrt();
@@ -496,7 +581,7 @@ pub fn blend(px: [u16; 3], clip: i32) -> [u16; 3] {
     for c in 0..3 {
         let mut acc = 0.0f32;
         for j in 0..3 {
-            acc = ITRANS[c][j].mul_add(lab[0][j], acc);
+            acc = crate::fmadd(ITRANS[c][j], lab[0][j], acc);
         }
         out[c] = ((acc / 3.0) as u32) as u16;
     }
@@ -509,7 +594,7 @@ pub fn convert(px: [u16; 3], m: &[[f32; 3]; 3]) -> [u16; 3] {
     let (a, b, c) = (px[0] as f32, px[1] as f32, px[2] as f32);
     let mut out = [0u16; 3];
     for i in 0..3 {
-        let v = m[i][2].mul_add(c, m[i][0].mul_add(a, m[i][1] * b));
+        let v = crate::fmadd(m[i][2], c, crate::fmadd(m[i][0], a, m[i][1] * b));
         out[i] = (v as i32).clamp(0, 65535) as u16;
     }
     out
@@ -528,11 +613,26 @@ pub fn develop(bytes: &[u8], opts: &Opts, stop: Option<&AtomicBool>) -> Result<(
     let t0 = std::time::Instant::now();
     stopped(stop)?;
     let p = Plan::new(bytes, opts)?;
+    develop_plan(bytes, &p, opts, stop, t0)
+}
+
+/// The develop of `bytes` by a plan made for it (Plan::new with `opts`),
+/// which the comparisons with LibRaw may give LibRaw's own matrix.
+#[doc(hidden)]
+pub fn develop_with(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>) -> Result<(Image, Times), Error> {
+    develop_plan(bytes, p, opts, stop, std::time::Instant::now())
+}
+
+fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, t0: std::time::Instant) -> Result<(Image, Times), Error> {
     let _job = memory::Job::admit(p.bytes(opts.half_size)?, "RAW develop")?;
     let open = t0.elapsed().as_secs_f64();
     let mut cfa = unpack(bytes, &p, stop)?;
     let unpacked = t0.elapsed().as_secs_f64();
     stopped(stop)?;
+    if !p.gains2.is_empty() {
+        let mut img = gain_map::Cfa { data: &mut cfa, pitch: p.width, top: 0, left: 0, height: p.height as u32, width: p.width as u32 };
+        gain_map::apply_cfa(&p.gains2, &mut img, |r, c| p.black[(r as usize % p.black_rows) * p.black_cols + c as usize % p.black_cols]);
+    }
     let data_max = subtract_black(&mut cfa, &p);
     let n = numbers(&p, opts, data_max);
     scale_mosaic(&mut cfa, &p, &n);
@@ -558,10 +658,14 @@ fn headroom(n: &Numbers) -> f32 {
     if mn <= 0.0 || mx <= 0.0 { 1.0 } else { mx / mn }
 }
 
-/// The pixel a develop writes for a demosaiced camera pixel.
+/// The pixel a develop writes for demosaiced camera pixel (row, col):
+/// the highlights, the stage 3 opcodes, the color matrix.
 #[inline(always)]
-fn finish(px: [u16; 3], p: &Plan, n: &Numbers) -> [u16; 3] {
-    let px = if n.highlight == 2 { blend(px, n.clip) } else { px };
+fn finish(px: [u16; 3], row: usize, col: usize, p: &Plan, n: &Numbers, g: &PixelGains) -> [u16; 3] {
+    let mut px = if n.highlight == 2 { blend(px, n.clip) } else { px };
+    if !g.is_empty() {
+        g.apply(row, col, &mut px);
+    }
     convert(px, &p.rgb_cam)
 }
 
@@ -572,6 +676,7 @@ fn half(cfa: &[u16], p: &Plan, n: &Numbers) -> Result<Image, Error> {
     let (ow, oh) = p.output_size(true);
     let mut rgb = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;
     let out = Out(rgb.as_mut_ptr());
+    let g = p.pixel_gains(true);
     (0..hh).into_par_iter().for_each(|y| {
         let out = out;
         for x in 0..hw {
@@ -586,7 +691,7 @@ fn half(cfa: &[u16], p: &Plan, n: &Numbers) -> Result<Image, Error> {
                 }
             }
             let px = [v[0] as u16, ((v[1] + v[3]) >> 1) as u16, v[2] as u16];
-            let px = finish(px, p, n);
+            let px = finish(px, y, x, p, n, &g);
             let (oy, ox) = to_output(p.flip, hw, hh, y, x);
             // SAFETY: each output pixel is written by its own block only.
             unsafe { std::ptr::copy_nonoverlapping(px.as_ptr(), out.at((oy * ow + ox) * 3), 3) };
@@ -604,8 +709,9 @@ fn full(cfa: &[u16], p: &Plan, n: &Numbers, stop: Option<&AtomicBool>) -> Result
     let lab = ahd::Lab::new(&p.rgb_cam);
     let m = Mosaic { data: cfa, width: w, height: h, pattern: p.pattern };
     let flip = p.flip;
+    let g = p.pixel_gains(false);
     ahd::demosaic(&m, &lab, stop, &|r, c, px| {
-        let px = finish(px, p, n);
+        let px = finish(px, r, c, p, n, &g);
         let (oy, ox) = to_output(flip, w, h, r, c);
         // SAFETY: the demosaic hands each pixel over exactly once.
         unsafe { std::ptr::copy_nonoverlapping(px.as_ptr(), out.at((oy * ow + ox) * 3), 3) };

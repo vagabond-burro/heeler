@@ -404,7 +404,7 @@ void heeler_silence_data_errors(libraw_data_t *d) {
     libraw_set_dataerror_handler(d, heeler_null_data_cb, nullptr);
 }
 
-// What a DNG's GainMap opcodes need (src/gain_map.rs), read after
+// What a DNG's GainMap opcodes need (heeler-rawdec's gain_map), read after
 // unpack and before processing: the OpcodeList2 bytes LibRaw kept for
 // the main image, the single-plane sensor buffer with its pitch, and
 // where the stage 2 image (the active area) sits in it.
@@ -421,7 +421,7 @@ unsigned heeler_active_width(libraw_data_t *d) { return d ? d->sizes.width : 0; 
 unsigned heeler_active_height(libraw_data_t *d) { return d ? d->sizes.height : 0; }
 unsigned heeler_filters(libraw_data_t *d) { return d ? d->idata.filters : 0; }
 
-// OpcodeList3 runs after demosaic (src/gain_map.rs apply_rgb): `stage3`
+// OpcodeList3 runs after demosaic (heeler-rawdec's gain_map, apply_rgb): `stage3`
 // is called with the handle between LibRaw's demosaic and its color
 // conversion, when image holds the camera's colors, black subtracted
 // and white balanced, iwidth by iheight, four samples a pixel.

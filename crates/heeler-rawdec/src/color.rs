@@ -156,6 +156,125 @@ pub fn camera_to_xyz_d50(p: &Profile, neutral: [f64; 3]) -> Option<M3> {
     }
 }
 
+/// The develop matrix the DNG color model gives: white-balanced camera RGB
+/// (the scene's white at equal values) through `cam_to_xyz` (D50, for the
+/// camera white `neutral`, as camera_to_xyz_d50 gives it) and a Bradford
+/// adaptation to sRGB's D65 white, to linear sRGB; each row scaled to sum
+/// to one, so the scene's white stays exactly white at its own level, as a
+/// develop's matrix keeps it.
+pub fn srgb_from_balanced(cam_to_xyz: &M3, neutral: [f64; 3]) -> Option<M3> {
+    let d65 = apply(&XYZ_FROM_SRGB, [1.0; 3]);
+    let mut m = mul3(&invert3(&XYZ_FROM_SRGB)?, &mul3(&bradford(D50, d65), &mul3(cam_to_xyz, &diag(neutral))));
+    for row in m.iter_mut() {
+        let sum: f64 = row.iter().sum();
+        if !(sum.is_finite() && sum > 1e-6) {
+            return None;
+        }
+        for v in row.iter_mut() {
+            *v /= sum;
+        }
+    }
+    Some(m)
+}
+
+/// The 24 patches of the X-Rite ColorChecker Classic (charts made after
+/// November 2014), CIE L*a*b* under D50, as X-Rite publishes them: a set
+/// of real surface colors to weigh one develop matrix against another.
+pub const CLASSIC_LAB: [[f64; 3]; 24] = [
+    [37.54, 14.37, 14.92],
+    [64.66, 19.27, 17.50],
+    [49.32, -3.82, -22.54],
+    [43.46, -12.74, 22.72],
+    [54.94, 9.61, -24.79],
+    [70.48, -32.26, -0.37],
+    [62.73, 35.83, 56.50],
+    [39.43, 10.75, -45.17],
+    [50.57, 48.64, 16.67],
+    [30.10, 22.54, -20.87],
+    [71.77, -24.13, 58.19],
+    [71.51, 18.24, 67.37],
+    [28.37, 15.42, -49.80],
+    [54.38, -39.72, 32.27],
+    [42.43, 51.05, 28.62],
+    [81.80, 2.67, 80.41],
+    [50.63, 51.28, -14.12],
+    [49.57, -29.71, -28.32],
+    [95.19, -1.03, 2.93],
+    [81.29, -0.57, 0.44],
+    [66.89, -0.75, -0.06],
+    [50.76, -0.13, 0.14],
+    [35.63, -0.46, -0.48],
+    [20.64, 0.07, -0.46],
+];
+
+/// CIE L*a*b* of an XYZ color, the white D50.
+pub fn lab(xyz: [f64; 3]) -> [f64; 3] {
+    let f = |t: f64| if t > 216.0 / 24389.0 { t.cbrt() } else { (24389.0 / 27.0 * t + 16.0) / 116.0 };
+    let (fx, fy, fz) = (f(xyz[0] / D50[0]), f(xyz[1] / D50[1]), f(xyz[2] / D50[2]));
+    [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
+}
+
+/// The XYZ (D50 white) of a CIE L*a*b* color.
+pub fn xyz_of_lab(l: [f64; 3]) -> [f64; 3] {
+    let fy = (l[0] + 16.0) / 116.0;
+    let (fx, fz) = (fy + l[1] / 500.0, fy - l[2] / 200.0);
+    let g = |f: f64| if f.powi(3) > 216.0 / 24389.0 { f.powi(3) } else { (116.0 * f - 16.0) * 27.0 / 24389.0 };
+    [g(fx) * D50[0], g(fy) * D50[1], g(fz) * D50[2]]
+}
+
+/// CIEDE2000 (Sharma, Wu and Dalal, 2005), kL = kC = kH = 1.
+pub fn de2000(a: [f64; 3], b: [f64; 3]) -> f64 {
+    use std::f64::consts::PI;
+    let (l1, a1, b1, l2, a2, b2) = (a[0], a[1], a[2], b[0], b[1], b[2]);
+    let cbar = ((a1 * a1 + b1 * b1).sqrt() + (a2 * a2 + b2 * b2).sqrt()) / 2.0;
+    let g = 0.5 * (1.0 - (cbar.powi(7) / (cbar.powi(7) + 25f64.powi(7))).sqrt());
+    let (a1p, a2p) = ((1.0 + g) * a1, (1.0 + g) * a2);
+    let (c1p, c2p) = ((a1p * a1p + b1 * b1).sqrt(), (a2p * a2p + b2 * b2).sqrt());
+    let hue = |b: f64, a: f64| if b == 0.0 && a == 0.0 { 0.0 } else { let h = b.atan2(a).to_degrees(); if h < 0.0 { h + 360.0 } else { h } };
+    let (h1p, h2p) = (hue(b1, a1p), hue(b2, a2p));
+    let dl = l2 - l1;
+    let dc = c2p - c1p;
+    let dh = if c1p * c2p == 0.0 {
+        0.0
+    } else if (h2p - h1p).abs() <= 180.0 {
+        h2p - h1p
+    } else if h2p - h1p > 180.0 {
+        h2p - h1p - 360.0
+    } else {
+        h2p - h1p + 360.0
+    };
+    let dhh = 2.0 * (c1p * c2p).sqrt() * (dh.to_radians() / 2.0).sin();
+    let lbar = (l1 + l2) / 2.0;
+    let cbarp = (c1p + c2p) / 2.0;
+    let hbarp = if c1p * c2p == 0.0 {
+        h1p + h2p
+    } else if (h1p - h2p).abs() <= 180.0 {
+        (h1p + h2p) / 2.0
+    } else if h1p + h2p < 360.0 {
+        (h1p + h2p + 360.0) / 2.0
+    } else {
+        (h1p + h2p - 360.0) / 2.0
+    };
+    let t = 1.0 - 0.17 * ((hbarp - 30.0) * PI / 180.0).cos() + 0.24 * ((2.0 * hbarp) * PI / 180.0).cos() + 0.32 * ((3.0 * hbarp + 6.0) * PI / 180.0).cos()
+        - 0.20 * ((4.0 * hbarp - 63.0) * PI / 180.0).cos();
+    let dtheta = 30.0 * (-((hbarp - 275.0) / 25.0).powi(2)).exp();
+    let rc = 2.0 * (cbarp.powi(7) / (cbarp.powi(7) + 25f64.powi(7))).sqrt();
+    let sl = 1.0 + 0.015 * (lbar - 50.0).powi(2) / (20.0 + (lbar - 50.0).powi(2)).sqrt();
+    let sc = 1.0 + 0.045 * cbarp;
+    let sh = 1.0 + 0.015 * cbarp * t;
+    let rt = -(2.0 * dtheta * PI / 180.0).sin() * rc;
+    ((dl / sl).powi(2) + (dc / sc).powi(2) + (dhh / sh).powi(2) + rt * (dc / sc) * (dhh / sh)).sqrt()
+}
+
+/// How far apart two camera (white-balanced) to XYZ (D50) matrices put
+/// real colors: the mean CIEDE2000 over the Classic patches, each taken
+/// back to the camera through `a` and forward through `b`.
+pub fn disagreement(a: &M3, b: &M3) -> Option<f64> {
+    let back = invert3(a)?;
+    let sum: f64 = CLASSIC_LAB.iter().map(|&l| de2000(l, lab(apply(b, apply(&back, xyz_of_lab(l)))))).sum();
+    Some(sum / CLASSIC_LAB.len() as f64)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,6 +325,22 @@ mod tests {
         for i in 0..3 {
             for j in 0..3 {
                 assert!((m[i][j] - want[i][j]).abs() < 2e-3, "{m:?} vs {want:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn under_d65_the_dng_model_develops_as_the_colormatrix_alone() {
+        // A camera white of D65 through one ColorMatrix: the model's develop
+        // matrix is the one the ColorMatrix alone gives (srgb_from_camera).
+        let cm = [[0.7374, -0.2389, -0.0551], [-0.5435, 1.3162, 0.2519], [-0.1006, 0.1795, 0.6552]];
+        let p = Profile { illuminants: [21, 0], color_matrix: [Some(cm), None], ..Default::default() };
+        let neutral = apply(&cm, apply(&XYZ_FROM_SRGB, [1.0; 3]));
+        let m = srgb_from_balanced(&camera_to_xyz_d50(&p, neutral).unwrap(), neutral).unwrap();
+        let (want, _) = srgb_from_camera(&cm).unwrap();
+        for i in 0..3 {
+            for j in 0..3 {
+                assert!((m[i][j] - want[i][j]).abs() < 1e-3, "{m:?} vs {want:?}");
             }
         }
     }

@@ -6,8 +6,10 @@
 pub mod ahd;
 pub mod cameras;
 pub mod color;
+pub mod deflate;
 pub mod develop;
 pub mod dng;
+pub mod gain_map;
 pub mod ljpeg;
 #[doc(hidden)]
 pub mod synthetic;
@@ -31,6 +33,20 @@ pub struct Opts {
     pub highlight: i32,
     /// -1 the default demosaic (AHD); others are declined at full size.
     pub demosaic: i32,
+    /// Develop with LibRaw's color (the daylight ColorMatrix alone) rather
+    /// than the DNG specification's color model: for the comparisons that
+    /// hold the rest of the develop to LibRaw's to the bit.
+    pub libraw_color: bool,
+}
+
+/// `a * b + c` as LibRaw's build computes the develop's expressions of
+/// that form: fused (one rounding) on aarch64, where clang contracts them,
+/// and with two roundings elsewhere, where the builds Heeler ships do not
+/// (or, with the `unfused` feature, here too: for checking that case on
+/// an aarch64 machine).
+#[inline(always)]
+pub(crate) fn fmadd(a: f32, b: f32, c: f32) -> f32 {
+    if cfg!(all(target_arch = "aarch64", not(feature = "unfused"))) { a.mul_add(b, c) } else { a * b + c }
 }
 
 static VERIFIED_ONLY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);

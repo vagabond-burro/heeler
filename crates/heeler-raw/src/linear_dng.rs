@@ -99,9 +99,11 @@ const DEFAULT_ADJUST_MAXIMUM_THRESHOLD: f32 = 0.75;
 /// Why a file is not this module's to develop, for the tests; None when
 /// it is.
 fn declined(f: &Facts, opcode3: bool) -> Option<&'static str> {
+    // Uncompressed pieces only through heeler-rawdec's reading (rust_facts),
+    // which marks them with lossless_dng 2.
     let reason = if f.filters != 0 || f.colors != 3 || f.tiff_samples != 3 {
         "not a three-sample linear raw"
-    } else if f.lossless_dng == 0 || f.tiff_compress != 7 {
+    } else if !(f.lossless_dng == 1 && f.tiff_compress == 7 || f.lossless_dng == 2 && f.tiff_compress == 1) {
         "not lossless JPEG"
     } else if f.tile_width == 0 || f.tile_length == 0 || f.tile_length == u32::MAX || f.tile_width > f.raw_width {
         "not tiled"
@@ -157,6 +159,10 @@ pub struct LinearDng {
     across: usize,
     lintable: Box<[u16]>,
     outcurve: Box<[u16]>,
+    /// Whether the facts and the tiles are read by heeler-rawdec (the
+    /// rust-decoder feature) rather than through LibRaw.
+    #[cfg_attr(not(feature = "rust-decoder"), allow(dead_code))]
+    rust: bool,
     /// The tiles decoded last, newest last: a band reads the tiles under
     /// it, and the next band most of the same ones.
     cache: std::sync::Mutex<Vec<(usize, std::sync::Arc<Vec<u16>>)>>,
@@ -166,10 +172,10 @@ impl LinearDng {
     /// The file as this module develops it, or None when it is not one
     /// (LibRaw develops it then). `opts` are the develop's.
     pub fn open(bytes: Vec<u8>, opts: DevelopOpts) -> Result<Option<LinearDng>, RawError> {
-        let Some((facts, lintable, outcurve)) = read_facts(&bytes, opts)? else { return Ok(None) };
+        let Some((facts, lintable, outcurve, rust)) = read_facts(&bytes, opts)? else { return Ok(None) };
         let Some(tiles) = tile_table(&bytes, &facts) else { return Ok(None) };
         let across = (facts.raw_width as usize).div_ceil(facts.tile_width as usize);
-        Ok(Some(LinearDng { bytes, facts, tiles, across, lintable, outcurve, cache: std::sync::Mutex::new(Vec::new()) }))
+        Ok(Some(LinearDng { bytes, facts, tiles, across, lintable, outcurve, rust, cache: std::sync::Mutex::new(Vec::new()) }))
     }
 
     /// The frame's size as LibRaw hands it back (turned when the file
@@ -330,6 +336,53 @@ impl LinearDng {
         let (trow, tcol) = ((t / self.across) * th, (t % self.across) * tw);
         let (rw, rh) = (self.facts.raw_width as usize, self.facts.raw_height as usize);
         let lin = &self.lintable;
+        #[cfg(feature = "rust-decoder")]
+        if self.rust {
+            use rayon::prelude::*;
+            // The piece's samples run in order, three a pixel, tile row by
+            // tile row; those past the frame's edge or the tile's last row
+            // are dropped, the rest go through the linearization table. A
+            // tile row is read side by side with the others where it can be.
+            let (rows_here, cols_here) = (th.min(rh.saturating_sub(trow)), tw.min(rw.saturating_sub(tcol)));
+            let put_row = |row: usize, line: &[u16], dst: &mut [u16]| {
+                if row < rows_here {
+                    for (d, &v) in dst[..cols_here * 3].iter_mut().zip(line) {
+                        *d = lin[v as usize];
+                    }
+                }
+            };
+            if self.facts.tiff_compress == 1 {
+                let bits = self.facts.tiff_bps as usize;
+                let row_bytes = (tw * 3 * bits).div_ceil(8);
+                let little = self.bytes.starts_with(b"II");
+                out.par_chunks_mut(tw * 3).zip(data.par_chunks(row_bytes)).enumerate().for_each(|(row, (dst, src))| {
+                    if src.len() == row_bytes {
+                        let mut line = vec![0u16; tw * 3];
+                        heeler_rawdec::develop::unpack_row(src, bits, little, &mut line);
+                        put_row(row, &line, dst);
+                    }
+                });
+            } else if self.tiles.len() < rayon::current_num_threads() {
+                // Fewer pieces than cores (often one strip): the code stream
+                // read across the cores (each restart interval from its own
+                // marker, or pieces that fall into step), then placed row by
+                // row.
+                let frame = heeler_rawdec::ljpeg::frame(data).map_err(|_| RawError::Unexpected)?;
+                let mut samples = vec![0u16; frame.width * frame.components * frame.height];
+                let side_by_side = match heeler_rawdec::ljpeg::decode_intervals(data, &mut samples).map_err(|_| RawError::Unexpected)? {
+                    Some(_) => true,
+                    None => heeler_rawdec::ljpeg::decode_parallel(data, &mut samples).map_err(|_| RawError::Unexpected)?.is_some(),
+                };
+                if side_by_side {
+                    out.par_chunks_mut(tw * 3).zip(samples.par_chunks(tw * 3)).enumerate().for_each(|(row, (dst, src))| put_row(row, src, dst));
+                    return Ok(out);
+                }
+                self.decode_serial(data, rows_here, cols_here, tw, &mut out)?;
+            } else {
+                self.decode_serial(data, rows_here, cols_here, tw, &mut out)?;
+            }
+            return Ok(out);
+        }
         ljpeg::decode(data, |row, col, samples| {
             // adobe_copy_pixel: the frame's bounds, then the table.
             if trow + row < rh && tcol + col < rw && row < th {
@@ -341,6 +394,26 @@ impl LinearDng {
         }, tw, rw)
         .map_err(|_| RawError::Unexpected)?;
         Ok(out)
+    }
+
+    /// A lossless JPEG piece read in order by heeler-rawdec into `out`
+    /// (`tw` pixels a row), only its first `rows` rows and `cols` columns
+    /// kept, through the linearization table.
+    #[cfg(feature = "rust-decoder")]
+    fn decode_serial(&self, data: &[u8], rows: usize, cols: usize, tw: usize, out: &mut [u16]) -> Result<(), RawError> {
+        let lin = &self.lintable;
+        let mut k = 0usize;
+        heeler_rawdec::ljpeg::decode(data, |_, samples| {
+            for &v in samples {
+                let (p, c) = (k / 3, k % 3);
+                if p / tw < rows && p % tw < cols {
+                    out[p * 3 + c] = lin[v as usize];
+                }
+                k += 1;
+            }
+        })
+        .map_err(|_| RawError::Unexpected)?;
+        Ok(())
     }
 
     #[doc(hidden)]
@@ -574,9 +647,15 @@ pub fn convert(px: [u16; 3], oc: &[[f32; 4]; 3], fused: bool) -> [u16; 3] {
     out
 }
 
-/// LibRaw's facts about `bytes` and its two tables, or None when the
-/// file is not this module's.
-fn read_facts(bytes: &[u8], opts: DevelopOpts) -> Result<Option<(Facts, Box<[u16]>, Box<[u16]>)>, RawError> {
+/// The facts about `bytes` and the two tables, or None when the file is
+/// not this module's: LibRaw's, or with the rust-decoder feature routing
+/// to Rust, heeler-rawdec's reading of the file's own tags (rust_facts).
+/// The last value says which.
+fn read_facts(bytes: &[u8], opts: DevelopOpts) -> Result<Option<(Facts, Box<[u16]>, Box<[u16]>, bool)>, RawError> {
+    #[cfg(feature = "rust-decoder")]
+    if crate::rust_path::enabled() {
+        return Ok(rust_facts(bytes, opts).and_then(|(f, lin, out, opcode3)| declined(&f, opcode3).is_none().then_some((f, lin, out, true))));
+    }
     let handle: Handle = configured(opts)?;
     if check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) }).is_err() {
         return Ok(None);
@@ -593,7 +672,125 @@ fn read_facts(bytes: &[u8], opts: DevelopOpts) -> Result<Option<(Facts, Box<[u16
     if declined(&facts, opcode3).is_some() {
         return Ok(None);
     }
-    Ok(Some((facts, lintable, outcurve)))
+    Ok(Some((facts, lintable, outcurve, false)))
+}
+
+/// The facts LibRaw would read from a linear DNG, read from its tags by
+/// heeler-rawdec, with the two tables (the linearization table as LibRaw
+/// loads through it, and its output curve, which for Heeler's linear
+/// 16-bit output is the identity) and whether it has an OpcodeList3. The
+/// options are heeler-raw's own (configured). The color is the DNG
+/// model's for the shot's white unless the Rust path is set to LibRaw's
+/// color. Uncompressed pieces are marked lossless_dng 2. None for a file
+/// this reading does not take.
+#[cfg(feature = "rust-decoder")]
+#[doc(hidden)]
+pub fn rust_facts(bytes: &[u8], opts: DevelopOpts) -> Option<(Facts, Box<[u16]>, Box<[u16]>, bool)> {
+    let d = heeler_rawdec::dng::Dng::parse(bytes).ok()?;
+    if d.photometric != 34892 || !opts.camera_matrix || d.sample_format != 1 || !(8..=16).contains(&d.bits) {
+        return None;
+    }
+    let n = d.as_shot_neutral.as_deref().filter(|n| n.len() == 3 && n.iter().all(|&v| v > 0.0))?;
+    let neutral = [n[0], n[1], n[2]];
+    let m = heeler_rawdec::develop::develop_matrix(&d, neutral, crate::rust_path::libraw_color()).ok()?;
+    let mut rgb_cam = [[0.0f32; 4]; 3];
+    for i in 0..3 {
+        for j in 0..3 {
+            rgb_cam[i][j] = m[i][j] as f32;
+        }
+    }
+    let (t, l, b, r) = d.active;
+    let inv = |v: f64| 1.0f32 / v as f32;
+    let cam_mul = [inv(neutral[0]), inv(neutral[1]), inv(neutral[2]), 0.0];
+    // A black level anywhere: declined, as LibRaw's would be.
+    let black = (d.black.iter().chain(&d.black_delta_h).chain(&d.black_delta_v).any(|&v| v != 0.0)) as u32;
+    let mut lintable: Box<[u16]> = (0..=u16::MAX).collect();
+    let mut maximum = d.white.first().copied().unwrap_or(65535.0).clamp(0.0, 65535.0) as u32;
+    if let Some(table) = d.linearization.as_deref().filter(|t| !t.is_empty()) {
+        let last = *table.last().unwrap();
+        for (i, v) in lintable.iter_mut().enumerate() {
+            *v = table.get(i).copied().unwrap_or(last);
+        }
+        maximum = maximum.min(lintable[0xffff] as u32);
+    }
+    let v = d.version;
+    let f = Facts {
+        raw_width: d.width as u32,
+        raw_height: d.height as u32,
+        width: (r - l) as u32,
+        height: (b - t) as u32,
+        top_margin: t as u32,
+        left_margin: l as u32,
+        flip: d.flip() as c_int,
+        filters: 0,
+        colors: if d.samples == 3 { 3 } else { 1 },
+        tiff_samples: d.samples,
+        tiff_bps: d.bits,
+        tiff_compress: d.compression,
+        tile_width: d.pieces.width as u32,
+        tile_length: d.pieces.height as u32,
+        raw_color: 0,
+        zero_is_bad: 0,
+        fuji_width: 0,
+        is_foveon: 0,
+        lossless_dng: match d.compression {
+            7 => 1,
+            1 => 2,
+            _ => 0,
+        },
+        maximum,
+        black,
+        cblack: [0; 6],
+        dng_version: u32::from_be_bytes(v),
+        as_shot_wb_applied: 0,
+        pixel_aspect: (d.default_scale.0 / d.default_scale.1) as f32,
+        cam_mul,
+        pre_mul: cam_mul,
+        rgb_cam,
+        white: [[0; 8]; 8],
+        user_mul: [0.0; 4],
+        use_auto_wb: 0,
+        use_camera_wb: opts.camera_wb as c_int,
+        highlight: opts.highlight,
+        user_black: -1,
+        user_cblack: [-1_000_001; 4],
+        user_sat: -1,
+        med_passes: 0,
+        no_auto_scale: 0,
+        green_matching: 0,
+        exp_correc: 0,
+        no_interpolation: 0,
+        has_bad_pixels: 0,
+        has_dark_frame: 0,
+        cropbox_set: 0,
+        half_size: opts.half_size as c_int,
+        output_color: 1,
+        output_bps: 16,
+        four_color_rgb: 0,
+        use_fuji_rotate: 1,
+        threshold: 0.0,
+        adjust_maximum_thr: if opts.fixed_white { 0.0 } else { DEFAULT_ADJUST_MAXIMUM_THRESHOLD },
+        bright: 1.0,
+        aber: [1.0; 4],
+        gamm: [1.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+    };
+    let outcurve: Box<[u16]> = (0..=u16::MAX).collect();
+    Some((f, lintable, outcurve, !d.opcodes[2].is_empty()))
+}
+
+/// LibRaw's two tables for `bytes` (its linearization curve and its
+/// output curve), for the tests that hold rust_facts to them.
+#[doc(hidden)]
+pub fn libraw_tables(bytes: &[u8], opts: DevelopOpts) -> Result<(Box<[u16]>, Box<[u16]>), RawError> {
+    let handle: Handle = configured(opts)?;
+    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    let mut facts = std::mem::MaybeUninit::<Facts>::zeroed();
+    let mut lintable = vec![0u16; 0x10000].into_boxed_slice();
+    let mut outcurve = vec![0u16; 0x10000].into_boxed_slice();
+    if unsafe { heeler_linear_facts(handle.0, facts.as_mut_ptr(), lintable.as_mut_ptr(), outcurve.as_mut_ptr()) } == 0 {
+        return Err(RawError::Unexpected);
+    }
+    Ok((lintable, outcurve))
 }
 
 /// Why LibRaw's facts about `bytes` keep it from this module, None when
@@ -627,20 +824,29 @@ pub fn libraw_facts(bytes: &[u8], opts: DevelopOpts) -> Result<Facts, RawError> 
 }
 
 /// The raw image's tiles, row by row, from the file's own directory: the
-/// one directory with the frame's size, LinearRaw and lossless JPEG.
+/// one directory with the frame's size, LinearRaw and the facts'
+/// compression. Strips (read only through rust_facts) are tiles the
+/// frame's width across.
 fn tile_table(bytes: &[u8], f: &Facts) -> Option<Vec<(usize, usize)>> {
     let tiff = tiff::Tiff::new(bytes)?;
     for ifd in tiff.ifds() {
         let get = |tag: u16| ifd.get(tag).and_then(|e| tiff.values(&e));
         let one = |tag: u16| get(tag).and_then(|v| v.first().copied());
-        if one(262) != Some(34892) || one(259) != Some(7) || one(256) != Some(f.raw_width as u64) || one(257) != Some(f.raw_height as u64) {
+        if one(262) != Some(34892) || one(259) != Some(f.tiff_compress as u64) || one(256) != Some(f.raw_width as u64) || one(257) != Some(f.raw_height as u64) {
             continue;
         }
-        if one(322) != Some(f.tile_width as u64) || one(323) != Some(f.tile_length as u64) {
-            return None;
-        }
-        let offsets = get(324)?;
-        let counts = get(325)?;
+        let (offsets, counts) = if one(322).is_some() {
+            if one(322) != Some(f.tile_width as u64) || one(323) != Some(f.tile_length as u64) {
+                return None;
+            }
+            (get(324)?, get(325)?)
+        } else {
+            let rows = one(278).unwrap_or(f.raw_height as u64).min(f.raw_height as u64);
+            if f.lossless_dng == 0 || f.tile_width != f.raw_width || rows != f.tile_length as u64 {
+                return None;
+            }
+            (get(273)?, get(279)?)
+        };
         let across = (f.raw_width as usize).div_ceil(f.tile_width as usize);
         let down = (f.raw_height as usize).div_ceil(f.tile_length as usize);
         if offsets.len() != across * down || counts.len() != offsets.len() {

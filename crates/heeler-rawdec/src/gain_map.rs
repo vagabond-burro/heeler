@@ -1,14 +1,14 @@
 //! DNG GainMap opcodes (opcode 9 in OpcodeList2), applied to the sensor
-//! data before LibRaw develops it.
+//! data before the develop: by heeler-raw to LibRaw's unpacked data, and
+//! by this crate's develop to its own.
 //!
 //! A phone corrects its lens shading this way: one smooth map of gains
 //! per CFA color, which the reader must multiply into the linear sensor
 //! values (black subtracted) before demosaicing. LibRaw reads the
 //! opcode lists but applies only MapPolynomial, and only in its lossy
-//! DNG reader; the rest it leaves to the Adobe DNG SDK, which Heeler's
-//! build does not use. So without this the corners of a Pixel photograph
-//! stay as dark, and as tinted, as the sensor saw them: the Pixel 3a's
-//! maps reach 3.4 at the corners.
+//! DNG reader. So without this the corners of a Pixel photograph stay as
+//! dark, and as tinted, as the sensor saw them: the Pixel 3a's maps reach
+//! 3.4 at the corners.
 //!
 //! Only GainMap is read; every other opcode in the list is skipped, as
 //! are maps on a plane a single-plane CFA image does not have. The map
@@ -20,14 +20,17 @@
 //! OpcodeList3 is applied after demosaic, to the camera's own colors
 //! (stage 3), and drones and iPhones put their lens shading there: a
 //! GainMap with a gain per color, or FixVignetteRadial (opcode 3), a
-//! polynomial in the distance from the optical center. apply_rgb applies
-//! both to LibRaw's demosaiced image before its color conversion, where
-//! the white balance is already in: a gain per channel commutes with it.
+//! polynomial in the distance from the optical center. PixelGains applies
+//! both, a pixel at a time, between the highlight blend and the color
+//! conversion, where the white balance is already in: a gain per channel
+//! commutes with it.
+
+use rayon::prelude::*;
 
 /// One GainMap opcode's parameters and gains, as the DNG specification
 /// lays them out (all big-endian).
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct GainMap {
+pub struct GainMap {
     top: u32,
     left: u32,
     bottom: u32,
@@ -55,7 +58,7 @@ const FIX_VIGNETTE_RADIAL: u32 = 3;
 /// center (cx, cy, fractions of the image's width and height) over the
 /// distance from that center to the farthest corner.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Vignette {
+pub struct Vignette {
     k: [f64; 5],
     cx: f64,
     cy: f64,
@@ -63,7 +66,7 @@ pub(crate) struct Vignette {
 
 /// An opcode applied after demosaic.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Stage3 {
+pub enum Stage3 {
     Gain(GainMap),
     Vignette(Vignette),
 }
@@ -88,12 +91,12 @@ fn opcodes(bytes: &[u8]) -> Vec<(u32, &[u8])> {
 
 /// The GainMaps in an opcode list; a map whose sizes do not add up is
 /// skipped.
-pub(crate) fn parse_list(bytes: &[u8]) -> Vec<GainMap> {
+pub fn parse_list(bytes: &[u8]) -> Vec<GainMap> {
     opcodes(bytes).into_iter().filter(|(id, _)| *id == GAIN_MAP).filter_map(|(_, p)| parse_gain_map(p)).collect()
 }
 
 /// The GainMaps and FixVignetteRadials in an opcode list, in its order.
-pub(crate) fn parse_list3(bytes: &[u8]) -> Vec<Stage3> {
+pub fn parse_list3(bytes: &[u8]) -> Vec<Stage3> {
     opcodes(bytes)
         .into_iter()
         .filter_map(|(id, p)| match id {
@@ -174,7 +177,7 @@ impl GainMap {
 }
 
 /// A single-plane sensor buffer and the stage 2 image within it.
-pub(crate) struct Cfa<'a> {
+pub struct Cfa<'a> {
     /// The whole readout, `pitch` samples a row.
     pub data: &'a mut [u16],
     pub pitch: usize,
@@ -188,8 +191,9 @@ pub(crate) struct Cfa<'a> {
 /// Multiplies every GainMap on plane 0 into a CFA buffer: each covered
 /// sample's value above its black level is scaled, and black is added
 /// back, rounded and kept within 16 bits. `black(row, col)` is the
-/// level LibRaw will subtract there, in active-area coordinates.
-pub(crate) fn apply_cfa(maps: &[GainMap], img: &mut Cfa, black: impl Fn(u32, u32) -> u32) -> usize {
+/// level the develop will subtract there, in active-area coordinates.
+/// The rows go side by side.
+pub fn apply_cfa(maps: &[GainMap], img: &mut Cfa, black: impl Fn(u32, u32) -> u32 + Sync) -> usize {
     let mut applied = 0;
     for map in maps.iter().filter(|m| m.plane == 0 && m.planes >= 1) {
         let bottom = map.bottom.min(img.height);
@@ -207,19 +211,23 @@ pub(crate) fn apply_cfa(maps: &[GainMap], img: &mut Cfa, black: impl Fn(u32, u32
                 (col, c0, fc)
             })
             .collect();
-        for row in (map.top..bottom).step_by(map.row_pitch as usize) {
-            let (r0, fr) = GainMap::locate(row as f64 / img.height.max(1) as f64, map.origin_v, map.spacing_v, map.points_v);
+        let (top, left, pitch, height) = (img.top, img.left, img.pitch, img.height);
+        img.data.par_chunks_mut(pitch).enumerate().for_each(|(line, data)| {
+            let Some(row) = line.checked_sub(top).map(|r| r as u32) else { return };
+            if row < map.top || row >= bottom || (row - map.top) % map.row_pitch != 0 {
+                return;
+            }
+            let (r0, fr) = GainMap::locate(row as f64 / height.max(1) as f64, map.origin_v, map.spacing_v, map.points_v);
             let r1 = (r0 + 1).min(last_v);
-            let line = (img.top + row as usize) * img.pitch + img.left;
             for &(col, c0, fc) in &cols {
                 let c1 = (c0 + 1).min(last_h);
                 let g = ((at(r0, c0) * (1.0 - fc) + at(r0, c1) * fc) * (1.0 - fr) + (at(r1, c0) * (1.0 - fc) + at(r1, c1) * fc) * fr) as f32;
-                if let Some(v) = img.data.get_mut(line + col as usize) {
+                if let Some(v) = data.get_mut(left + col as usize) {
                     let b = black(row, col) as f32;
                     *v = (b + (*v as f32 - b) * g).round().clamp(0.0, 65535.0) as u16;
                 }
             }
-        }
+        });
         applied += 1;
     }
     applied
@@ -227,7 +235,7 @@ pub(crate) fn apply_cfa(maps: &[GainMap], img: &mut Cfa, black: impl Fn(u32, u32
 
 /// A demosaiced image: `stride` samples a pixel, the first `planes` of
 /// them the camera's colors.
-pub(crate) struct Rgb<'a> {
+pub struct Rgb<'a> {
     pub data: &'a mut [u16],
     pub stride: usize,
     pub planes: usize,
@@ -253,80 +261,126 @@ impl Vignette {
     }
 }
 
+/// One stage 3 opcode, worked out for an image's size: where each row and
+/// column falls.
+#[derive(Clone, Debug)]
+enum Prepared {
+    /// A GainMap: its planes, and for each row and column it covers, the
+    /// grid sample before it and the weight of the one after.
+    Gain { map: GainMap, first: usize, last: usize, rows: Vec<Option<(usize, f64)>>, cols: Vec<Option<(usize, f64)>> },
+    /// A FixVignetteRadial: each column's squared distance from the
+    /// center (over the farthest corner's), and the center's row.
+    Vignette { k: [f64; 5], dx2: Vec<f64>, cy: f64, far: f64 },
+}
+
+/// OpcodeList3's GainMaps and FixVignetteRadials for an image `width` by
+/// `height` with `planes` color planes, applied a pixel at a time.
+#[derive(Clone, Debug, Default)]
+pub struct PixelGains {
+    ops: Vec<Prepared>,
+}
+
+impl PixelGains {
+    pub fn new(ops: &[Stage3], width: u32, height: u32, planes: usize) -> PixelGains {
+        let (w, h) = (width as usize, height as usize);
+        let ops = ops
+            .iter()
+            .filter_map(|op| match op {
+                Stage3::Gain(map) => {
+                    let first = map.plane as usize;
+                    let last = (first + map.planes as usize).min(planes);
+                    if first >= last {
+                        return None;
+                    }
+                    let place = |n: usize, lo: u32, hi: u32, pitch: u32, origin: f64, spacing: f64, points: u32| -> Vec<Option<(usize, f64)>> {
+                        (0..n as u32)
+                            .map(|i| (i >= lo && i < hi.min(n as u32) && (i - lo) % pitch == 0).then(|| GainMap::locate(i as f64 / n.max(1) as f64, origin, spacing, points)))
+                            .collect()
+                    };
+                    let rows = place(h, map.top, map.bottom, map.row_pitch, map.origin_v, map.spacing_v, map.points_v);
+                    let cols = place(w, map.left, map.right, map.col_pitch, map.origin_h, map.spacing_h, map.points_h);
+                    Some(Prepared::Gain { map: map.clone(), first, last, rows, cols })
+                }
+                Stage3::Vignette(v) => {
+                    let (cx, cy) = (v.cx * w as f64, v.cy * h as f64);
+                    let far = [(0.0, 0.0), (w as f64, 0.0), (0.0, h as f64), (w as f64, h as f64)]
+                        .iter()
+                        .map(|(x, y)| (x - cx).powi(2) + (y - cy).powi(2))
+                        .fold(0.0, f64::max);
+                    (far > 0.0).then(|| Prepared::Vignette { k: v.k, dx2: (0..w).map(|col| (col as f64 - cx).powi(2) / far).collect(), cy, far })
+                }
+            })
+            .collect();
+        PixelGains { ops }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.ops.is_empty()
+    }
+
+    /// The bytes the tables hold.
+    pub fn bytes(&self) -> usize {
+        self.ops
+            .iter()
+            .map(|op| match op {
+                Prepared::Gain { map, rows, cols, .. } => map.gains.len() * 4 + (rows.len() + cols.len()) * 24,
+                Prepared::Vignette { dx2, .. } => dx2.len() * 8,
+            })
+            .sum()
+    }
+
+    /// Scales pixel (row, col)'s color planes by each opcode's gain in
+    /// turn, each rounded and kept within 16 bits.
+    #[inline]
+    pub fn apply(&self, row: usize, col: usize, px: &mut [u16]) {
+        let scale = |v: &mut u16, g: f64| *v = (*v as f64 * g).round().clamp(0.0, 65535.0) as u16;
+        for op in &self.ops {
+            match op {
+                Prepared::Gain { map, first, last, rows, cols } => {
+                    let (Some(Some((r0, fr))), Some(Some((c0, fc)))) = (rows.get(row), cols.get(col)) else { continue };
+                    let (r0, fr, c0, fc) = (*r0, *fr, *c0, *fc);
+                    let mp = map.map_planes as usize;
+                    let at = |r: usize, c: usize, p: usize| map.gains[(r * map.points_h as usize + c) * mp + p.min(mp - 1)] as f64;
+                    let r1 = (r0 + 1).min(map.points_v as usize - 1);
+                    let c1 = (c0 + 1).min(map.points_h as usize - 1);
+                    for plane in *first..(*last).min(px.len()) {
+                        let p = plane - first;
+                        let g = (at(r0, c0, p) * (1.0 - fc) + at(r0, c1, p) * fc) * (1.0 - fr) + (at(r1, c0, p) * (1.0 - fc) + at(r1, c1, p) * fc) * fr;
+                        scale(&mut px[plane], g);
+                    }
+                }
+                Prepared::Vignette { k, dx2, cy, far } => {
+                    let Some(dx) = dx2.get(col) else { continue };
+                    let dy2 = (row as f64 - cy).powi(2) / far;
+                    let r2 = dx + dy2;
+                    let [k0, k1, k2, k3, k4] = *k;
+                    let g = 1.0 + r2 * (k0 + r2 * (k1 + r2 * (k2 + r2 * (k3 + r2 * k4))));
+                    for s in px.iter_mut() {
+                        scale(s, g);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Applies OpcodeList3's GainMaps and FixVignetteRadials, in order, to a
 /// demosaiced image whose black is already taken off: each sample is
 /// scaled by its gain, rounded and kept within 16 bits. A GainMap reaches
 /// the planes it names (its map plane per image plane, the last one for
 /// any beyond) and the pixels its area and pitch name; a vignette reaches
 /// every pixel and plane. Returns how many opcodes were applied.
-pub(crate) fn apply_rgb(ops: &[Stage3], img: &mut Rgb) -> usize {
-    let scale = |v: &mut u16, g: f64| *v = (*v as f64 * g).round().clamp(0.0, 65535.0) as u16;
-    let (w, h) = (img.width as usize, img.height as usize);
-    let mut applied = 0;
-    for op in ops {
-        match op {
-            Stage3::Gain(map) => {
-                let first = map.plane as usize;
-                let last = (first + map.planes as usize).min(img.planes).min(img.stride);
-                if first >= last {
-                    continue;
-                }
-                let mp = map.map_planes as usize;
-                let at = |r: usize, c: usize, p: usize| map.gains[(r * map.points_h as usize + c) * mp + p.min(mp - 1)] as f64;
-                let (last_v, last_h) = (map.points_v as usize - 1, map.points_h as usize - 1);
-                // Grid positions worked out once a column and once a row.
-                let cols: Vec<(usize, usize, f64)> = (map.left..map.right.min(img.width))
-                    .step_by(map.col_pitch as usize)
-                    .map(|col| {
-                        let (c0, fc) = GainMap::locate(col as f64 / w.max(1) as f64, map.origin_h, map.spacing_h, map.points_h);
-                        (col as usize, c0, fc)
-                    })
-                    .collect();
-                for row in (map.top..map.bottom.min(img.height)).step_by(map.row_pitch as usize) {
-                    let (r0, fr) = GainMap::locate(row as f64 / h.max(1) as f64, map.origin_v, map.spacing_v, map.points_v);
-                    let r1 = (r0 + 1).min(last_v);
-                    for &(col, c0, fc) in &cols {
-                        let c1 = (c0 + 1).min(last_h);
-                        let base = (row as usize * w + col) * img.stride;
-                        for plane in first..last {
-                            let p = plane - first;
-                            let g = (at(r0, c0, p) * (1.0 - fc) + at(r0, c1, p) * fc) * (1.0 - fr) + (at(r1, c0, p) * (1.0 - fc) + at(r1, c1, p) * fc) * fr;
-                            if let Some(v) = img.data.get_mut(base + plane) {
-                                scale(v, g);
-                            }
-                        }
-                    }
-                }
-            }
-            Stage3::Vignette(v) => {
-                let (cx, cy) = (v.cx * w as f64, v.cy * h as f64);
-                let far = [(0.0, 0.0), (w as f64, 0.0), (0.0, h as f64), (w as f64, h as f64)]
-                    .iter()
-                    .map(|(x, y)| (x - cx).powi(2) + (y - cy).powi(2))
-                    .fold(0.0, f64::max);
-                if far <= 0.0 {
-                    continue;
-                }
-                let dx2: Vec<f64> = (0..w).map(|col| (col as f64 - cx).powi(2) / far).collect();
-                let planes = img.planes.min(img.stride);
-                let [k0, k1, k2, k3, k4] = v.k;
-                let len = img.data.len();
-                for row in 0..h {
-                    let dy2 = (row as f64 - cy).powi(2) / far;
-                    let line = &mut img.data[(row * w * img.stride).min(len)..((row + 1) * w * img.stride).min(len)];
-                    for (px, dx) in line.chunks_exact_mut(img.stride).zip(&dx2) {
-                        let r2 = dx + dy2;
-                        let g = 1.0 + r2 * (k0 + r2 * (k1 + r2 * (k2 + r2 * (k3 + r2 * k4))));
-                        for s in &mut px[..planes] {
-                            scale(s, g);
-                        }
-                    }
-                }
-            }
+pub fn apply_rgb(ops: &[Stage3], img: &mut Rgb) -> usize {
+    let planes = img.planes.min(img.stride);
+    let gains = PixelGains::new(ops, img.width, img.height, planes);
+    let w = img.width as usize;
+    let stride = img.stride;
+    img.data.par_chunks_mut(w.max(1) * stride).enumerate().for_each(|(row, line)| {
+        for (col, px) in line.chunks_exact_mut(stride).enumerate() {
+            gains.apply(row, col, &mut px[..planes]);
         }
-        applied += 1;
-    }
-    applied
+    });
+    gains.ops.len()
 }
 
 #[cfg(test)]
@@ -336,7 +390,7 @@ mod tests {
     /// One GainMap opcode's bytes: an area, a plane, pitches, a grid of
     /// gains over the whole image (origin 0, spacing so the last sample
     /// lands on the far edge), flags 0 (required).
-    pub(crate) fn gain_map_opcode(area: [u32; 4], pitch: [u32; 2], points: [u32; 2], gains: &[f32]) -> Vec<u8> {
+    pub fn gain_map_opcode(area: [u32; 4], pitch: [u32; 2], points: [u32; 2], gains: &[f32]) -> Vec<u8> {
         let mut p = Vec::new();
         for v in [area[0], area[1], area[2], area[3], 0, 1, pitch[0], pitch[1], points[0], points[1]] {
             p.extend_from_slice(&v.to_be_bytes());
