@@ -204,6 +204,10 @@ def run_suites() -> None:
     run([sys.executable, str(REPO_ROOT / "scripts" / "test_help_kit.py")], cwd=REPO_ROOT)
     require_cargo()
     run([tool("cargo"), "test", "--workspace"], cwd=REPO_ROOT)
+    # heeler-raw again with the pure Rust develop routed in: the shipped
+    # build leaves the rust-decoder feature off, so the workspace run
+    # above never compiles the routing.
+    run([tool("cargo"), "test", "-p", "heeler-raw", "--features", "rust-decoder"], cwd=REPO_ROOT)
     ensure_node_modules()
     # vitest strips types without checking them, so the type check is
     # its own step: `npm run build` starts with it, and a type error

@@ -8,7 +8,9 @@
 //! maker/camera/file, the sample archive's layout), skipping AppleDouble
 //! `._` files and the manifest. Options:
 //!
-//!   --decoder libraw        which develop to time (libraw)
+//!   --decoder libraw|rust   which develop to time (libraw); rust needs
+//!                           the rust-decoder feature and skips the
+//!                           files that path declines
 //!   --runs N                timed runs a file, after one untimed (3)
 //!   --half                  half-size develops instead of full
 //!   --only TEXT             only files whose corpus path contains TEXT
@@ -191,6 +193,17 @@ fn time_file(decoder: &str, bytes: &[u8], opts: DevelopOpts, runs: usize) -> Row
         let t = Instant::now();
         let (img, times, sensor) = match decoder {
             "libraw" => {
+                #[cfg(feature = "rust-decoder")]
+                heeler_raw::rust_path::set_enabled(false);
+                let (img, times) = heeler_raw::decode_sensor_timed(bytes, opts).map_err(|e| e.to_string())?;
+                (img, times, 0usize)
+            }
+            #[cfg(feature = "rust-decoder")]
+            "rust" => {
+                heeler_raw::rust_path::set_enabled(true);
+                if !heeler_raw::rust_path::takes(bytes, opts) {
+                    return Err("declined by the Rust path".into());
+                }
                 let (img, times) = heeler_raw::decode_sensor_timed(bytes, opts).map_err(|e| e.to_string())?;
                 (img, times, 0usize)
             }

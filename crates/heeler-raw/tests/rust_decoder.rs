@@ -20,9 +20,20 @@ fn opts(o: DevelopOpts) -> Opts {
     Opts { half_size: o.half_size, fixed_white: o.fixed_white, camera_wb: o.camera_wb, camera_matrix: o.camera_matrix, highlight: o.highlight, demosaic: o.demosaic }
 }
 
-/// LibRaw's develop.
+/// Held while a test turns heeler-raw's process-wide routing to LibRaw
+/// or to the Rust develop, so tests on other threads see the routing
+/// they expect.
+static ROUTING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// LibRaw's develop, whatever the build's features.
 fn libraw(bytes: &[u8], o: DevelopOpts) -> heeler_raw::SensorImage {
-    heeler_raw::decode_sensor_with(bytes, o).expect("LibRaw develops the synthetic DNG")
+    let _routing = ROUTING.lock().unwrap_or_else(|e| e.into_inner());
+    #[cfg(feature = "rust-decoder")]
+    heeler_raw::rust_path::set_enabled(false);
+    let s = heeler_raw::decode_sensor_with(bytes, o).expect("LibRaw develops the synthetic DNG");
+    #[cfg(feature = "rust-decoder")]
+    heeler_raw::rust_path::set_enabled(true);
+    s
 }
 
 /// Every develop the app asks of a Bayer file, Rust against LibRaw.
@@ -116,8 +127,13 @@ fn sizes_from_the_header_are_libraws() {
     for orientation in [1u16, 6] {
         let bytes = cfa_dng(&Spec { width: 72, height: 50, tile: Some((32, 32)), active: Some([2, 4, 48, 70]), orientation, pixel: &scene, ..Spec::default() });
         let plan = heeler_rawdec::Plan::new(&bytes, &opts(DevelopOpts::default())).unwrap();
-            let raw = heeler_raw::dimensions(&bytes).unwrap();
+        let _routing = ROUTING.lock().unwrap_or_else(|e| e.into_inner());
+        #[cfg(feature = "rust-decoder")]
+        heeler_raw::rust_path::set_enabled(false);
+        let raw = heeler_raw::dimensions(&bytes).unwrap();
         let picture = heeler_raw::picture_dimensions(&bytes).unwrap();
+        #[cfg(feature = "rust-decoder")]
+        heeler_raw::rust_path::set_enabled(true);
         assert_eq!((plan.dng.width, plan.dng.height), raw, "orientation {orientation}");
         assert_eq!(plan.output_size(false), picture, "orientation {orientation}");
     }
@@ -149,3 +165,34 @@ fn files_outside_the_verified_develop_are_left_to_libraw() {
     assert!(declined(b"II*\0\x08\0\0\0\0\0\0\0\0\0", base), "not a DNG");
 }
 
+/// With the rust-decoder feature, heeler-raw's own entry points take a
+/// verified file to the Rust develop, with LibRaw's answers, and keep
+/// every other file on LibRaw.
+#[test]
+#[cfg(all(feature = "rust-decoder", target_arch = "aarch64", target_vendor = "apple"))]
+fn with_the_feature_heeler_raw_develops_verified_files_in_rust() {
+    let bytes = cfa_dng(&Spec { width: 76, pixel: &scene, orientation: 6, ..Spec::default() });
+    let theirs: Vec<_> = [false, true].iter().flat_map(|&half_size| [0, 2].map(move |highlight| DevelopOpts { half_size, highlight, ..DevelopOpts::default() })).map(|o| (o, libraw(&bytes, o))).collect();
+    let lib_dims = (heeler_raw::dimensions(&bytes), heeler_raw::picture_dimensions(&bytes));
+    let _routing = ROUTING.lock().unwrap_or_else(|e| e.into_inner());
+    // The synthetic file's camera is on no list: LibRaw's.
+    heeler_raw::rust_path::set_enabled(true);
+    assert!(!heeler_raw::rust_path::takes(&bytes, DevelopOpts::default()), "an unverified camera stays on LibRaw");
+    heeler_rawdec::set_verified_only(false);
+    assert!(heeler_raw::rust_path::takes(&bytes, DevelopOpts::default()));
+    for (o, lib) in &theirs {
+        let rust = heeler_raw::decode_sensor_with(&bytes, *o).unwrap();
+        assert_eq!((rust.width, rust.height), (lib.width, lib.height), "{o:?}");
+        assert!(rust.rgb == lib.rgb && rust.sensor_data && rust.headroom == lib.headroom, "{o:?}");
+    }
+    assert_eq!((heeler_raw::dimensions(&bytes), heeler_raw::picture_dimensions(&bytes)).0.unwrap(), lib_dims.0.unwrap());
+    assert_eq!(heeler_raw::picture_dimensions(&bytes).unwrap(), lib_dims.1.unwrap());
+    let plan = heeler_rawdec::Plan::new(&bytes, &opts(DevelopOpts::default())).unwrap();
+    assert_eq!(heeler_raw::develop_bytes(&bytes, DevelopOpts::default()).unwrap(), plan.bytes(false).unwrap());
+    assert_eq!(heeler_raw::demosaic_extra_bytes(&bytes), plan.demosaic_extra());
+    let stop = AtomicBool::new(true);
+    assert!(matches!(heeler_raw::decode_sensor_until(&bytes, DevelopOpts::default(), &stop), Err(heeler_raw::RawError::Cancelled)));
+    // A develop the Rust path does not do goes to LibRaw.
+    assert!(!heeler_raw::rust_path::takes(&bytes, DevelopOpts { demosaic: 11, ..DevelopOpts::default() }));
+    heeler_rawdec::set_verified_only(true);
+}

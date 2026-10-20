@@ -42,6 +42,8 @@ fn every_corpus_dng_the_rust_develop_takes_is_libraws_develop() {
         eprintln!("HEELER_RAW_CORPUS not set; skipping the corpus comparison");
         return;
     };
+    #[cfg(feature = "rust-decoder")]
+    heeler_raw::rust_path::set_enabled(false);
     let mut taken = 0;
     let mut cameras = std::collections::BTreeSet::new();
     let mut failures = Vec::new();
@@ -71,6 +73,8 @@ fn every_corpus_dng_the_rust_develop_takes_is_libraws_develop() {
             }
         }
     }
+    #[cfg(feature = "rust-decoder")]
+    heeler_raw::rust_path::set_enabled(true);
     eprintln!("{taken} corpus DNGs from {} cameras compared", cameras.len());
     assert!(failures.is_empty(), "{} differ from LibRaw:\n{}", failures.len(), failures.join("\n"));
     let listed = heeler_rawdec::verified_cameras();

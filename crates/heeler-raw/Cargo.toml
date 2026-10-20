@@ -12,12 +12,20 @@ license = "MPL-2.0 AND CDDL-1.0 AND MIT"
 
 [dependencies]
 heeler-engine = { path = "../heeler-engine" }
+# The pure Rust develop (crates/heeler-rawdec), taken for the files it
+# has been verified on when the rust-decoder feature is on.
+heeler-rawdec = { path = "../heeler-rawdec", optional = true }
 libz-sys = { version = "1.1.29", default-features = false, features = ["static"] }
 mozjpeg-sys = "2.2.3"
 # The linear DNG decoder's tiles side by side (src/linear_dng.rs); the
 # workspace links it through heeler-engine already.
 rayon = "1"
 thiserror.workspace = true
+
+[features]
+# Off by default: the shipped app develops every raw with LibRaw until the
+# owner turns this on.
+rust-decoder = ["dep:heeler-rawdec"]
 
 [dev-dependencies]
 # The tests and harnesses that hold heeler-rawdec to LibRaw.

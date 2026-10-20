@@ -38,6 +38,8 @@ pub const ZLIB_LINKED: bool = matches!(env!("HEELER_RAW_ZLIB").as_bytes(), b"1")
 
 mod gain_map;
 mod gpr;
+#[cfg(feature = "rust-decoder")]
+pub mod rust_path;
 pub mod linear_dng;
 pub use gpr::is_gpr;
 
@@ -208,6 +210,10 @@ pub fn dimensions(bytes: &[u8]) -> Result<(usize, usize), RawError> {
     if let Some(dims) = gpr::dimensions(bytes) {
         return Ok(dims);
     }
+    #[cfg(feature = "rust-decoder")]
+    if let Some(p) = rust_path::plan(bytes, DevelopOpts::default()) {
+        return Ok((p.dng.width, p.dng.height));
+    }
     let p = unsafe { libraw_init(0) };
     if p.is_null() { return Err(RawError::Init); }
     let handle = Handle(p);
@@ -234,6 +240,10 @@ pub fn demosaic_extra_bytes(bytes: &[u8]) -> usize {
     xtrans_default();
     if gpr::dimensions(bytes).is_some() {
         return unsafe { heeler_ahd_workers_bytes() };
+    }
+    #[cfg(feature = "rust-decoder")]
+    if let Some(p) = rust_path::plan(bytes, DevelopOpts::default()) {
+        return p.demosaic_extra();
     }
     let p = unsafe { libraw_init(0) };
     if p.is_null() {
@@ -290,6 +300,10 @@ fn xtrans_default() {
 pub fn picture_dimensions(bytes: &[u8]) -> Result<(usize, usize), RawError> {
     if let Some(dims) = gpr::dimensions(bytes) {
         return Ok(dims);
+    }
+    #[cfg(feature = "rust-decoder")]
+    if let Some(p) = rust_path::plan(bytes, DevelopOpts::default()) {
+        return Ok(p.output_size(false));
     }
     let p = unsafe { libraw_init(0) };
     if p.is_null() { return Err(RawError::Init); }
@@ -448,6 +462,10 @@ pub fn develop_bytes(bytes: &[u8], opts: DevelopOpts) -> Result<usize, RawError>
         let converted = heeler_engine::memory::bytes(w, h, 1, 2)?;
         return Ok(heeler_engine::memory::sum([heeler_engine::memory::bytes(w, h, 1, per_pixel)?, bytes.len(), converted, converted, if opts.half_size { 0 } else { unsafe { heeler_ahd_workers_bytes() } }])?);
     }
+    #[cfg(feature = "rust-decoder")]
+    if let Some(p) = rust_path::plan(bytes, opts) {
+        return Ok(p.bytes(opts.half_size)?);
+    }
     let p = unsafe { libraw_init(0) };
     if p.is_null() {
         return Err(RawError::Init);
@@ -505,6 +523,10 @@ fn develop(bytes: &[u8], opts: DevelopOpts, stop: Option<&AtomicBool>, mut times
     let stopped = || stop.is_some_and(|s| s.load(Ordering::Relaxed));
     if stopped() {
         return Err(RawError::Cancelled);
+    }
+    #[cfg(feature = "rust-decoder")]
+    if let Some(done) = rust_path::develop(bytes, opts, stop, times.as_deref_mut()) {
+        return done;
     }
     // A GoPro GPR's VC-5 tile is decoded here; LibRaw sees a plain DNG.
     let converted = gpr::as_dng(bytes)?;
