@@ -482,11 +482,19 @@ pub fn decode_intervals(data: &[u8], out: &mut [u16]) -> Result<Option<Frame>, E
     Ok(Some(f))
 }
 
+/// How many codes the scan's Huffman tables take to repeat: 1 where every
+/// component shares a table, else the shortest cycle of the components'
+/// tables.
+pub fn table_period(f: &Frame) -> usize {
+    let n = f.table.len().max(1);
+    (1..=n).find(|&p| n % p == 0 && (0..n).all(|i| f.table[i] == f.table[i % p])).unwrap_or(n)
+}
+
 /// Decodes a scan whose lines can be rebuilt independently (predictor 1,
-/// no restart markers, one Huffman table for every component) across
-/// the cores, into `out` (height lines of width times components
-/// samples), the same samples `decode` hands over. None when the scan is
-/// not of that kind; the caller decodes it in order then.
+/// no restart markers) across the cores, into `out` (height lines of
+/// width times components samples), the same samples `decode` hands
+/// over. None when the scan is not of that kind; the caller decodes it in
+/// order then.
 ///
 /// A Huffman code stream can be read from any bit, and a reader that
 /// starts mid-code falls into step with the true code boundaries within
@@ -495,13 +503,18 @@ pub fn decode_intervals(data: &[u8], out: &mut [u16]) -> Result<Option<Frame>, E
 /// true first code (where the piece before it ended) only until that
 /// reading meets a code boundary of the piece's own, after which the two
 /// agree and the piece's own reading is kept (or the whole piece is read
-/// again if they never meet within the codes it remembers). The differences then become
-/// samples a line at a time, the lines side by side, once the first
-/// sample of each line (predicted from the line above) is known.
+/// again if they never meet within the codes it remembers). Where the
+/// components take different tables (a CR2's two), a piece does not know
+/// which component its first code belongs to, so it is read once for
+/// each place in the tables' cycle, and a reading is kept only from a
+/// boundary where both the bit and the place agree with the true reading.
+/// The differences then become samples a line at a time, the lines side
+/// by side, once the first sample of each line (predicted from the line
+/// above) is known.
 pub fn decode_parallel(data: &[u8], out: &mut [u16]) -> Result<Option<Frame>, Error> {
     use rayon::prelude::*;
     let (f, tables) = headers(data)?;
-    if f.point_transform != 0 || f.restart != 0 || f.predictor != 1 || f.table.iter().any(|&t| t != f.table[0]) {
+    if f.point_transform != 0 || f.restart != 0 || f.predictor != 1 {
         return Ok(None);
     }
     let n = f.components;
@@ -510,7 +523,9 @@ pub fn decode_parallel(data: &[u8], out: &mut [u16]) -> Result<Option<Frame>, Er
     if out.len() < total {
         return Err(Error::Corrupt("a scan larger than its buffer"));
     }
-    let huff = tables[f.table[0]].as_ref().unwrap();
+    // The table for each place in the cycle.
+    let period = table_period(&f);
+    let huff: Vec<&Huffman> = (0..period).map(|k| tables[f.table[k]].as_ref().unwrap()).collect();
     // The entropy-coded data runs to the first marker.
     let raw = &data[f.data..];
     let end = raw.windows(2).position(|w| w[0] == 0xff && w[1] != 0).unwrap_or(raw.len());
@@ -525,99 +540,152 @@ pub fn decode_parallel(data: &[u8], out: &mut [u16]) -> Result<Option<Frame>, Er
     let starts: Vec<usize> = (0..total_bits).step_by(span).collect();
     /// How many code boundaries a piece remembers to fall into step by.
     const SYNC: usize = 4096;
-    struct Piece {
-        /// Codes read from the true start before the readings meet.
-        head: Vec<u16>,
+    /// A piece read from a bit, its first code taken at one place of the
+    /// tables' cycle.
+    struct Reading {
+        /// Where in the cycle its first code is.
+        phase: usize,
         diffs: Vec<u16>,
         bounds: Vec<usize>,
         exit: usize,
         ok: bool,
     }
-    let read = |from: usize, until: usize, remember: usize| -> Piece {
+    impl Reading {
+        /// The place in the cycle after its last code.
+        fn exit_phase(&self, period: usize) -> usize {
+            (self.phase + self.diffs.len()) % period
+        }
+    }
+    struct Piece {
+        /// Codes read from the true start before the readings meet.
+        head: Vec<u16>,
+        /// One reading a place in the cycle (just the one once settled).
+        readings: Vec<Reading>,
+        /// The reading kept and the code it is kept from.
+        kept: (usize, usize),
+    }
+    let read = |from: usize, until: usize, phase: usize, remember: usize| -> Reading {
         let mut r = Flat { data: &bits, pos: from };
-        let mut p = Piece { head: Vec::new(), diffs: Vec::with_capacity((until - from) / 4), bounds: Vec::with_capacity(remember.min(SYNC)), exit: from, ok: true };
+        let mut p = Reading { phase, diffs: Vec::with_capacity((until - from) / 4), bounds: Vec::with_capacity(remember.min(SYNC)), exit: from, ok: true };
+        let mut k = phase;
         while r.pos < until && r.pos < total_bits {
             if p.bounds.len() < remember {
                 p.bounds.push(r.pos);
             }
-            match r.diff(huff) {
+            match r.diff(huff[k]) {
                 Ok(d) => p.diffs.push(d as u16),
                 Err(_) => {
                     p.ok = false;
                     break;
                 }
             }
+            k = if k + 1 == period { 0 } else { k + 1 };
         }
         p.exit = r.pos;
         p
     };
-    let mut read_pieces: Vec<Piece> = starts.par_iter().enumerate().map(|(i, &from)| {
-        let until = starts.get(i + 1).copied().unwrap_or(total_bits);
-        read(from, until, if i == 0 { 0 } else { SYNC })
-    }).collect();
+    let mut read_pieces: Vec<Piece> = starts
+        .par_iter()
+        .enumerate()
+        .map(|(i, &from)| {
+            let until = starts.get(i + 1).copied().unwrap_or(total_bits);
+            let readings = if i == 0 { vec![read(from, until, 0, 0)] } else { (0..period).into_par_iter().map(|q| read(from, until, q, SYNC)).collect() };
+            Piece { head: Vec::new(), readings, kept: (0, 0) }
+        })
+        .collect();
     // In order: each piece kept from where the one before it truly ended.
-    let mut keep_from = vec![0usize; read_pieces.len()];
-    let mut at = read_pieces[0].exit;
-    if !read_pieces[0].ok && read_pieces.len() > 1 {
+    if !read_pieces[0].readings[0].ok && read_pieces.len() > 1 {
         return Err(Error::Corrupt("an undefined Huffman code"));
     }
-    for i in 1..read_pieces.len() {
+    let mut at = read_pieces[0].readings[0].exit;
+    let mut phase = read_pieces[0].readings[0].exit_phase(period);
+    let count = read_pieces.len();
+    for i in 1..count {
         let until = starts.get(i + 1).copied().unwrap_or(total_bits);
-        let p = &read_pieces[i];
-        // Read from the true start until it meets one of the piece's own
-        // code boundaries. A piece that broken (a reading from a false
-        // start can meet a code no table has), or that never meets the
-        // true reading within the codes it remembers, is read again.
+        // Read from the true start until it meets a code boundary of one
+        // of the piece's readings at the same place in the cycle. A reading
+        // that broke (one from a false start can meet a code no table has)
+        // is left out; a piece no reading meets within the codes it
+        // remembers is read again.
         let mut met = None;
         let mut head = Vec::new();
-        if p.ok {
+        {
+            let p = &read_pieces[i];
             let mut r = Flat { data: &bits, pos: at };
-            let mut j = p.bounds.partition_point(|&b| b < at);
-            while j < p.bounds.len() {
-                if p.bounds[j] == r.pos {
-                    met = Some(j);
+            let mut k = phase;
+            let mut j: Vec<usize> = p.readings.iter().map(|q| q.bounds.partition_point(|&b| b < at)).collect();
+            'walk: loop {
+                let mut open = false;
+                for (q, reading) in p.readings.iter().enumerate() {
+                    if !reading.ok {
+                        continue;
+                    }
+                    while j[q] < reading.bounds.len() && reading.bounds[j[q]] < r.pos {
+                        j[q] += 1;
+                    }
+                    if j[q] < reading.bounds.len() {
+                        open = true;
+                        if reading.bounds[j[q]] == r.pos && (reading.phase + j[q]) % period == k {
+                            met = Some((q, j[q]));
+                            break 'walk;
+                        }
+                    }
+                }
+                if !open {
                     break;
                 }
-                match r.diff(huff) {
+                match r.diff(huff[k]) {
                     Ok(d) => head.push(d as u16),
                     Err(_) => break,
                 }
-                while j < p.bounds.len() && p.bounds[j] < r.pos {
-                    j += 1;
-                }
+                k = if k + 1 == period { 0 } else { k + 1 };
             }
         }
+        let p = &mut read_pieces[i];
         match met {
-            Some(k) => {
-                keep_from[i] = k;
-                read_pieces[i].head = head;
+            Some(kept) => {
+                p.kept = kept;
+                p.head = head;
             }
-            None => read_pieces[i] = read(at, until, 0),
+            None => {
+                p.readings = vec![read(at, until, phase, 0)];
+                p.kept = (0, 0);
+                p.head = Vec::new();
+            }
         }
-        let p = &read_pieces[i];
-        if !p.ok && i + 1 < read_pieces.len() {
+        let reading = &p.readings[p.kept.0];
+        if !reading.ok && i + 1 < count {
             return Err(Error::Corrupt("an undefined Huffman code"));
         }
-        at = p.exit;
+        at = reading.exit;
+        phase = reading.exit_phase(period);
     }
+    // The readings kept, without the others.
+    let read_pieces: Vec<(Vec<u16>, Reading, usize)> = read_pieces
+        .into_iter()
+        .map(|mut p| {
+            let (q, k) = p.kept;
+            (p.head, p.readings.swap_remove(q), k)
+        })
+        .collect();
     // Each piece's differences in place, then the lines rebuilt.
     let mut offsets = Vec::with_capacity(read_pieces.len());
     let mut sum = 0usize;
-    for (p, &k) in read_pieces.iter().zip(&keep_from) {
+    for (head, reading, k) in &read_pieces {
         offsets.push(sum);
-        sum += p.head.len() + p.diffs.len() - k;
+        sum += head.len() + reading.diffs.len() - k;
     }
     if sum < total {
         return Err(Error::Corrupt("a scan shorter than its frame"));
     }
     {
         let out = crate::ahd::Out(out.as_mut_ptr());
-        read_pieces.par_iter().zip(&keep_from).zip(&offsets).for_each(|((p, &k), &o)| {
+        read_pieces.par_iter().zip(&offsets).for_each(|((head, reading, k), &o)| {
             if o >= total {
                 return;
             }
             let mut o = o;
-            for src in [&p.head[..], &p.diffs[k..]] {
+            for src in [&head[..], &reading.diffs[*k..]] {
                 let len = src.len().min(total.saturating_sub(o));
                 // SAFETY: the pieces' ranges are disjoint and inside the
                 // first `total` samples of `out`.
@@ -777,6 +845,25 @@ mod tests {
         let mut got = Vec::new();
         decode(&data, |_, l| got.push(l.to_vec())).unwrap();
         assert_eq!(got, lines);
+    }
+
+    #[test]
+    fn the_parallel_decode_reads_components_with_their_own_tables() {
+        // Two tables, alternating by component (a CR2's), and four
+        // components on two (a cycle of two in four places); large enough
+        // that pieces start on either table.
+        use crate::synthetic::lossless_jpeg_tables;
+        for (w, h, comps) in [(400usize, 300usize, 2usize), (300, 400, 4), (257, 211, 2)] {
+            let lines = pattern(w, comps, h, 14);
+            let data = lossless_jpeg_tables(&lines, w, comps, 14, 1, 0, 2);
+            assert_eq!(table_period(&frame(&data).unwrap()), 2);
+            let mut serial = Vec::new();
+            decode(&data, |_, l| serial.extend_from_slice(l)).unwrap();
+            assert_eq!(serial, lines.concat(), "{w} by {h}, {comps} components: the serial decode");
+            let mut par = vec![0u16; w * comps * h];
+            assert!(decode_parallel(&data, &mut par).unwrap().is_some());
+            assert!(par == serial, "{w} by {h}, {comps} components");
+        }
     }
 
     #[test]

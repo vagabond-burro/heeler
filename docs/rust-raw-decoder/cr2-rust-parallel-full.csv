@@ -1,0 +1,143 @@
+file,maker,camera,format,megapixels,decoder,half,runs,status,total_ms,open_ms,unpack_ms,develop_ms,out_width,out_height
+Canon/Canon PowerShot S100V/Canon_PS-S100V_FW1.0.2.0.CR2,Canon,Canon PowerShot S100V,CR2,12.33,rust,0,5,ok,58.04,0.04,21.05,36.58,4048,3047
+Canon/Canon PowerShot S2 IS/IMG_1107.CR2,Canon,Canon PowerShot S2 IS,CR2,5.11,rust,0,5,ok,16.31,0.00,0.63,15.62,2612,1956
+Canon/EOS 1000D/IMG_9406.CR2,Canon,EOS 1000D,CR2,10.16,rust,0,5,ok,45.68,0.04,15.42,30.05,3906,2602
+Canon/EOS 100D/IMG_3721.CR2,Canon,EOS 100D,CR2,18.10,rust,0,5,ok,84.79,0.03,31.82,53.07,5208,3476
+Canon/EOS 1100D/IMG_0962.CR2,Canon,EOS 1100D,CR2,12.25,rust,0,5,ok,53.86,0.04,17.72,36.01,4290,2856
+Canon/EOS 1200D/IMG_0008.CR2,Canon,EOS 1200D,CR2,18.02,rust,0,5,ok,85.02,0.03,29.59,55.47,5202,3464
+Canon/EOS 1300D/IMG_0778.CR2,Canon,EOS 1300D,CR2,18.02,rust,0,5,ok,78.73,0.03,25.92,52.55,5202,3464
+Canon/EOS 2000D/IMG_0531.CR2,Canon,EOS 2000D,CR2,24.17,rust,0,5,ok,116.01,0.03,44.95,71.03,6020,4015
+Canon/EOS 200D/IMG_1813.CR2,Canon,EOS 200D,CR2,24.22,rust,0,5,ok,106.10,0.04,35.04,70.54,6024,4020
+Canon/EOS 20D/IMG_3893.CR2,Canon,EOS 20D,CR2,8.27,rust,0,5,ok,36.32,0.03,11.54,24.36,3522,2348
+Canon/EOS 30D/IMG_0062.CR2,Canon,EOS 30D,CR2,8.27,rust,0,5,ok,38.26,0.03,13.69,24.48,3522,2348
+Canon/EOS 350D/IMG_1707.CR2,Canon,EOS 350D,CR2,8.04,rust,0,5,ok,36.43,0.03,12.34,23.97,3474,2314
+Canon/EOS 4000D/IMG_0361.CR2,Canon,EOS 4000D,CR2,18.02,rust,0,5,ok,82.72,0.04,29.04,53.34,5202,3464
+Canon/EOS 400D/IMG_3397.CR2,Canon,EOS 400D,CR2,10.16,rust,0,5,ok,47.25,0.03,16.56,30.36,3906,2602
+Canon/EOS 40D/_MG_0153.CR2,Canon,EOS 40D,CR2,10.17,rust,0,5,ok,45.60,0.03,15.06,30.34,3908,2602
+Canon/EOS 40D/_MG_0154.CR2,Canon,EOS 40D,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 450D/_MG_7191.CR2,Canon,EOS 450D,CR2,12.25,rust,0,5,ok,58.82,0.03,22.46,36.50,4290,2856
+Canon/EOS 500D/IMG_0002.CR2,Canon,EOS 500D,CR2,15.16,rust,0,5,ok,65.65,0.04,21.22,43.99,4770,3178
+Canon/EOS 50D/IMG_9516.CR2,Canon,EOS 50D,CR2,15.15,rust,0,5,ok,72.85,0.03,27.96,44.70,4770,3176
+Canon/EOS 50D/IMG_9517.CR2,Canon,EOS 50D,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 50D/IMG_9518.CR2,Canon,EOS 50D,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 550D/IMG_4047.CR2,Canon,EOS 550D,CR2,18.02,rust,0,5,ok,80.35,0.04,26.48,54.01,5202,3464
+Canon/EOS 5D/IMG_1428.CR2,Canon,EOS 5D,CR2,12.81,rust,0,5,ok,56.00,0.03,17.89,37.99,4386,2920
+Canon/EOS 5D Mark II/08.canon.raw.cr2,Canon,EOS 5D Mark II,CR2,21.14,rust,0,5,ok,94.38,0.04,31.71,62.90,5634,3752
+Canon/EOS 5D Mark II/09.canon.sraw1.cr2,Canon,EOS 5D Mark II,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark II/10.canon.sraw2.cr2,Canon,EOS 5D Mark II,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark II/IMG_0051.CR2,Canon,EOS 5D Mark II,CR2,21.14,rust,0,5,ok,97.68,0.04,33.66,63.64,5634,3752
+Canon/EOS 5D Mark III/5G4A9394.CR2,Canon,EOS 5D Mark III,CR2,22.43,rust,0,5,ok,100.98,0.04,32.68,67.88,5796,3870
+Canon/EOS 5D Mark III/5G4A9395.CR2,Canon,EOS 5D Mark III,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark III/5G4A9396.CR2,Canon,EOS 5D Mark III,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark IV/B13A0729.CR2,Canon,EOS 5D Mark IV,CR2,30.36,rust,0,5,ok,132.14,0.04,40.98,91.02,6744,4502
+Canon/EOS 5D Mark IV/B13A0732.CR2,Canon,EOS 5D Mark IV,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark IV/B13A0733.CR2,Canon,EOS 5D Mark IV,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark IV/B13A0734.CR2,Canon,EOS 5D Mark IV,CR2,30.36,rust,0,5,ok,136.15,0.04,43.61,91.51,6744,4502
+Canon/EOS 5D Mark IV/B13A0800.CR2,Canon,EOS 5D Mark IV,CR2,30.36,rust,0,5,ok,156.53,0.04,56.78,99.82,6744,4502
+Canon/EOS 5DS/2K4A9927.CR2,Canon,EOS 5DS,CR2,51.16,rust,0,5,ok,246.29,0.04,75.58,170.54,8736,5856
+Canon/EOS 5DS/2K4A9928.CR2,Canon,EOS 5DS,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5DS/2K4A9929.CR2,Canon,EOS 5DS,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5DS R/_DSR2002.CR2,Canon,EOS 5DS R,CR2,51.16,rust,0,5,ok,247.56,0.04,76.15,171.25,8736,5856
+Canon/EOS 5DS R/_DSR2003.CR2,Canon,EOS 5DS R,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5DS R/_DSR2004.CR2,Canon,EOS 5DS R,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 600D/_MG_2587.CR2,Canon,EOS 600D,CR2,18.02,rust,0,5,ok,80.59,0.03,26.76,54.27,5202,3464
+Canon/EOS 60D/IMG_2014.CR2,Canon,EOS 60D,CR2,18.02,rust,0,5,ok,83.57,0.04,28.48,55.39,5202,3464
+Canon/EOS 60D/IMG_2015.CR2,Canon,EOS 60D,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 60D/IMG_2016.CR2,Canon,EOS 60D,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 650D/IMG_3517.CR2,Canon,EOS 650D,CR2,18.10,rust,0,5,ok,81.94,0.04,26.14,55.47,5208,3476
+Canon/EOS 6D/EOS_6D_RAW.CR2,Canon,EOS 6D,CR2,20.17,rust,0,5,ok,93.28,0.04,30.01,62.93,5496,3670
+Canon/EOS 6D/EOS_6D_mRAW.CR2,Canon,EOS 6D,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 6D/EOS_6D_sRAW.CR2,Canon,EOS 6D,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 6D/IMG_0001.CR2,Canon,EOS 6D,CR2,20.17,rust,0,5,ok,91.74,0.04,29.63,61.57,5496,3670
+Canon/EOS 6D Mark II/6DII-RAW.CR2,Canon,EOS 6D Mark II,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 6D Mark II/6DII-mRAW.CR2,Canon,EOS 6D Mark II,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 6D Mark II/6DII-sRAW.CR2,Canon,EOS 6D Mark II,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 700D/_MG_1948.CR2,Canon,EOS 700D,CR2,18.10,rust,0,5,ok,82.15,0.04,26.62,55.06,5208,3476
+Canon/EOS 70D/RAW_CANON_EOS70D_01.CR2,Canon,EOS 70D,CR2,20.17,rust,0,5,ok,93.25,0.04,30.04,62.81,5496,3670
+Canon/EOS 70D/mRAW_CANON_EOS70D_01.CR2,Canon,EOS 70D,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 70D/sRAW_CANON_EOS70D_01.CR2,Canon,EOS 70D,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 750D/IMG_5474.CR2,Canon,EOS 750D,CR2,24.23,rust,0,5,ok,109.32,0.04,34.68,74.11,6024,4022
+Canon/EOS 760D/2015-07-10_18-54-26.cr2,Canon,EOS 760D,CR2,24.23,rust,0,5,ok,110.01,0.04,33.95,75.84,6024,4022
+Canon/EOS 77D/IMG_4049.CR2,Canon,EOS 77D,CR2,24.22,rust,0,5,ok,121.22,0.04,44.52,76.36,6024,4020
+Canon/EOS 7D/RAW_CANON_EOS_7D-mraw.CR2,Canon,EOS 7D,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 7D/RAW_CANON_EOS_7D-raw.CR2,Canon,EOS 7D,CR2,18.02,rust,0,5,ok,82.95,0.04,27.98,54.74,5202,3464
+Canon/EOS 7D/RAW_CANON_EOS_7D-sraw.CR2,Canon,EOS 7D,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 7D/_MG_0001.CR2,Canon,EOS 7D,CR2,18.02,rust,0,5,ok,86.54,0.04,30.31,56.09,5202,3464
+Canon/EOS 7D Mark II/capture000106.cr2,Canon,EOS 7D Mark II,CR2,20.17,rust,0,5,ok,91.92,0.04,29.66,62.70,5496,3670
+Canon/EOS 7D Mark II/capture000107.cr2,Canon,EOS 7D Mark II,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 7D Mark II/capture000108.cr2,Canon,EOS 7D Mark II,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 800D/IMG_3378.CR2,Canon,EOS 800D,CR2,24.22,rust,0,5,ok,111.05,0.04,35.05,75.70,6024,4020
+Canon/EOS 80D/IMG_0096.CR2,Canon,EOS 80D,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 80D/IMG_0097.CR2,Canon,EOS 80D,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 80D/IMG_0098.CR2,Canon,EOS 80D,CR2,24.22,rust,0,5,ok,126.31,0.04,50.16,75.14,6024,4020
+Canon/EOS Digital Rebel XS/RAW_CANON_1000D.CR2,Canon,EOS Digital Rebel XS,CR2,10.16,rust,0,5,ok,49.45,0.04,17.80,31.61,2602,3906
+Canon/EOS Digital Rebel XSi/_MG_1125.CR2,Canon,EOS Digital Rebel XSi,CR2,12.25,rust,0,5,ok,59.14,0.04,20.71,38.29,4290,2856
+Canon/EOS Digital Rebel XT/IMG_8728.CR2,Canon,EOS Digital Rebel XT,CR2,8.04,rust,0,5,ok,39.80,0.03,12.45,27.21,2314,3474
+Canon/EOS Digital Rebel XTi/img_2981.cr2,Canon,EOS Digital Rebel XTi,CR2,10.16,rust,0,5,ok,47.20,0.04,15.70,31.16,3906,2602
+Canon/EOS Kiss Digital N/20170226_0040.CR2,Canon,EOS Kiss Digital N,CR2,8.04,rust,0,5,ok,37.12,0.03,12.03,25.08,2314,3474
+Canon/EOS Kiss F/IMG_7072.CR2,Canon,EOS Kiss F,CR2,10.16,rust,0,5,ok,45.57,0.04,14.09,31.33,3906,2602
+Canon/EOS Kiss X3/IMG_2856-2.CR2,Canon,EOS Kiss X3,CR2,15.16,rust,0,5,ok,74.94,0.04,27.22,47.39,4770,3178
+Canon/EOS Kiss X4/20120117-e01.CR2,Canon,EOS Kiss X4,CR2,18.02,rust,0,5,ok,86.24,0.04,29.65,56.45,5202,3464
+Canon/EOS Kiss X80/IMG_3688.CR2,Canon,EOS Kiss X80,CR2,18.02,rust,0,5,ok,88.13,0.04,31.56,56.14,5202,3464
+Canon/EOS Kiss X9/IMG_3505.CR2,Canon,EOS Kiss X9,CR2,24.22,rust,0,5,ok,132.20,0.04,49.25,82.79,6024,4020
+Canon/EOS M/IMG_4624.CR2,Canon,EOS M,CR2,18.10,rust,0,5,ok,86.93,0.04,28.96,56.81,5208,3476
+Canon/EOS M10/IMG_2207.CR2,Canon,EOS M10,CR2,18.10,rust,0,5,ok,83.17,0.04,26.59,56.59,5208,3476
+Canon/EOS M100/IMG_1200.CR2,Canon,EOS M100,CR2,24.22,rust,0,5,ok,112.19,0.04,35.57,75.86,6024,4020
+Canon/EOS M2/m2_test_02.cr2,Canon,EOS M2,CR2,18.10,rust,0,5,ok,84.87,0.04,28.22,56.48,5208,3476
+Canon/EOS M3/IMG_4635.CR2,Canon,EOS M3,CR2,24.23,rust,0,5,ok,134.54,0.05,50.03,84.74,6024,4022
+Canon/EOS M5/IMG_6968.CR2,Canon,EOS M5,CR2,24.22,rust,0,5,ok,120.07,0.04,41.95,77.63,6024,4020
+Canon/EOS M6/Canon_EOS-M6-IMG_0302.CR2,Canon,EOS M6,CR2,24.22,rust,0,5,ok,117.09,0.04,39.89,76.55,6024,4020
+Canon/EOS Rebel SL1/IMG_0308.CR2,Canon,EOS Rebel SL1,CR2,18.10,rust,0,5,ok,85.91,0.04,28.33,57.54,5208,3476
+Canon/EOS Rebel SL2/Canon_SL2_Len_24-105.CR2,Canon,EOS Rebel SL2,CR2,24.22,rust,0,5,ok,117.14,0.04,38.96,77.86,6024,4020
+Canon/EOS Rebel T100/IMG_7229.CR2,Canon,EOS Rebel T100,CR2,18.02,rust,0,5,ok,84.78,0.04,28.63,56.00,5202,3464
+Canon/EOS Rebel T1i/IMG_0493.CR2,Canon,EOS Rebel T1i,CR2,15.16,rust,0,5,ok,76.45,0.04,28.02,47.95,4770,3178
+Canon/EOS Rebel T2i/IMG_9301.CR2,Canon,EOS Rebel T2i,CR2,18.02,rust,0,5,ok,86.68,0.04,29.11,57.54,5202,3464
+Canon/EOS Rebel T3/IMG_0294.CR2,Canon,EOS Rebel T3,CR2,12.25,rust,0,5,ok,57.69,0.04,18.91,38.64,4290,2856
+Canon/EOS Rebel T3i/IMG_0126.CR2,Canon,EOS Rebel T3i,CR2,18.02,rust,0,5,ok,83.31,0.04,26.32,57.06,5202,3464
+Canon/EOS Rebel T4i/IMG_6980.CR2,Canon,EOS Rebel T4i,CR2,18.10,rust,0,5,ok,86.51,0.04,29.49,56.82,5208,3476
+Canon/EOS Rebel T5/IMG_0764.CR2,Canon,EOS Rebel T5,CR2,18.02,rust,0,5,ok,88.22,0.04,30.40,57.10,5202,3464
+Canon/EOS Rebel T5i/IMG_5139.CR2,Canon,EOS Rebel T5i,CR2,18.10,rust,0,5,ok,85.59,0.04,27.91,57.71,5208,3476
+Canon/EOS Rebel T6/IMG_2422.CR2,Canon,EOS Rebel T6,CR2,18.02,rust,0,5,ok,87.00,0.04,28.92,57.67,5202,3464
+Canon/EOS Rebel T6i/IMG_6217.CR2,Canon,EOS Rebel T6i,CR2,24.23,rust,0,5,ok,119.45,0.04,41.49,77.68,6024,4022
+Canon/EOS Rebel T6s/IMG_3661.CR2,Canon,EOS Rebel T6s,CR2,24.23,rust,0,5,ok,114.88,0.04,36.73,77.99,6024,4022
+Canon/EOS Rebel T7/IMG_0662.CR2,Canon,EOS Rebel T7,CR2,24.17,rust,0,5,ok,125.39,0.04,46.19,78.87,6020,4015
+Canon/EOS Rebel T7i/20190925-1501-0421.cr2,Canon,EOS Rebel T7i,CR2,24.22,rust,0,5,ok,116.42,0.04,39.12,77.29,6024,4020
+Canon/EOS Rebel T7i/IMG_1322.CR2,Canon,EOS Rebel T7i,CR2,24.22,rust,0,5,ok,117.46,0.06,38.95,77.74,6024,4020
+Canon/EOS-1D Mark II/RAW_CANON_1DM2.CR2,Canon,EOS-1D Mark II,CR2,8.27,rust,0,5,ok,39.31,0.04,12.87,26.36,3522,2348
+Canon/EOS-1D Mark II N/RY5Q8391-20170423-ss250-ap8.0-fl50-iso100.CR2,Canon,EOS-1D Mark II N,CR2,8.27,rust,0,5,ok,44.78,0.04,17.99,26.43,3522,2348
+Canon/EOS-1D Mark III/_K5R7350.CR2,Canon,EOS-1D Mark III,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS-1D Mark IV/IMG_5391.CR2,Canon,EOS-1D Mark IV,CR2,16.09,rust,0,5,ok,80.31,0.04,29.26,50.75,4916,3272
+Canon/EOS-1D Mark IV/IMG_5395.CR2,Canon,EOS-1D Mark IV,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS-1D Mark IV/IMG_5398.CR2,Canon,EOS-1D Mark IV,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS-1D X/RAW_CANON_EOS_1DX.CR2,Canon,EOS-1D X,CR2,18.17,rust,0,5,ok,89.38,0.04,31.48,56.90,5218,3482
+Canon/EOS-1D X Mark II/AZ1I2270.CR2,Canon,EOS-1D X Mark II,CR2,20.17,rust,0,5,ok,98.45,0.04,32.63,65.14,5496,3670
+Canon/EOS-1D X Mark II/AZ1I2271.CR2,Canon,EOS-1D X Mark II,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS-1D X Mark II/AZ1I2272.CR2,Canon,EOS-1D X Mark II,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS-1Ds Mark II/RAW_CANON_1DSM2.CR2,Canon,EOS-1Ds Mark II,CR2,16.71,rust,0,5,ok,76.94,0.04,23.95,53.25,3335,5010
+Canon/EOS-1Ds Mark III/RAW_CANON_1DSM3.CR2,Canon,EOS-1Ds Mark III,CR2,21.16,rust,0,5,ok,99.12,0.04,31.32,67.67,5640,3752
+Canon/PowerShot A480/CRW_0007.CR2,Canon,PowerShot A480,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot G1 X/IMG_0004.CR2,Canon,PowerShot G1 X,CR2,14.60,rust,0,5,ok,74.49,0.04,28.30,46.18,4404,3316
+Canon/PowerShot G1 X Mark II/IMG_1986.CR2,Canon,PowerShot G1 X Mark II,CR2,14.59,rust,0,5,ok,73.59,0.04,27.04,46.40,4400,3316
+Canon/PowerShot G1 X Mark III/20180719T101829IMG_0246.CR2,Canon,PowerShot G1 X Mark III,CR2,24.22,rust,0,5,ok,117.24,0.04,38.83,77.93,6024,4020
+Canon/PowerShot G10/RAW_CANON_G10.CR2,Canon,PowerShot G10,CR2,14.74,rust,0,5,ok,77.24,0.04,30.57,46.52,4432,3326
+Canon/PowerShot G11/IMG_3310.CR2,Canon,PowerShot G11,CR2,10.17,rust,0,5,ok,48.45,0.04,16.42,31.96,3684,2760
+Canon/PowerShot G12/2017_09_20_img_1146.cr2,Canon,PowerShot G12,CR2,10.17,rust,0,5,ok,47.64,0.04,14.89,32.59,3684,2760
+Canon/PowerShot G15/2016-04-28_IMG_1712.CR2,Canon,PowerShot G15,CR2,12.33,rust,0,5,ok,60.03,0.04,20.41,39.50,4048,3047
+Canon/PowerShot G16/IMG_0963.CR2,Canon,PowerShot G16,CR2,12.14,rust,0,5,ok,57.26,0.04,18.57,38.60,4024,3018
+Canon/PowerShot G3 X/IMG_5395.CR2,Canon,PowerShot G3 X,CR2,20.44,rust,0,5,ok,98.61,0.05,32.44,66.06,5536,3692
+Canon/PowerShot G5 X/IMG_2240.CR2,Canon,PowerShot G5 X,CR2,20.44,rust,0,5,ok,100.01,0.05,33.99,65.45,5536,3692
+Canon/PowerShot G7 X/CANON_G7X_IMG_6738.CR2,Canon,PowerShot G7 X,CR2,20.44,rust,0,5,ok,94.56,0.05,28.02,66.04,5536,3692
+Canon/PowerShot G7 X Mark II/IMG_0166.CR2,Canon,PowerShot G7 X Mark II,CR2,20.44,rust,0,5,ok,96.76,0.05,30.26,66.35,5536,3692
+Canon/PowerShot G9/IMG_1188.CR2,Canon,PowerShot G9,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot G9 X/IMG_3301.CR2,Canon,PowerShot G9 X,CR2,20.44,rust,0,5,ok,100.10,0.04,33.45,66.26,5536,3692
+Canon/PowerShot G9 X Mark II/IMG_1066.CR2,Canon,PowerShot G9 X Mark II,CR2,20.44,rust,0,5,ok,97.66,0.05,32.12,65.50,5536,3692
+Canon/PowerShot S100/IMG_1340.CR2,Canon,PowerShot S100,CR2,12.33,rust,0,5,ok,59.68,0.04,19.24,40.11,4048,3047
+Canon/PowerShot S110/IMG_1218.CR2,Canon,PowerShot S110,CR2,12.33,rust,0,5,ok,59.55,0.04,19.61,39.79,4048,3047
+Canon/PowerShot S120/IMG_1995.CR2,Canon,PowerShot S120,CR2,12.13,rust,0,5,ok,59.36,0.04,19.75,38.84,4022,3015
+Canon/PowerShot S90/RAW_CANON_S90.CR2,Canon,PowerShot S90,CR2,10.17,rust,0,5,ok,52.52,0.04,19.06,33.00,3684,2760
+Canon/PowerShot S95/img_1866.cr2,Canon,PowerShot S95,CR2,10.17,rust,0,5,ok,48.71,0.04,16.09,32.47,3684,2760
+Canon/PowerShot SX1 IS/RAW_CANON_POWERSHOT_SX1_IS.CR2,Canon,PowerShot SX1 IS,CR2,10.93,rust,0,5,ok,53.00,0.04,16.98,35.20,3960,2760
+Canon/PowerShot SX40 HS/CRW_6036.CR2,Canon,PowerShot SX40 HS,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX50 HS/IMG_4059.CR2,Canon,PowerShot SX50 HS,CR2,12.40,rust,0,5,ok,59.73,0.04,19.28,39.55,4072,3044
+Canon/PowerShot SX60 HS/Canon-SX60HS-Canon-RAW.CR2,Canon,PowerShot SX60 HS,CR2,16.35,rust,0,5,ok,91.04,0.04,37.98,52.78,4672,3500
+Canon/SX150IS/CRW_1762.CR2,Canon,SX150IS,CR2,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0

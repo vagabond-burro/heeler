@@ -7,6 +7,13 @@
 /// with predictor `psv` and one Huffman table (categories 0 and 1 in two
 /// bits, the rest in five), a restart marker every `restart` MCUs.
 pub fn lossless_jpeg(lines: &[Vec<u16>], width: usize, comps: usize, precision: u8, psv: u8, restart: usize) -> Vec<u8> {
+    lossless_jpeg_tables(lines, width, comps, precision, psv, restart, 1)
+}
+
+/// lossless_jpeg with `tables` Huffman tables (1 or 2), component c
+/// taking table c % tables, as a CR2's two components do: the second
+/// codes categories 0 to 6 in three bits and the rest in seven.
+pub fn lossless_jpeg_tables(lines: &[Vec<u16>], width: usize, comps: usize, precision: u8, psv: u8, restart: usize, tables: usize) -> Vec<u8> {
     let mut out = vec![0xff, 0xd8];
     let seg = |out: &mut Vec<u8>, tag: u8, body: &[u8]| {
         out.extend_from_slice(&[0xff, tag]);
@@ -28,18 +35,35 @@ pub fn lossless_jpeg(lines: &[Vec<u16>], width: usize, comps: usize, precision: 
     let mut dht = vec![0u8];
     dht.extend_from_slice(&counts);
     dht.extend(0..17u8);
+    if tables > 1 {
+        // Categories 0..=6 in three bits, 7..=16 in seven.
+        let mut counts = [0u8; 16];
+        counts[2] = 7;
+        counts[6] = 10;
+        dht.push(1);
+        dht.extend_from_slice(&counts);
+        dht.extend(0..17u8);
+    }
     seg(&mut out, 0xc4, &dht);
     if restart > 0 {
         seg(&mut out, 0xdd, &(restart as u16).to_be_bytes());
     }
     let mut sos = vec![comps as u8];
     for c in 0..comps {
-        sos.extend_from_slice(&[c as u8 + 1, 0]);
+        sos.extend_from_slice(&[c as u8 + 1, ((c % tables) as u8) << 4]);
     }
     sos.extend_from_slice(&[psv, 0, 0]);
     seg(&mut out, 0xda, &sos);
-    // Codes: category 0 is 00, 1 is 01, 2.. are 5 bits from 10000.
-    let code = |cat: u32| -> (u32, u32) { if cat < 2 { (cat, 2) } else { (0b10000 + cat - 2, 5) } };
+    // Codes: category 0 is 00, 1 is 01, 2.. are 5 bits from 10000; in the
+    // second table 0..=6 are 3 bits from 000, 7.. are 7 bits from 1110000.
+    let code = |table: usize, cat: u32| -> (u32, u32) {
+        match table {
+            0 if cat < 2 => (cat, 2),
+            0 => (0b10000 + cat - 2, 5),
+            _ if cat < 7 => (cat, 3),
+            _ => (0b1110000 + cat - 7, 7),
+        }
+    };
     struct W {
         acc: u64,
         nbits: u32,
@@ -103,13 +127,14 @@ pub fn lossless_jpeg(lines: &[Vec<u16>], width: usize, comps: usize, precision: 
             if d >= 32768 {
                 d -= 65536;
             }
+            let table = (i % n) % tables;
             if d == -32768 {
-                let (c, l) = code(16);
+                let (c, l) = code(table, 16);
                 w.put(c, l);
                 continue;
             }
             let cat = 32 - d.unsigned_abs().leading_zeros();
-            let (c, len) = code(cat);
+            let (c, len) = code(table, cat);
             w.put(c, len);
             if cat > 0 {
                 let bits = if d < 0 { (d - 1) as u32 } else { d as u32 };

@@ -53,6 +53,9 @@ pub struct Plan {
     /// the lens shading phones, drones and some cameras write.
     pub gains2: Vec<gain_map::GainMap>,
     pub stage3: Vec<gain_map::Stage3>,
+    /// How many readings the parallel lossless JPEG decode makes of each
+    /// piece of its stream (ljpeg::table_period): 1 for one Huffman table.
+    pub table_period: usize,
 }
 
 impl Plan {
@@ -110,6 +113,7 @@ impl Plan {
         if opts.libraw_color && !dng.camera_calibration.iter().all(diagonal) {
             return Err(Error::Unsupported("a camera calibration that mixes colors"));
         }
+        let mut table_period = 1;
         if dng.compression == 7 {
             // LibRaw reads a tile whose JPEG line, times its components,
             // spans the raw image's width as two tile rows a line, for one
@@ -119,6 +123,7 @@ impl Plan {
             if f.width * f.components * f.height != dng.pieces.width * dng.pieces.height {
                 return Err(Error::Unsupported("a tile's JPEG frame is not the tile's size"));
             }
+            table_period = crate::ljpeg::table_period(&f);
             if dng.coding == Coding::Tiff && f.components > 1 && f.components * f.components * f.width == dng.width {
                 return Err(Error::Unsupported("a tile layout LibRaw reads its own way"));
             }
@@ -151,7 +156,7 @@ impl Plan {
         // LibRaw's develop.
         let gains2 = gain_map::parse_list(&dng.opcodes[1]);
         let stage3 = gain_map::parse_list3(&dng.opcodes[2]);
-        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern, black, black_rows: rows, black_cols: cols, white, cam_mul, rgb_cam, flip: dng.flip(), gains2, stage3, dng })
+        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern, black, black_rows: rows, black_cols: cols, white, cam_mul, rgb_cam, flip: dng.flip(), gains2, stage3, table_period, dng })
     }
 
     /// The output's size (turned when the file says so).
@@ -198,8 +203,9 @@ impl Plan {
     }
 
     /// What reading one piece across the cores holds: its samples, the
-    /// differences each worker reads (a piece's worth, and a little more
-    /// where pieces are read again), and the code stream unstuffed.
+    /// differences each worker reads (a piece's worth for each place in the
+    /// Huffman tables' cycle, and a little more where pieces are read
+    /// again), and the code stream unstuffed.
     fn parallel_bytes(&self) -> Result<usize, memory::MemoryError> {
         if self.float() {
             // A piece at a time a worker: its floats and its inflated bytes.
@@ -213,7 +219,10 @@ impl Plan {
         let d = &self.dng;
         let largest = d.pieces.spans.iter().map(|&(_, n)| n).max().unwrap_or(0);
         let samples = memory::bytes(d.pieces.width, d.pieces.height, 1, 2)?;
-        memory::sum([samples, samples + samples / 2, largest, rayon::current_num_threads() * 64 * 4096 + 65536])
+        // The differences, read once for each place in the tables' cycle,
+        // and a little more where pieces are read again.
+        let diffs = memory::bytes(samples, self.table_period, 1, 1)?;
+        memory::sum([samples, diffs + samples / 2, largest, rayon::current_num_threads() * 64 * 4096 + 65536])
     }
 
     /// The demosaic's buffers beyond the mosaic and output: one set a

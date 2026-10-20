@@ -797,19 +797,23 @@ develops each. CSVs in `docs/rust-raw-decoder/cr2-arw-*.csv`.
 | Size | Format | Files | LibRaw s | Rust s | Ratio | LibRaw unpack s | Rust unpack s | LibRaw develop s | Rust develop s |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Full | ARW | 82 | 25.26 | 8.78 | 0.35 | 3.40 | 0.30 | 21.85 | 8.48 |
-| Full | CR2 | 105 | 38.64 | 12.64 | 0.33 | 21.74 | 7.11 | 16.87 | 5.52 |
+| Full | CR2 | 105 | 38.64 | 9.01 | 0.23 | 21.74 | 3.05 | 16.87 | 5.94 |
 | Half | ARW | 82 | 10.81 | 0.77 | 0.07 | 3.34 | 0.28 | 7.47 | 0.48 |
-| Half | CR2 | 105 | 26.50 | 7.48 | 0.28 | 21.07 | 7.09 | 5.43 | 0.37 |
+| Half | CR2 | 105 | 26.50 | 3.29 | 0.12 | 21.07 | 2.92 | 5.43 | 0.36 |
 
 Every camera is under the 0.50 target, the slowest at 0.37 (full size,
-the 61-megapixel Sony bodies). A CR2's strip is one lossless JPEG stream
-with a Huffman table for each of its two components, which the
-speculative parallel decode does not yet read, so it decodes on one
-core: most of a CR2's time now, and the next speedup.
+the 61-megapixel Sony bodies; the slowest CR2 is at 0.26). A CR2's strip
+is one lossless JPEG stream with a Huffman table for each of its two
+components; the speculative parallel decode reads each piece once for
+each place in the tables' cycle (a reader that starts mid-stream cannot
+know which component its first code belongs to) and keeps a reading
+only from a code boundary where both the bit and the place agree with
+the true reading. That halved a CR2's unpack (21.7 s for LibRaw, 7.1 s
+on one core, 3.1 s across the cores; CR2 rows as measured after it, in
+`docs/rust-raw-decoder/cr2-rust-parallel-*.csv`).
 
 ### Not yet done
 
-- CR2's strip across the cores (the parallel decode with two tables).
 - The owner's decisions on Sony's lossless coding, ARW1, and the SR2
   block's cipher (described only by code), which hold back the older
   Sony bodies.
