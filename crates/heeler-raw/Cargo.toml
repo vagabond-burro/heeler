@@ -19,5 +19,9 @@ mozjpeg-sys = "2.2.3"
 rayon = "1"
 thiserror.workspace = true
 
+[dev-dependencies]
+# The tests and harnesses that hold heeler-rawdec to LibRaw.
+heeler-rawdec = { path = "../heeler-rawdec" }
+
 [build-dependencies]
 cc = "1"

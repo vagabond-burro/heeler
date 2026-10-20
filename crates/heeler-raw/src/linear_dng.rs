@@ -26,61 +26,62 @@ use crate::{check, configured, DevelopOpts, Handle, RawError};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub(crate) struct Facts {
-    raw_width: u32,
-    raw_height: u32,
-    width: u32,
-    height: u32,
-    top_margin: u32,
-    left_margin: u32,
-    flip: c_int,
-    filters: u32,
-    colors: c_int,
-    tiff_samples: u32,
-    tiff_bps: u32,
-    tiff_compress: u32,
-    tile_width: u32,
-    tile_length: u32,
-    raw_color: u32,
-    zero_is_bad: u32,
-    fuji_width: u32,
-    is_foveon: u32,
-    lossless_dng: u32,
-    maximum: u32,
-    black: u32,
-    cblack: [u32; 6],
-    dng_version: u32,
-    as_shot_wb_applied: c_int,
-    pixel_aspect: f32,
-    cam_mul: [f32; 4],
-    pre_mul: [f32; 4],
-    rgb_cam: [[f32; 4]; 3],
-    white: [[u16; 8]; 8],
-    user_mul: [f32; 4],
-    use_auto_wb: c_int,
-    use_camera_wb: c_int,
-    highlight: c_int,
-    user_black: c_int,
-    user_cblack: [c_int; 4],
-    user_sat: c_int,
-    med_passes: c_int,
-    no_auto_scale: c_int,
-    green_matching: c_int,
-    exp_correc: c_int,
-    no_interpolation: c_int,
-    has_bad_pixels: c_int,
-    has_dark_frame: c_int,
-    cropbox_set: c_int,
-    half_size: c_int,
-    output_color: c_int,
-    output_bps: c_int,
-    four_color_rgb: c_int,
-    use_fuji_rotate: c_int,
-    threshold: f32,
-    adjust_maximum_thr: f32,
-    bright: f32,
-    aber: [f64; 4],
-    gamm: [f64; 6],
+#[doc(hidden)]
+pub struct Facts {
+    pub raw_width: u32,
+    pub raw_height: u32,
+    pub width: u32,
+    pub height: u32,
+    pub top_margin: u32,
+    pub left_margin: u32,
+    pub flip: c_int,
+    pub filters: u32,
+    pub colors: c_int,
+    pub tiff_samples: u32,
+    pub tiff_bps: u32,
+    pub tiff_compress: u32,
+    pub tile_width: u32,
+    pub tile_length: u32,
+    pub raw_color: u32,
+    pub zero_is_bad: u32,
+    pub fuji_width: u32,
+    pub is_foveon: u32,
+    pub lossless_dng: u32,
+    pub maximum: u32,
+    pub black: u32,
+    pub cblack: [u32; 6],
+    pub dng_version: u32,
+    pub as_shot_wb_applied: c_int,
+    pub pixel_aspect: f32,
+    pub cam_mul: [f32; 4],
+    pub pre_mul: [f32; 4],
+    pub rgb_cam: [[f32; 4]; 3],
+    pub white: [[u16; 8]; 8],
+    pub user_mul: [f32; 4],
+    pub use_auto_wb: c_int,
+    pub use_camera_wb: c_int,
+    pub highlight: c_int,
+    pub user_black: c_int,
+    pub user_cblack: [c_int; 4],
+    pub user_sat: c_int,
+    pub med_passes: c_int,
+    pub no_auto_scale: c_int,
+    pub green_matching: c_int,
+    pub exp_correc: c_int,
+    pub no_interpolation: c_int,
+    pub has_bad_pixels: c_int,
+    pub has_dark_frame: c_int,
+    pub cropbox_set: c_int,
+    pub half_size: c_int,
+    pub output_color: c_int,
+    pub output_bps: c_int,
+    pub four_color_rgb: c_int,
+    pub use_fuji_rotate: c_int,
+    pub threshold: f32,
+    pub adjust_maximum_thr: f32,
+    pub bright: f32,
+    pub aber: [f64; 4],
+    pub gamm: [f64; 6],
 }
 
 extern "C" {
@@ -609,6 +610,20 @@ pub fn declined_because(bytes: &[u8], opts: DevelopOpts) -> Result<Option<&'stat
     let mut len = 0usize;
     let opcode3 = !unsafe { heeler_opcode_list3(handle.0, &mut len) }.is_null() && len > 0;
     Ok(declined(&facts, opcode3))
+}
+
+/// What LibRaw read when it opened `bytes` with `opts`: its sizes,
+/// levels, white balance and matrix, before unpacking. For the tests
+/// and harnesses that hold heeler-rawdec to LibRaw.
+#[doc(hidden)]
+pub fn libraw_facts(bytes: &[u8], opts: DevelopOpts) -> Result<Facts, RawError> {
+    let handle: Handle = configured(opts)?;
+    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    let mut facts = std::mem::MaybeUninit::<Facts>::zeroed();
+    if unsafe { heeler_linear_facts(handle.0, facts.as_mut_ptr(), std::ptr::null_mut(), std::ptr::null_mut()) } == 0 {
+        return Err(RawError::Unexpected);
+    }
+    Ok(unsafe { facts.assume_init() })
 }
 
 /// The raw image's tiles, row by row, from the file's own directory: the

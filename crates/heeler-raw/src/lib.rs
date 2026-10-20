@@ -301,6 +301,46 @@ pub fn picture_dimensions(bytes: &[u8]) -> Result<(usize, usize), RawError> {
     Ok((w, h))
 }
 
+/// The black level LibRaw subtracts at each (row, col) of the active
+/// area's first 8 rows and 8 columns, read after open: the common level,
+/// the CFA site's and the repeating pattern's together. For the harnesses
+/// that hold heeler-rawdec to LibRaw.
+#[doc(hidden)]
+pub fn libraw_black_8x8(bytes: &[u8]) -> Result<[[u32; 8]; 8], RawError> {
+    let handle = configured(DevelopOpts::default())?;
+    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    let mut out = [[0u32; 8]; 8];
+    for (r, row) in out.iter_mut().enumerate() {
+        for (c, v) in row.iter_mut().enumerate() {
+            *v = unsafe { heeler_black_at(handle.0, r as c_uint, c as c_uint) };
+        }
+    }
+    Ok(out)
+}
+
+/// LibRaw's unpacked sensor data over the active area, one sample a
+/// pixel, as it holds it before the develop (linearized, black not yet
+/// subtracted): width, height and samples. Bayer and monochrome files.
+/// For the harnesses that hold heeler-rawdec to LibRaw.
+#[doc(hidden)]
+pub fn libraw_mosaic(bytes: &[u8]) -> Result<(usize, usize, Vec<u16>), RawError> {
+    let handle = configured(DevelopOpts::default())?;
+    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    check(unsafe { libraw_unpack(handle.0) })?;
+    let raw = unsafe { heeler_cfa_image(handle.0) };
+    if raw.is_null() {
+        return Err(RawError::Unexpected);
+    }
+    let (pitch, rows) = unsafe { (heeler_raw_pitch(handle.0) as usize / 2, heeler_raw_height(handle.0) as usize) };
+    let (top, left, w, h) = unsafe { (heeler_top_margin(handle.0) as usize, heeler_left_margin(handle.0) as usize, heeler_active_width(handle.0) as usize, heeler_active_height(handle.0) as usize) };
+    let all = unsafe { std::slice::from_raw_parts(raw, rows * pitch) };
+    let mut out = Vec::with_capacity(w * h);
+    for r in top..top + h {
+        out.extend_from_slice(&all[r * pitch + left..r * pitch + left + w]);
+    }
+    Ok((w, h, out))
+}
+
 /// Applies a DNG's GainMap opcodes (OpcodeList2) to the unpacked sensor
 /// data, which LibRaw itself does not (src/gain_map.rs). Bayer CFA images
 /// only: a linear DNG's maps, and the lists applied after demosaic
