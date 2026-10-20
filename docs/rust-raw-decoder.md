@@ -88,9 +88,14 @@ marked. A DNG is classed by its raw image's compression and photometric
 interpretation, since one extension hides several decoders.
 
 ```
-cargo run --release -p heeler-raw --example rawbench -- \
+cargo run --release -p heeler-raw --features rust-decoder --example rawbench -- \
     --decoder libraw --runs 3 --csv libraw.csv
 ```
+
+Two more harnesses hold the Rust path to LibRaw: `dngfacts` (each DNG's
+tags as the Rust reader reads them against what LibRaw read when it
+opened the file) and `rustdiff` (the unpacked mosaic, the white-balanced
+mosaic and the four develops, sample by sample).
 
 ## The baseline
 
@@ -371,3 +376,197 @@ Rust path takes, and skips when `HEELER_RAW_CORPUS` is unset.
   holds it to running within that budget and failing one byte short).
 - The stop flag of `decode_sensor_until` is checked between stages, between
   tiles and between pieces of the code stream.
+
+## Phase 2: DNG, end to end
+
+The first format is DNG's Bayer raw image, in lossless JPEG (tiles or
+strips) and uncompressed (8 to 16 bits, packed or whole). It is the
+corpus's third most common extension and, alone among the common formats,
+carries its own matrices and levels, so it is verified without any camera
+table; its compressions are fully specified; and it shows the speedup:
+LibRaw decodes its tiles one after another and develops on one thread
+outside the demosaic.
+
+### What was built
+
+- `crates/heeler-rawdec`: TIFF directories (`tiff.rs`), the DNG tags a
+  develop needs (`dng.rs`), lossless JPEG (`ljpeg.rs`: a table that decodes
+  a code and its difference in one lookup; tiles side by side; a one-strip
+  frame read from many points at once and put back together in order),
+  the color math (`color.rs`), AHD from the published algorithm
+  (`ahd.rs`), and the develop (`develop.rs`). DNGs made in code for the
+  tests (`synthetic.rs`) and the verified cameras (`verified.rs`).
+- `heeler-raw`: the routing (`rust_path.rs`, the `rust-decoder` feature),
+  and three read-only views of LibRaw's own state for the harnesses
+  (`linear_dng::libraw_facts`, `libraw_black_8x8`, `libraw_mosaic`).
+
+### What LibRaw does with a DNG, as measured
+
+These are LibRaw's readings of a DNG, found by holding the Rust reader to
+LibRaw's on the corpus and on DNGs made in code; the Rust path follows
+them because it verifies against LibRaw.
+
+- The color matrix is the one calibrated under the higher color
+  temperature (D65 over Standard A, D55 over A, daylight over tungsten).
+  A diagonal CameraCalibration or AnalogBalance has no effect (the rows
+  are normalized away). For some camera-written DNGs (older Canon
+  compacts, a few drones and phones) LibRaw develops with matrices of its
+  own instead, a few float steps away from the file's; those cameras are
+  not on the verified list.
+- The camera white balance is the reciprocal of AsShotNeutral, in single
+  precision; a file with only AsShotWhiteXY gets no camera white balance.
+- Black levels drop their fraction; BlackLevelDeltaH and DeltaV are
+  declined (none in the corpus).
+- An odd ActiveArea top or left moves in by one, keeping whole 2 by 2
+  blocks. Some camera-written files (Pentax, Samsung GX, the Leica SL2)
+  have their ActiveArea read differently or not at all; they stay on
+  LibRaw.
+- The white level drops to the frame's brightest sample after black when
+  that lies within a quarter of it (unless the develop asks for fixed
+  white).
+- At half size an odd last row or column is left out.
+- A lossless JPEG tile whose line, times its components, spans the raw
+  width is read as two tile rows a line (one writer's layout): such files
+  stay on LibRaw.
+- Files LibRaw decodes in ways the specification does not (0xFF bytes in
+  the coded data without the stuffed zero) are reported damaged by the
+  Rust path and go to LibRaw, as do floating-point DNGs.
+
+### Verification results
+
+On the 2020-file corpus: 262 DNGs, 236 with a Bayer raw image. In the
+stage-by-stage comparison (`rustdiff`, every DNG the rules then accepted)
+95 files matched LibRaw at every stage (the unpacked mosaic, the
+white-balanced mosaic, and full and half develops under Clip and Blend) to
+the bit, 52 differed for the reasons above, and 2 were reported damaged
+(0xFF without the stuffed zero) and went to LibRaw. The verified list
+takes the 70 cameras (Make and Model) all of whose files matched. With the
+final rules, 148 Bayer DNGs pass the rules: 84, from the verified cameras,
+are developed by the Rust path, every one identical to LibRaw's develop
+(`rust_decoder_corpus.rs`), and 64 stay on LibRaw because their camera is
+not verified. The fixture
+tests hold the same on DNGs made in code, including layouts the corpus
+lacks.
+
+### Speed
+
+Measured on those 84 files, both decoders in one binary, the median of 5
+timed develops each after one untimed, one decoder after the other with
+nothing else running.
+
+#### Full size, per format
+
+| Format | Files | LibRaw s | Rust s | Ratio (sums) | Median ratio | LibRaw unpack s | Rust unpack s | LibRaw develop s | Rust develop s | Verdict |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| DNG-Uncompressed-CFA | 47 | 9.56 | 2.54 | 0.27 | 0.25 | 2.80 | 0.07 | 6.75 | 2.47 | target |
+| DNG-LJ92-CFA | 37 | 16.34 | 4.18 | 0.26 | 0.25 | 9.00 | 1.24 | 7.34 | 2.94 | target |
+| all | 84 | 25.90 | 6.72 | 0.26 | 0.25 | 11.80 | 1.31 | 14.09 | 5.41 | target |
+
+#### Half size, per format
+
+| Format | Files | LibRaw s | Rust s | Ratio (sums) | Median ratio | LibRaw unpack s | Rust unpack s | LibRaw develop s | Rust develop s | Verdict |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| DNG-Uncompressed-CFA | 47 | 4.88 | 0.19 | 0.04 | 0.04 | 2.76 | 0.06 | 2.12 | 0.13 | target |
+| DNG-LJ92-CFA | 37 | 11.51 | 1.29 | 0.11 | 0.10 | 9.04 | 1.14 | 2.46 | 0.14 | target |
+| all | 84 | 16.39 | 1.48 | 0.09 | 0.06 | 11.80 | 1.20 | 4.59 | 0.27 | target |
+
+#### Per camera
+
+Full-size develops; median ms of each decoder (open and unpack, then develop), and the ratio of the totals, with the half-size ratio beside it.
+
+| Maker folder | Camera | Format | Files | MP | LibRaw ms | LibRaw unpack/develop | Rust ms | Rust unpack/develop | Ratio | Half ratio | Verdict |
+|---|---|---|---:|---:|---:|---|---:|---|---:|---:|---|
+| Arashi Vision | Insta360 One X | DNG-Uncompressed-CFA | 1 | 18.5 | 167 | 15/152 | 56 | 1/55 | 0.34 | 0.06 | target |
+| Autel | Model 323 | DNG-Uncompressed-CFA | 1 | 12.0 | 119 | 10/109 | 38 | 1/38 | 0.32 | 0.07 | target |
+| Autel Robotics | XB015 | DNG-Uncompressed-CFA | 1 | 9.0 | 97 | 7/90 | 31 | 1/30 | 0.32 | 0.08 | target |
+| Canon | Canon PowerShot A560 | DNG-Uncompressed-CFA | 1 | 7.2 | 109 | 37/72 | 26 | 1/25 | 0.23 | 0.04 | target |
+| Canon | EOS 60D | DNG-LJ92-CFA | 1 | 0.5 | 16 | 5/11 | 4 | 2/3 | 0.28 | 0.37 | target |
+| Canon | EOS 7D Mark II | DNG-LJ92-CFA | 1 | 20.2 | 391 | 217/175 | 71 | 8/63 | 0.18 | 0.04 | target |
+| Canon | PowerShot G1 X | DNG-Uncompressed-CFA | 1 | 14.6 | 220 | 90/130 | 49 | 2/47 | 0.22 | 0.03 | target |
+| Canon | PowerShot G7 X | DNG-Uncompressed-CFA | 1 | 20.0 | 285 | 112/172 | 67 | 2/64 | 0.23 | 0.03 | target |
+| Canon | PowerShot S100 | DNG-Uncompressed-CFA | 1 | 12.3 | 202 | 71/131 | 43 | 2/41 | 0.21 | 0.03 | target |
+| Canon | PowerShot SX50 HS | DNG-Uncompressed-CFA | 1 | 12.8 | 186 | 71/116 | 44 | 2/42 | 0.23 | 0.04 | target |
+| Canon | PowerShot SX60 HS | DNG-Uncompressed-CFA | 1 | 16.3 | 234 | 90/144 | 56 | 2/54 | 0.24 | 0.03 | target |
+| Canon | PowerShot SX710 HS | DNG-Uncompressed-CFA | 1 | 20.6 | 291 | 117/175 | 71 | 3/69 | 0.24 | 0.03 | target |
+| DJI | FC350 | DNG-Uncompressed-CFA | 1 | 9.0 | 97 | 7/90 | 31 | 0/31 | 0.32 | 0.07 | target |
+| DJI | FC4382 | DNG-LJ92-CFA | 1 | 12.2 | 227 | 117/109 | 87 | 49/38 | 0.38 | 0.34 | target |
+| DJI | FC9287 | DNG-LJ92-CFA | 1 | 37.8 | 732 | 423/308 | 274 | 162/112 | 0.37 | 0.30 | target |
+| Eyedeas | E1 | DNG-Uncompressed-CFA | 1 | 16.1 | 202 | 13/189 | 51 | 1/50 | 0.25 | 0.07 | target |
+| KanDao | QooCam | DNG-LJ92-CFA | 1 | 9.3 | 198 | 103/94 | 34 | 4/30 | 0.17 | 0.04 | target |
+| KanDao | QooCam | DNG-Uncompressed-CFA | 2 | 9.3 | 102 | 8/95 | 31 | 0/30 | 0.30 | 0.06 | target |
+| KanDao | QooCam 8K | DNG-Uncompressed-CFA | 1 | 29.5 | 262 | 24/238 | 95 | 1/94 | 0.36 | 0.06 | target |
+| LG | D855 | DNG-Uncompressed-CFA | 1 | 13.0 | 127 | 11/117 | 44 | 1/43 | 0.34 | 0.07 | target |
+| LG | H815 | DNG-Uncompressed-CFA | 1 | 15.9 | 223 | 78/144 | 52 | 2/50 | 0.23 | 0.03 | target |
+| LG | LG-F800K | DNG-Uncompressed-CFA | 1 | 16.3 | 223 | 81/142 | 55 | 2/53 | 0.25 | 0.03 | target |
+| LG | LG-H870 | DNG-Uncompressed-CFA | 1 | 13.0 | 182 | 64/117 | 45 | 1/44 | 0.25 | 0.03 | target |
+| LG | VS995 | DNG-Uncompressed-CFA | 1 | 16.3 | 222 | 80/142 | 54 | 2/52 | 0.24 | 0.03 | target |
+| Leica | CL | DNG-Uncompressed-CFA | 1 | 24.2 | 350 | 146/204 | 83 | 3/80 | 0.24 | 0.03 | target |
+| Leica | M (Typ 240) | DNG-LJ92-CFA | 1 | 23.9 | 460 | 257/204 | 113 | 37/77 | 0.25 | 0.12 | target |
+| Leica | M (Typ 240) | DNG-Uncompressed-CFA | 1 | 23.9 | 223 | 20/203 | 80 | 1/79 | 0.36 | 0.05 | target |
+| Leica | M10 | DNG-LJ92-CFA | 1 | 23.9 | 469 | 266/202 | 109 | 33/76 | 0.23 | 0.10 | target |
+| Leica | M8 | DNG-Uncompressed-CFA | 1 | 10.3 | 143 | 45/98 | 36 | 1/35 | 0.25 | 0.03 | target |
+| Leica | M9 | DNG-Uncompressed-CFA | 1 | 18.1 | 237 | 78/159 | 62 | 1/60 | 0.26 | 0.03 | target |
+| Leica | M9 Digital Camera | DNG-Uncompressed-CFA | 1 | 18.1 | 173 | 15/158 | 61 | 1/60 | 0.35 | 0.06 | target |
+| Leica | Q (Typ 116) | DNG-Uncompressed-CFA | 1 | 24.2 | 348 | 144/204 | 85 | 3/81 | 0.24 | 0.03 | target |
+| Leica | Q2 | DNG-Uncompressed-CFA | 1 | 47.3 | 652 | 278/375 | 161 | 6/155 | 0.25 | 0.03 | target |
+| Leica | SL (Typ 601) | DNG-Uncompressed-CFA | 1 | 24.2 | 348 | 144/203 | 84 | 3/81 | 0.24 | 0.03 | target |
+| Leica | X2 | DNG-Uncompressed-CFA | 1 | 16.2 | 231 | 88/143 | 56 | 2/54 | 0.24 | 0.03 | target |
+| Leica Camera AG | LEICA M10-R | DNG-LJ92-CFA | 1 | 41.0 | 767 | 441/328 | 200 | 58/143 | 0.26 | 0.11 | target |
+| Nikon | D80 | DNG-LJ92-CFA | 1 | 10.2 | 202 | 106/97 | 39 | 4/35 | 0.19 | 0.04 | target |
+| OnePlus | ONEPLUS A3003 | DNG-Uncompressed-CFA | 1 | 16.3 | 155 | 13/142 | 57 | 1/56 | 0.36 | 0.05 | target |
+| OnePlus | ONEPLUS A5000 | DNG-Uncompressed-CFA | 1 | 16.3 | 155 | 13/142 | 56 | 1/55 | 0.36 | 0.05 | target |
+| OnePlus | ONEPLUS A6003 | DNG-Uncompressed-CFA | 1 | 16.3 | 155 | 13/142 | 58 | 1/57 | 0.37 | 0.06 | target |
+| Panasonic | DMC-LX1 | DNG-LJ92-CFA | 1 | 8.4 | 171 | 87/85 | 33 | 4/29 | 0.19 | 0.04 | target |
+| Parrot | Bebop 2 | DNG-Uncompressed-CFA | 1 | 13.6 | 201 | 11/190 | 48 | 1/47 | 0.24 | 0.05 | target |
+| Parrot | Bebop Drone | DNG-Uncompressed-CFA | 1 | 13.6 | 203 | 11/191 | 49 | 1/48 | 0.24 | 0.05 | target |
+| Pentax | 645Z | DNG-LJ92-CFA | 1 | 51.3 | 950 | 544/405 | 257 | 73/184 | 0.27 | 0.11 | target |
+| Pentax | K-01 | DNG-LJ92-CFA | 1 | 16.1 | 315 | 173/142 | 72 | 20/53 | 0.23 | 0.09 | target |
+| Pentax | K-1 | DNG-LJ92-CFA | 2 | 36.4 | 653 | 358/294 | 176 | 47/129 | 0.27 | 0.10 | target |
+| Pentax | K-1 Mark II | DNG-LJ92-CFA | 6 | 32.9 | 594 | 326/268 | 160 | 44/116 | 0.27 | 0.11 | target |
+| Pentax | K-3 | DNG-LJ92-CFA | 1 | 24.3 | 448 | 244/203 | 111 | 31/80 | 0.25 | 0.10 | target |
+| Pentax | K-3 II | DNG-LJ92-CFA | 2 | 24.3 | 471 | 266/204 | 120 | 38/82 | 0.25 | 0.12 | target |
+| Pentax | K-3 Mark III | DNG-LJ92-CFA | 1 | 25.9 | 466 | 248/217 | 119 | 33/86 | 0.26 | 0.10 | target |
+| Pentax | K-30 | DNG-LJ92-CFA | 1 | 16.1 | 307 | 165/142 | 69 | 18/52 | 0.22 | 0.09 | target |
+| Pentax | K-50 | DNG-LJ92-CFA | 1 | 16.1 | 305 | 162/143 | 69 | 17/53 | 0.23 | 0.08 | target |
+| Pentax | K-500 | DNG-LJ92-CFA | 1 | 16.1 | 309 | 167/143 | 69 | 18/51 | 0.22 | 0.08 | target |
+| Pentax | K-70 | DNG-LJ92-CFA | 2 | 24.2 | 440 | 236/204 | 109 | 30/79 | 0.25 | 0.10 | target |
+| Pentax | K-S1 | DNG-LJ92-CFA | 1 | 20.1 | 369 | 195/174 | 87 | 22/66 | 0.24 | 0.09 | target |
+| Pentax | K-S2 | DNG-LJ92-CFA | 1 | 20.1 | 367 | 192/175 | 89 | 23/66 | 0.24 | 0.10 | target |
+| Pentax | KP | DNG-LJ92-CFA | 1 | 24.3 | 455 | 251/205 | 112 | 33/79 | 0.25 | 0.11 | target |
+| Pentax | MX-1 | DNG-Uncompressed-CFA | 1 | 12.1 | 176 | 66/110 | 44 | 2/42 | 0.25 | 0.04 | target |
+| Pentax | Q | DNG-Uncompressed-CFA | 1 | 12.0 | 176 | 67/109 | 43 | 2/41 | 0.24 | 0.03 | target |
+| Pentax | Q7 | DNG-Uncompressed-CFA | 1 | 12.0 | 177 | 67/110 | 43 | 2/41 | 0.24 | 0.03 | target |
+| RaspberryPi | RP_imx477 | DNG-Uncompressed-CFA | 3 | 12.3 | 180 | 67/113 | 45 | 2/43 | 0.25 | 0.04 | target |
+| Ricoh | GR | DNG-LJ92-CFA | 1 | 16.2 | 307 | 164/143 | 69 | 16/53 | 0.22 | 0.08 | target |
+| Ricoh | GR DIGITAL 2 | DNG-Uncompressed-CFA | 1 | 10.0 | 148 | 54/94 | 37 | 1/35 | 0.25 | 0.04 | target |
+| Ricoh | GR II | DNG-LJ92-CFA | 1 | 10.4 | 271 | 172/99 | 53 | 20/34 | 0.19 | 0.10 | target |
+| Ricoh | GR III | DNG-LJ92-CFA | 1 | 24.2 | 463 | 257/205 | 112 | 34/80 | 0.24 | 0.11 | target |
+| Ricoh | GR IIIx | DNG-LJ92-CFA | 1 | 24.2 | 445 | 240/205 | 111 | 32/79 | 0.25 | 0.11 | target |
+| Ricoh | GXR | DNG-Uncompressed-CFA | 1 | 10.1 | 164 | 56/107 | 37 | 1/35 | 0.22 | 0.03 | target |
+| Xiaomi | HM NOTE 1LTE | DNG-Uncompressed-CFA | 1 | 13.1 | 185 | 66/119 | 48 | 2/45 | 0.26 | 0.05 | target |
+| Xiaomi | MI MAX | DNG-Uncompressed-CFA | 1 | 16.4 | 227 | 84/143 | 58 | 2/56 | 0.26 | 0.04 | target |
+| YI TECHNOLOGY | M1 | DNG-Uncompressed-CFA | 1 | 20.3 | 285 | 112/173 | 70 | 2/68 | 0.25 | 0.03 | target |
+| Yuneec | CGO3 | DNG-LJ92-CFA | 1 | 12.0 | 234 | 125/109 | 46 | 5/41 | 0.19 | 0.04 | target |
+| Yuneec | CGO3P | DNG-Uncompressed-CFA | 1 | 12.0 | 119 | 10/109 | 42 | 1/41 | 0.35 | 0.06 | target |
+| asus | ASUS_Z01KD | DNG-Uncompressed-CFA | 1 | 11.5 | 137 | 9/128 | 40 | 1/40 | 0.30 | 0.06 | target |
+
+Every verified camera reaches the target: full-size ratios from 0.18 to
+0.38, half size from 0.03 to 0.37 (the 0.5 MP file, where fixed costs
+dominate). Where the time went, from the stage split: the unpack is a
+tenth of LibRaw's (tiles side by side, and one-strip frames read from many
+points at once: a 24 MP strip from 90 ms to 31 ms), and the develop is two
+fifths (one pass a stage, every stage across the cores, no four-channel
+copy, no histogram, no second copy out). At half size LibRaw still
+unpacks and copies the full frame and scales it on one thread; the Rust
+develop bins 2 by 2 blocks straight from the mosaic.
+
+### Not yet done
+
+- Windows and Linux: the bit-exact claim holds on Apple's arm64; the other
+  platforms are covered by the tolerance above but have not been measured.
+- The 64 files from cameras whose DNGs the rules accept but which are not
+  verified, and the 77 phone and drone DNGs with lens shading opcodes
+  (`gain_map.rs` moves across next).
+- `heeler-io`'s banded export (`keep_develop`) still develops through
+  `decode_sensor_with` and so takes the Rust path with the feature; its
+  separate linear DNG path is unchanged.

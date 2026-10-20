@@ -1,0 +1,263 @@
+file,maker,camera,format,megapixels,decoder,half,runs,status,total_ms,open_ms,unpack_ms,develop_ms,out_width,out_height
+Converted DNG/Canon EOS 5D Mark III/5G4A9394-compressed-lossless.DNG,Converted DNG,Canon EOS 5D Mark III,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Converted DNG/Canon EOS 5D Mark III/5G4A9394-compressed-lossy.DNG,Converted DNG,Canon EOS 5D Mark III,DNG-LossyJPEG,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Converted DNG/Canon EOS 5D Mark III/5G4A9394-uncompressed.DNG,Converted DNG,Canon EOS 5D Mark III,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Converted DNG/Canon EOS 5D Mark III/5G4A9395-compressed-lossless.DNG,Converted DNG,Canon EOS 5D Mark III,DNG-LJ92-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Converted DNG/Canon EOS 5D Mark III/5G4A9395-compressed-lossy.DNG,Converted DNG,Canon EOS 5D Mark III,DNG-LossyJPEG,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Converted DNG/Canon EOS 5D Mark III/5G4A9395-uncompressed.DNG,Converted DNG,Canon EOS 5D Mark III,DNG-Uncompressed-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Apple/iPhone 12 Pro/IMG_1361.DNG,Apple,iPhone 12 Pro,DNG-LJ92-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Apple/iPhone 6s Plus/IMG_0853.DNG,Apple,iPhone 6s Plus,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Apple/iPhone 7 Plus/IMG_0739.DNG,Apple,iPhone 7 Plus,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Apple/iPhone 8/RAW_2018_11_07_14_43_14_820_noflash.dng,Apple,iPhone 8,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Apple/iPhone SE/A4973FFB-9CBD-4ED8-805D-E30F4AE08A95.dng,Apple,iPhone SE,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Apple/iPhone XS/IMG_1105.dng,Apple,iPhone XS,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Arashi Vision/Insta360 One X/IMG_20201122_142733_00_015.dng,Arashi Vision,Insta360 One X,DNG-Uncompressed-CFA,18.48,rust,0,5,ok,56.02,0.00,0.79,55.09,3040,6080
+Autel/Model 323/MAX_0005.DNG,Autel,Model 323,DNG-Uncompressed-CFA,12.00,rust,0,5,ok,38.47,0.00,0.55,37.88,4000,3000
+Autel Robotics/XB015/MAX_0001.DNG,Autel Robotics,XB015,DNG-Uncompressed-CFA,9.00,rust,0,5,ok,30.69,0.07,0.61,29.87,4000,2250
+Blackmagic/Blackmagic Pocket Cinema Camera 4k/4k_DCI_uncompressed.dng,Blackmagic,Blackmagic Pocket Cinema Camera 4k,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Blackmagic/Blackmagic Pocket Cinema Camera 4k/BMPCC_4k_DCI_3-1.dng,Blackmagic,Blackmagic Pocket Cinema Camera 4k,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Blackmagic/Blackmagic Pocket Cinema Camera 4k/BMPCC_4k_DCI_4-1.dng,Blackmagic,Blackmagic Pocket Cinema Camera 4k,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Blackmagic/Blackmagic Pocket Cinema Camera 4k/BMPCC_4k_DCI_lossless.dng,Blackmagic,Blackmagic Pocket Cinema Camera 4k,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Blackmagic/Blackmagic Pocket Cinema Camera 4k/BMPCC_4k_DCI_uncompressed.dng,Blackmagic,Blackmagic Pocket Cinema Camera 4k,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Blackmagic/Micro Cinema Camera/CAM1_2000-01-01_1659_C0002_000100.dng,Blackmagic,Micro Cinema Camera,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Blackmagic/Micro Cinema Camera/CAM1_2000-01-01_1707_C0003_000100.dng,Blackmagic,Micro Cinema Camera,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Blackmagic/Pocket Cinema Camera/Blackmagic_Pocket_Cinema_Camera_1_2016-09-17_0053_C0022_000007.dng,Blackmagic,Pocket Cinema Camera,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Blackmagic/URSA 4K/Blackmagic URSA_1_1999-12-31_2153_C0003_000001.dng,Blackmagic,URSA 4K,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Blackmagic Design/Pocket Cinema Camera 6k Pro/A010_04101355_S068.dng,Blackmagic Design,Pocket Cinema Camera 6k Pro,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon DIGITAL IXUS 60/CRW_2069.DNG,Canon,Canon DIGITAL IXUS 60,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon DIGITAL IXUS 95 IS/CRW_2593_01.DNG,Canon,Canon DIGITAL IXUS 95 IS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot A3100 IS/CRW_3338.DNG,Canon,Canon PowerShot A3100 IS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot A3300 IS/CRW_1140.DNG,Canon,Canon PowerShot A3300 IS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot A410/CANON_A410_CHDK_CRW_0741.DNG,Canon,Canon PowerShot A410,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot A480/CRW_0010.DNG,Canon,Canon PowerShot A480,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot A540/CANON_A540_CHDK_CRW_0010.DNG,Canon,Canon PowerShot A540,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot A550/CRW_0006.DNG,Canon,Canon PowerShot A550,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot A560/IMG_2641.DNG,Canon,Canon PowerShot A560,DNG-Uncompressed-CFA,7.22,rust,0,5,ok,25.51,0.00,0.93,24.54,3108,2324
+Canon/Canon PowerShot A570 IS/CRW_1918.DNG,Canon,Canon PowerShot A570 IS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot A640/CRW_0440.DNG,Canon,Canon PowerShot A640,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot D10/CANON_D10_CHDK_CRW_0626.DNG,Canon,Canon PowerShot D10,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot ELPH 130 IS/CANON_IXUS140_ELPH130_CHDK_CRW_5645.DNG,Canon,Canon PowerShot ELPH 130 IS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot ELPH 160/RAW_CANON_POWERSHOT_IXUS160_CHDK.DNG,Canon,Canon PowerShot ELPH 160,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot ELPH 180/CANON_IXUS175_ELPH180_CHDK_CRW_0194.DNG,Canon,Canon PowerShot ELPH 180,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot ELPH 180/CRW_0334.DNG,Canon,Canon PowerShot ELPH 180,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot ELPH 310 HS/CRW_9720.DNG,Canon,Canon PowerShot ELPH 310 HS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot S2 IS/IMG_1739.DNG,Canon,Canon PowerShot S2 IS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot S3IS/CRW_8531.DNG,Canon,Canon PowerShot S3IS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark III/M24-1221_000202.dng,Canon,EOS 5D Mark III,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark III/compress.dng,Canon,EOS 5D Mark III,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark III/hdrmerge-bayer-fp16-uncompressed.dng,Canon,EOS 5D Mark III,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark III/hdrmerge-bayer-fp16-w-pred-deflate.dng,Canon,EOS 5D Mark III,DNG-Deflate-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark III/hdrmerge-bayer-fp24-uncompressed.dng,Canon,EOS 5D Mark III,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark III/hdrmerge-bayer-fp24-w-pred-deflate.dng,Canon,EOS 5D Mark III,DNG-Deflate-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark III/hdrmerge-bayer-fp32-uncompressed.dng,Canon,EOS 5D Mark III,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark III/hdrmerge-bayer-fp32-w-pred-deflate.dng,Canon,EOS 5D Mark III,DNG-Deflate-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 60D/M14-1451_000085_cDNG_compressed.dng,Canon,EOS 60D,DNG-LJ92-CFA,0.52,rust,0,5,ok,4.49,0.01,1.89,2.55,960,540
+Canon/EOS 7D Mark II/0P9A0410-Enhanced-NR.dng,Canon,EOS 7D Mark II,DNG-LJ92-CFA,20.17,rust,0,5,ok,70.81,0.02,7.66,63.07,5496,3670
+Canon/EOS-1D X/CROPGX2R4019-topaz-denoiseraw.dng,Canon,EOS-1D X,DNG-Uncompressed-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/IXY 220F/canon_ixy_220f.DNG,Canon,IXY 220F,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot A3200 IS/RAW_CANON_POWERSHOT_A3200IS_CHDK.DNG,Canon,PowerShot A3200 IS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot A720 IS/IMG_8329.DNG,Canon,PowerShot A720 IS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot G1 X/CRW_0004.DNG,Canon,PowerShot G1 X,DNG-Uncompressed-CFA,14.59,rust,0,5,ok,48.72,0.00,2.04,46.88,4404,3312
+Canon/PowerShot G7 X/CANON_G7X_CHDK_CRW_6740.DNG,Canon,PowerShot G7 X,DNG-Uncompressed-CFA,19.96,rust,0,5,ok,66.66,0.00,2.45,64.15,5472,3648
+Canon/PowerShot S100/CRW_1369.DNG,Canon,PowerShot S100,DNG-Uncompressed-CFA,12.33,rust,0,5,ok,42.96,0.00,1.52,41.37,3046,4048
+Canon/PowerShot SD450/RAW_CANON_POWERSHOT_SD450_CHDK_V0.9.7-725.DNG,Canon,PowerShot SD450,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX10 IS/CRW_1627.DNG,Canon,PowerShot SX10 IS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX100 IS/CRW_0964_01.DNG,Canon,PowerShot SX100 IS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX130 IS/CRW_8815.DNG,Canon,PowerShot SX130 IS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX160 IS/CANON_SX160IS_CHDK_CRW_5152.DNG,Canon,PowerShot SX160 IS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX20 IS/CRW_6489.DNG,Canon,PowerShot SX20 IS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX220 HS/CRW_7733.DNG,Canon,PowerShot SX220 HS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX230 HS/CRW_5894.DNG,Canon,PowerShot SX230 HS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX240 HS/CRW_5797.DNG,Canon,PowerShot SX240 HS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX260 HS/CRW_3027.DNG,Canon,PowerShot SX260 HS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX30 IS/CRW_0763.DNG,Canon,PowerShot SX30 IS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX40 HS/CRW_6037.DNG,Canon,PowerShot SX40 HS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX50 HS/CRW_4061.DNG,Canon,PowerShot SX50 HS,DNG-Uncompressed-CFA,12.79,rust,0,5,ok,43.53,0.00,1.65,41.86,4176,3062
+Canon/PowerShot SX510 HS/RAW_CANON_POWERSHOT_SX510HS.DNG,Canon,PowerShot SX510 HS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX530 HS/CRW_4494.DNG,Canon,PowerShot SX530 HS,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX60 HS/Canon-SX60HS-CHDK-RAW.DNG,Canon,PowerShot SX60 HS,DNG-Uncompressed-CFA,16.32,rust,0,5,ok,56.24,0.00,2.03,54.23,4664,3500
+Canon/PowerShot SX710 HS/CANON_SX710HS_CHDK_CRW_0716.DNG,Canon,PowerShot SX710 HS,DNG-Uncompressed-CFA,20.64,rust,0,5,ok,71.34,0.00,2.58,68.80,5248,3932
+DJI/DJI Osmo Action/DJI_0254.DNG,DJI,DJI Osmo Action,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+DJI/FC220/DJI_0004.DNG,DJI,FC220,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+DJI/FC350/DJI_0040.DNG,DJI,FC350,DNG-Uncompressed-CFA,9.00,rust,0,5,ok,31.16,0.01,0.45,30.70,4000,2250
+DJI/FC4382/DJI_20250506184749_0011_D.DNG,DJI,FC4382,DNG-LJ92-CFA,12.19,rust,0,5,ok,86.93,0.01,48.71,38.19,4032,3024
+DJI/FC6310/DJI_0220.DNG,DJI,FC6310,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+DJI/FC7303/DJI_0109.DNG,DJI,FC7303,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+DJI/FC7303/DJI_0765.DNG,DJI,FC7303,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+DJI/FC9287/DJI_20250528104510_0025_D.DNG,DJI,FC9287,DNG-LJ92-CFA,37.75,rust,0,5,ok,273.84,0.01,162.06,112.32,8192,4608
+Eyedeas/E1/EYED0651.DNG,Eyedeas,E1,DNG-Uncompressed-CFA,16.15,rust,0,5,ok,51.17,0.00,0.71,50.43,3480,4640
+FIMI/X8SE/IMG_20180808_081040_0001.DNG,FIMI,X8SE,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Fujifilm/X100S/fujifilm-x100s-daylight-DSCF9505.dng,Fujifilm,X100S,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Google/Pixel 2 XL/IMG_20180109_080629.dng,Google,Pixel 2 XL,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Google/Pixel 3a/IMG_20190918_164153.dng,Google,Pixel 3a,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Google/Pixel 4 XL/IMG_20191023_125156.dng,Google,Pixel 4 XL,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Google/Pixel 4a/PXL_20201121_100251397.dng,Google,Pixel 4a,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Google/Pixel 6 Pro/PXL_20220910_093206982.dng,Google,Pixel 6 Pro,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Google/Pixel 7 Pro/PXL_20221204_063131635.dng,Google,Pixel 7 Pro,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Google/Pixel 8 Pro/PXL_20240415_103400204.RAW-02.ORIGINAL.dng,Google,Pixel 8 Pro,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HMD Global/Nokia 7 plus/IMG_20190612_120131.dng,HMD Global,Nokia 7 plus,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HTC/HTC 10/IMAG1305.dng,HTC,HTC 10,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/ANE-LX1/IMG_20200920_112515.dng,HUAWEI,ANE-LX1,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/AUM-L29/IMG_20181222_154757.dng,HUAWEI,AUM-L29,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/BLA-L29/IMG_20180119_175851.dng,HUAWEI,BLA-L29,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/CLT-L09/IMG_20191010_085409.dng,HUAWEI,CLT-L09,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/DLI-L22/IMG_20171028_150510.dng,HUAWEI,DLI-L22,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/EML-L09/IMG_20190316_130857_(2).dng,HUAWEI,EML-L09,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/EML-L29/IMG_20190507_233457.dng,HUAWEI,EML-L29,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/EVA-AL00/IMG_20171015_200142.dng,HUAWEI,EVA-AL00,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/EVA-L09/Huawai_P9_Leica.dng,HUAWEI,EVA-L09,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/FRD-L09/IMG_20180520_132951.dng,HUAWEI,FRD-L09,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/HRY-LX1/IMG_20190427_200711.dng,HUAWEI,HRY-LX1,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/HUAWEI NXT-L29/IMG_20190508_113343.dng,HUAWEI,HUAWEI NXT-L29,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/PRA-LX1/IMG_20180330_171432.dng,HUAWEI,PRA-LX1,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/SNE-LX1/IMG_20191221_095657.dng,HUAWEI,SNE-LX1,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/VKY-L09/IMG_20180429_160450.dng,HUAWEI,VKY-L09,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/VOG-L29/IMG_20190330_123314.dng,HUAWEI,VOG-L29,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/VTR-L09/IMG_20180307_120152.dng,HUAWEI,VTR-L09,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+HUAWEI/WAS-LX1A/IMG_20180416_193350.dng,HUAWEI,WAS-LX1A,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Hasselblad/L1D-20c/DJI_0017.DNG,Hasselblad,L1D-20c,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Hasselblad/L2D-20c/DJI_0023.DNG,Hasselblad,L2D-20c,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+KanDao/QooCam/KD3D_20190310_123825_000001.DNG,KanDao,QooCam,DNG-Uncompressed-CFA,9.33,rust,0,5,ok,30.60,0.00,0.49,29.99,4320,2160
+KanDao/QooCam/KDRaw_Q360_20190310_125715_000001.dng,KanDao,QooCam,DNG-LJ92-CFA,9.33,rust,0,5,ok,34.02,0.02,3.97,30.01,4320,2160
+KanDao/QooCam/Q360_20190310_123437_000001.DNG,KanDao,QooCam,DNG-Uncompressed-CFA,9.33,rust,0,5,ok,31.23,0.00,0.46,30.77,4320,2160
+KanDao/QooCam 8K/Q360_20210330_100513_00000D.DNG,KanDao,QooCam 8K,DNG-Uncompressed-CFA,29.49,rust,0,5,ok,95.39,0.00,1.24,94.09,3840,7680
+LG/D855/IMG_2017_07_16_13_10_47.dng,LG,D855,DNG-Uncompressed-CFA,12.99,rust,0,5,ok,43.66,0.00,0.62,43.01,4164,3120
+LG/H815/20161227_150823.dng,LG,H815,DNG-Uncompressed-CFA,15.87,rust,0,5,ok,52.03,0.00,1.71,50.36,5312,2988
+LG/LG-F800K/20171028_174609.dng,LG,LG-F800K,DNG-Uncompressed-CFA,16.26,rust,0,5,ok,54.75,0.00,1.82,52.92,4656,3492
+LG/LG-H850/LGG5_Camera_Front.dng,LG,LG-H850,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+LG/LG-H870/20180705_215945.dng,LG,LG-H870,DNG-Uncompressed-CFA,12.98,rust,0,5,ok,45.26,0.00,1.44,43.61,4160,3120
+LG/LG-H910/opn_20190921_065338_0.dng,LG,LG-H910,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+LG/Nexus 5X/IMG_20170214_170637_637.dng,LG,Nexus 5X,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+LG/US996/IMG_20170821_025047.dng,LG,US996,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+LG/VS995/0313171232.dng,LG,VS995,DNG-Uncompressed-CFA,16.26,rust,0,5,ok,54.13,0.00,1.80,52.29,4656,3492
+Leica/CL/L1080510_2018_CL-35-135-Chateau_Thy__Chateau_Ham.DNG,Leica,CL,DNG-Uncompressed-CFA,24.16,rust,0,5,ok,83.40,0.01,3.17,80.21,6016,4016
+Leica/M (Typ 240)/ADG_RPUsubmit_compressed_L1006373.DNG,Leica,M (Typ 240),DNG-LJ92-CFA,23.94,rust,0,5,ok,113.24,0.01,37.39,76.81,5984,4000
+Leica/M (Typ 240)/ADG_RPUsubmit_uncompressed_L1006374.DNG,Leica,M (Typ 240),DNG-Uncompressed-CFA,23.94,rust,0,5,ok,80.02,0.00,1.09,79.00,5984,4000
+Leica/M Monochrom/L1000622.DNG,Leica,M Monochrom,DNG-Uncompressed-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Leica/M Monochrom (Typ 246)/M2462362.DNG,Leica,M Monochrom (Typ 246),DNG-LJ92-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Leica/M10/f5381888.dng,Leica,M10,DNG-LJ92-CFA,23.89,rust,0,5,ok,108.71,0.01,32.69,75.79,5984,3992
+Leica/M8/L1030132.DNG,Leica,M8,DNG-Uncompressed-CFA,10.34,rust,0,5,ok,36.08,0.01,0.78,35.28,3920,2638
+Leica/M9/L1049390.DNG,Leica,M9,DNG-Uncompressed-CFA,18.11,rust,0,5,ok,61.68,0.01,1.11,60.40,5216,3472
+Leica/M9 Digital Camera/L1049391.DNG,Leica,M9 Digital Camera,DNG-Uncompressed-CFA,18.11,rust,0,5,ok,61.24,0.00,0.83,60.41,5216,3472
+Leica/Q (Typ 116)/L1070048.DNG,Leica,Q (Typ 116),DNG-Uncompressed-CFA,24.16,rust,0,5,ok,84.94,0.01,3.33,81.44,6016,4016
+Leica/Q2/L1000750.DNG,Leica,Q2,DNG-Uncompressed-CFA,47.26,rust,0,5,ok,161.17,0.01,5.78,155.23,8392,5632
+Leica/SL (Typ 601)/20160915_Lechtaler_001.DNG,Leica,SL (Typ 601),DNG-Uncompressed-CFA,24.16,rust,0,5,ok,83.92,0.01,3.33,80.72,6016,4016
+Leica/X2/L1021324.DNG,Leica,X2,DNG-Uncompressed-CFA,16.18,rust,0,5,ok,56.20,0.00,2.15,53.91,4944,3272
+Leica Camera AG/LEICA M10-R/M10R0324.DNG,Leica Camera AG,LEICA M10-R,DNG-LJ92-CFA,41.00,rust,0,5,ok,200.04,0.01,57.72,142.59,7872,5208
+Leica Camera AG/LEICA SL2/L1020010.DNG,Leica Camera AG,LEICA SL2,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Light/L16/L16_00148.dng,Light,L16,DNG-Uncompressed-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+MADV/QJXJ01FJ/IMG_20190326_134416.DNG,MADV,QJXJ01FJ,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Microsoft/Lumia 950 XL Dual SIM/Microsoft_-_Lumia_950XL.dng,Microsoft,Lumia 950 XL Dual SIM,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/D80/DSC_0143.dng,Nikon,D80,DNG-LJ92-CFA,10.18,rust,0,5,ok,39.21,0.02,4.19,35.03,3900,2611
+Nikon/LS-5000/F014-07.dng,Nikon,LS-5000,DNG-Uncompressed-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nokia/Lumia 1020/RAW_NOKIA_LUMIA_1020.DNG,Nokia,Lumia 1020,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nokia/Lumia 930/WP_20180612_19_16_03_Raw__highres.dng,Nokia,Lumia 930,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+OnePlus/ONEPLUS A3003/IMG_20170316_134557.dng,OnePlus,ONEPLUS A3003,DNG-Uncompressed-CFA,16.28,rust,0,5,ok,56.56,0.02,0.77,55.72,4656,3496
+OnePlus/ONEPLUS A5000/IMG_20171224_201301.dng,OnePlus,ONEPLUS A5000,DNG-Uncompressed-CFA,16.28,rust,0,5,ok,56.26,0.02,0.82,55.43,4656,3496
+OnePlus/ONEPLUS A6003/IMG_20201019_093659.dng,OnePlus,ONEPLUS A6003,DNG-Uncompressed-CFA,16.28,rust,0,5,ok,57.87,0.02,0.81,57.00,4656,3496
+OnePlus/One/IMG_20150729_201116.dng,OnePlus,One,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Panasonic/DMC-LX1/P1080763.dng,Panasonic,DMC-LX1,DNG-LJ92-CFA,8.37,rust,0,5,ok,32.82,0.02,3.52,29.20,3857,2170
+Parrot/Anafi/100000190019.DNG,Parrot,Anafi,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Parrot/Bebop 2/Bebop2_20170330115857+0200.dng,Parrot,Bebop 2,DNG-Uncompressed-CFA,13.60,rust,0,5,ok,48.31,0.00,0.70,47.41,3320,4096
+Parrot/Bebop Drone/Bebop_Drone_2015-11-07T180428+0000_C10611.dng,Parrot,Bebop Drone,DNG-Uncompressed-CFA,13.60,rust,0,5,ok,48.69,0.01,0.68,47.97,3320,4096
+Pentax/645D/645D2839.DNG,Pentax,645D,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Pentax/645Z/IMGP2836.DNG,Pentax,645Z,DNG-LJ92-CFA,51.26,rust,0,5,ok,257.00,0.01,73.05,184.00,8268,6200
+Pentax/K-01/_IGP2068.DNG,Pentax,K-01,DNG-LJ92-CFA,16.15,rust,0,5,ok,72.14,0.01,19.60,52.81,4936,3272
+Pentax/K-1/IMGP8551.DNG,Pentax,K-1,DNG-LJ92-CFA,36.38,rust,0,5,ok,174.75,0.01,45.96,128.60,7376,4932
+Pentax/K-1/IMGP8555.DNG,Pentax,K-1,DNG-LJ92-CFA,36.38,rust,0,5,ok,176.66,0.02,47.42,129.22,7376,4932
+Pentax/K-1 Mark II/_IMG2387.DNG,Pentax,K-1 Mark II,DNG-LJ92-CFA,36.38,rust,0,5,ok,174.67,0.01,45.33,128.71,7376,4932
+Pentax/K-1 Mark II/_IMG2390.DNG,Pentax,K-1 Mark II,DNG-LJ92-CFA,36.38,rust,0,5,ok,176.48,0.02,45.98,131.39,7376,4932
+Pentax/K-1 Mark II/_K1I9779.DNG,Pentax,K-1 Mark II,DNG-LJ92-CFA,36.38,rust,0,5,ok,179.23,0.01,48.50,130.48,7376,4932
+Pentax/K-1 Mark II/_K1I9783.DNG,Pentax,K-1 Mark II,DNG-LJ92-CFA,36.38,rust,0,5,ok,180.52,0.02,49.51,131.25,7376,4932
+Pentax/K-1 Mark II/_K1I9784.DNG,Pentax,K-1 Mark II,DNG-LJ92-CFA,36.38,rust,0,5,ok,177.43,0.02,49.19,127.99,7376,4932
+Pentax/K-1 Mark II/_K1I9786.DNG,Pentax,K-1 Mark II,DNG-LJ92-CFA,15.56,rust,0,5,ok,72.11,0.01,23.28,48.66,4832,3220
+Pentax/K-3/IMGP6916.DNG,Pentax,K-3,DNG-LJ92-CFA,24.26,rust,0,5,ok,110.99,0.01,30.51,80.27,6028,4024
+Pentax/K-3 II/20170430-121325.dng,Pentax,K-3 II,DNG-LJ92-CFA,24.26,rust,0,5,ok,110.78,0.01,31.66,79.46,6028,4024
+Pentax/K-3 II/IMGP0668.DNG,Pentax,K-3 II,DNG-LJ92-CFA,24.26,rust,0,5,ok,128.93,0.01,44.98,83.69,6028,4024
+Pentax/K-3 Mark III/_IMG0114.DNG,Pentax,K-3 Mark III,DNG-LJ92-CFA,25.89,rust,0,5,ok,119.41,0.01,33.07,86.28,6224,4160
+Pentax/K-3 Mark III Monochrome/K3III.DNG,Pentax,K-3 Mark III Monochrome,DNG-LJ92-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Pentax/K-30/_IGP4042.DNG,Pentax,K-30,DNG-LJ92-CFA,16.15,rust,0,5,ok,69.07,0.01,18.12,51.83,4936,3272
+Pentax/K-5/_MAR0543.DNG,Pentax,K-5,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Pentax/K-5 II/IMGP2032.DNG,Pentax,K-5 II,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Pentax/K-5 II s/_JAK3776.DNG,Pentax,K-5 II s,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Pentax/K-50/IMGP1385.DNG,Pentax,K-50,DNG-LJ92-CFA,16.15,rust,0,5,ok,68.99,0.01,16.63,52.70,4936,3272
+Pentax/K-500/Pentax_-_K-500.DNG,Pentax,K-500,DNG-LJ92-CFA,16.15,rust,0,5,ok,68.59,0.01,17.77,50.59,4936,3272
+Pentax/K-7/IMGP6297.DNG,Pentax,K-7,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Pentax/K-70/IMGP0771.DNG,Pentax,K-70,DNG-LJ92-CFA,24.23,rust,0,5,ok,107.86,0.02,30.60,77.20,6022,4024
+Pentax/K-70/IMGP6855.DNG,Pentax,K-70,DNG-LJ92-CFA,24.23,rust,0,5,ok,109.98,0.01,29.21,80.72,6022,4024
+Pentax/K-S1/IMGP4743.DNG,Pentax,K-S1,DNG-LJ92-CFA,20.11,rust,0,5,ok,87.45,0.01,21.64,65.86,5488,3664
+Pentax/K-S2/IMGP3368.DNG,Pentax,K-S2,DNG-LJ92-CFA,20.11,rust,0,5,ok,88.99,0.01,22.66,66.28,5488,3664
+Pentax/K-x/IMGP6431.DNG,Pentax,K-x,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Pentax/K10D/IMGP5398.DNG,Pentax,K10D,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Pentax/K200D/IMGP2292.DNG,Pentax,K200D,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Pentax/K20D/RAW_Pentax_K20.DNG,Pentax,K20D,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Pentax/KP/IMGP0236.DNG,Pentax,KP,DNG-LJ92-CFA,24.30,rust,0,5,ok,112.49,0.01,32.85,78.81,6028,4032
+Pentax/MX-1/pentax_mx1_raw2.dng,Pentax,MX-1,DNG-Uncompressed-CFA,12.09,rust,0,5,ok,43.87,0.01,1.55,42.24,4016,3010
+Pentax/PENTAX K-r/IMGP4425.DNG,Pentax,PENTAX K-r,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Pentax/Q/IMGP0647.DNG,Pentax,Q,DNG-Uncompressed-CFA,12.00,rust,0,5,ok,42.79,0.01,1.58,41.18,4000,3000
+Pentax/Q7/IMGP1691.DNG,Pentax,Q7,DNG-Uncompressed-CFA,12.00,rust,0,5,ok,42.96,0.00,1.52,41.41,4000,3000
+Plustek/OpticFilm 8100/SF8_processed_-_Mon_Jun_17_19-45-39_2019.dng,Plustek,OpticFilm 8100,DNG-Uncompressed-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Plustek/OpticFilm 8200i SE/AristaUltra_400_Test1.dng,Plustek,OpticFilm 8200i SE,DNG-Uncompressed-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+RaspberryPi/RP_imx477/pi.dng,RaspberryPi,RP_imx477,DNG-Uncompressed-CFA,12.33,rust,0,5,ok,44.64,0.00,1.53,43.20,4056,3040
+RaspberryPi/RP_imx477/pi_hq_picamera.dng,RaspberryPi,RP_imx477,DNG-Uncompressed-CFA,12.33,rust,0,5,ok,45.02,0.00,1.77,43.22,4056,3040
+RaspberryPi/RP_imx477/pi_hq_raspistill.dng,RaspberryPi,RP_imx477,DNG-Uncompressed-CFA,12.33,rust,0,5,ok,44.61,0.01,1.58,43.01,4056,3040
+Realme/RMX1851/IMG_OCT_20191005_163311.dng,Realme,RMX1851,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Ricoh/GR/R0003611.DNG,Ricoh,GR,DNG-LJ92-CFA,16.22,rust,0,5,ok,68.80,0.01,15.82,53.03,4944,3280
+Ricoh/GR DIGITAL 2/RAW_RICOH_GR2.DNG,Ricoh,GR DIGITAL 2,DNG-Uncompressed-CFA,10.03,rust,0,5,ok,36.94,0.00,1.45,35.28,3656,2744
+Ricoh/GR II/R0000443.DNG,Ricoh,GR II,DNG-LJ92-CFA,10.37,rust,0,5,ok,52.82,0.01,19.69,33.80,3952,2624
+Ricoh/GR III/R0000357.DNG,Ricoh,GR III,DNG-LJ92-CFA,24.22,rust,0,5,ok,112.37,0.01,33.49,79.92,6020,4024
+Ricoh/GR IIIx/R0001005.DNG,Ricoh,GR IIIx,DNG-LJ92-CFA,24.22,rust,0,5,ok,110.60,0.01,31.68,78.79,6020,4024
+Ricoh/GXR/R0017428.DNG,Ricoh,GXR,DNG-Uncompressed-CFA,10.09,rust,0,5,ok,36.52,0.00,1.35,35.19,2748,3672
+Ricoh/RICOH GX200/R0014336-20180515-ss620-ap4.6-fl5-iso64.DNG,Ricoh,RICOH GX200,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/G920F/LRM_20170316_152407.dng,Samsung,G920F,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/G935F/20170403_104110.dng,Samsung,G935F,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/GX10/_G107701.DNG,Samsung,GX10,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/GX20/_G205027.DNG,Samsung,GX20,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/Galaxy S21 Ultra/20230712_115041.dng,Samsung,Galaxy S21 Ultra,DNG-LJ92-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/Galaxy S22 Ulra/20221225_114402.dng,Samsung,Galaxy S22 Ulra,DNG-LJ92-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/Galaxy S22 Ultra/20230531_111518.dng,Samsung,Galaxy S22 Ultra,DNG-LJ92-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/Galaxy S23/20230414_115131.dng,Samsung,Galaxy S23,DNG-LJ92-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/Galaxy S23/20230715_154550.dng,Samsung,Galaxy S23,DNG-LJ92-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/Galaxy S23 Ultra/20230817_120455.dng,Samsung,Galaxy S23 Ultra,DNG-LJ92-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/Galaxy S23 Ultra/20231214_130645.dng,Samsung,Galaxy S23 Ultra,DNG-LJ92-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/Galaxy S23+/20231227_172938.dng,Samsung,Galaxy S23+,DNG-LJ92-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/SAMSUNG-SM-G930A/20180105_103031.dng,Samsung,SAMSUNG-SM-G930A,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/SM-G930F/20200125_130015.dng,Samsung,SM-G930F,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/SM-G930T/20180602_132834.dng,Samsung,SM-G930T,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/SM-G950F/2018-06-08_12.48.51.dng,Samsung,SM-G950F,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/SM-G950U/20170828_141409.dng,Samsung,SM-G950U,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/SM-G955F/20180202_091722.dng,Samsung,SM-G955F,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/SM-G960F/20191119_101508.dng,Samsung,SM-G960F,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/SM-G965F/Samsung_SM-G965F_4-3_ratio_f2.4.dng,Samsung,SM-G965F,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/SM-G973F/20191114_225157.dng,Samsung,SM-G973F,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/SM-G973U/20200402_181931.dng,Samsung,SM-G973U,DNG-unknown,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Samsung/SM-S901E/20250305_173647.dng,Samsung,SM-S901E,DNG-JXL-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sigma/fp/A002_647_20240229_000001_4k_12bit.DNG,Sigma,fp,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sigma/fp/A002_648_20240229_000001_4k_10bit.DNG,Sigma,fp,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sigma/fp/A002_650_20240229_000001_4k_8bit.DNG,Sigma,fp,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sigma/fp/A002_651_20240229_000001_2k_12bit.DNG,Sigma,fp,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sigma/fp/A002_652_20240229_000001_2k_10bit.DNG,Sigma,fp,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sigma/fp/A002_653_20240229_000001_2k_8bit.DNG,Sigma,fp,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sigma/fp/SDIM4591.DNG,Sigma,fp,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sigma/fp L/SDIM0915.DNG,Sigma,fp L,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sigma/sd Quattro/sample3.DNG,Sigma,sd Quattro,DNG-Uncompressed-Linear,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+XIAOYI/YDXJ 2/ydxj0065.dng,XIAOYI,YDXJ 2,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+XIAOYI/YI 4K/YDXJ0026.DNG,XIAOYI,YI 4K,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+XIAOYI/YIAC 3/YIAC0075.DNG,XIAOYI,YIAC 3,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Xiaomi/HM NOTE 1LTE/IMG_2016.07.31_15.48.08.dng,Xiaomi,HM NOTE 1LTE,DNG-Uncompressed-CFA,13.13,rust,0,5,ok,48.21,0.56,1.68,44.77,4208,3120
+Xiaomi/M2010J19CG/IMG_20201224_141323.dng,Xiaomi,M2010J19CG,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Xiaomi/MI 8/IMG_20200101_174326.dng,Xiaomi,MI 8,DNG-LJ92-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Xiaomi/MI MAX/IMG_2019_10_27_14_47_40.dng,Xiaomi,MI MAX,DNG-Uncompressed-CFA,16.37,rust,0,5,ok,58.07,0.00,2.00,56.04,4672,3504
+Xiaomi/Mi 9 Lite/IMG_20200324_073611.dng,Xiaomi,Mi 9 Lite,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Xiaomi/Redmi Note 7/IMG_20190615_155524.dng,Xiaomi,Redmi Note 7,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Xiaomi/Redmi Note 8T/IMG_20200715_094601.dng,Xiaomi,Redmi Note 8T,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+YI TECHNOLOGY/M1/PC070001.DNG,YI TECHNOLOGY,M1,DNG-Uncompressed-CFA,20.29,rust,0,5,ok,70.46,0.00,2.43,68.04,5200,3902
+Yuneec/CGO3/YUN00038.dng,Yuneec,CGO3,DNG-LJ92-CFA,12.00,rust,0,5,ok,45.56,0.02,4.63,40.86,4000,3000
+Yuneec/CGO3P/YUN00007.dng,Yuneec,CGO3P,DNG-Uncompressed-CFA,12.00,rust,0,5,ok,41.95,0.00,0.60,41.35,4000,3000
+asus/ASUS_I01WD/P_20190922_161212.dng,asus,ASUS_I01WD,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+asus/ASUS_Z01KD/2018-12-02_07.39.26-1.dng,asus,ASUS_Z01KD,DNG-Uncompressed-CFA,11.50,rust,0,5,ok,40.50,0.02,0.60,39.86,2936,3916
+bq/Aquaris U Plus/IMG_20180217_111328_894.dng,bq,Aquaris U Plus,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+moto g8plus/moto g8plus/IMG_20200621_212547364.dng,moto g8plus,moto g8plus,DNG-unknown,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+motorola/Moto G (5S) Plus/IMG_20180328_152254.dng,motorola,Moto G (5S) Plus,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+motorola/Nexus 6/DSC_0017.DNG,motorola,Nexus 6,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+motorola/moto g(7) play/IMG_20191114_091702382.dng,motorola,moto g(7) play,DNG-Uncompressed-CFA,0.00,rust,0,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
