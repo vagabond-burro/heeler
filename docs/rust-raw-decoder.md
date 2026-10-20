@@ -821,10 +821,12 @@ cameras whose entry in LibRaw's table holds other numbers (older
 calibrations, or a sibling model's). For all 207 the table would change
 the daylight color of what Heeler shows today, by amounts no measurement
 here ranks except one: the Olympus E-M1 Mark II, whose real chart above
-favors the table's pair under tungsten (4.6 against 6.1). Whether those
-cameras keep their manufacturer's matrix for daylight, or take the table's
-pair throughout, is for the owner when their formats come; the table
-supports either.
+favors the table's pair under tungsten (4.6 against 6.1). The owner's
+decision (2026-10-20): every camera takes the table's pair throughout,
+these 207 included, so a develop never uses a maker-note matrix; their
+daylight color changes from what Heeler shows today when their formats
+move to the Rust path, and the release notes for that change should say
+so.
 
 Cross-check with the lab measurements: the table's pairs are the
 calibrations the "DNG model" column above scored for the 49 cameras with
