@@ -367,7 +367,27 @@ unsafe extern "C" fn apply_stage3_opcodes(d: *mut c_void) {
 }
 
 pub fn decode_sensor_with(bytes: &[u8], opts: DevelopOpts) -> Result<SensorImage, RawError> {
-    develop(bytes, opts, None)
+    develop(bytes, opts, None, None)
+}
+
+/// Where one develop's wall time went, in seconds: opening the file
+/// (identification and metadata), unpacking the sensor data, and the
+/// develop that makes RGB of it (demosaic, color and the copy out).
+#[doc(hidden)]
+#[derive(Debug, Default, Clone, Copy)]
+pub struct StageTimes {
+    pub open: f64,
+    pub unpack: f64,
+    pub develop: f64,
+}
+
+/// decode_sensor_with, timed stage by stage: for the benchmark harness
+/// (examples/rawbench.rs). The develop is decode_sensor_with's own.
+#[doc(hidden)]
+pub fn decode_sensor_timed(bytes: &[u8], opts: DevelopOpts) -> Result<(SensorImage, StageTimes), RawError> {
+    let mut times = StageTimes::default();
+    let image = develop(bytes, opts, None, Some(&mut times))?;
+    Ok((image, times))
 }
 
 /// decode_sensor_with, stopped with RawError::Cancelled once `stop` is
@@ -375,7 +395,7 @@ pub fn decode_sensor_with(bytes: &[u8], opts: DevelopOpts) -> Result<SensorImage
 /// reports, so a develop nobody needs any more ends at its next stage.
 /// What a develop that runs to the end returns is decode_sensor_with's.
 pub fn decode_sensor_until(bytes: &[u8], opts: DevelopOpts, stop: &AtomicBool) -> Result<SensorImage, RawError> {
-    develop(bytes, opts, Some(stop))
+    develop(bytes, opts, Some(stop), None)
 }
 
 /// The memory a full decode_sensor_with of `bytes` admits, from the
@@ -439,7 +459,8 @@ fn configured(opts: DevelopOpts) -> Result<Handle, RawError> {
     Ok(handle)
 }
 
-fn develop(bytes: &[u8], opts: DevelopOpts, stop: Option<&AtomicBool>) -> Result<SensorImage, RawError> {
+fn develop(bytes: &[u8], opts: DevelopOpts, stop: Option<&AtomicBool>, mut times: Option<&mut StageTimes>) -> Result<SensorImage, RawError> {
+    let start = std::time::Instant::now();
     xtrans_default();
     let stopped = || stop.is_some_and(|s| s.load(Ordering::Relaxed));
     if stopped() {
@@ -466,7 +487,9 @@ fn develop(bytes: &[u8], opts: DevelopOpts, stop: Option<&AtomicBool>) -> Result
         unsafe { libraw_set_progress_handler(handle.0, Some(stop_requested), stop as *const AtomicBool as *mut c_void) };
     }
     let cancelled = |code: c_int| if stopped() { Err(RawError::Cancelled) } else { check(code) };
+    let opened = start.elapsed().as_secs_f64();
     cancelled(unsafe { libraw_unpack(handle.0) })?;
+    let unpacked = start.elapsed().as_secs_f64();
     // A full-size Bayer develop demosaics across the cores, LibRaw's own
     // AHD tile by tile (the shim's heeler_ahd_parallel).
     if PARALLEL_AHD.load(Ordering::Relaxed) {
@@ -504,6 +527,10 @@ fn develop(bytes: &[u8], opts: DevelopOpts, stop: Option<&AtomicBool>) -> Result
         for (px, v) in rgb.chunks_exact_mut(3).zip(&gray) {
             px.fill(*v);
         }
+    }
+    if let Some(t) = times.as_deref_mut() {
+        let done = start.elapsed().as_secs_f64();
+        *t = StageTimes { open: opened, unpack: unpacked - opened, develop: done - unpacked };
     }
     Ok(SensorImage { width: w, height: h, rgb, headroom, sensor_data })
 }
