@@ -1,0 +1,12 @@
+[package]
+name = "heeler-rawdec"
+version.workspace = true
+edition.workspace = true
+# Pure Rust: no C or C++, so it builds wherever the workspace's Rust
+# does (iOS included). Written from the DNG and JPEG specifications.
+license.workspace = true
+
+[dependencies]
+heeler-engine = { path = "../heeler-engine" }
+rayon = "1"
+thiserror.workspace = true

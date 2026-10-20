@@ -1932,6 +1932,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "heeler-rawdec"
+version = "26.6.0"
+dependencies = [
+ "heeler-engine",
+ "rayon",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "heeler-stitch"
 version = "26.6.0"
 dependencies = [

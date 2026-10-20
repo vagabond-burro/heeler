@@ -9,6 +9,7 @@ members = [
     "crates/heeler-catalog",
     "crates/heeler-gpu",
     "crates/heeler-raw",
+    "crates/heeler-rawdec",
     "crates/heeler-stitch",
     "crates/heeler-vision",
     "apps/heeler-app/src-tauri",

@@ -1,0 +1,247 @@
+//! The DNG tags a develop needs (DNG Specification 1.7), read from the
+//! file's directories: the raw image's directory (NewSubFileType 0 with
+//! CFA photometric) and the camera profile tags in IFD0.
+
+use crate::tiff::{Ifd, Tiff};
+use crate::Error;
+
+/// Where a raw image's compressed pieces are: tiles or strips, each an
+/// offset and a byte count, and the size of each piece in pixels.
+#[derive(Clone, Debug)]
+pub struct Pieces {
+    pub width: usize,
+    pub height: usize,
+    pub spans: Vec<(usize, usize)>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Dng {
+    pub make: String,
+    pub model: String,
+    pub unique_model: String,
+    pub version: [u8; 4],
+    /// TIFF orientation 1 to 8 (IFD0's).
+    pub orientation: u16,
+    pub width: usize,
+    pub height: usize,
+    pub bits: u32,
+    pub compression: u32,
+    pub photometric: u32,
+    pub samples: u32,
+    /// SampleFormat: 1 unsigned integers, 3 floating point.
+    pub sample_format: u32,
+    pub pieces: Pieces,
+    /// CFARepeatPatternDim and CFAPattern, mapped through CFAPlaneColor
+    /// to 0 red, 1 green, 2 blue (another color is kept as 3 and up).
+    pub cfa_dim: (usize, usize),
+    pub cfa: Vec<u8>,
+    pub cfa_layout: u32,
+    pub linearization: Option<Vec<u16>>,
+    pub black_dim: (usize, usize),
+    /// BlackLevel, black_dim rows by cols (one sample a pixel).
+    pub black: Vec<f64>,
+    pub black_delta_h: Vec<f64>,
+    pub black_delta_v: Vec<f64>,
+    pub white: Vec<f64>,
+    /// ActiveArea: top, left, bottom, right.
+    pub active: (usize, usize, usize, usize),
+    pub default_crop: Option<[f64; 4]>,
+    pub default_scale: (f64, f64),
+    pub as_shot_neutral: Option<Vec<f64>>,
+    pub as_shot_white_xy: Option<(f64, f64)>,
+    pub color_matrix: [Option<Vec<f64>>; 3],
+    pub camera_calibration: [Option<Vec<f64>>; 3],
+    pub illuminant: [u32; 3],
+    pub analog_balance: Option<Vec<f64>>,
+    pub forward_matrix: [Option<Vec<f64>>; 3],
+    pub opcodes: [bool; 3],
+    pub baseline_exposure: f64,
+}
+
+fn reals(t: &Tiff, ifd: &Ifd, tag: u16) -> Option<Vec<f64>> {
+    ifd.get(tag).and_then(|e| t.reals(&e))
+}
+
+fn uint(t: &Tiff, ifd: &Ifd, tag: u16) -> Option<u32> {
+    ifd.get(tag).and_then(|e| t.uint(&e))
+}
+
+impl Dng {
+    /// The DNG's tags, or Unsupported when the file is not a DNG with a
+    /// CFA raw image.
+    pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
+        let t = Tiff::new(bytes).ok_or(Error::Unsupported("not a TIFF"))?;
+        let ifds = t.ifds();
+        let ifd0 = ifds.first().ok_or(Error::Unsupported("no directory"))?;
+        let version = ifd0.get(50706).and_then(|e| t.uints(&e)).ok_or(Error::Unsupported("not a DNG"))?;
+        if version.len() != 4 {
+            return Err(Error::Corrupt("DNGVersion"));
+        }
+        let raw = ifds
+            .iter()
+            .find(|i| uint(&t, i, 254).unwrap_or(0) == 0 && uint(&t, i, 262) == Some(32803))
+            .ok_or(Error::Unsupported("no CFA raw image"))?;
+        let ascii = |ifd: &Ifd, tag| ifd.get(tag).and_then(|e| t.ascii(&e)).unwrap_or_default();
+        // Profile tags live in IFD0; a few writers repeat them in the raw
+        // directory, which then wins, as it is the image's own.
+        let profile = |tag: u16| reals(&t, raw, tag).or_else(|| reals(&t, ifd0, tag));
+        let width = uint(&t, raw, 256).ok_or(Error::Corrupt("ImageWidth"))? as usize;
+        let height = uint(&t, raw, 257).ok_or(Error::Corrupt("ImageLength"))? as usize;
+        let samples = uint(&t, raw, 277).unwrap_or(1);
+        let bits = raw.get(258).and_then(|e| t.uints(&e)).and_then(|v| v.first().copied()).unwrap_or(1);
+        let pieces = if let (Some(tw), Some(th)) = (uint(&t, raw, 322), uint(&t, raw, 323)) {
+            let offs = raw.get(324).and_then(|e| t.uints(&e)).ok_or(Error::Corrupt("TileOffsets"))?;
+            let counts = raw.get(325).and_then(|e| t.uints(&e)).ok_or(Error::Corrupt("TileByteCounts"))?;
+            Pieces { width: tw as usize, height: th as usize, spans: offs.iter().zip(&counts).map(|(&o, &n)| (o as usize, n as usize)).collect() }
+        } else {
+            let offs = raw.get(273).and_then(|e| t.uints(&e)).ok_or(Error::Corrupt("StripOffsets"))?;
+            let counts = raw.get(279).and_then(|e| t.uints(&e)).ok_or(Error::Corrupt("StripByteCounts"))?;
+            let rows = uint(&t, raw, 278).map_or(height, |r| (r as usize).min(height));
+            Pieces { width, height: rows, spans: offs.iter().zip(&counts).map(|(&o, &n)| (o as usize, n as usize)).collect() }
+        };
+        if pieces.width == 0 || pieces.height == 0 || pieces.spans.len() != width.div_ceil(pieces.width) * height.div_ceil(pieces.height) {
+            return Err(Error::Corrupt("the tile or strip layout"));
+        }
+        if pieces.spans.iter().any(|&(o, n)| o.checked_add(n).is_none_or(|e| e > bytes.len())) {
+            return Err(Error::Corrupt("a tile or strip past the end of the file"));
+        }
+        let cfa_dim = match raw.get(33421).and_then(|e| t.uints(&e)).as_deref() {
+            Some(&[r, c]) => (r as usize, c as usize),
+            _ => return Err(Error::Corrupt("CFARepeatPatternDim")),
+        };
+        let pattern = raw.get(33422).and_then(|e| t.uints(&e)).ok_or(Error::Corrupt("CFAPattern"))?;
+        let planes = raw.get(50710).and_then(|e| t.uints(&e)).unwrap_or_else(|| vec![0, 1, 2]);
+        if pattern.len() != cfa_dim.0 * cfa_dim.1 || pattern.is_empty() {
+            return Err(Error::Corrupt("CFAPattern"));
+        }
+        let cfa = pattern.iter().map(|&p| planes.get(p as usize).map(|&c| c.min(255) as u8).ok_or(Error::Corrupt("CFAPattern"))).collect::<Result<Vec<_>, _>>()?;
+        let active = match raw.get(50829).and_then(|e| t.uints(&e)).as_deref() {
+            Some(&[a, b, c, d]) => (a as usize, b as usize, c as usize, d as usize),
+            _ => (0, 0, height, width),
+        };
+        if active.0 >= active.2 || active.1 >= active.3 || active.2 > height || active.3 > width {
+            return Err(Error::Corrupt("ActiveArea"));
+        }
+        let black_dim = match raw.get(50713).and_then(|e| t.uints(&e)).as_deref() {
+            Some(&[r, c]) if r > 0 && c > 0 => (r as usize, c as usize),
+            _ => (1, 1),
+        };
+        let black = reals(&t, raw, 50714).unwrap_or_else(|| vec![0.0]);
+        let three = |tag1: u16, tag2: u16, tag3: u16| [profile(tag1), profile(tag2), profile(tag3)];
+        let crop = match (reals(&t, raw, 50719).as_deref(), reals(&t, raw, 50720).as_deref()) {
+            (Some(&[x, y]), Some(&[w, h])) => Some([x, y, w, h]),
+            _ => None,
+        };
+        Ok(Dng {
+            make: ascii(ifd0, 271),
+            model: ascii(ifd0, 272),
+            unique_model: ascii(ifd0, 50708),
+            version: [version[0] as u8, version[1] as u8, version[2] as u8, version[3] as u8],
+            orientation: uint(&t, ifd0, 274).unwrap_or(1) as u16,
+            width,
+            height,
+            bits,
+            compression: uint(&t, raw, 259).unwrap_or(1),
+            photometric: 32803,
+            samples,
+            sample_format: uint(&t, raw, 339).unwrap_or(1),
+            pieces,
+            cfa_dim,
+            cfa,
+            cfa_layout: uint(&t, raw, 50711).unwrap_or(1),
+            linearization: raw.get(50712).and_then(|e| t.uints(&e)).map(|v| v.into_iter().map(|x| x.min(65535) as u16).collect()),
+            black_dim,
+            black,
+            black_delta_h: reals(&t, raw, 50715).unwrap_or_default(),
+            black_delta_v: reals(&t, raw, 50716).unwrap_or_default(),
+            white: reals(&t, raw, 50717).unwrap_or_else(|| vec![((1u64 << bits.min(32)) - 1) as f64]),
+            active,
+            default_crop: crop,
+            default_scale: match reals(&t, raw, 50718).as_deref() {
+                Some(&[h, v]) => (h, v),
+                _ => (1.0, 1.0),
+            },
+            as_shot_neutral: profile(50728),
+            as_shot_white_xy: match profile(50729).as_deref() {
+                Some(&[x, y]) => Some((x, y)),
+                _ => None,
+            },
+            color_matrix: three(50721, 50722, 52529),
+            camera_calibration: three(50723, 50724, 52530),
+            illuminant: [
+                profile(50778).and_then(|v| v.first().copied()).unwrap_or(0.0) as u32,
+                profile(50779).and_then(|v| v.first().copied()).unwrap_or(0.0) as u32,
+                profile(52531).and_then(|v| v.first().copied()).unwrap_or(0.0) as u32,
+            ],
+            analog_balance: profile(50727),
+            forward_matrix: three(50964, 50965, 52532),
+            opcodes: [raw.get(51008).is_some(), raw.get(51009).is_some(), raw.get(51022).is_some()],
+            baseline_exposure: profile(50730).and_then(|v| v.first().copied()).unwrap_or(0.0),
+        })
+    }
+
+    /// The black level at (row, col) of the active area: the BlackLevel
+    /// pattern's entry and the row's and column's deltas, the fraction
+    /// dropped (LibRaw's integer levels).
+    pub fn black_at(&self, row: usize, col: usize) -> u32 {
+        let (r, c) = self.black_dim;
+        let v = self.black.get((row % r) * c + col % c).copied().unwrap_or(self.black[0])
+            + self.black_delta_h.get(col).copied().unwrap_or(0.0)
+            + self.black_delta_v.get(row).copied().unwrap_or(0.0);
+        v.max(0.0) as u32
+    }
+
+    /// The color matrix a develop uses: of the profile's calibrated
+    /// matrices, the one calibrated under the highest color temperature
+    /// (the daylight one of the usual tungsten and daylight pair).
+    pub fn color_matrix(&self) -> Option<[[f64; 3]; 3]> {
+        let mut best: Option<(u32, [[f64; 3]; 3])> = None;
+        for i in 0..3 {
+            let Some(m) = self.color_matrix[i].as_deref().and_then(crate::color::as3) else { continue };
+            let t = illuminant_kelvin(self.illuminant[i]);
+            if best.is_none_or(|(bt, _)| t > bt) {
+                best = Some((t, m));
+            }
+        }
+        best.map(|(_, m)| m)
+    }
+
+    /// LibRaw's flip for the TIFF orientation: bit 0 mirrors columns,
+    /// bit 1 rows, bit 2 swaps the axes after both.
+    pub fn flip(&self) -> u8 {
+        if (1..=8).contains(&self.orientation) { [0, 0, 1, 3, 2, 4, 6, 7, 5][self.orientation as usize] } else { 0 }
+    }
+
+    /// The color at (row, col) of the raw image, the pattern anchored at
+    /// the active area's top left.
+    pub fn color_at(&self, row: usize, col: usize) -> u8 {
+        let (r, c) = ((row + self.cfa_dim.0 - self.active.0 % self.cfa_dim.0) % self.cfa_dim.0, (col + self.cfa_dim.1 - self.active.1 % self.cfa_dim.1) % self.cfa_dim.1);
+        self.cfa[r * self.cfa_dim.1 + c]
+    }
+}
+
+/// The correlated color temperature of an EXIF LightSource code, as the
+/// DNG specification's calibration illuminants use them; 0 for unknown
+/// or other.
+pub fn illuminant_kelvin(code: u32) -> u32 {
+    match code {
+        1 | 4 | 9 => 5500,
+        2 | 14 => 4150,
+        3 => 2850,
+        10 => 6500,
+        11 => 7500,
+        12 => 6430,
+        13 => 5000,
+        15 => 3450,
+        16 => 2940,
+        17 => 2856,
+        18 => 4874,
+        19 => 6774,
+        20 => 5503,
+        21 => 6504,
+        22 => 7504,
+        23 => 5003,
+        24 => 3200,
+        _ => 0,
+    }
+}
