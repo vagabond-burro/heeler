@@ -409,8 +409,13 @@ pub fn opcode_list(ops: &[Vec<u8>]) -> Vec<u8> {
 /// lossless JPEG strip of two components in `slices` (how many before the
 /// last, their width, the last one's width), and Canon maker notes with a
 /// 582-word ColorData whose as-shot white balance is `wb` (red, green,
-/// green, blue). Make "Canon", Model `model`.
+/// green, blue). Make "Canon", Model `model`, IFD0 Orientation 1.
 pub fn cr2(model: &str, width: usize, height: usize, slices: [usize; 3], wb: [u16; 4], pixel: &dyn Fn(usize, usize) -> u16) -> Vec<u8> {
+    cr2_oriented(model, width, height, slices, wb, 1, pixel)
+}
+
+/// cr2 with IFD0 Orientation `orientation`.
+pub fn cr2_oriented(model: &str, width: usize, height: usize, slices: [usize; 3], wb: [u16; 4], orientation: u16, pixel: &dyn Fn(usize, usize) -> u16) -> Vec<u8> {
     assert_eq!(slices[0] * slices[1] + slices[2], width);
     // The JPEG's samples run slice by slice, each top to bottom.
     let mut stream = Vec::with_capacity(width * height);
@@ -477,7 +482,7 @@ pub fn cr2(model: &str, width: usize, height: usize, slices: [usize; 3], wb: [u1
     };
     let placeholder = vec![0xEE; 4];
     let (mut nexts, mut fix) = (Vec::new(), Vec::new());
-    let ifd0 = vec![(271u16, 2u16, 6u32, ascii("Canon")), (272, 2, model.len() as u32 + 1, ascii(model)), (274, 3, 1, short(&[1])), (34665, 4, 1, placeholder.clone())];
+    let ifd0 = vec![(271u16, 2u16, 6u32, ascii("Canon")), (272, 2, model.len() as u32 + 1, ascii(model)), (274, 3, 1, short(&[orientation])), (34665, 4, 1, placeholder.clone())];
     write(&mut out, ifd0, &mut nexts, &mut fix);
     let at1 = write(&mut out, vec![(256, 3, 1, short(&[160]))], &mut nexts, &mut fix);
     let at2 = write(&mut out, vec![(256, 3, 1, short(&[160]))], &mut nexts, &mut fix);

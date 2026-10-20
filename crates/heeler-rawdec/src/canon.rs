@@ -108,6 +108,14 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         (2560, -4) => color.get(333..337),
         _ => None,
     };
+    // A file whose IFD0 orientation is no orientation at all (some Canon
+    // firmware writes 0) states the camera's way up only in maker notes
+    // laid out model by model; it stays LibRaw's, which reads them.
+    let orientation = uint(ifd0, 274).unwrap_or(1);
+    if !(1..=8).contains(&orientation) {
+        return Err(Error::Unsupported("an orientation tag outside 1 to 8"));
+    }
+    let orientation = orientation as u16;
     let calibration = crate::cameras::find(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
     let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
     let (top, left) = (geometry.top as usize, geometry.left as usize);
@@ -117,7 +125,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         model: model.clone(),
         unique_model: model,
         version: [0, 0, 0, 0],
-        orientation: uint(ifd0, 274).unwrap_or(1) as u16,
+        orientation,
         width,
         height,
         bits: frame.precision,

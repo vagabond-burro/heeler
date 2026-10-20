@@ -214,6 +214,11 @@ fn files_outside_the_verified_develop_are_left_to_libraw() {
     // An X-Trans-like 2 by 2 with three greens is not Bayer.
     assert!(declined(&cfa_dng(&Spec { cfa: [1, 1, 1, 2], ..Spec { width: 76, pixel: &scene, ..Spec::default() } }), base));
     assert!(declined(b"II*\0\x08\0\0\0\0\0\0\0\0\0", base), "not a DNG");
+    // A CR2 whose IFD0 orientation is 0 (some Canon firmware's): its way
+    // up is only in model-by-model maker notes, which LibRaw reads.
+    let px = |y: usize, x: usize| 128 + (scene(y, x) >> 2).min(3900);
+    let sideways = heeler_rawdec::synthetic::cr2_oriented("Canon EOS 20D", 3596, 2360, [1, 1728, 1868], [2000, 1024, 1024, 1500], 0, &px);
+    assert!(declined(&sideways, base), "an orientation tag outside 1 to 8");
 }
 
 /// With the rust-decoder feature, heeler-raw's own entry points take a

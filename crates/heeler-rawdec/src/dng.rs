@@ -45,6 +45,13 @@ pub enum Coding {
     /// Sony's compressed blocks (sony.rs), one strip, through the
     /// linearization table (its tone curve).
     SonyBlocks,
+    /// Sony's lossless tiles (sony.rs): each a lossless JPEG of four
+    /// components, a JPEG pixel one 2 by 2 block of the tile.
+    SonyTiles,
+    /// Uncompressed samples packed least significant bits first (two
+    /// 12-bit samples in three bytes, the first in the low byte and the low
+    /// half of the next): the older Sony bodies' 12-bit uncompressed data.
+    PackedLow,
 }
 
 /// A raw file in the terms a develop needs, which are the DNG

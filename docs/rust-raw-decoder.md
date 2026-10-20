@@ -814,10 +814,114 @@ on one core, 3.1 s across the cores; CR2 rows as measured after it, in
 
 ### Not yet done
 
-- The owner's decisions on Sony's lossless coding, ARW1, and the SR2
-  block's cipher (described only by code), which hold back the older
-  Sony bodies.
+- Sony's lossless coding and the older bodies: done in Phase 4b, below.
 - sRAW and mRAW.
+
+## Phase 4b: the rest of Sony, and LibRaw's known faults
+
+### The owner's decisions (2026-10-20)
+
+- Sony's lossless coding: its layout may be found from the data against
+  LibRaw's reading.
+- The SR2 block's cipher, described only in code: it may be learned from
+  a widely used metadata reader's source (Artistic or GPL licensed) and
+  written again in Heeler's own terms, verified against LibRaw. No
+  decoder's code is read.
+- "Compressed RAW 2" (the A7 V's and A7R VI's lossy coding) and ARW1 (the
+  DSLR-A100's): find what is publicly described first.
+
+### What was built
+
+- Sony lossless (`Coding::SonyTiles`): TIFF tiles of 512 by 512, each an
+  ITU-T T.81 lossless JPEG of 256 by 256 pixels with four components (one
+  table, predictor 1); a JPEG pixel's components are one 2 by 2 block of
+  the tile in reading order, the first two on its upper row. Found by
+  trying the 24 orders against LibRaw's mosaic; all 16,384 samples tried
+  agreed with the first. Where the frame states no white level the
+  camera's comes from geometry.rs. The medium and small lossless sizes
+  are not Bayer and stay on LibRaw.
+- The SR2 block: IFD0's DNGPrivateData holds (in four bytes) the offset of
+  the SR2Private directory, which gives the enciphered block's offset,
+  length and 32-bit key (also four bytes). The keystream: four steps of
+  the linear congruential generator x -> x * 0x02E90EDD + 1 from the key,
+  extended to a ring of 127 words by shifted exclusive ors, then each
+  stream word the exclusive or of the ring's words 1 and 65 ahead,
+  replacing the oldest; it is applied to the block as big-endian 32-bit
+  words. The block is then an IFD with the older bodies' black level,
+  white balance and (unused) white level; their white level comes from
+  geometry.rs. Black stated for 12-bit uncompressed data is in 14-bit
+  units, a quarter of it used.
+- 12-bit uncompressed (the A850 and A900, marked 32767 in the files): two
+  samples in three bytes, least significant bits first
+  (`Coding::PackedLow`).
+
+### Verification
+
+- Every ARW of the corpus: 168 match LibRaw at every stage (82 before),
+  from 95 cameras (36 before): the lossless files of the current bodies,
+  and the A7, A7 II, A7R II, A7S, A6000 to A6500, NEX, SLT, A-mount and
+  RX bodies through the SR2 block. The corpus test now holds 477 files
+  from 367 cameras to LibRaw to the bit.
+- Declined: the A200 to A390's coding (8 files; variable length, not
+  ARW2's blocks, and described only by code), "Compressed RAW 2" (4),
+  ARW1 (1), files from 5 bodies the calibration table lacks, and the
+  non-Bayer sizes (20).
+- Speed over the 168: 0.33 of LibRaw's time at full size (the slowest
+  camera 0.40, the A7R III), 0.06 at half size. CSVs in
+  `docs/rust-raw-decoder/arw-*.csv`.
+
+### What is publicly described of Sony's other codings
+
+- "Compressed RAW 2" (compression 32766): no prose description of the
+  bitstream. A Sony patent (WO2024043054A1) describes a lossy RAW mode
+  with a wavelet transform on Bayer data and per-band quantization, with
+  no filter, tables, entropy code or layout. SMPTE RDD 34 (LLVC, a Sony
+  line-based wavelet codec; free to read) is a plausible relative, but no
+  public source ties it to these files. Building a decoder would be
+  reverse engineering against sample files; it stays on LibRaw.
+- ARW1 and the A200 to A390's coding: no prose, patent or standard found;
+  the only detailed descriptions are other decoders' code. They stay on
+  LibRaw.
+
+### LibRaw's known faults, against the Rust path
+
+Verifying against LibRaw risks copying its mistakes. Its issue tracker
+(659 issues, the 384 touching these formats or the develop) was read for
+wrong results on DNG, CR2 and ARW:
+
+- A CR2 whose IFD0 orientation tag is invalid (some EOS 40D firmware
+  writes 0): LibRaw reads the camera's way up from the maker notes, laid
+  out model by model; the Rust path read 0 and would have shown the
+  photograph sideways. Such files are now declined and stay LibRaw's
+  (CR2 and ARW alike), with a test. The corpus had no such file; the
+  issue's sample did.
+- Sony white levels above 16383 for the A500 to A580 (an issue says the
+  true clip is 16383): their clipped highlights reach exactly 16596, the
+  level LibRaw uses, so the level is right for them.
+- Sony crop-mode areas LibRaw guessed for several full-frame bodies: of
+  those, only the 7S's crop mode is in geometry.rs, and its area ends
+  inside real data (the columns after LibRaw's full-frame area are
+  repeated padding, its crop area stops eight real columns short).
+- Not carried over by design, and possible later improvements in the
+  app rather than the decoder: the camera's own aspect crop (Sony) and a
+  DNG's DefaultCrop are not applied (LibRaw's area is the image; a
+  document could start with them as its crop).
+- A camera LibRaw does not know (the A7R VI, issue 828): it develops the
+  whole 10240 by 7168 tile frame, padding included, with a fallback
+  matrix, where the file states a 9984 by 6656 image at (12, 8). The Rust
+  path declines it (no geometry and no calibration yet) rather than copy
+  that.
+- A 32-bit float DNG reported as rendering wrongly: its shared sample had
+  its picture blacked out, so the claim could not be checked; its white
+  level is a normalized 1.0, which the Rust path declines.
+- Crashes, memory-safety reports and fuzzing finds (about 260) concern
+  LibRaw's code, not its results.
+
+### Second corpus
+
+A second public archive of sample raw files (CC0, 807 camera models,
+about 120 GB) is being mirrored to the sample storage, each file checked against its SHA-256;
+the issue samples above are kept beside it.
 
 ## Color sources, measured
 

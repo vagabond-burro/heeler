@@ -1,7 +1,11 @@
 //! Sony ARW files, read into the DNG terms a develop needs (dng.rs).
 //!
 //! An ARW is TIFF; the raw frame is IFD0's SubIFD with CFA photometric.
-//! Two codings are read: uncompressed (14 bits in 16-bit words, in the
+//! Four codings are read. Lossless: tiles of ITU-T T.81 lossless JPEG,
+//! each JPEG pixel four components that are one 2 by 2 block of the
+//! frame, in reading order (found from the data against LibRaw's
+//! reading). 12-bit uncompressed (older bodies, marked 32767): two
+//! samples in three bytes, least significant bits first. Uncompressed (14 bits in 16-bit words, in the
 //! file's byte order) and Sony's compressed one (compression 32767, one
 //! byte a pixel): each row is cut into 16-byte blocks, each block 16
 //! pixels of one color, every second column, the two colors' blocks
@@ -12,13 +16,15 @@
 //! The 11-bit values go through a tone curve (SonyToneCurve, 0x7010):
 //! twice the value, then linear with slope 1, 2, 4, 8 and 16 between the
 //! curve's four knots (each a quarter of the tag's value), the last
-//! segment running on past the white level. The lossless coding and the
-//! older files whose levels are in the enciphered SR2 block are not read.
+//! segment running on past the white level.
 //!
 //! The white balance, black level and white level are the raw
 //! directory's own tags (0x7313, 0x7310, and the DNG WhiteLevel tag,
-//! 0xC61D); the image area and CFA colors come from geometry.rs (LibRaw's,
-//! so documents keep their geometry), the color calibrations from
+//! 0xC61D), or for the older bodies the enciphered SR2 block's (the
+//! cipher as a metadata reader's source documents it, written here in
+//! Heeler's terms; the white level then the camera's, from geometry.rs);
+//! the image area and CFA colors come from geometry.rs (LibRaw's, so
+//! documents keep their geometry), the color calibrations from
 //! cameras.rs.
 
 use rayon::prelude::*;
@@ -56,6 +62,71 @@ pub fn tone_curve(tag: &[u32]) -> Vec<u16> {
             y.min(u16::MAX as u32) as u16
         })
         .collect()
+}
+
+/// The SR2 block's keystream, as 32-bit words: four steps of the linear
+/// congruential generator x -> x * 0x02E90EDD + 1 (mod 2^32) from the key
+/// seed a 127-word state (the fourth word, and each later one, the
+/// exclusive or of two earlier words shifted up a bit, carrying the top
+/// bit of the exclusive or of two others), and each word of the stream
+/// then replaces the oldest state word with the exclusive or of the words
+/// 1 and 65 places on in the ring.
+struct Keystream {
+    ring: [u32; 128],
+    at: usize,
+}
+
+impl Keystream {
+    fn new(key: u32) -> Keystream {
+        let mut ring = [0u32; 128];
+        let mut x = key;
+        for w in ring.iter_mut().take(4) {
+            x = x.wrapping_mul(0x02e9_0edd).wrapping_add(1);
+            *w = x;
+        }
+        ring[3] = ring[3] << 1 | (ring[0] ^ ring[2]) >> 31;
+        for i in 4..127 {
+            ring[i] = (ring[i - 4] ^ ring[i - 2]) << 1 | (ring[i - 3] ^ ring[i - 1]) >> 31;
+        }
+        Keystream { ring, at: 127 }
+    }
+
+    fn next(&mut self) -> u32 {
+        let w = self.ring[(self.at + 1) & 127] ^ self.ring[(self.at + 65) & 127];
+        self.ring[self.at & 127] = w;
+        self.at += 1;
+        w
+    }
+}
+
+/// Deciphers (or enciphers: the cipher is its own inverse) an SR2 block
+/// in place, as big-endian 32-bit words; a last partial word is left.
+pub fn sr2_decipher(block: &mut [u8], key: u32) {
+    let mut ks = Keystream::new(key);
+    for w in block.chunks_exact_mut(4) {
+        let v = u32::from_be_bytes([w[0], w[1], w[2], w[3]]) ^ ks.next();
+        w.copy_from_slice(&v.to_be_bytes());
+    }
+}
+
+/// The deciphered SR2 block (white balance and levels of the older
+/// bodies): DNGPrivateData (0xC634) in IFD0 points to the SR2Private
+/// directory, which gives the block's offset (0x7200), length (0x7201)
+/// and key (0x7221). The block is an IFD whose offsets count from the
+/// file's start; it comes back as a copy of the file's first bytes up to
+/// its end, deciphered in place, for Tiff to read.
+pub fn sr2_block(t: &Tiff, ifd0: &crate::tiff::Ifd) -> Option<(Vec<u8>, usize)> {
+    // Four bytes holding the directory's offset in the file's byte order.
+    let private = t.u32(ifd0.get(0xc634)?.offset())? as usize;
+    let (dir, _) = t.ifd(private)?;
+    let get = |tag| dir.get(tag).and_then(|e| t.uint(&e));
+    // The key is four bytes read as a 32-bit word in the file's order.
+    let key = t.u32(dir.get(0x7221)?.offset())?;
+    let (at, len) = (get(0x7200)? as usize, get(0x7201)? as usize);
+    let end = at.checked_add(len)?;
+    let mut copy = t.data().get(..end)?.to_vec();
+    sr2_decipher(&mut copy[at..end], key);
+    Some((copy, at))
 }
 
 /// One 16-byte block's 16 values (11 bits each).
@@ -124,26 +195,73 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let (make, model) = (ascii(271), ascii(272));
     let width = uint(raw, 256).ok_or(Error::Corrupt("ImageWidth"))? as usize;
     let height = uint(raw, 257).ok_or(Error::Corrupt("ImageLength"))? as usize;
-    let offset = uint(raw, 273).ok_or(Error::Corrupt("StripOffsets"))? as usize;
-    let count = uint(raw, 279).ok_or(Error::Corrupt("StripByteCounts"))? as usize;
-    if offset.checked_add(count).is_none_or(|e| e > bytes.len()) {
-        return Err(Error::Corrupt("a raw strip past the end of the file"));
+    // One strip, or tiles (the lossless coding).
+    let pieces = match (uint(raw, 322), uint(raw, 323)) {
+        (Some(tw), Some(th)) => {
+            let offs = uints(raw, 324).ok_or(Error::Corrupt("TileOffsets"))?;
+            let counts = uints(raw, 325).ok_or(Error::Corrupt("TileByteCounts"))?;
+            Pieces { width: tw as usize, height: th as usize, spans: offs.iter().zip(&counts).map(|(&o, &n)| (o as usize, n as usize)).collect() }
+        }
+        _ => {
+            let offset = uint(raw, 273).ok_or(Error::Corrupt("StripOffsets"))? as usize;
+            let count = uint(raw, 279).ok_or(Error::Corrupt("StripByteCounts"))? as usize;
+            Pieces { width, height, spans: vec![(offset, count)] }
+        }
+    };
+    if pieces.width == 0 || pieces.height == 0 || pieces.spans.len() != width.div_ceil(pieces.width) * height.div_ceil(pieces.height) {
+        return Err(Error::Corrupt("the tile or strip layout"));
     }
+    if pieces.spans.iter().any(|&(o, n)| o.checked_add(n).is_none_or(|e| e > bytes.len())) {
+        return Err(Error::Corrupt("a raw piece past the end of the file"));
+    }
+    let count = pieces.spans[0].1;
+    let bits_tag = uints(raw, 258).and_then(|b| b.first().copied()).unwrap_or(0);
+    let tiled = pieces.spans.len() > 1 || pieces.width != width;
     let (coding, bits, compression, linearization) = match uint(raw, 259) {
-        Some(32767) if count >= width * height && width % 32 == 0 => {
+        // A few older bodies mark 12-bit packed uncompressed data so.
+        Some(32767) if !tiled && count == width * height * 3 / 2 && bits_tag == 12 => (Coding::PackedLow, 12, 1, None),
+        Some(32767) if !tiled && count >= width * height && width % 32 == 0 => {
             let curve = uints(raw, 0x7010).filter(|c| c.len() == 4).ok_or(Error::Unsupported("no tone curve"))?;
             (Coding::SonyBlocks, 16, 32767, Some(tone_curve(&curve)))
         }
-        Some(1) if count >= width * height * 2 => (Coding::Tiff, 16, 1, None),
+        Some(1) if !tiled && count >= width * height * 2 => (Coding::Tiff, 16, 1, None),
+        // Lossless: tiles of ITU-T T.81 lossless JPEG, each JPEG pixel four
+        // components, one 2 by 2 block of the frame, in reading order.
+        Some(7) if tiled && pieces.width % 2 == 0 && pieces.height % 2 == 0 && (8..=16).contains(&bits_tag) => (Coding::SonyTiles, bits_tag, 7, None),
         _ => return Err(Error::Unsupported("a Sony coding not read here")),
     };
     // The levels and white balance the frame states for itself; files
     // that keep them only in the enciphered SR2 block are declined.
     let reals = |tag| raw.get(tag).and_then(|e| t.reals(&e));
-    let black = reals(0x7310).filter(|b| b.len() == 4).ok_or(Error::Unsupported("no stated black level"))?;
-    let wb = reals(0x7313).filter(|w| w.len() == 4 && w.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no stated white balance"))?;
-    let white = reals(0xc61d).and_then(|w| w.first().copied()).ok_or(Error::Unsupported("no stated white level"))?;
+    // The older bodies keep them only in the enciphered SR2 block, the
+    // black level there in 14-bit units (a quarter of it for 12-bit
+    // uncompressed data).
+    let sr2 = sr2_block(&t, ifd0);
+    let sr2_reals = |tag| {
+        let (copy, at) = sr2.as_ref()?;
+        let t = Tiff::new(copy)?;
+        let (dir, _) = t.ifd(*at)?;
+        dir.get(tag).and_then(|e| t.reals(&e))
+    };
+    let four = |v: Option<Vec<f64>>| v.filter(|v| v.len() == 4);
+    let black = four(reals(0x7310))
+        .or_else(|| four(sr2_reals(0x7310)).map(|b| if compression == 1 && bits_tag == 12 { b.iter().map(|v| v / 4.0).collect() } else { b }))
+        .ok_or(Error::Unsupported("no stated black level"))?;
+    let wb = four(reals(0x7313)).or_else(|| four(sr2_reals(0x7313))).filter(|w| w.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no stated white balance"))?;
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
+    // The white level the frame states, else the camera's (geometry.rs).
+    let white = reals(0xc61d)
+        .and_then(|w| w.first().copied())
+        .or((geometry.white > 0).then_some(geometry.white as f64))
+        .ok_or(Error::Unsupported("no white level"))?;
+    // A file whose IFD0 orientation is no orientation at all (some Canon
+    // firmware writes 0) states the camera's way up only in maker notes
+    // laid out model by model; it stays LibRaw's, which reads them.
+    let orientation = uint(ifd0, 274).unwrap_or(1);
+    if !(1..=8).contains(&orientation) {
+        return Err(Error::Unsupported("an orientation tag outside 1 to 8"));
+    }
+    let orientation = orientation as u16;
     let calibration = crate::cameras::find(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
     let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
     let (top, left) = (geometry.top as usize, geometry.left as usize);
@@ -153,7 +271,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         model: model.clone(),
         unique_model: model,
         version: [0, 0, 0, 0],
-        orientation: uint(ifd0, 274).unwrap_or(1) as u16,
+        orientation,
         width,
         height,
         bits,
@@ -162,7 +280,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         samples: 1,
         sample_format: 1,
         predictor: 1,
-        pieces: Pieces { width, height, spans: vec![(offset, count)] },
+        pieces,
         cfa_dim: (2, 2),
         cfa: geometry.colors.to_vec(),
         cfa_layout: 1,
@@ -207,6 +325,32 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_sr2_cipher_is_its_own_inverse_and_its_stream_is_fixed() {
+        let plain: Vec<u8> = (0..64u8).collect();
+        let mut block = plain.clone();
+        sr2_decipher(&mut block, 0x4433_2211);
+        assert_ne!(block, plain);
+        sr2_decipher(&mut block, 0x4433_2211);
+        assert_eq!(block, plain);
+        // The stream for the key every corpus file uses, pinned so the
+        // cipher cannot change unnoticed (the corpus test holds it to
+        // LibRaw's reading of the deciphered levels).
+        let mut ks = Keystream::new(0x4433_2211);
+        let first: Vec<u32> = (0..3).map(|_| ks.next()).collect();
+        assert_eq!(first, [0x54c2_c4d6, 0x49c4_78bc, 0x34ae_2f8e]);
+        assert_eq!(Keystream::new(0).ring[0], 1, "the generator's first step from zero");
+    }
+
+    #[test]
+    fn twelve_bit_samples_unpack_low_bits_first() {
+        // 0x123 and 0xABC: low byte 0x23, then 0xC (low half of the second
+        // sample) over 0x1, then 0xAB.
+        let mut line = [0u16; 2];
+        crate::develop::unpack_row_low(&[0x23, 0xC1, 0xAB], 12, &mut line);
+        assert_eq!(line, [0x123, 0xABC]);
+    }
 
     #[test]
     fn the_tone_curve_doubles_its_slope_at_each_knot() {

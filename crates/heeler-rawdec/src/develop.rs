@@ -399,7 +399,11 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
                     }
                     continue;
                 };
-                unpack_row(row, bits, little, &mut line);
+                if d.coding == Coding::PackedLow {
+                    unpack_row_low(row, bits, &mut line);
+                } else {
+                    unpack_row(row, bits, little, &mut line);
+                }
                 put_run(out, p, r0 + tr, c0, &line, lin);
             }
             Ok(())
@@ -426,6 +430,27 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         })?;
         Ok(())
     };
+    if d.coding == Coding::SonyTiles {
+        // Each tile's JPEG line is two rows of the tile: components 0 and 1
+        // side by side, then 2 and 3.
+        d.pieces.spans.par_iter().enumerate().try_for_each(|(i, &(at, len))| -> Result<(), Error> {
+            stopped(stop)?;
+            let (r0, c0) = origin(i);
+            let (mut top, mut bottom) = (vec![0u16; pw], vec![0u16; pw]);
+            crate::ljpeg::decode(&bytes[at..at + len], |y, line| {
+                for (x, px) in line.chunks_exact(4).enumerate().take(pw / 2) {
+                    top[2 * x] = px[0];
+                    top[2 * x + 1] = px[1];
+                    bottom[2 * x] = px[2];
+                    bottom[2 * x + 1] = px[3];
+                }
+                put_run(out, p, r0 + 2 * y, c0, &top, lin);
+                put_run(out, p, r0 + 2 * y + 1, c0, &bottom, lin);
+            })?;
+            Ok(())
+        })?;
+        return Ok(cfa);
+    }
     if d.coding == Coding::SonyBlocks {
         let (at, len) = d.pieces.spans[0];
         stopped(stop)?;
@@ -554,6 +579,23 @@ pub fn unpack_row(row: &[u8], bits: usize, little: bool, line: &mut [u16]) {
                 *v = ((acc >> have) & mask) as u16;
             }
         }
+    }
+}
+
+/// One row of samples packed least significant bits first: each sample's
+/// low bits in the lower bits of the byte it starts in.
+pub fn unpack_row_low(row: &[u8], bits: usize, line: &mut [u16]) {
+    let (mut acc, mut have, mut at) = (0u64, 0usize, 0usize);
+    let mask = (1u64 << bits) - 1;
+    for v in line.iter_mut() {
+        while have < bits {
+            acc |= (*row.get(at).unwrap_or(&0) as u64) << have;
+            at += 1;
+            have += 8;
+        }
+        *v = (acc & mask) as u16;
+        acc >>= bits;
+        have -= bits;
     }
 }
 
