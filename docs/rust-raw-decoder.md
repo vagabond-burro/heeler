@@ -570,3 +570,199 @@ develop bins 2 by 2 blocks straight from the mosaic.
 - `heeler-io`'s banded export (`keep_develop`) still develops through
   `decode_sensor_with` and so takes the Rust path with the feature; its
   separate linear DNG path is unchanged.
+
+## Color sources, measured
+
+Every non-DNG format needs a camera matrix the file does not carry, and
+the choice of source is the owner's (above). This section measures the
+candidates, so the choice rests on accuracy and not on which program a
+number came from. The harness is `crates/heeler-raw/examples/colorcheck.rs`;
+every score is the mean CIEDE2000 (lower is better; about 1 is a just
+noticeable difference side by side) against reference values.
+
+The sources:
+
+- LibRaw's matrix: the one Heeler develops with today, a single matrix a
+  camera, calibrated for daylight.
+- The DNG model: the DNG specification's own color model (chapter 6),
+  which blends a camera's two calibrations (Standard Illuminant A and D65)
+  by the color temperature of the scene's white, through the
+  ForwardMatrix where there is one. The tags come from DNGs written from
+  the same raw files by the converter most raw workflows use to write
+  DNGs; those
+  per-camera numbers are the de facto industry reference, and LibRaw's own
+  table largely descends from them. "ColorMatrix only" is the same model
+  ignoring the ForwardMatrix.
+- A fit to the measured sensitivities: a 3 by 3 matrix fitted from the
+  camera's spectral sensitivities as the Academy Software Foundation's
+  ACES camera data (Apache-2.0) gives them, which is independent of every
+  raw converter.
+- The chart's own fit: a 3 by 3 matrix fitted to the very shot, each
+  patch scored by a fit that never saw it. No single matrix does better on
+  that shot; it shows what the shot itself allows.
+
+### On real charts
+
+The corpus holds five raw shots of X-Rite charts with published reference
+values: four Digital ColorChecker SG (140 patches, the edition before
+November 2014, as their print shows) and one ColorChecker Classic (24
+patches, the edition after). No DNG among them, and none of the cameras
+in the spectral data. Each patch's mean camera RGB is read from LibRaw's
+unpacked mosaic (no demosaic), white balanced on the chart's own neutral
+patches, taken to XYZ by each source, and its exposure matched on the
+neutrals. The windows behind the SG charts throw a few percent of veiling
+light into every patch (the black patches read L* 22 to 35 against 6.5),
+so the main scores subtract that flare, estimated from the neutral
+patches, the same for every source. Mean CIEDE2000, and in brackets the
+mean over the patches of L* 25 or more:
+
+| Shot | LibRaw matrix | DNG model, converter's tags | DNG model, ColorMatrix only | Chart's own fit (cross-validated) | Without flare correction: LibRaw / DNG model / fit |
+|---|---|---|---|---|---|
+| Hasselblad CFV-50 (FFF), SG, daylight | 3.85 (2.96) | 3.96 (3.05) | 3.96 (3.05) | 2.78 (1.90) | 4.14 / 4.20 / 3.81 |
+| Hasselblad H5D-40 (FFF), SG, daylight | 3.63 (2.78) | 3.64 (2.79) | 3.64 (2.79) | 2.70 (1.90) | 4.46 / 4.46 / 4.23 |
+| Hasselblad H5D-50c (FFF), SG, daylight | 3.10 (1.94) | 3.04 (1.93) | 3.04 (1.93) | 2.39 (1.29) | 4.09 / 4.12 / 3.98 |
+| Nikon D5 (NEF), SG, daylight | 3.38 (2.11) | 3.39 (2.12) | 3.30 (1.97) | 3.16 (1.76) | 7.02 / 7.03 / 5.85 |
+| Olympus E-M1 Mark II (ORF), Classic, tungsten | 6.10 (6.21) | 4.60 (4.65) | 4.61 (4.66) | 4.49 (4.55) | 5.88 / 4.61 / 4.66 |
+
+### Simulated from measured sensitivities
+
+For the 49 cameras with both measured spectral sensitivities and a corpus
+file, the camera's response to 190 measured surface colors (the data
+set's training patches) is simulated under CIE D65 and Standard
+Illuminant A and scored the same way. The fit to the sensitivities is
+fitted on half the patches and scored on the other half; it is scored by
+the same sensitivities that made it, so it shows how far each matrix is
+from the best a 3 by 3 matrix can do for that sensor, not an independent
+check of the sensitivities. Median over the cameras:
+
+| Illuminant | LibRaw matrix | DNG model, converter's tags | DNG model, ColorMatrix only | Fit to the sensitivities (held out) |
+|---|---:|---:|---:|---:|
+| D65 | 2.19 | 2.17 | 2.21 | 1.04 |
+| A | 3.69 | 2.73 | 2.81 | 1.46 |
+| D65, without the 3 Fujifilm | 2.06 | 2.05 | 2.08 | 1.02 |
+| A, without the 3 Fujifilm | 3.65 | 2.73 | 2.73 | 1.46 |
+
+Under A the DNG model (ForwardMatrix or ColorMatrix, whichever the file has) beats LibRaw's matrix by more than 0.1 on 45 of 49 cameras, LibRaw beats it on 4; under D65 the DNG model beats LibRaw on 0, LibRaw beats it on 3.
+
+The three Fujifilm cameras' DNG profiles keep most of their color
+correction in a hue and saturation table (their ForwardMatrix is ProPhoto
+RGB's own), which this model does not apply, so their full DNG model
+scores are not that profile's real rendering; the ColorMatrix-only column
+is the fair one for them. Per camera:
+
+| Camera | D65: LibRaw | D65: DNG model | D65: ColorMatrix only | D65: fit | A: LibRaw | A: DNG model | A: ColorMatrix only | A: fit |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Canon Digital Rebel XTi | 2.47 | 2.47 | 2.42 | 0.91 | 4.17 | 3.11 | 3.18 | 1.38 |
+| Canon EOS-1D X Mark II | 1.66 | 1.65 | 1.67 | 0.89 | 3.36 | 1.86 | 1.92 | 1.38 |
+| Canon EOS-1Ds Mark III | 1.96 | 1.97 | 1.99 | 1.00 | 4.21 | 2.60 | 2.57 | 1.33 |
+| Canon EOS-1Ds Mark II | 2.02 | 2.02 | 2.06 | 0.88 | 3.48 | 2.69 | 2.74 | 1.22 |
+| Canon EOS 100D | 1.39 | 1.41 | 1.47 | 0.99 | 3.78 | 1.84 | 1.76 | 1.46 |
+| Canon EOS 200D | 1.60 | 1.60 | 1.68 | 1.10 | 3.62 | 2.04 | 1.97 | 1.33 |
+| Canon EOS 5DS | 1.50 | 1.50 | 1.47 | 1.09 | 3.36 | 1.75 | 1.84 | 1.47 |
+| Canon EOS 5D | 2.44 | 2.44 | 2.42 | 1.37 | 4.87 | 3.35 | 3.21 | 1.84 |
+| Canon EOS 5D Mark III | 1.17 | 1.16 | 1.18 | 0.90 | 3.13 | 1.58 | 1.58 | 1.50 |
+| Canon EOS 5D Mark II | 2.03 | 1.99 | 2.03 | 0.94 | 4.63 | 2.68 | 2.68 | 1.36 |
+| Canon EOS 5D Mark IV | 1.55 | 1.55 | 1.51 | 1.00 | 3.69 | 2.11 | 2.22 | 1.47 |
+| Canon EOS 600D | 1.45 | 1.45 | 1.49 | 0.94 | 3.76 | 1.94 | 1.82 | 1.47 |
+| Canon EOS M | 1.21 | 1.21 | 1.25 | 1.02 | 3.55 | 1.61 | 1.61 | 1.49 |
+| Canon EOS R10 | 2.19 | 2.17 | 2.24 | 1.06 | 3.64 | 2.78 | 2.81 | 1.26 |
+| Canon EOS R5 | 2.40 | 2.39 | 2.44 | 0.89 | 4.51 | 3.17 | 3.22 | 1.43 |
+| Canon EOS R5m2 | 2.02 | 2.00 | 2.01 | 0.99 | 4.00 | 2.96 | 2.91 | 1.52 |
+| Canon EOS R6 | 1.80 | 1.75 | 1.88 | 1.04 | 3.78 | 2.86 | 2.90 | 1.54 |
+| Canon EOS R6m2 | 2.34 | 2.33 | 2.36 | 0.98 | 4.42 | 2.98 | 3.13 | 1.44 |
+| Canon EOS RP | 2.32 | 2.34 | 2.35 | 0.96 | 4.27 | 2.72 | 2.67 | 1.46 |
+| Canon EOS R | 2.83 | 2.85 | 2.85 | 1.02 | 4.52 | 3.40 | 3.43 | 1.50 |
+| Canon PowerShot S90 | 2.09 | 2.09 | 2.09 | 1.87 | 5.19 | 4.20 | 4.21 | 2.57 |
+| Fujifilm GFX 100 | 4.28 | 7.47 | 4.33 | 1.84 | 5.85 | 6.65 | 3.66 | 2.16 |
+| Fujifilm X-T3 | 3.04 | 7.72 | 3.06 | 1.80 | 5.06 | 6.75 | 3.35 | 2.13 |
+| Fujifilm X-T4 | 3.20 | 7.79 | 3.00 | 1.83 | 5.43 | 6.85 | 3.82 | 2.18 |
+| Hasselblad L1D-20c | 2.63 | 2.63 | 2.63 | 1.06 | 4.51 | 5.12 | 5.12 | 1.45 |
+| Hasselblad L2D-20c | 3.95 | 3.95 | 3.95 | 1.39 | 4.95 | 4.45 | 4.45 | 1.91 |
+| Nikon D200 | 2.53 | 2.53 | 2.53 | 1.51 | 3.61 | 3.23 | 3.24 | 1.65 |
+| Nikon D3300 | 1.94 | 1.93 | 1.94 | 1.28 | 3.35 | 2.25 | 2.31 | 1.55 |
+| Nikon D5100 | 1.25 | 1.25 | 1.25 | 1.21 | 3.79 | 1.54 | 1.55 | 1.49 |
+| Nikon D5300 | 1.87 | 1.86 | 1.87 | 1.16 | 3.14 | 2.38 | 2.48 | 1.48 |
+| Nikon D7000 | 1.23 | 1.23 | 1.23 | 1.12 | 3.65 | 1.40 | 1.40 | 1.36 |
+| Nikon D700 | 2.22 | 2.22 | 2.22 | 1.26 | 3.39 | 2.73 | 2.71 | 1.43 |
+| Nikon D70 | 2.51 | 2.51 | 2.51 | 1.21 | 3.58 | 2.91 | 3.05 | 1.60 |
+| Nikon D800E | 1.43 | 1.45 | 1.43 | 1.11 | 2.94 | 1.50 | 1.51 | 1.41 |
+| Nikon D810 | 2.36 | 2.38 | 2.36 | 1.13 | 2.99 | 2.62 | 2.65 | 1.40 |
+| Nikon D850 | 1.78 | 1.79 | 1.78 | 1.15 | 3.42 | 2.43 | 2.42 | 1.58 |
+| Nikon Z f | 2.38 | 2.32 | 2.38 | 1.26 | 3.84 | 3.20 | 3.16 | 1.53 |
+| Panasonic DC-GX9 | 2.21 | 2.23 | 2.21 | 1.41 | 3.54 | 2.74 | 2.82 | 1.83 |
+| Sony DSC-RX100M4 | 2.60 | 2.60 | 2.77 | 1.22 | 4.16 | 3.48 | 3.58 | 1.57 |
+| Sony ILCE-6400 | 2.77 | 2.80 | 2.59 | 1.03 | 4.48 | 3.63 | 3.72 | 1.45 |
+| Sony ILCE-7CM2 | 2.91 | 2.82 | 2.84 | 0.93 | 3.86 | 3.03 | 3.02 | 1.27 |
+| Sony ILCE-7M3 | 2.44 | 2.47 | 2.28 | 0.98 | 3.56 | 2.73 | 2.84 | 1.32 |
+| Sony ILCE-7M4 | 2.72 | 2.63 | 2.57 | 0.93 | 3.58 | 2.92 | 2.82 | 1.24 |
+| Sony ILCE-7RM2 | 1.53 | 1.59 | 1.66 | 0.99 | 2.62 | 2.19 | 2.25 | 1.28 |
+| Sony ILCE-7RM3 | 1.96 | 1.96 | 1.90 | 0.99 | 2.97 | 1.94 | 1.93 | 1.30 |
+| Sony ILCE-7RM4 | 2.55 | 2.58 | 2.57 | 0.93 | 3.82 | 2.96 | 3.07 | 1.25 |
+| Sony ILCE-7SM2 | 2.22 | 2.29 | 2.45 | 1.14 | 3.31 | 3.00 | 3.02 | 1.80 |
+| Sony ILCE-7SM3 | 1.82 | 1.74 | 1.95 | 0.97 | 3.10 | 2.31 | 2.40 | 1.36 |
+| Sony ILCE-9 | 1.71 | 1.71 | 1.65 | 0.96 | 2.73 | 2.48 | 2.50 | 1.29 |
+
+### What the measurements say
+
+1. In daylight, LibRaw's matrix and the DNG model are the same to within
+   0.11 on every real chart and within a tenth on 46 of the 49 simulated
+   cameras: LibRaw's table is the daylight half of the same calibration.
+   On the real charts both sit within about one unit of the best a single
+   matrix can do on that shot (1.9 to 3.0 on the lit patches).
+2. Away from daylight LibRaw's single matrix falls behind. Under tungsten
+   the DNG model is better on the real Classic chart (4.6 against 6.1, as
+   good as the chart's own fit) and on 45 of the 49 simulated cameras (2.7
+   against 3.7, median), because it moves to the camera's tungsten
+   calibration as the white warms, and LibRaw keeps the daylight one.
+3. Matrices fitted to measured sensitivities are about one unit closer to
+   the sensor's best than either, in simulation. No chart shot in the
+   corpus comes from those cameras, so this is not yet confirmed on real
+   photographs.
+4. The real charts cannot separate sources finer than about a unit: the
+   shots' own light (flare, uneven light, the window's daylight against
+   the charts' D50 reference) leaves even the chart's own fit at 2.4 to
+   3.2.
+
+### Recommendation
+
+- For DNG, develop with the DNG model, the dual-illuminant blend and the
+  ForwardMatrix, and later the profile's hue and saturation tables. It is
+  what the file asks for, and it is measurably better than LibRaw's
+  reading away from daylight. In daylight it changes nothing visible; under
+  warm light it changes colors toward correct. That is a deliberate step
+  away from matching LibRaw for those files, and the owner's to take.
+- For the other formats, the dual-illuminant model needs two calibrations
+  a camera, and LibRaw's table has one. That converter's calibrations
+  are the most complete and the best measured here; whether Heeler may
+  ship numbers read from another program's output is the open question.
+  The spectral data is the independent source, for the cameras it covers.
+- To confirm the spectral matrices, and to judge any source for a camera
+  with no reference, shoot a ColorChecker in daylight and under tungsten
+  with the camera. Two frames a camera settle it at the level this
+  harness measures.
+
+### Reproducing
+
+The chart shots are in the corpus (`HEELER_RAW_CORPUS`):
+`Hasselblad/CFV-50/20170401_CCSG_on_Hasselblad_CFV-50-0002297.fff`,
+`Hasselblad/H5D-40/20151114_CCSG_on_Hasselblad_H5D40-0726.fff`,
+`Hasselblad/H5D-50c/20151114_CCSG_on_Hasselblad_H5D50c-0017.fff`,
+`Nikon/D5/20170603_CCSG_on_Nikon_D5-DSC3096.NEF` and
+`Olympus/E-M1MarkII/Olympus_EM1mk2_Standard_20MP_ColorChecker.ORF`.
+With `colorcheck preview` find the chart, then pass the preview
+coordinates of the centers of the four corner patches (top left, top right,
+bottom left, bottom right) to `mark` to check the boxes and to `chart` to
+score, with a DNG written from the same file. At K = 4 the corners used
+here were:
+
+| Shot | Chart | Corner patch centers |
+|---|---|---|
+| CFV-50 | sg | 277,350 762,348 278,686 762,686 |
+| H5D-40 | sg | 206,126 679,120 209,455 683,449 |
+| H5D-50c | sg | 264,145 799,140 266,514 802,511 |
+| D5 | sg | 172,48 502,47 174,276 503,275 |
+| E-M1 Mark II | classic | 190,298 397,298 190,420 397,420 |
+
+`COLORCHECK_FLARE=1` subtracts the flare. For the simulation, `spectral`
+takes the ACES camera data's folder, a camera's sensitivity file, a raw
+file from that camera (for LibRaw's matrix) and a DNG written from it.

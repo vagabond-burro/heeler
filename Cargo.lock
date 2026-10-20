@@ -1929,6 +1929,7 @@ dependencies = [
  "libz-sys",
  "mozjpeg-sys",
  "rayon",
+ "serde_json",
  "thiserror 2.0.21",
 ]
 

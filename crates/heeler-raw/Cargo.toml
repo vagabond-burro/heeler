@@ -30,6 +30,8 @@ rust-decoder = ["dep:heeler-rawdec"]
 [dev-dependencies]
 # The tests and harnesses that hold heeler-rawdec to LibRaw.
 heeler-rawdec = { path = "../heeler-rawdec" }
+# examples/colorcheck.rs reads spectral data files.
+serde_json.workspace = true
 
 [build-dependencies]
 cc = "1"
