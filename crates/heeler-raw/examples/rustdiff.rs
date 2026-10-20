@@ -104,7 +104,7 @@ fn main() {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let name = path.to_string_lossy().into_owned();
         let base = DevelopOpts::default();
-        let mut plan = match heeler_rawdec::plan(&bytes, &opts_of(base)) {
+        let plan = match heeler_rawdec::plan(&bytes, &opts_of(base)) {
             Ok(p) => p,
             Err(e) => {
                 *tally.entry(format!("declined: {e}")).or_default() += 1;
@@ -117,6 +117,9 @@ fn main() {
         // tables can round a camera's matrix apart from the file's): the
         // outputs below are developed with LibRaw's.
         let libraw_matrix = heeler_raw::linear_dng::libraw_facts(&bytes, base).ok().map(|f| f.rgb_cam.map(|r| [r[0], r[1], r[2]]));
+        // LibRaw's black and white levels too, for formats whose levels the
+        // develop reads its own way (a DNG's are the same either way).
+        let numbered = heeler_raw::with_libraw_numbers(&bytes, &plan).unwrap_or_else(|_| plan.clone());
         if !quick {
             // The develop matrix, to the bit.
             if let Ok(f) = heeler_raw::linear_dng::libraw_facts(&bytes, base) {
@@ -148,8 +151,8 @@ fn main() {
                 let o = DevelopOpts { highlight, ..base };
                 let stages = heeler_raw::linear_dng::libraw_stages(&bytes, o).unwrap();
                 let mut mine = heeler_rawdec::develop::unpack(&bytes, &plan, None).unwrap();
-                let max = heeler_rawdec::develop::subtract_black(&mut mine, &plan);
-                let n = heeler_rawdec::develop::numbers(&plan, &opts_of(o), max);
+                let max = heeler_rawdec::develop::subtract_black(&mut mine, &numbered);
+                let n = heeler_rawdec::develop::numbers(&numbered, &opts_of(o), max);
                 heeler_rawdec::develop::scale_mosaic(&mut mine, &plan, &n);
                 let theirs: Vec<u16> = stages.scaled.chunks_exact(4).map(|p| *p.iter().max().unwrap()).collect();
                 let bad = mine.iter().zip(&theirs).filter(|(a, b)| a != b).count();
@@ -169,7 +172,7 @@ fn main() {
         for &(half, highlight) in cases {
             let o = DevelopOpts { half_size: half, highlight, ..base };
             let theirs = heeler_raw::decode_sensor_with(&bytes, o).unwrap();
-            let mut with = plan.clone();
+            let mut with = numbered.clone();
             if let Some(m) = libraw_matrix {
                 with.rgb_cam = m;
             }

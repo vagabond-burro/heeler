@@ -378,3 +378,114 @@ pub fn opcode_list(ops: &[Vec<u8>]) -> Vec<u8> {
     }
     l
 }
+
+/// A CR2 made in code: the four directories of IFD0's chain, the raw
+/// frame (`width` by `height`, `pixel` at each site, 12 bits) as one
+/// lossless JPEG strip of two components in `slices` (how many before the
+/// last, their width, the last one's width), and Canon maker notes with a
+/// 582-word ColorData whose as-shot white balance is `wb` (red, green,
+/// green, blue). Make "Canon", Model `model`.
+pub fn cr2(model: &str, width: usize, height: usize, slices: [usize; 3], wb: [u16; 4], pixel: &dyn Fn(usize, usize) -> u16) -> Vec<u8> {
+    assert_eq!(slices[0] * slices[1] + slices[2], width);
+    // The JPEG's samples run slice by slice, each top to bottom.
+    let mut stream = Vec::with_capacity(width * height);
+    let mut x0 = 0;
+    for s in 0..=slices[0] {
+        let w = if s < slices[0] { slices[1] } else { slices[2] };
+        for y in 0..height {
+            stream.extend((x0..x0 + w).map(|x| pixel(y, x)));
+        }
+        x0 += w;
+    }
+    let lines: Vec<Vec<u16>> = stream.chunks(width).map(<[u16]>::to_vec).collect();
+    let jpeg = lossless_jpeg(&lines, width / 2, 2, 12, 1, 0);
+    // Directory entries: tag, type, count, value bytes (inline when four
+    // bytes or fewer, else placed after the directories).
+    type E = (u16, u16, u32, Vec<u8>);
+    let short = |v: &[u16]| v.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>();
+    let long = |v: &[u32]| v.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>();
+    let ascii = |s: &str| {
+        let mut b = s.as_bytes().to_vec();
+        b.push(0);
+        b
+    };
+    let mut color = vec![0u16; 582];
+    color[25..29].copy_from_slice(&wb);
+    // Layout: header (16), then IFD0, IFD1, IFD2, IFD3, EXIF, maker notes,
+    // each followed by its out-of-line values, then the strip.
+    let mut out = vec![0u8; 16];
+    out[..4].copy_from_slice(b"II*\0");
+    out[4..8].copy_from_slice(&16u32.to_le_bytes());
+    out[8..12].copy_from_slice(b"CR\x02\0");
+    let write = |out: &mut Vec<u8>, entries: Vec<E>, next_at: &mut Vec<(usize, &'static str)>, fix: &mut Vec<(usize, &'static str)>| -> usize {
+        let at = out.len();
+        let n = entries.len();
+        out.extend_from_slice(&(n as u16).to_le_bytes());
+        let values_at = at + 2 + 12 * n + 4;
+        let mut extra = Vec::new();
+        for (tag, typ, count, v) in &entries {
+            out.extend_from_slice(&tag.to_le_bytes());
+            out.extend_from_slice(&typ.to_le_bytes());
+            out.extend_from_slice(&count.to_le_bytes());
+            if v.len() <= 4 {
+                let mut b = v.clone();
+                b.resize(4, 0);
+                // Placeholders for offsets filled in later.
+                match (tag, v.as_slice()) {
+                    (273, [0xEE, 0xEE, 0xEE, 0xEE]) => fix.push((out.len(), "strip")),
+                    (34665, [0xEE, 0xEE, 0xEE, 0xEE]) => fix.push((out.len(), "exif")),
+                    _ => {}
+                }
+                out.extend_from_slice(&b);
+            } else {
+                out.extend_from_slice(&((values_at + extra.len()) as u32).to_le_bytes());
+                extra.extend_from_slice(v);
+                if extra.len() % 2 == 1 {
+                    extra.push(0);
+                }
+            }
+        }
+        next_at.push((out.len(), ""));
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.extend_from_slice(&extra);
+        at
+    };
+    let placeholder = vec![0xEE; 4];
+    let (mut nexts, mut fix) = (Vec::new(), Vec::new());
+    let ifd0 = vec![(271u16, 2u16, 6u32, ascii("Canon")), (272, 2, model.len() as u32 + 1, ascii(model)), (274, 3, 1, short(&[1])), (34665, 4, 1, placeholder.clone())];
+    write(&mut out, ifd0, &mut nexts, &mut fix);
+    let at1 = write(&mut out, vec![(256, 3, 1, short(&[160]))], &mut nexts, &mut fix);
+    let at2 = write(&mut out, vec![(256, 3, 1, short(&[160]))], &mut nexts, &mut fix);
+    let ifd3 = vec![
+        (259u16, 3u16, 1u32, short(&[6])),
+        (273, 4, 1, placeholder.clone()),
+        (279, 4, 1, long(&[jpeg.len() as u32])),
+        (0xc5d8, 4, 1, long(&[1])),
+        (0xc640, 3, 3, short(&[slices[0] as u16, slices[1] as u16, slices[2] as u16])),
+        (0xc6c5, 4, 1, long(&[1])),
+    ];
+    let at3 = write(&mut out, ifd3, &mut nexts, &mut fix);
+    let notes_entries = vec![(0x4001u16, 3u16, 582u32, short(&color))];
+    // The maker note's entry, its count and offset set once the notes are
+    // written: the notes IFD is its value.
+    let exif_at = write(&mut out, vec![(0x927c, 7, 0, Vec::new())], &mut Vec::new(), &mut fix);
+    let notes_at = write(&mut out, notes_entries, &mut Vec::new(), &mut Vec::new());
+    let strip_at = out.len();
+    out.extend_from_slice(&jpeg);
+    // IFD0's chain, the raw directory in the header, then the offsets.
+    for ((at, _), next) in nexts.iter().zip([at1, at2, at3, 0]) {
+        out[*at..at + 4].copy_from_slice(&(next as u32).to_le_bytes());
+    }
+    out[12..16].copy_from_slice(&(at3 as u32).to_le_bytes());
+    // The EXIF directory's maker note: type 7, count the notes' size,
+    // value at the notes IFD.
+    let note_entry = exif_at + 2;
+    let notes_len = (strip_at - notes_at) as u32;
+    out[note_entry + 4..note_entry + 8].copy_from_slice(&notes_len.to_le_bytes());
+    out[note_entry + 8..note_entry + 12].copy_from_slice(&(notes_at as u32).to_le_bytes());
+    for (at, what) in fix {
+        let v = if what == "strip" { strip_at } else { exif_at };
+        out[at..at + 4].copy_from_slice(&(v as u32).to_le_bytes());
+    }
+    out
+}

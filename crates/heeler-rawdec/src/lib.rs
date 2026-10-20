@@ -4,13 +4,16 @@
 //! LibRaw's develop of the same files by heeler-raw's tests.
 
 pub mod ahd;
+pub mod canon;
 pub mod cameras;
 pub mod color;
 pub mod deflate;
 pub mod develop;
 pub mod dng;
 pub mod gain_map;
+pub mod geometry;
 pub mod ljpeg;
+pub mod sony;
 #[doc(hidden)]
 pub mod synthetic;
 pub mod tiff;
@@ -59,9 +62,9 @@ pub fn set_verified_only(on: bool) {
     VERIFIED_ONLY.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// The cameras verified against LibRaw, as Make and Model.
+/// The cameras verified against LibRaw, as format, Make and Model.
 #[doc(hidden)]
-pub fn verified_cameras() -> &'static [(&'static str, &'static str)] {
+pub fn verified_cameras() -> &'static [(&'static str, &'static str, &'static str)] {
     verified::cameras()
 }
 
@@ -69,7 +72,7 @@ pub fn verified_cameras() -> &'static [(&'static str, &'static str)] {
 /// develop's rules (Plan::new) and the verified cameras (verified.rs).
 pub fn plan(bytes: &[u8], opts: &Opts) -> Result<Plan, Error> {
     let p = Plan::new(bytes, opts)?;
-    if VERIFIED_ONLY.load(std::sync::atomic::Ordering::Relaxed) && !verified::camera(&p.dng.make, &p.dng.model) {
+    if VERIFIED_ONLY.load(std::sync::atomic::Ordering::Relaxed) && !verified::camera(p.dng.format.name(), &p.dng.make, &p.dng.model) {
         return Err(Error::Unsupported("a camera not verified against LibRaw"));
     }
     Ok(p)

@@ -18,7 +18,7 @@ use heeler_engine::memory;
 use rayon::prelude::*;
 
 use crate::ahd::{self, Mosaic, Out};
-use crate::dng::Dng;
+use crate::dng::{Coding, Dng};
 use crate::gain_map::{self, PixelGains};
 use crate::{Error, Opts};
 
@@ -59,7 +59,7 @@ impl Plan {
     /// The plan for `bytes`, or Unsupported with the reason this crate
     /// leaves the file to LibRaw.
     pub fn new(bytes: &[u8], opts: &Opts) -> Result<Plan, Error> {
-        let dng = Dng::parse(bytes)?;
+        let dng = Dng::open(bytes)?;
         if dng.photometric != 32803 {
             return Err(Error::Unsupported("not a CFA image"));
         }
@@ -67,16 +67,18 @@ impl Plan {
         // uncompressed or Deflated with the floating-point predictor.
         match (dng.sample_format, dng.compression, dng.predictor) {
             (1, 1 | 7, _) if (8..=16).contains(&dng.bits) => {}
+            (1, 32767, _) if dng.coding == Coding::SonyBlocks => {}
             (3, 1, 1) | (3, 8, 3 | 34894 | 34895) if matches!(dng.bits, 16 | 24 | 32) && dng.linearization.is_none() => {}
             _ => return Err(Error::Unsupported("a sample format, depth or compression not read here")),
         }
         if dng.samples != 1 || dng.cfa_layout != 1 || dng.cfa_dim != (2, 2) {
             return Err(Error::Unsupported("not a one-sample 2 by 2 Bayer mosaic"));
         }
-        // An odd top or left edge of the active area moves in a row or a
-        // column, as LibRaw moves it, so the area starts on a whole 2 by 2.
+        // An odd top or left edge of a DNG's active area moves in a row or
+        // a column, as LibRaw moves it, so the area starts on a whole 2 by
+        // 2. Another format's area is LibRaw's own already (geometry.rs).
         let (t, l, b, r) = dng.active;
-        let (t, l) = (t + (t & 1), l + (l & 1));
+        let (t, l) = if dng.is_dng() { (t + (t & 1), l + (l & 1)) } else { (t, l) };
         if t >= b || l >= r {
             return Err(Error::Corrupt("ActiveArea"));
         }
@@ -117,7 +119,7 @@ impl Plan {
             if f.width * f.components * f.height != dng.pieces.width * dng.pieces.height {
                 return Err(Error::Unsupported("a tile's JPEG frame is not the tile's size"));
             }
-            if f.components > 1 && f.components * f.components * f.width == dng.width {
+            if dng.coding == Coding::Tiff && f.components > 1 && f.components * f.components * f.width == dng.width {
                 return Err(Error::Unsupported("a tile layout LibRaw reads its own way"));
             }
         }
@@ -131,9 +133,10 @@ impl Plan {
             return Err(Error::Unsupported("a demosaic other than the default"));
         }
         let neutral = dng.as_shot_neutral.as_deref().filter(|n| n.len() == 3 && n.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no AsShotNeutral"))?;
-        // The reciprocal in single precision, as LibRaw takes it.
+        // A DNG's: the reciprocal in single precision, as LibRaw takes it;
+        // another format's as the file states it.
         let inv = |v: f64| 1.0f32 / v as f32;
-        let cam_mul = [inv(neutral[0]), inv(neutral[1]), inv(neutral[2]), inv(neutral[1])];
+        let cam_mul = dng.cam_mul.unwrap_or([inv(neutral[0]), inv(neutral[1]), inv(neutral[2]), inv(neutral[1])]);
         let rgb_cam = develop_matrix(&dng, [neutral[0], neutral[1], neutral[2]], opts.libraw_color)?.map(|row| row.map(|v| v as f32));
         let (br, bc) = dng.black_dim;
         // The black pattern over its own period and the CFA's, so one
@@ -165,7 +168,9 @@ impl Plan {
         let (ow, oh) = self.output_size(half);
         // The unpack's buffers are gone before the demosaic's arrive.
         let working = self.parallel_bytes()?.max(if half { 0 } else { self.demosaic_extra() });
-        memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES, self.pixel_gains(half).bytes()])
+        // A black measured on the border holds the whole frame a while.
+        let frame = if self.dng.border_black { memory::bytes(self.dng.width, self.dng.height, 1, 2)? } else { 0 };
+        memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES, self.pixel_gains(half).bytes(), frame])
     }
 
     /// The image the stage 3 opcodes see: the active area, or at half size
@@ -412,6 +417,39 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         })?;
         Ok(())
     };
+    if d.coding == Coding::SonyBlocks {
+        let (at, len) = d.pieces.spans[0];
+        stopped(stop)?;
+        crate::sony::decode(&bytes[at..at + len], d.width, d.height, &|r, line| put_run(out, p, r, 0, line, lin));
+        return Ok(cfa);
+    }
+    if let Coding::Slices([n, w, last]) = d.coding {
+        // One strip, its samples in slices: decoded whole (across the cores
+        // where the stream allows), then each frame row gathered from them.
+        let (at, len) = d.pieces.spans[0];
+        let data = &bytes[at..at + len];
+        stopped(stop)?;
+        let mut samples = memory::vector(d.width * d.height, 0u16, "RAW lossless JPEG samples")?;
+        if crate::ljpeg::decode_intervals(data, &mut samples)?.is_none() && crate::ljpeg::decode_parallel(data, &mut samples)?.is_none() {
+            let mut k = 0;
+            crate::ljpeg::decode(data, |_, line| {
+                let end = (k + line.len()).min(samples.len());
+                samples[k..end].copy_from_slice(&line[..end - k]);
+                k = end;
+            })?;
+        }
+        stopped(stop)?;
+        let h = d.height;
+        (0..h).into_par_iter().for_each(|r| {
+            let mut base = 0;
+            for s in 0..=n {
+                let ws = if s < n { w } else { last };
+                put_run(out, p, r, s * w, &samples[base + r * ws..base + (r + 1) * ws], lin);
+                base += ws * h;
+            }
+        });
+        return Ok(cfa);
+    }
     if p.parallel_pieces() {
         // Fewer pieces than cores (often one strip): each piece's code
         // stream read across the cores (each restart interval from its own
@@ -435,6 +473,53 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         decode_piece(i, &bytes[at..at + len])
     })?;
     Ok(cfa)
+}
+
+/// The masked border's columns a black level is measured over: those
+/// left of the image area, two in from either side (the outermost and
+/// those next to the image can carry light).
+const BORDER_MARGIN: usize = 2;
+
+/// The frame's black level from its masked border: for each site of the
+/// 2 by 2 pattern (counted from the image area's top left), the rounded
+/// mean of the masked columns left of the area, over the area's rows.
+pub fn border_black(frame: &[u16], frame_width: usize, p: &Plan) -> Result<[u32; 4], Error> {
+    let cols = BORDER_MARGIN..p.left.saturating_sub(BORDER_MARGIN);
+    if cols.len() < 4 {
+        return Err(Error::Unsupported("no masked border to measure black on"));
+    }
+    let (sum, n) = (p.top..p.top + p.height)
+        .into_par_iter()
+        .map(|r| {
+            let mut sum = [0u64; 4];
+            let mut n = [0u64; 4];
+            for c in cols.clone() {
+                // The site counted from the area's top left (c - left has
+                // the parity of c + left).
+                let k = ((r - p.top) & 1) << 1 | ((c + p.left) & 1);
+                sum[k] += frame[r * frame_width + c] as u64;
+                n[k] += 1;
+            }
+            (sum, n)
+        })
+        .reduce(|| ([0; 4], [0; 4]), |a, b| ([0, 1, 2, 3].map(|i| a.0[i] + b.0[i]), [0, 1, 2, 3].map(|i| a.1[i] + b.1[i])));
+    Ok([0, 1, 2, 3].map(|i| ((sum[i] + n[i] / 2) / n[i].max(1)) as u32))
+}
+
+/// The image area's samples, as unpack gives them, and the black level
+/// measured on the masked border (border_black), from the whole frame
+/// decoded.
+pub fn unpack_measuring_black(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<(Vec<u16>, [u32; 4]), Error> {
+    let (fw, fh) = (p.dng.width, p.dng.height);
+    let whole = Plan { top: 0, left: 0, width: fw, height: fh, ..p.clone() };
+    let frame = unpack(bytes, &whole, stop)?;
+    let black = border_black(&frame, fw, p)?;
+    let mut cfa = memory::vector(p.width * p.height, 0u16, "RAW mosaic")?;
+    cfa.par_chunks_mut(p.width).enumerate().for_each(|(r, row)| {
+        let at = (p.top + r) * fw + p.left;
+        row.copy_from_slice(&frame[at..at + p.width]);
+    });
+    Ok((cfa, black))
 }
 
 /// One row of uncompressed samples: 8 bits a byte, 16 in the file's byte
@@ -536,8 +621,14 @@ fn scale(v: u16, mul: f32) -> u16 {
 /// Scales the mosaic in place by each site's white balance multiplier.
 pub fn scale_mosaic(cfa: &mut [u16], p: &Plan, n: &Numbers) {
     let w = p.width;
+    // The green on blue's row takes the fourth multiplier, the second
+    // green's (a DNG's is the first green's; a CR2's can differ).
+    let mul = |i: usize, j: usize| {
+        let c = p.pattern[i][j] as usize;
+        n.scale_mul[if c == 1 && p.pattern[i].contains(&2) { 3 } else { c }]
+    };
     cfa.par_chunks_mut(w).enumerate().for_each(|(r, row)| {
-        let m = [n.scale_mul[p.pattern[r & 1][0] as usize], n.scale_mul[p.pattern[r & 1][1] as usize]];
+        let m = [mul(r & 1, 0), mul(r & 1, 1)];
         for (c, v) in row.iter_mut().enumerate() {
             *v = scale(*v, m[c & 1]);
         }
@@ -626,7 +717,14 @@ pub fn develop_with(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBoo
 fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, t0: std::time::Instant) -> Result<(Image, Times), Error> {
     let _job = memory::Job::admit(p.bytes(opts.half_size)?, "RAW develop")?;
     let open = t0.elapsed().as_secs_f64();
-    let mut cfa = unpack(bytes, &p, stop)?;
+    let measured;
+    let (mut cfa, p) = if p.dng.border_black {
+        let (cfa, black) = unpack_measuring_black(bytes, p, stop)?;
+        measured = Plan { black: black.to_vec(), black_rows: 2, black_cols: 2, ..p.clone() };
+        (cfa, &measured)
+    } else {
+        (unpack(bytes, p, stop)?, p)
+    };
     let unpacked = t0.elapsed().as_secs_f64();
     stopped(stop)?;
     if !p.gains2.is_empty() {

@@ -321,8 +321,46 @@ pub fn picture_dimensions(bytes: &[u8]) -> Result<(usize, usize), RawError> {
 /// that hold heeler-rawdec to LibRaw.
 #[doc(hidden)]
 pub fn libraw_black_8x8(bytes: &[u8]) -> Result<[[u32; 8]; 8], RawError> {
+    libraw_black(bytes, false)
+}
+
+/// libraw_black_8x8 after unpacking, where LibRaw sets the levels it reads
+/// from the sensor data itself (the masked border) rather than the tags.
+#[doc(hidden)]
+pub fn libraw_black_unpacked_8x8(bytes: &[u8]) -> Result<[[u32; 8]; 8], RawError> {
+    libraw_black(bytes, true)
+}
+
+/// `plan` with LibRaw's own numbers for `bytes` in place of its own: the
+/// develop matrix, the white balance, the black level (as LibRaw holds it
+/// after unpacking) and the white level. For the comparisons, which hold the decode and the
+/// develop to LibRaw's, not where those numbers come from (the shipped
+/// develop takes them from the file and Heeler's tables, tested apart).
+#[doc(hidden)]
+pub fn with_libraw_numbers(bytes: &[u8], plan: &heeler_rawdec::Plan) -> Result<heeler_rawdec::Plan, RawError> {
+    let f = linear_dng::libraw_facts(bytes, DevelopOpts::default())?;
+    let black = libraw_black_unpacked_8x8(bytes)?;
+    let mut p = plan.clone();
+    p.rgb_cam = f.rgb_cam.map(|r| [r[0], r[1], r[2]]);
+    // LibRaw's white balance too: it reads some files' stated balance as
+    // none (unity), where the shipped develop takes the file's.
+    if f.cam_mul.iter().take(3).all(|&v| v > 0.0) {
+        p.cam_mul = [f.cam_mul[0], f.cam_mul[1], f.cam_mul[2], if f.cam_mul[3] > 0.0 { f.cam_mul[3] } else { f.cam_mul[1] }];
+    }
+    p.black = black.iter().flatten().copied().collect();
+    p.black_rows = 8;
+    p.black_cols = 8;
+    p.dng.border_black = false;
+    p.white = f.maximum;
+    Ok(p)
+}
+
+fn libraw_black(bytes: &[u8], unpacked: bool) -> Result<[[u32; 8]; 8], RawError> {
     let handle = configured(DevelopOpts::default())?;
     check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    if unpacked {
+        check(unsafe { libraw_unpack(handle.0) })?;
+    }
     let mut out = [[0u32; 8]; 8];
     for (r, row) in out.iter_mut().enumerate() {
         for (c, v) in row.iter_mut().enumerate() {

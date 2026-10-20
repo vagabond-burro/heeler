@@ -27,6 +27,13 @@ pub struct Ifd {
     entries: Vec<Entry>,
 }
 
+impl Entry {
+    /// Where the entry's values start in the file.
+    pub fn offset(&self) -> usize {
+        self.at
+    }
+}
+
 impl Ifd {
     pub fn get(&self, tag: u16) -> Option<Entry> {
         self.entries.iter().find(|e| e.tag == tag).copied()

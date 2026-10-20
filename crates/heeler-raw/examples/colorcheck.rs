@@ -39,8 +39,8 @@
 //!
 //!   colorcheck spectral DATA_DIR CAMERA_JSON RAW DNG
 //!
-//! `shift`: for each DNG the Rust develop takes (paths, or the corpus at
-//! HEELER_RAW_CORPUS), how far its color (the DNG model for the shot's
+//! `shift`: for each file the Rust develop takes (paths, or the corpus's
+//! DNGs at HEELER_RAW_CORPUS), how far its color (the DNG model for the shot's
 //! white) moves the 24 Classic patch colors from where LibRaw's daylight
 //! matrix develops them: each patch's color as LibRaw renders it is
 //! taken back to white-balanced camera RGB through LibRaw's matrix and
@@ -641,7 +641,15 @@ fn shift(args: &[String]) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let (Ok(lib), Ok(dng)) = (heeler_rawdec::plan(&bytes, &base), heeler_rawdec::plan(&bytes, &heeler_rawdec::Opts { libraw_color: false, ..base })) else { continue };
         let f64m = |m: &[[f32; 3]; 3]| m.map(|r| r.map(|v| v as f64));
-        let Some(back) = invert3(&f64m(&lib.rgb_cam)) else { continue };
+        // LibRaw's own matrix for a format whose files carry none (a DNG's
+        // is the file's daylight one, as the plan reads it).
+        let libraw = if lib.dng.is_dng() { lib.rgb_cam } else {
+            match heeler_raw::linear_dng::libraw_facts(&bytes, heeler_raw::DevelopOpts::default()) {
+                Ok(f) => f.rgb_cam.map(|r| [r[0], r[1], r[2]]),
+                Err(_) => continue,
+            }
+        };
+        let Some(back) = invert3(&f64m(&libraw)) else { continue };
         let ours = f64m(&dng.rgb_cam);
         let d: Vec<f64> = patches.iter().map(|&c| {
             let moved = apply(&ours, apply(&back, c));

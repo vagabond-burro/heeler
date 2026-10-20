@@ -14,8 +14,45 @@ pub struct Pieces {
     pub spans: Vec<(usize, usize)>,
 }
 
+/// The file format a raw description was read from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Format {
+    Dng,
+    Cr2,
+    Arw,
+}
+
+impl Format {
+    pub fn name(self) -> &'static str {
+        match self {
+            Format::Dng => "DNG",
+            Format::Cr2 => "CR2",
+            Format::Arw => "ARW",
+        }
+    }
+}
+
+/// How a raw image's pieces are coded, beyond what the TIFF compression
+/// tag says.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Coding {
+    /// As the compression tag says (every DNG).
+    Tiff,
+    /// One lossless JPEG strip whose samples fill the frame in vertical
+    /// slices, top to bottom, slice after slice (CR2): how many slices
+    /// before the last, their width, and the last one's width.
+    Slices([usize; 3]),
+    /// Sony's compressed blocks (sony.rs), one strip, through the
+    /// linearization table (its tone curve).
+    SonyBlocks,
+}
+
+/// A raw file in the terms a develop needs, which are the DNG
+/// specification's: read from a DNG's tags, or from another format's own
+/// tags and Heeler's per-camera tables (canon.rs, geometry.rs, cameras.rs).
 #[derive(Clone, Debug)]
 pub struct Dng {
+    pub format: Format,
     pub make: String,
     pub model: String,
     pub unique_model: String,
@@ -65,6 +102,14 @@ pub struct Dng {
     /// (ProfileHueSatMapData1/2, ProfileLookTableData).
     pub profile_tables: bool,
     pub baseline_exposure: f64,
+    pub coding: Coding,
+    /// The camera's white balance as a non-DNG file states it (red,
+    /// green, blue, green), which LibRaw takes as is; a DNG's is the
+    /// reciprocal of AsShotNeutral.
+    pub cam_mul: Option<[f32; 4]>,
+    /// The black level is measured from the frame's masked border once
+    /// the frame is decoded (CR2), rather than stated.
+    pub border_black: bool,
 }
 
 fn reals(t: &Tiff, ifd: &Ifd, tag: u16) -> Option<Vec<f64>> {
@@ -148,6 +193,7 @@ impl Dng {
             _ => None,
         };
         Ok(Dng {
+            format: Format::Dng,
             make: ascii(ifd0, 271),
             model: ascii(ifd0, 272),
             unique_model: ascii(ifd0, 50708),
@@ -194,7 +240,25 @@ impl Dng {
             opcodes: [51008u16, 51009, 51022].map(|tag| raw.get(tag).and_then(|e| t.bytes(&e)).map(<[u8]>::to_vec).unwrap_or_default()),
             profile_tables: [50938u16, 50939, 50982].iter().any(|&tag| raw.get(tag).is_some() || ifd0.get(tag).is_some()),
             baseline_exposure: profile(50730).and_then(|v| v.first().copied()).unwrap_or(0.0),
+            coding: Coding::Tiff,
+            cam_mul: None,
+            border_black: false,
         })
+    }
+
+    pub fn is_dng(&self) -> bool {
+        self.format == Format::Dng
+    }
+
+    /// Any raw file this crate reads: a DNG, a CR2 or an ARW.
+    pub fn open(bytes: &[u8]) -> Result<Dng, Error> {
+        if crate::canon::is_cr2(bytes) {
+            return crate::canon::parse(bytes);
+        }
+        if crate::sony::is_arw(bytes) {
+            return crate::sony::parse(bytes);
+        }
+        Dng::parse(bytes)
     }
 
     /// The black level at (row, col) of the active area: the BlackLevel

@@ -121,6 +121,44 @@ fn lens_shading_opcodes_develop_as_heeler_raw_applies_them_around_libraw() {
     same_as_libraw("lens shading, odd sizes", &bytes);
 }
 
+/// A CR2 made in code, its frame in slices: unpacked into the right
+/// places, and developed as LibRaw does (given LibRaw's levels and
+/// matrix), full size and half, Clip and Blend.
+#[test]
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
+fn a_cr2_in_slices_develops_as_libraw_does() {
+    let px = |y: usize, x: usize| 128 + (scene(y, x) >> 2).min(3900);
+    let bytes = heeler_rawdec::synthetic::cr2("Canon EOS 20D", 3596, 2360, [1, 1728, 1868], [2000, 1024, 1024, 1500], &px);
+    let plan = heeler_rawdec::Plan::new(&bytes, &opts(DevelopOpts::default())).unwrap();
+    let mine = heeler_rawdec::develop::unpack(&bytes, &plan, None).unwrap();
+    let expected: Vec<u16> = (plan.top..plan.top + plan.height).flat_map(|y| (plan.left..plan.left + plan.width).map(move |x| px(y, x))).collect();
+    assert!(mine == expected, "the slices put back in place");
+    let (w, h, theirs) = heeler_raw::libraw_mosaic(&bytes).unwrap();
+    assert_eq!((plan.width, plan.height), (w, h));
+    assert!(mine == theirs, "LibRaw's unpacked mosaic");
+    let with = heeler_raw::with_libraw_numbers(&bytes, &plan).unwrap();
+    for half_size in [false, true] {
+        for highlight in [0, 2] {
+            let o = DevelopOpts { half_size, highlight, ..DevelopOpts::default() };
+            let theirs = libraw(&bytes, o);
+            let (mine, _) = heeler_rawdec::develop::develop_with(&bytes, &with, &opts(o), None).unwrap();
+            assert_eq!((mine.width, mine.height), (theirs.width, theirs.height));
+            let first = mine.rgb.iter().zip(&theirs.rgb).position(|(a, b)| a != b);
+            assert!(first.is_none(), "half {half_size}, highlight {highlight}: differs first at {first:?}");
+        }
+    }
+    // The shipped develop: its own levels and the camera's calibrations
+    // through the DNG model, at LibRaw's size, white kept white.
+    let o = Opts { libraw_color: false, ..opts(DevelopOpts::default()) };
+    let own = heeler_rawdec::Plan::new(&bytes, &o).unwrap();
+    for row in own.rgb_cam {
+        assert!((row.iter().sum::<f32>() - 1.0).abs() < 1e-5, "{:?}", own.rgb_cam);
+    }
+    let (img, _) = heeler_rawdec::develop(&bytes, &o, None).unwrap();
+    let theirs = libraw(&bytes, DevelopOpts::default());
+    assert_eq!((img.width, img.height), (theirs.width, theirs.height));
+}
+
 #[test]
 fn a_stopped_develop_ends_canceled() {
     let bytes = cfa_dng(&Spec { width: 76, pixel: &scene, ..Spec::default() });

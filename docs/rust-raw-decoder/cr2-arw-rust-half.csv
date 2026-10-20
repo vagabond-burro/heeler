@@ -1,0 +1,349 @@
+file,maker,camera,format,megapixels,decoder,half,runs,status,total_ms,open_ms,unpack_ms,develop_ms,out_width,out_height
+Canon/Canon PowerShot S100V/Canon_PS-S100V_FW1.0.2.0.CR2,Canon,Canon PowerShot S100V,CR2,3.08,rust,1,5,ok,55.92,0.04,53.49,2.39,2024,1523
+Canon/Canon PowerShot S2 IS/IMG_1107.CR2,Canon,Canon PowerShot S2 IS,CR2,1.28,rust,1,5,ok,1.94,0.00,0.63,1.27,1306,978
+Canon/EOS 1000D/IMG_9406.CR2,Canon,EOS 1000D,CR2,2.54,rust,1,5,ok,38.87,0.03,36.56,2.19,1953,1301
+Canon/EOS 100D/IMG_3721.CR2,Canon,EOS 100D,CR2,4.53,rust,1,5,ok,80.65,0.03,76.48,5.00,2604,1738
+Canon/EOS 1100D/IMG_0962.CR2,Canon,EOS 1100D,CR2,3.06,rust,1,5,ok,45.57,0.03,42.72,2.81,2145,1428
+Canon/EOS 1200D/IMG_0008.CR2,Canon,EOS 1200D,CR2,4.50,rust,1,5,ok,73.60,0.03,69.54,3.43,2601,1732
+Canon/EOS 1300D/IMG_0778.CR2,Canon,EOS 1300D,CR2,4.50,rust,1,5,ok,63.42,0.04,59.96,3.26,2601,1732
+Canon/EOS 2000D/IMG_0531.CR2,Canon,EOS 2000D,CR2,6.04,rust,1,5,ok,115.63,0.04,110.89,4.34,3010,2007
+Canon/EOS 200D/IMG_1813.CR2,Canon,EOS 200D,CR2,6.05,rust,1,5,ok,91.29,0.03,86.36,4.65,3012,2010
+Canon/EOS 20D/IMG_3893.CR2,Canon,EOS 20D,CR2,2.07,rust,1,5,ok,29.75,0.03,27.69,1.84,1761,1174
+Canon/EOS 30D/IMG_0062.CR2,Canon,EOS 30D,CR2,2.07,rust,1,5,ok,35.25,0.03,33.16,1.87,1761,1174
+Canon/EOS 350D/IMG_1707.CR2,Canon,EOS 350D,CR2,2.01,rust,1,5,ok,30.18,0.03,28.31,1.75,1737,1157
+Canon/EOS 4000D/IMG_0361.CR2,Canon,EOS 4000D,CR2,4.50,rust,1,5,ok,76.61,0.03,73.32,3.29,2601,1732
+Canon/EOS 400D/IMG_3397.CR2,Canon,EOS 400D,CR2,2.54,rust,1,5,ok,41.04,0.03,38.85,2.15,1953,1301
+Canon/EOS 40D/_MG_0153.CR2,Canon,EOS 40D,CR2,2.54,rust,1,5,ok,38.91,0.03,36.59,2.25,1954,1301
+Canon/EOS 40D/_MG_0154.CR2,Canon,EOS 40D,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 450D/_MG_7191.CR2,Canon,EOS 450D,CR2,3.06,rust,1,5,ok,61.52,0.03,58.82,2.58,2145,1428
+Canon/EOS 500D/IMG_0002.CR2,Canon,EOS 500D,CR2,3.79,rust,1,5,ok,52.28,0.03,49.25,2.92,2385,1589
+Canon/EOS 50D/IMG_9516.CR2,Canon,EOS 50D,CR2,3.79,rust,1,5,ok,63.86,0.03,60.86,2.95,2385,1588
+Canon/EOS 50D/IMG_9517.CR2,Canon,EOS 50D,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 50D/IMG_9518.CR2,Canon,EOS 50D,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 550D/IMG_4047.CR2,Canon,EOS 550D,CR2,4.50,rust,1,5,ok,68.15,0.03,64.83,3.36,2601,1732
+Canon/EOS 5D/IMG_1428.CR2,Canon,EOS 5D,CR2,3.20,rust,1,5,ok,46.73,0.03,43.89,2.72,2193,1460
+Canon/EOS 5D Mark II/08.canon.raw.cr2,Canon,EOS 5D Mark II,CR2,5.28,rust,1,5,ok,79.50,0.03,75.53,4.07,2817,1876
+Canon/EOS 5D Mark II/09.canon.sraw1.cr2,Canon,EOS 5D Mark II,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark II/10.canon.sraw2.cr2,Canon,EOS 5D Mark II,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark II/IMG_0051.CR2,Canon,EOS 5D Mark II,CR2,5.28,rust,1,5,ok,88.95,0.04,84.94,3.96,2817,1876
+Canon/EOS 5D Mark III/5G4A9394.CR2,Canon,EOS 5D Mark III,CR2,5.61,rust,1,5,ok,83.77,0.03,79.37,4.18,2898,1935
+Canon/EOS 5D Mark III/5G4A9395.CR2,Canon,EOS 5D Mark III,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark III/5G4A9396.CR2,Canon,EOS 5D Mark III,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark IV/B13A0729.CR2,Canon,EOS 5D Mark IV,CR2,7.59,rust,1,5,ok,106.86,0.03,101.15,5.67,3372,2251
+Canon/EOS 5D Mark IV/B13A0732.CR2,Canon,EOS 5D Mark IV,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark IV/B13A0733.CR2,Canon,EOS 5D Mark IV,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5D Mark IV/B13A0734.CR2,Canon,EOS 5D Mark IV,CR2,7.59,rust,1,5,ok,110.37,0.03,103.64,5.78,3372,2251
+Canon/EOS 5D Mark IV/B13A0800.CR2,Canon,EOS 5D Mark IV,CR2,7.59,rust,1,5,ok,132.45,0.04,126.36,5.97,3372,2251
+Canon/EOS 5DS/2K4A9927.CR2,Canon,EOS 5DS,CR2,12.79,rust,1,5,ok,184.44,0.03,174.08,10.50,4368,2928
+Canon/EOS 5DS/2K4A9928.CR2,Canon,EOS 5DS,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5DS/2K4A9929.CR2,Canon,EOS 5DS,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5DS R/_DSR2002.CR2,Canon,EOS 5DS R,CR2,12.79,rust,1,5,ok,189.62,0.03,179.92,9.30,4368,2928
+Canon/EOS 5DS R/_DSR2003.CR2,Canon,EOS 5DS R,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 5DS R/_DSR2004.CR2,Canon,EOS 5DS R,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 600D/_MG_2587.CR2,Canon,EOS 600D,CR2,4.50,rust,1,5,ok,67.47,0.03,63.87,3.46,2601,1732
+Canon/EOS 60D/IMG_2014.CR2,Canon,EOS 60D,CR2,4.50,rust,1,5,ok,74.56,0.03,70.91,3.47,2601,1732
+Canon/EOS 60D/IMG_2015.CR2,Canon,EOS 60D,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 60D/IMG_2016.CR2,Canon,EOS 60D,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 650D/IMG_3517.CR2,Canon,EOS 650D,CR2,4.53,rust,1,5,ok,66.37,0.03,62.31,3.88,2604,1738
+Canon/EOS 6D/EOS_6D_RAW.CR2,Canon,EOS 6D,CR2,5.04,rust,1,5,ok,75.19,0.03,71.04,3.97,2748,1835
+Canon/EOS 6D/EOS_6D_mRAW.CR2,Canon,EOS 6D,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 6D/EOS_6D_sRAW.CR2,Canon,EOS 6D,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 6D/IMG_0001.CR2,Canon,EOS 6D,CR2,5.04,rust,1,5,ok,76.90,0.03,72.81,3.80,2748,1835
+Canon/EOS 6D Mark II/6DII-RAW.CR2,Canon,EOS 6D Mark II,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 6D Mark II/6DII-mRAW.CR2,Canon,EOS 6D Mark II,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 6D Mark II/6DII-sRAW.CR2,Canon,EOS 6D Mark II,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 700D/_MG_1948.CR2,Canon,EOS 700D,CR2,4.53,rust,1,5,ok,66.80,0.03,63.18,3.49,2604,1738
+Canon/EOS 70D/RAW_CANON_EOS70D_01.CR2,Canon,EOS 70D,CR2,5.04,rust,1,5,ok,75.84,0.03,71.92,3.82,2748,1835
+Canon/EOS 70D/mRAW_CANON_EOS70D_01.CR2,Canon,EOS 70D,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 70D/sRAW_CANON_EOS70D_01.CR2,Canon,EOS 70D,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 750D/IMG_5474.CR2,Canon,EOS 750D,CR2,6.06,rust,1,5,ok,89.88,0.03,85.23,4.51,3012,2011
+Canon/EOS 760D/2015-07-10_18-54-26.cr2,Canon,EOS 760D,CR2,6.06,rust,1,5,ok,88.39,0.03,83.76,4.55,3012,2011
+Canon/EOS 77D/IMG_4049.CR2,Canon,EOS 77D,CR2,6.05,rust,1,5,ok,116.94,0.03,112.23,4.58,3012,2010
+Canon/EOS 7D/RAW_CANON_EOS_7D-mraw.CR2,Canon,EOS 7D,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 7D/RAW_CANON_EOS_7D-raw.CR2,Canon,EOS 7D,CR2,4.50,rust,1,5,ok,69.19,0.03,65.61,3.42,2601,1732
+Canon/EOS 7D/RAW_CANON_EOS_7D-sraw.CR2,Canon,EOS 7D,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 7D/_MG_0001.CR2,Canon,EOS 7D,CR2,4.50,rust,1,5,ok,72.66,0.04,69.23,3.34,2601,1732
+Canon/EOS 7D Mark II/capture000106.cr2,Canon,EOS 7D Mark II,CR2,5.04,rust,1,5,ok,73.61,0.04,69.69,3.89,2748,1835
+Canon/EOS 7D Mark II/capture000107.cr2,Canon,EOS 7D Mark II,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 7D Mark II/capture000108.cr2,Canon,EOS 7D Mark II,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 800D/IMG_3378.CR2,Canon,EOS 800D,CR2,6.05,rust,1,5,ok,87.23,0.03,82.68,4.42,3012,2010
+Canon/EOS 80D/IMG_0096.CR2,Canon,EOS 80D,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 80D/IMG_0097.CR2,Canon,EOS 80D,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS 80D/IMG_0098.CR2,Canon,EOS 80D,CR2,6.05,rust,1,5,ok,107.32,0.04,102.66,4.40,3012,2010
+Canon/EOS Digital Rebel XS/RAW_CANON_1000D.CR2,Canon,EOS Digital Rebel XS,CR2,2.54,rust,1,5,ok,40.47,0.03,38.01,2.16,1301,1953
+Canon/EOS Digital Rebel XSi/_MG_1125.CR2,Canon,EOS Digital Rebel XSi,CR2,3.06,rust,1,5,ok,51.66,0.04,48.97,2.56,2145,1428
+Canon/EOS Digital Rebel XT/IMG_8728.CR2,Canon,EOS Digital Rebel XT,CR2,2.01,rust,1,5,ok,29.47,0.03,27.47,1.82,1157,1737
+Canon/EOS Digital Rebel XTi/img_2981.cr2,Canon,EOS Digital Rebel XTi,CR2,2.54,rust,1,5,ok,37.13,0.03,34.96,2.11,1953,1301
+Canon/EOS Kiss Digital N/20170226_0040.CR2,Canon,EOS Kiss Digital N,CR2,2.01,rust,1,5,ok,29.84,0.03,27.88,1.91,1157,1737
+Canon/EOS Kiss F/IMG_7072.CR2,Canon,EOS Kiss F,CR2,2.54,rust,1,5,ok,35.99,0.03,33.69,2.17,1953,1301
+Canon/EOS Kiss X3/IMG_2856-2.CR2,Canon,EOS Kiss X3,CR2,3.79,rust,1,5,ok,67.48,0.03,64.39,2.98,2385,1589
+Canon/EOS Kiss X4/20120117-e01.CR2,Canon,EOS Kiss X4,CR2,4.50,rust,1,5,ok,72.81,0.03,69.33,3.28,2601,1732
+Canon/EOS Kiss X80/IMG_3688.CR2,Canon,EOS Kiss X80,CR2,4.50,rust,1,5,ok,80.49,0.03,77.02,3.29,2601,1732
+Canon/EOS Kiss X9/IMG_3505.CR2,Canon,EOS Kiss X9,CR2,6.05,rust,1,5,ok,127.04,0.03,122.26,4.61,3012,2010
+Canon/EOS M/IMG_4624.CR2,Canon,EOS M,CR2,4.53,rust,1,5,ok,69.96,0.03,66.43,3.49,2604,1738
+Canon/EOS M10/IMG_2207.CR2,Canon,EOS M10,CR2,4.53,rust,1,5,ok,64.11,0.04,60.47,3.54,2604,1738
+Canon/EOS M100/IMG_1200.CR2,Canon,EOS M100,CR2,6.05,rust,1,5,ok,87.30,0.04,82.61,4.64,3012,2010
+Canon/EOS M2/m2_test_02.cr2,Canon,EOS M2,CR2,4.53,rust,1,5,ok,67.55,0.03,63.54,3.89,2604,1738
+Canon/EOS M3/IMG_4635.CR2,Canon,EOS M3,CR2,6.06,rust,1,5,ok,127.37,0.04,122.57,4.67,3012,2011
+Canon/EOS M5/IMG_6968.CR2,Canon,EOS M5,CR2,6.05,rust,1,5,ok,106.55,0.04,101.86,4.57,3012,2010
+Canon/EOS M6/Canon_EOS-M6-IMG_0302.CR2,Canon,EOS M6,CR2,6.05,rust,1,5,ok,93.44,0.04,88.64,4.74,3012,2010
+Canon/EOS Rebel SL1/IMG_0308.CR2,Canon,EOS Rebel SL1,CR2,4.53,rust,1,5,ok,67.69,0.03,63.82,3.67,2604,1738
+Canon/EOS Rebel SL2/Canon_SL2_Len_24-105.CR2,Canon,EOS Rebel SL2,CR2,6.05,rust,1,5,ok,94.10,0.04,89.07,4.54,3012,2010
+Canon/EOS Rebel T100/IMG_7229.CR2,Canon,EOS Rebel T100,CR2,4.50,rust,1,5,ok,66.58,0.03,62.94,3.40,2601,1732
+Canon/EOS Rebel T1i/IMG_0493.CR2,Canon,EOS Rebel T1i,CR2,3.79,rust,1,5,ok,72.28,0.04,68.96,2.98,2385,1589
+Canon/EOS Rebel T2i/IMG_9301.CR2,Canon,EOS Rebel T2i,CR2,4.50,rust,1,5,ok,65.60,0.03,62.15,3.30,2601,1732
+Canon/EOS Rebel T3/IMG_0294.CR2,Canon,EOS Rebel T3,CR2,3.06,rust,1,5,ok,43.64,0.04,41.01,2.49,2145,1428
+Canon/EOS Rebel T3i/IMG_0126.CR2,Canon,EOS Rebel T3i,CR2,4.50,rust,1,5,ok,63.91,0.04,60.34,3.40,2601,1732
+Canon/EOS Rebel T4i/IMG_6980.CR2,Canon,EOS Rebel T4i,CR2,4.53,rust,1,5,ok,72.09,0.03,68.49,3.39,2604,1738
+Canon/EOS Rebel T5/IMG_0764.CR2,Canon,EOS Rebel T5,CR2,4.50,rust,1,5,ok,70.71,0.03,67.15,3.42,2601,1732
+Canon/EOS Rebel T5i/IMG_5139.CR2,Canon,EOS Rebel T5i,CR2,4.53,rust,1,5,ok,65.70,0.03,62.13,3.46,2604,1738
+Canon/EOS Rebel T6/IMG_2422.CR2,Canon,EOS Rebel T6,CR2,4.50,rust,1,5,ok,67.13,0.03,63.75,3.31,2601,1732
+Canon/EOS Rebel T6i/IMG_6217.CR2,Canon,EOS Rebel T6i,CR2,6.06,rust,1,5,ok,101.30,0.03,96.29,4.67,3012,2011
+Canon/EOS Rebel T6s/IMG_3661.CR2,Canon,EOS Rebel T6s,CR2,6.06,rust,1,5,ok,87.42,0.03,82.40,4.66,3012,2011
+Canon/EOS Rebel T7/IMG_0662.CR2,Canon,EOS Rebel T7,CR2,6.04,rust,1,5,ok,112.03,0.03,107.45,4.45,3010,2007
+Canon/EOS Rebel T7i/20190925-1501-0421.cr2,Canon,EOS Rebel T7i,CR2,6.05,rust,1,5,ok,94.06,0.03,89.40,4.52,3012,2010
+Canon/EOS Rebel T7i/IMG_1322.CR2,Canon,EOS Rebel T7i,CR2,6.05,rust,1,5,ok,88.21,0.06,83.59,4.46,3012,2010
+Canon/EOS-1D Mark II/RAW_CANON_1DM2.CR2,Canon,EOS-1D Mark II,CR2,2.07,rust,1,5,ok,30.69,0.04,28.84,1.74,1761,1174
+Canon/EOS-1D Mark II N/RY5Q8391-20170423-ss250-ap8.0-fl50-iso100.CR2,Canon,EOS-1D Mark II N,CR2,2.07,rust,1,5,ok,38.51,0.03,36.63,1.89,1761,1174
+Canon/EOS-1D Mark III/_K5R7350.CR2,Canon,EOS-1D Mark III,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS-1D Mark IV/IMG_5391.CR2,Canon,EOS-1D Mark IV,CR2,4.02,rust,1,5,ok,69.59,0.03,65.75,3.14,2458,1636
+Canon/EOS-1D Mark IV/IMG_5395.CR2,Canon,EOS-1D Mark IV,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS-1D Mark IV/IMG_5398.CR2,Canon,EOS-1D Mark IV,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS-1D X/RAW_CANON_EOS_1DX.CR2,Canon,EOS-1D X,CR2,4.54,rust,1,5,ok,74.40,0.03,70.63,3.64,2609,1741
+Canon/EOS-1D X Mark II/AZ1I2270.CR2,Canon,EOS-1D X Mark II,CR2,5.04,rust,1,5,ok,78.63,0.04,74.51,3.71,2748,1835
+Canon/EOS-1D X Mark II/AZ1I2271.CR2,Canon,EOS-1D X Mark II,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS-1D X Mark II/AZ1I2272.CR2,Canon,EOS-1D X Mark II,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS-1Ds Mark II/RAW_CANON_1DSM2.CR2,Canon,EOS-1Ds Mark II,CR2,4.18,rust,1,5,ok,62.81,0.03,59.36,3.34,1667,2505
+Canon/EOS-1Ds Mark III/RAW_CANON_1DSM3.CR2,Canon,EOS-1Ds Mark III,CR2,5.29,rust,1,5,ok,78.95,0.03,74.79,4.03,2820,1876
+Canon/PowerShot A480/CRW_0007.CR2,Canon,PowerShot A480,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot G1 X/IMG_0004.CR2,Canon,PowerShot G1 X,CR2,3.65,rust,1,5,ok,67.97,0.04,64.93,3.15,2202,1658
+Canon/PowerShot G1 X Mark II/IMG_1986.CR2,Canon,PowerShot G1 X Mark II,CR2,3.65,rust,1,5,ok,62.76,0.04,59.46,3.16,2200,1658
+Canon/PowerShot G1 X Mark III/20180719T101829IMG_0246.CR2,Canon,PowerShot G1 X Mark III,CR2,6.05,rust,1,5,ok,97.01,0.04,91.99,4.67,3012,2010
+Canon/PowerShot G10/RAW_CANON_G10.CR2,Canon,PowerShot G10,CR2,3.69,rust,1,5,ok,67.71,0.04,64.50,2.82,2216,1663
+Canon/PowerShot G11/IMG_3310.CR2,Canon,PowerShot G11,CR2,2.54,rust,1,5,ok,43.59,0.04,41.35,2.14,1842,1380
+Canon/PowerShot G12/2017_09_20_img_1146.cr2,Canon,PowerShot G12,CR2,2.54,rust,1,5,ok,37.47,0.04,35.13,2.18,1842,1380
+Canon/PowerShot G15/2016-04-28_IMG_1712.CR2,Canon,PowerShot G15,CR2,3.08,rust,1,5,ok,49.29,0.04,46.63,2.44,2024,1523
+Canon/PowerShot G16/IMG_0963.CR2,Canon,PowerShot G16,CR2,3.04,rust,1,5,ok,46.14,0.04,43.33,2.65,2012,1509
+Canon/PowerShot G3 X/IMG_5395.CR2,Canon,PowerShot G3 X,CR2,5.11,rust,1,5,ok,77.28,0.04,72.95,4.35,2768,1846
+Canon/PowerShot G5 X/IMG_2240.CR2,Canon,PowerShot G5 X,CR2,5.11,rust,1,5,ok,82.80,0.04,78.60,4.06,2768,1846
+Canon/PowerShot G7 X/CANON_G7X_IMG_6738.CR2,Canon,PowerShot G7 X,CR2,5.11,rust,1,5,ok,70.12,0.04,65.91,4.08,2768,1846
+Canon/PowerShot G7 X Mark II/IMG_0166.CR2,Canon,PowerShot G7 X Mark II,CR2,5.11,rust,1,5,ok,71.38,0.04,67.35,4.00,2768,1846
+Canon/PowerShot G9/IMG_1188.CR2,Canon,PowerShot G9,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot G9 X/IMG_3301.CR2,Canon,PowerShot G9 X,CR2,5.11,rust,1,5,ok,81.48,0.04,77.42,3.96,2768,1846
+Canon/PowerShot G9 X Mark II/IMG_1066.CR2,Canon,PowerShot G9 X Mark II,CR2,5.11,rust,1,5,ok,78.75,0.04,74.58,4.16,2768,1846
+Canon/PowerShot S100/IMG_1340.CR2,Canon,PowerShot S100,CR2,3.08,rust,1,5,ok,47.23,0.04,44.71,2.39,2024,1523
+Canon/PowerShot S110/IMG_1218.CR2,Canon,PowerShot S110,CR2,3.08,rust,1,5,ok,48.50,0.04,45.98,2.46,2024,1523
+Canon/PowerShot S120/IMG_1995.CR2,Canon,PowerShot S120,CR2,3.03,rust,1,5,ok,48.67,0.04,45.90,2.60,2011,1507
+Canon/PowerShot S90/RAW_CANON_S90.CR2,Canon,PowerShot S90,CR2,2.54,rust,1,5,ok,45.22,0.04,42.91,2.25,1842,1380
+Canon/PowerShot S95/img_1866.cr2,Canon,PowerShot S95,CR2,2.54,rust,1,5,ok,39.98,0.04,37.75,2.10,1842,1380
+Canon/PowerShot SX1 IS/RAW_CANON_POWERSHOT_SX1_IS.CR2,Canon,PowerShot SX1 IS,CR2,2.73,rust,1,5,ok,41.35,0.04,39.00,2.28,1980,1380
+Canon/PowerShot SX40 HS/CRW_6036.CR2,Canon,PowerShot SX40 HS,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot SX50 HS/IMG_4059.CR2,Canon,PowerShot SX50 HS,CR2,3.10,rust,1,5,ok,46.23,0.03,43.50,2.60,2036,1522
+Canon/PowerShot SX60 HS/Canon-SX60HS-Canon-RAW.CR2,Canon,PowerShot SX60 HS,CR2,4.09,rust,1,5,ok,76.35,0.04,72.71,3.44,2336,1750
+Canon/SX150IS/CRW_1762.CR2,Canon,SX150IS,CR2,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Hasselblad/Lunar/DSC00343.ARW,Hasselblad,Lunar,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-HX95/DSC00018.ARW,Sony,DSC-HX95,ARW,4.57,rust,1,5,ok,6.83,0.01,3.12,3.66,1854,2464
+Sony/DSC-HX99/DSC00001.ARW,Sony,DSC-HX99,ARW,4.57,rust,1,5,ok,6.95,0.01,3.01,3.85,2464,1854
+Sony/DSC-RX0/DSC00009.ARW,Sony,DSC-RX0,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX0M2/RX000224.ARW,Sony,DSC-RX0M2,ARW,3.89,rust,1,5,ok,6.20,0.01,2.72,3.29,2416,1612
+Sony/DSC-RX1/_DSC0812.ARW,Sony,DSC-RX1,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX10/DSC01951.ARW,Sony,DSC-RX10,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX100/DSC00838.ARW,Sony,DSC-RX100,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX100M2/Sony_RX100M2.ARW,Sony,DSC-RX100M2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX100M3/DSC00734.ARW,Sony,DSC-RX100M3,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX100M4/DSC00591.ARW,Sony,DSC-RX100M4,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX100M5/RAW_SONY_RX100M5.ARW,Sony,DSC-RX100M5,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX100M5A/20181014_0082.ARW,Sony,DSC-RX100M5A,ARW,5.05,rust,1,5,ok,7.07,0.01,3.17,3.80,2748,1836
+Sony/DSC-RX100M6/sony_rx100m6_arw-compressed_16:9.arw,Sony,DSC-RX100M6,ARW,5.05,rust,1,5,ok,7.01,0.01,3.13,3.82,2748,1836
+Sony/DSC-RX100M6/sony_rx100m6_arw-compressed_1:1.arw,Sony,DSC-RX100M6,ARW,5.05,rust,1,5,ok,7.10,0.01,3.28,3.78,2748,1836
+Sony/DSC-RX100M6/sony_rx100m6_arw-compressed_3:2.arw,Sony,DSC-RX100M6,ARW,5.05,rust,1,5,ok,7.13,0.01,3.15,3.91,2748,1836
+Sony/DSC-RX100M6/sony_rx100m6_arw-compressed_4:3.arw,Sony,DSC-RX100M6,ARW,5.05,rust,1,5,ok,7.34,0.01,3.20,3.93,2748,1836
+Sony/DSC-RX100M7/DSC00601.ARW,Sony,DSC-RX100M7,ARW,5.05,rust,1,5,ok,7.09,0.01,3.18,3.86,2748,1836
+Sony/DSC-RX100M7A/RX700064.ARW,Sony,DSC-RX100M7A,ARW,5.05,rust,1,5,ok,7.23,0.01,3.21,3.97,2748,1836
+Sony/DSC-RX10M2/RAW_SONY_RX10M2.ARW,Sony,DSC-RX10M2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX10M3/RAW_SONY_RX10M3.ARW,Sony,DSC-RX10M3,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX10M4/DSC02484.ARW,Sony,DSC-RX10M4,ARW,5.05,rust,1,5,ok,7.26,0.01,3.33,3.90,2748,1836
+Sony/DSC-RX1R/DSC04636.ARW,Sony,DSC-RX1R,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX1RM2/DSC03238.ARW,Sony,DSC-RX1RM2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX1RM2/DSC03239.ARW,Sony,DSC-RX1RM2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX1RM3/DSC00253.ARW,Sony,DSC-RX1RM3,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX1RM3/DSC00254.ARW,Sony,DSC-RX1RM3,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX1RM3/DSC00255.ARW,Sony,DSC-RX1RM3,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX1RM3/DSC00256.ARW,Sony,DSC-RX1RM3,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSC-RX1RM3/DSC00257.ARW,Sony,DSC-RX1RM3,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A100/_DSC0258.ARW,Sony,DSLR-A100,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A200/DSC00108.ARW,Sony,DSLR-A200,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A230/DSC08026.ARW,Sony,DSLR-A230,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A290/DSC00014.ARW,Sony,DSLR-A290,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A300/RAW_SONY_A300.ARW,Sony,DSLR-A300,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A330/RAW_SONY_A330.ARW,Sony,DSLR-A330,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A350/DSC05472.ARW,Sony,DSLR-A350,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A380/DSC05353.ARW,Sony,DSLR-A380,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A390/RAW_SONY_A390.ARW,Sony,DSLR-A390,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A450/20170423_113243_A450_07665.ARW,Sony,DSLR-A450,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A500/DSC02421.ARW,Sony,DSLR-A500,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A550/RAW_SONY_A550.ARW,Sony,DSLR-A550,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A560/DSC09008.ARW,Sony,DSLR-A560,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A580/RAW_SONY_A580.ARW,Sony,DSLR-A580,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A700/DSC07249.ARW,Sony,DSLR-A700,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A850/RAW_SONY_A850.ARW,Sony,DSLR-A850,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/DSLR-A900/_DSC7969.ARW,Sony,DSLR-A900,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCA-68/DSC00018.ARW,Sony,ILCA-68,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCA-77M2/_DSC0244.ARW,Sony,ILCA-77M2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCA-99M2/BR_00086.ARW,Sony,ILCA-99M2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-1/A1_full_compressed.ARW,Sony,ILCE-1,ARW,12.52,rust,1,5,ok,16.77,0.01,7.95,8.77,4330,2892
+Sony/ILCE-1/A1_full_lossless_compressed.ARW,Sony,ILCE-1,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-1/A1_full_uncompressed.ARW,Sony,ILCE-1,ARW,12.52,rust,1,5,ok,11.21,0.01,1.85,9.34,4330,2892
+Sony/ILCE-1M2/A1_07626_uncompressed_full_frame.ARW,Sony,ILCE-1M2,ARW,12.54,rust,1,5,ok,11.00,0.01,1.78,9.15,4336,2892
+Sony/ILCE-1M2/A1_07627_lossless_compressed_large_full_frame.ARW,Sony,ILCE-1M2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-1M2/A1_07628_lossless_compressed_medium_full_frame.ARW,Sony,ILCE-1M2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-1M2/A1_07629_lossless_compressed_small_full_frame.ARW,Sony,ILCE-1M2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-1M2/A1_07630_lossy_compressed_full_frame.ARW,Sony,ILCE-1M2,ARW,12.54,rust,1,5,ok,16.76,0.01,7.46,9.08,4336,2892
+Sony/ILCE-1M2/A1_07631_uncompressed_apsc.ARW,Sony,ILCE-1M2,ARW,5.34,rust,1,5,ok,5.03,0.01,0.90,4.13,2832,1884
+Sony/ILCE-1M2/A1_07632_lossless_compressed_medium_apsc.ARW,Sony,ILCE-1M2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-1M2/A1_07633_lossless_compressed_small_apsc.ARW,Sony,ILCE-1M2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-1M2/A1_07634_lossy_compressed_apsc.ARW,Sony,ILCE-1M2,ARW,5.34,rust,1,5,ok,7.49,0.01,3.29,4.23,2832,1884
+Sony/ILCE-3000/_DSC3941.ARW,Sony,ILCE-3000,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-3500/DSC06923.ARW,Sony,ILCE-3500,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-5000/_DSC0793.ARW,Sony,ILCE-5000,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-5100/DSC04601.ARW,Sony,ILCE-5100,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-6000/DSC01542.ARW,Sony,ILCE-6000,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-6001/sony_tweak_a6001.ARW,Sony,ILCE-6001,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-6100/DSC00033.ARW,Sony,ILCE-6100,ARW,6.06,rust,1,5,ok,8.57,0.01,3.81,4.62,3012,2012
+Sony/ILCE-6300/AST05226.ARW,Sony,ILCE-6300,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-6300/DDL06913.ARW,Sony,ILCE-6300,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-6400/DSC00087.ARW,Sony,ILCE-6400,ARW,6.06,rust,1,5,ok,8.27,0.01,3.69,4.61,3012,2012
+Sony/ILCE-6400/DSC00475.ARW,Sony,ILCE-6400,ARW,6.06,rust,1,5,ok,8.46,0.01,3.89,4.60,3012,2012
+Sony/ILCE-6400A/DSC04880.ARW,Sony,ILCE-6400A,ARW,6.06,rust,1,5,ok,8.55,0.01,4.00,4.52,3012,2012
+Sony/ILCE-6400A/KTB00899.ARW,Sony,ILCE-6400A,ARW,6.06,rust,1,5,ok,8.92,0.01,3.93,4.72,2012,3012
+Sony/ILCE-6500/_DSC6914.ARW,Sony,ILCE-6500,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-6500/_DSC6916.ARW,Sony,ILCE-6500,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-6600/_DSC0268.ARW,Sony,ILCE-6600,ARW,6.06,rust,1,5,ok,8.37,0.01,3.74,4.60,3012,2012
+Sony/ILCE-6700/DSC00001.ARW,Sony,ILCE-6700,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-6700/DSC00002.ARW,Sony,ILCE-6700,ARW,6.50,rust,1,5,ok,9.24,0.01,4.22,4.98,3120,2084
+Sony/ILCE-7/Sony_-_ILCE-7_-_14bit_uncompressed_(32).arw,Sony,ILCE-7,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7C/DSC00018.ARW,Sony,ILCE-7C,ARW,6.06,rust,1,5,ok,8.24,0.01,3.68,4.57,3012,2012
+Sony/ILCE-7C/DSC00107[1].ARW,Sony,ILCE-7C,ARW,6.06,rust,1,5,ok,5.40,0.01,0.90,4.42,3012,2012
+Sony/ILCE-7CM2/DSC02429.ARW,Sony,ILCE-7CM2,ARW,8.24,rust,1,5,ok,7.49,0.01,1.24,6.24,3514,2344
+Sony/ILCE-7CM2/DSC02430.ARW,Sony,ILCE-7CM2,ARW,3.67,rust,1,5,ok,3.73,0.01,0.68,3.01,2346,1566
+Sony/ILCE-7CM2/DSC02431.ARW,Sony,ILCE-7CM2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7CM2/DSC02435.ARW,Sony,ILCE-7CM2,ARW,8.24,rust,1,5,ok,11.52,0.01,5.39,6.29,3514,2344
+Sony/ILCE-7CM2/DSC02436.ARW,Sony,ILCE-7CM2,ARW,3.67,rust,1,5,ok,5.46,0.01,2.43,2.91,2346,1566
+Sony/ILCE-7CR/DSC00794.ARW,Sony,ILCE-7CR,ARW,15.25,rust,1,5,ok,12.74,0.01,2.03,10.69,4782,3188
+Sony/ILCE-7CR/DSC00795.ARW,Sony,ILCE-7CR,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7CR/DSC00796.ARW,Sony,ILCE-7CR,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7CR/DSC00797.ARW,Sony,ILCE-7CR,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7CR/DSC00798.ARW,Sony,ILCE-7CR,ARW,15.25,rust,1,5,ok,20.40,0.01,9.52,10.94,4782,3188
+Sony/ILCE-7CR/DSC00799.ARW,Sony,ILCE-7CR,ARW,6.59,rust,1,5,ok,9.29,0.01,4.21,5.01,3152,2090
+Sony/ILCE-7CR/DSC00800.ARW,Sony,ILCE-7CR,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7CR/DSC00801.ARW,Sony,ILCE-7CR,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7CR/DSC00802.ARW,Sony,ILCE-7CR,ARW,6.59,rust,1,5,ok,5.89,0.01,1.00,4.86,3152,2090
+Sony/ILCE-7M2/SONY ILCE-7M2 daylight.arw,Sony,ILCE-7M2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7M2/SONY ILCE-7M2 tungsten.arw,Sony,ILCE-7M2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7M2/_DSC1066.ARW,Sony,ILCE-7M2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7M3/UNCOMPRESSED_14bit.ARW,Sony,ILCE-7M3,ARW,6.06,rust,1,5,ok,6.04,0.01,1.25,4.74,3012,2012
+Sony/ILCE-7M3/_DSC0009.ARW,Sony,ILCE-7M3,ARW,6.06,rust,1,5,ok,8.72,0.01,4.02,4.52,3012,2012
+Sony/ILCE-7M3/_DSC0010.ARW,Sony,ILCE-7M3,ARW,6.06,rust,1,5,ok,8.73,0.01,4.08,4.57,3012,2012
+Sony/ILCE-7M4/ILCE-7M4_DSC06673_FullFrame-Raw-Uncompressed.ARW,Sony,ILCE-7M4,ARW,8.24,rust,1,5,ok,7.70,0.01,1.30,6.21,3514,2344
+Sony/ILCE-7M4/ILCE-7M4_DSC06674_FullFrame-LossLess-Compressed-Large.ARW,Sony,ILCE-7M4,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7M4/ILCE-7M4_DSC06675_FullFrame-LossLess-Compressed-Medium.ARW,Sony,ILCE-7M4,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7M4/ILCE-7M4_DSC06676_FullFrame-LossLess-Compressed-Small.ARW,Sony,ILCE-7M4,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7M4/ILCE-7M4_DSC06677_FullFrame-Raw-Compressed.ARW,Sony,ILCE-7M4,ARW,8.24,rust,1,5,ok,11.45,0.01,5.24,6.07,3514,2344
+Sony/ILCE-7M4/ILCE-7M4_DSC06678_APS-C-Raw-Uncompressed.ARW,Sony,ILCE-7M4,ARW,3.67,rust,1,5,ok,4.23,0.01,1.03,3.11,2346,1566
+Sony/ILCE-7M4/ILCE-7M4_DSC06679_APS-C-LossLess-Medium.ARW,Sony,ILCE-7M4,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7M4/ILCE-7M4_DSC06680_APS-C-LossLess-Small.ARW,Sony,ILCE-7M4,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7M4/ILCE-7M4_DSC06681_APS-C-Raw-Compressed.ARW,Sony,ILCE-7M4,ARW,3.67,rust,1,5,ok,5.69,0.01,2.66,3.06,2346,1566
+Sony/ILCE-7M5/apcs_compressed_hq.ARW,Sony,ILCE-7M5,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7M5/apsc_compressed.ARW,Sony,ILCE-7M5,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7M5/apsc_compressed_lossless.ARW,Sony,ILCE-7M5,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7M5/full_compressed.ARW,Sony,ILCE-7M5,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7M5/full_compressed_HQ.ARW,Sony,ILCE-7M5,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7M5/full_compressed_lossless.ARW,Sony,ILCE-7M5,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7R/DSC06741.ARW,Sony,ILCE-7R,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7RM2/12-bit-compressed.ARW,Sony,ILCE-7RM2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7RM2/12-bit-uncompressed.ARW,Sony,ILCE-7RM2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7RM2/14-bit-compressed.ARW,Sony,ILCE-7RM2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7RM2/14-bit-uncompressed.ARW,Sony,ILCE-7RM2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7RM2/distortion-correction-off.ARW,Sony,ILCE-7RM2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7RM2/vignetting-and-CA-correction-off.ARW,Sony,ILCE-7RM2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7RM2/vignetting-and-CA-correction-on.ARW,Sony,ILCE-7RM2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7RM3/DSC03791.ARW,Sony,ILCE-7RM3,ARW,10.60,rust,1,5,ok,9.71,0.01,1.69,7.83,3984,2660
+Sony/ILCE-7RM3/DSC03792.ARW,Sony,ILCE-7RM3,ARW,10.60,rust,1,5,ok,9.39,0.01,1.61,7.75,3984,2660
+Sony/ILCE-7RM3/DSC03793.ARW,Sony,ILCE-7RM3,ARW,10.60,rust,1,5,ok,9.45,0.01,1.61,7.66,3984,2660
+Sony/ILCE-7RM3/DSC03794.ARW,Sony,ILCE-7RM3,ARW,10.60,rust,1,5,ok,9.18,0.01,1.53,7.57,3984,2660
+Sony/ILCE-7RM3/Sony_-_ILCE-7RM3_-_12bit_compressed_(3:2).ARW,Sony,ILCE-7RM3,ARW,10.60,rust,1,5,ok,13.95,0.01,6.37,7.54,3984,2660
+Sony/ILCE-7RM3/Sony_-_ILCE-7RM3_-_12bit_uncompressed_(3:2).ARW,Sony,ILCE-7RM3,ARW,10.60,rust,1,5,ok,9.45,0.01,1.67,7.81,3984,2660
+Sony/ILCE-7RM3/Sony_-_ILCE-7RM3_-_14bit_compressed_(3:2).ARW,Sony,ILCE-7RM3,ARW,10.60,rust,1,5,ok,14.18,0.01,6.40,7.76,3984,2660
+Sony/ILCE-7RM3/Sony_-_ILCE-7RM3_-_14bit_uncompressed_(3:2).ARW,Sony,ILCE-7RM3,ARW,10.60,rust,1,5,ok,9.59,0.01,1.70,7.93,3984,2660
+Sony/ILCE-7RM3A/_DSC0360.ARW,Sony,ILCE-7RM3A,ARW,10.60,rust,1,5,ok,9.30,0.01,1.63,7.64,3984,2660
+Sony/ILCE-7RM3A/_DSC0361.ARW,Sony,ILCE-7RM3A,ARW,10.60,rust,1,5,ok,14.43,0.01,6.72,7.56,3984,2660
+Sony/ILCE-7RM4/DSC00395.ARW,Sony,ILCE-7RM4,ARW,15.25,rust,1,5,ok,13.28,0.01,2.02,11.03,4784,3188
+Sony/ILCE-7RM4/DSC00396.ARW,Sony,ILCE-7RM4,ARW,15.25,rust,1,5,ok,20.20,0.01,9.01,10.75,4784,3188
+Sony/ILCE-7RM4/DSC00397.ARW,Sony,ILCE-7RM4,ARW,15.25,rust,1,5,ok,20.19,0.01,9.27,10.86,4784,3188
+Sony/ILCE-7RM4/DSC00398.ARW,Sony,ILCE-7RM4,ARW,15.25,rust,1,5,ok,12.86,0.01,1.98,10.82,4784,3188
+Sony/ILCE-7RM4A/DSC00551.ARW,Sony,ILCE-7RM4A,ARW,15.25,rust,1,5,ok,12.94,0.01,2.02,10.81,4784,3188
+Sony/ILCE-7RM4A/compressed_12_bit.ARW,Sony,ILCE-7RM4A,ARW,15.25,rust,1,5,ok,19.85,0.01,8.95,10.86,4784,3188
+Sony/ILCE-7RM4A/compressed_14_bit.ARW,Sony,ILCE-7RM4A,ARW,15.25,rust,1,5,ok,19.85,0.01,8.91,10.84,4784,3188
+Sony/ILCE-7RM4A/uncompressed_14_bit.ARW,Sony,ILCE-7RM4A,ARW,15.25,rust,1,5,ok,12.68,0.01,1.94,10.65,4784,3188
+Sony/ILCE-7RM5/7RM5-LosslessCompressedLarge.ARW,Sony,ILCE-7RM5,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7RM5/7RM5-LosslessCompressedMedium.ARW,Sony,ILCE-7RM5,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7RM5/7RM5-LosslessCompressedSmall.ARW,Sony,ILCE-7RM5,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7RM5/7RM5-LosslessUncompressed.ARW,Sony,ILCE-7RM5,ARW,15.25,rust,1,5,ok,13.27,0.01,2.17,11.00,4782,3188
+Sony/ILCE-7RM5/7RM5-LossyCompressed.ARW,Sony,ILCE-7RM5,ARW,15.25,rust,1,5,ok,20.23,0.01,9.53,10.71,4782,3188
+Sony/ILCE-7RM5/7RM5-S35-LosslessCompressedMedium.ARW,Sony,ILCE-7RM5,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7RM5/7RM5-S35-LosslessCompressedSmall.ARW,Sony,ILCE-7RM5,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7RM5/7RM5-S35-LosslessUncompressed.ARW,Sony,ILCE-7RM5,ARW,6.55,rust,1,5,ok,6.04,0.01,1.09,4.85,3136,2090
+Sony/ILCE-7RM5/7RM5-S35-LossyCompressed.ARW,Sony,ILCE-7RM5,ARW,6.55,rust,1,5,ok,9.23,0.01,4.27,4.90,3136,2090
+Sony/ILCE-7S/DSC04125.ARW,Sony,ILCE-7S,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7S/DSC04126.ARW,Sony,ILCE-7S,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7SM2/DSC01005.ARW,Sony,ILCE-7SM2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-7SM3/DSC01568.ARW,Sony,ILCE-7SM3,ARW,3.03,rust,1,5,ok,3.26,0.01,0.58,2.50,2128,1424
+Sony/ILCE-7SM3/DSC01569.ARW,Sony,ILCE-7SM3,ARW,3.03,rust,1,5,ok,4.70,0.01,2.15,2.48,2128,1424
+Sony/ILCE-9/Sony_-_ILCE-9_-_compressed.ARW,Sony,ILCE-9,ARW,6.06,rust,1,5,ok,8.39,0.01,3.68,4.57,3012,2012
+Sony/ILCE-9/Sony_-_ILCE-9_-_uncompressed.ARW,Sony,ILCE-9,ARW,6.06,rust,1,5,ok,5.55,0.01,0.91,4.57,3012,2012
+Sony/ILCE-9M2/SONY_A9II_(ILCE-9M2)_-_compressed_(3:2)_12bit.ARW,Sony,ILCE-9M2,ARW,6.06,rust,1,5,ok,8.43,0.01,3.73,4.61,3012,2012
+Sony/ILCE-9M2/SONY_A9II_(ILCE-9M2)_-_compressed_(3:2)_14bit.ARW,Sony,ILCE-9M2,ARW,6.06,rust,1,5,ok,8.36,0.01,3.83,4.47,3012,2012
+Sony/ILCE-9M2/SONY_A9II_(ILCE-9M2)_-_uncompressed_(3:2)_14bit.ARW,Sony,ILCE-9M2,ARW,6.06,rust,1,5,ok,5.54,0.01,0.95,4.50,3012,2012
+Sony/ILCE-9M3/DSC00110.ARW,Sony,ILCE-9M3,ARW,6.04,rust,1,5,ok,5.94,0.01,1.05,4.84,3006,2010
+Sony/ILCE-9M3/DSC00111.ARW,Sony,ILCE-9M3,ARW,6.04,rust,1,5,ok,8.71,0.01,4.02,4.56,3006,2010
+Sony/ILCE-9M3/DSC00112.ARW,Sony,ILCE-9M3,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-9M3/DSC00113.ARW,Sony,ILCE-9M3,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-9M3/DSC00114.ARW,Sony,ILCE-9M3,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-9M3/DSC00115.ARW,Sony,ILCE-9M3,ARW,2.61,rust,1,5,ok,2.79,0.01,0.53,2.23,1974,1324
+Sony/ILCE-9M3/DSC00116.ARW,Sony,ILCE-9M3,ARW,2.61,rust,1,5,ok,4.20,0.01,1.93,2.23,1974,1324
+Sony/ILCE-9M3/DSC00117.ARW,Sony,ILCE-9M3,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-9M3/DSC00118.ARW,Sony,ILCE-9M3,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILCE-QX1/DSC02361.ARW,Sony,ILCE-QX1,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILME-FX2/Image_1_-_Uncompressed_-_Landscape.ARW,Sony,ILME-FX2,ARW,8.24,rust,1,5,ok,7.21,0.01,1.21,5.93,3514,2344
+Sony/ILME-FX2/Image_2_-_Compressed_-_Architecture.ARW,Sony,ILME-FX2,ARW,8.24,rust,1,5,ok,11.23,0.01,4.98,6.19,3514,2344
+Sony/ILME-FX2/Image_3_-_Lossless_Compression_(L)_-_Shade.ARW,Sony,ILME-FX2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILME-FX2/Image_4_-_Lossless_Compression_(M)_-_Shade.ARW,Sony,ILME-FX2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILME-FX2/Image_5_-_Lossless_Compression_(S)_-_Shade.ARW,Sony,ILME-FX2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ILME-FX3/DSC00001.ARW,Sony,ILME-FX3,ARW,3.03,rust,1,5,ok,4.54,0.01,2.01,2.48,2128,1424
+Sony/ILME-FX30/20230408-171459-DSC00090.ARW,Sony,ILME-FX30,ARW,6.50,rust,1,5,ok,9.22,0.01,4.06,5.03,3120,2084
+Sony/NEX-3/RAW_SONY_NEX3.ARW,Sony,NEX-3,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/NEX-3N/DSC05854.ARW,Sony,NEX-3N,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/NEX-5/20150924T092802_Château_Schönbrunn_AT.ARW,Sony,NEX-5,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/NEX-5N/DSC02519.ARW,Sony,NEX-5N,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/NEX-5R/RAW_SONY_NEX-5R.ARW,Sony,NEX-5R,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/NEX-5T/DSC01723.ARW,Sony,NEX-5T,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/NEX-6/DSC07133.ARW,Sony,NEX-6,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/NEX-7/RAW_SONY_NEX7.ARW,Sony,NEX-7,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/NEX-C3/DSC01977.ARW,Sony,NEX-C3,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/NEX-F3/_DSC4017.ARW,Sony,NEX-F3,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/SLT-A33/DSC01867.ARW,Sony,SLT-A33,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/SLT-A35/DSC01566.ARW,Sony,SLT-A35,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/SLT-A37/DSC06850.ARW,Sony,SLT-A37,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/SLT-A55/DSC06309.ARW,Sony,SLT-A55,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/SLT-A57/a57-06125.arw,Sony,SLT-A57,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/SLT-A58/DSC01523.ARW,Sony,SLT-A58,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/SLT-A65/DSC02776.ARW,Sony,SLT-A65,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/SLT-A77/_DSC3619.ARW,Sony,SLT-A77,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/SLT-A99/sans_titre-000162019.ARW,Sony,SLT-A99,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/UMC-R10C/20240501120008.arw,Sony,UMC-R10C,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ZV-1/DSC00056.ARW,Sony,ZV-1,ARW,5.05,rust,1,5,ok,7.37,0.01,3.46,3.86,2748,1836
+Sony/ZV-1M2/_DSC5498.ARW,Sony,ZV-1M2,ARW,5.05,rust,1,5,ok,7.28,0.01,3.32,3.85,2748,1836
+Sony/ZV-E1/DSC00489.ARW,Sony,ZV-E1,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Sony/ZV-E10/DSC00002.ARW,Sony,ZV-E10,ARW,6.06,rust,1,5,ok,8.46,0.01,3.66,4.59,3012,2012
+Sony/ZV-E10M2/DSC00696.ARW,Sony,ZV-E10M2,ARW,6.50,rust,1,5,ok,8.63,0.01,3.83,4.80,3120,2084
+Sony/ZV-E10M2/DSC00697.ARW,Sony,ZV-E10M2,ARW,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
