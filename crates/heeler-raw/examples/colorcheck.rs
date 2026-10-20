@@ -1,5 +1,5 @@
 //! Color sources measured against color charts, for the choice of where
-//! a non-DNG raw's camera matrix comes from (docs/rust-raw-decoder.md).
+//! a non-DNG raw's camera matrix comes from.
 //!
 //! Two measurements, each scored by CIEDE2000 against reference values:
 //!
@@ -44,8 +44,8 @@
 //! and S2 (CIE 15).
 use std::io::Write;
 
-use heeler_rawdec::color::{invert3, mul3, XYZ_FROM_SRGB};
-use heeler_rawdec::dng::{illuminant_kelvin, Dng};
+use heeler_rawdec::color::{apply, bradford, camera_to_xyz_d50, invert3, mul3, D50, XYZ_FROM_SRGB};
+use heeler_rawdec::dng::Dng;
 
 type M3 = [[f64; 3]; 3];
 
@@ -223,23 +223,6 @@ const DAYLIGHT_BASIS: [[f64; 81]; 3] = [
     [3.0, 2.1, 1.2, 0.05, -1.1, -0.8, -0.5, -0.6, -0.7, -0.95, -1.2, -1.9, -2.6, -2.75, -2.9, -2.85, -2.8, -2.7, -2.6, -2.6, -2.6, -2.2, -1.8, -1.65, -1.5, -1.4, -1.3, -1.25, -1.2, -1.1, -1.0, -0.75, -0.5, -0.4, -0.3, -0.15, 0.0, 0.1, 0.2, 0.35, 0.5, 1.3, 2.1, 2.65, 3.2, 3.65, 4.1, 4.4, 4.7, 4.9, 5.1, 5.9, 6.7, 7.0, 7.3, 7.95, 8.6, 9.2, 9.8, 10.0, 10.2, 9.25, 8.3, 8.95, 9.6, 9.05, 8.5, 7.75, 7.0, 7.3, 7.6, 7.8, 8.0, 7.35, 6.7, 5.95, 5.2, 6.3, 7.4, 7.1, 6.8],
 ];
 
-/// The ICC D50 white, Y = 1.
-const D50: [f64; 3] = [0.96422, 1.0, 0.82521];
-
-fn apply(m: &M3, v: [f64; 3]) -> [f64; 3] {
-    [0, 1, 2].map(|i| m[i][0] * v[0] + m[i][1] * v[1] + m[i][2] * v[2])
-}
-
-fn diag(v: [f64; 3]) -> M3 {
-    [[v[0], 0.0, 0.0], [0.0, v[1], 0.0], [0.0, 0.0, v[2]]]
-}
-
-/// Bradford chromatic adaptation from white `src` to white `dst` (XYZ).
-fn bradford(src: [f64; 3], dst: [f64; 3]) -> M3 {
-    const B: M3 = [[0.8951, 0.2664, -0.1614], [-0.7502, 1.7135, 0.0367], [0.0389, -0.0685, 1.0296]];
-    let (s, d) = (apply(&B, src), apply(&B, dst));
-    mul3(&invert3(&B).unwrap(), &mul3(&diag([d[0] / s[0], d[1] / s[1], d[2] / s[2]]), &B))
-}
 
 fn lab(xyz: [f64; 3]) -> [f64; 3] {
     let f = |t: f64| if t > 216.0 / 24389.0 { t.cbrt() } else { (24389.0 / 27.0 * t + 16.0) / 116.0 };
@@ -298,12 +281,6 @@ fn de2000(a: [f64; 3], b: [f64; 3]) -> f64 {
     ((dl / sl).powi(2) + (dc / sc).powi(2) + (dhh / sh).powi(2) + rt * (dc / sc) * (dhh / sh)).sqrt()
 }
 
-/// Correlated color temperature of a chromaticity (McCamy, 1992).
-fn cct(x: f64, y: f64) -> f64 {
-    let n = (x - 0.3320) / (0.1858 - y);
-    (449.0 * n.powi(3) + 3525.0 * n.powi(2) + 6823.3 * n + 5520.33).clamp(2000.0, 50000.0)
-}
-
 /// LibRaw's develop matrix as a camera (white balanced) to XYZ D50 matrix:
 /// its camera to linear sRGB, sRGB to XYZ (D65), adapted to D50.
 fn libraw_to_xyz(rgb_cam: &[[f32; 4]; 3]) -> M3 {
@@ -312,60 +289,15 @@ fn libraw_to_xyz(rgb_cam: &[[f32; 4]; 3]) -> M3 {
     mul3(&bradford(d65, D50), &mul3(&XYZ_FROM_SRGB, &rc))
 }
 
-/// The DNG specification's camera to XYZ (D50) matrix for `neutral`, the
-/// camera's response to the scene's white (chapter 6), from a DNG's tags:
-/// through the ForwardMatrix when `forward` and the file has one, else
-/// through the inverted ColorMatrix and Bradford adaptation. A profile's
-/// hue and saturation tables, which some profiles carry most of their
-/// color correction in (a ForwardMatrix that is only ProPhoto's), are not
-/// applied.
+/// The DNG color model (heeler-rawdec's color::camera_to_xyz_d50) with a
+/// DNG's own tags, through its ForwardMatrix or, unless `forward`, its
+/// ColorMatrix alone.
 fn dng_to_xyz(d: &Dng, neutral: [f64; 3], forward: bool) -> Option<M3> {
-    let m = |v: &Option<Vec<f64>>| v.as_deref().and_then(heeler_rawdec::color::as3);
-    let ab = d.analog_balance.as_deref().filter(|a| a.len() >= 3).map_or(diag([1.0; 3]), |a| diag([a[0], a[1], a[2]]));
-    let t1 = illuminant_kelvin(d.illuminant[0]) as f64;
-    let t2 = illuminant_kelvin(d.illuminant[1]) as f64;
-    let (cm1, cm2) = (m(&d.color_matrix[0])?, m(&d.color_matrix[1]));
-    let id = diag([1.0; 3]);
-    let (cc1, cc2) = (m(&d.camera_calibration[0]).unwrap_or(id), m(&d.camera_calibration[1]).unwrap_or(id));
-    let (fm1, fm2) = if forward { (m(&d.forward_matrix[0]), m(&d.forward_matrix[1])) } else { (None, None) };
-    // The weight of the first calibration at temperature t: linear in 1/t
-    // between the two calibrations' temperatures, clamped.
-    let weight = |t: f64| -> f64 {
-        if cm2.is_none() || t1 <= 0.0 || t2 <= 0.0 || t1 == t2 {
-            return 1.0;
-        }
-        let g = (1.0 / t - 1.0 / t2) / (1.0 / t1 - 1.0 / t2);
-        g.clamp(0.0, 1.0)
-    };
-    let mix = |a: &M3, b: Option<M3>, g: f64| -> M3 {
-        match b {
-            Some(b) => [0, 1, 2].map(|i| [0, 1, 2].map(|j| g * a[i][j] + (1.0 - g) * b[i][j])),
-            None => *a,
-        }
-    };
-    // The white's chromaticity, found by iterating from D50.
-    let mut xy = (0.3457, 0.3585);
-    let mut xyz_to_cam = id;
-    for _ in 0..20 {
-        let g = weight(cct(xy.0, xy.1));
-        xyz_to_cam = mul3(&ab, &mul3(&mix(&cc1, Some(cc2), g), &mix(&cm1, cm2, g)));
-        let w = apply(&invert3(&xyz_to_cam)?, neutral);
-        let s = w[0] + w[1] + w[2];
-        xy = (w[0] / s, w[1] / s);
+    let mut p = d.profile();
+    if !forward {
+        p.forward_matrix = [None, None];
     }
-    let g = weight(cct(xy.0, xy.1));
-    match fm1 {
-        Some(fm1) => {
-            let abcc = mul3(&ab, &mix(&cc1, Some(cc2), g));
-            let r = apply(&invert3(&abcc)?, neutral);
-            let dmat = diag([1.0 / r[0], 1.0 / r[1], 1.0 / r[2]]);
-            Some(mul3(&mix(&fm1, fm2, g), &mul3(&dmat, &invert3(&abcc)?)))
-        }
-        None => {
-            let white = [xy.0 / xy.1, 1.0, (1.0 - xy.0 - xy.1) / xy.1];
-            Some(mul3(&bradford(white, D50), &invert3(&xyz_to_cam)?))
-        }
-    }
+    camera_to_xyz_d50(&p, neutral)
 }
 
 /// The 3 by 3 matrix taking `cam` nearest to `xyz` (least squares).

@@ -206,6 +206,19 @@ impl Dng {
         best.map(|(_, m)| m)
     }
 
+    /// The camera profile the file carries, for the DNG color model
+    /// (color::camera_to_xyz_d50).
+    pub fn profile(&self) -> crate::color::Profile {
+        let m = |v: &Option<Vec<f64>>| v.as_deref().and_then(crate::color::as3);
+        crate::color::Profile {
+            illuminants: [self.illuminant[0], self.illuminant[1]],
+            color_matrix: [m(&self.color_matrix[0]), m(&self.color_matrix[1])],
+            camera_calibration: [m(&self.camera_calibration[0]), m(&self.camera_calibration[1])],
+            forward_matrix: [m(&self.forward_matrix[0]), m(&self.forward_matrix[1])],
+            analog_balance: self.analog_balance.as_deref().filter(|a| a.len() >= 3).map(|a| [a[0], a[1], a[2]]),
+        }
+    }
+
     /// LibRaw's flip for the TIFF orientation: bit 0 mirrors columns,
     /// bit 1 rows, bit 2 swaps the axes after both.
     pub fn flip(&self) -> u8 {

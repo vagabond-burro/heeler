@@ -4,6 +4,7 @@
 //! LibRaw's develop of the same files by heeler-raw's tests.
 
 pub mod ahd;
+pub mod cameras;
 pub mod color;
 pub mod develop;
 pub mod dng;

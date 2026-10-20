@@ -583,7 +583,10 @@ noticeable difference side by side) against reference values.
 The sources:
 
 - LibRaw's matrix: the one Heeler develops with today, a single matrix a
-  camera, calibrated for daylight.
+  camera for daylight: its table's, or, for some makers (Olympus, Pentax,
+  Samsung, Phase One and others), the matrix the camera writes in its
+  own maker notes, which LibRaw prefers when the develop asks for the
+  camera's matrix, as Heeler's does.
 - The DNG model: the DNG specification's own color model (chapter 6),
   which blends a camera's two calibrations (Standard Illuminant A and D65)
   by the color temperature of the scene's white, through the
@@ -766,3 +769,64 @@ here were:
 `COLORCHECK_FLARE=1` subtracts the flare. For the simulation, `spectral`
 takes the ACES camera data's folder, a camera's sensitivity file, a raw
 file from that camera (for LibRaw's matrix) and a DNG written from it.
+
+## Camera calibrations for the other formats
+
+The owner's decision (2026-10-20): the non-DNG formats take their two
+calibrations from DNGs written by the converter most raw workflows use.
+`crates/heeler-raw/examples/calibrations.rs` writes one small DNG from one
+file of every camera folder in the corpus (the profile tags are the
+camera's whatever the image size) and turns its profile into a row of
+`crates/heeler-rawdec/src/calibrations.rs`, keyed by Make and Model;
+`heeler_rawdec::cameras::find` looks a camera up and `Calibration::profile`
+hands it to the DNG color model (`color::camera_to_xyz_d50`, the same model
+the measurements above scored). The develop does not use the table yet:
+it comes in with the first non-DNG format. The per-camera report is
+`rust-raw-decoder/camera-calibrations.csv`.
+
+```
+cargo run --release -p heeler-raw --example calibrations -- CONVERTER WORK_DIR \
+    crates/heeler-rawdec/src/calibrations.rs docs/rust-raw-decoder/camera-calibrations.csv
+```
+
+What the table holds, from the 859 camera folders with non-DNG files:
+
+- 771 cameras. 733 have the usual pair (Standard Illuminant A and D65),
+  8 a tungsten and D50 pair, 1 D55 and D75, and 28 a single calibration
+  (scanners, a few old bodies). 736 have forward matrices. 58 profiles also
+  carry hue and saturation tables (the Fujifilm bodies among them), which
+  the matrices alone do not reproduce; the table marks them.
+- 80 folders have no calibration: bodies newer than the converter
+  installed here (Canon EOS R6 Mark III, Fujifilm X-T30 III, Sony ILCE-7M5,
+  DSC-RX1RM3), Foveon cameras, Canon compacts running CHDK, and devices
+  without a profile (Raspberry Pi sensors, action cameras). Running the
+  generator with a newer converter adds the new bodies.
+
+Against LibRaw's develop matrix for the same files (the daylight
+calibration as a camera to sRGB matrix, element by element):
+
+| | Cameras |
+|---|---:|
+| The same (within 0.002) | 544 |
+| Close (within 0.05) | 13 |
+| Different | 207 |
+| LibRaw cannot open the sample | 7 |
+
+The 544 are LibRaw's own table, which is the same converter's daylight
+calibration. Of the 207 that differ, 125 match once LibRaw's preference
+for a maker-note matrix is turned off: for those cameras (Olympus and OM
+System, Pentax, Samsung, Phase One, Leaf, Kodak, some Panasonic and Sony)
+Heeler develops today with the manufacturer's own matrix. The other 82 are
+cameras whose entry in LibRaw's table holds other numbers (older
+calibrations, or a sibling model's). For all 207 the table would change
+the daylight color of what Heeler shows today, by amounts no measurement
+here ranks except one: the Olympus E-M1 Mark II, whose real chart above
+favors the table's pair under tungsten (4.6 against 6.1). Whether those
+cameras keep their manufacturer's matrix for daylight, or take the table's
+pair throughout, is for the owner when their formats come; the table
+supports either.
+
+Cross-check with the lab measurements: the table's pairs are the
+calibrations the "DNG model" column above scored for the 49 cameras with
+measured spectral sensitivities (2.17 under D65 and 2.73 under illuminant
+A, median, against 2.19 and 3.69 for LibRaw's single matrix).
