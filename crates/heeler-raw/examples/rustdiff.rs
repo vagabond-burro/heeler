@@ -128,6 +128,28 @@ fn main() {
                 if ulps.iter().any(|&u| u != 0) {
                     notes.push(format!("rgb_cam ulps {ulps:?}"));
                 }
+                // The develop's own levels, which the outputs below do
+                // not use: the black measured on the masked border, and
+                // the white level and balance.
+                let own_black = if plan.dng.border_black {
+                    heeler_rawdec::develop::unpack_measuring_black(&bytes, &plan, None).ok().map(|(_, b)| b)
+                } else {
+                    let at = |r: usize, c: usize| plan.black.get((r % plan.black_rows.max(1)) * plan.black_cols.max(1) + c % plan.black_cols.max(1)).copied().unwrap_or(0);
+                    Some([at(0, 0), at(0, 1), at(1, 0), at(1, 1)])
+                };
+                if !plan.dng.is_dng() {
+                    if let (Some(own), Ok(theirs)) = (own_black, heeler_raw::libraw_black_unpacked_8x8(&bytes)) {
+                        let theirs = [theirs[0][0], theirs[0][1], theirs[1][0], theirs[1][1]];
+                        if own != theirs {
+                            notes.push(format!("own black {own:?} vs {theirs:?}"));
+                            *tally.entry("own black differs (not in the outputs)".into()).or_default() += 1;
+                        }
+                    }
+                }
+                if plan.white != f.maximum || plan.cam_mul[..3] != f.cam_mul[..3] {
+                    notes.push(format!("own white {} vs {}, balance {:?} vs {:?}", plan.white, f.maximum, plan.cam_mul, f.cam_mul));
+                    *tally.entry("own white or balance differs (not in the outputs)".into()).or_default() += 1;
+                }
             }
             // The unpacked mosaic.
             match heeler_raw::libraw_mosaic(&bytes) {

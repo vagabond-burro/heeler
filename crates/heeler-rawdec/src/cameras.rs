@@ -28,9 +28,18 @@ pub struct Calibration {
 
 include!("calibrations.rs");
 
+/// Cameras sold under another name in another market, by the name the
+/// table has them under (Make, the other Model, the table's Model).
+const SAME_CAMERA: &[(&str, &str, &str)] = &[("Canon", "Canon EOS Rebel T8i", "Canon EOS 850D"), ("Canon", "Canon EOS Kiss X10i", "Canon EOS 850D")];
+
 /// A camera's calibration by Make and Model as its files give them: an
-/// exact match first, then one that differs only in case and spacing.
+/// exact match first, then one that differs only in case and spacing,
+/// then the camera's other market name's.
 pub fn find(make: &str, model: &str) -> Option<&'static Calibration> {
+    find_named(make, model).or_else(|| SAME_CAMERA.iter().find(|(mk, other, _)| *mk == make && *other == model).and_then(|(mk, _, named)| find_named(mk, named)))
+}
+
+fn find_named(make: &str, model: &str) -> Option<&'static Calibration> {
     let norm = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ").to_ascii_lowercase();
     CALIBRATIONS.iter().find(|c| c.make == make && c.model == model).or_else(|| {
         let (mk, md) = (norm(make), norm(model));
@@ -85,5 +94,6 @@ mod tests {
         assert_eq!(c.illuminants, [17, 21]);
         assert!(find("sony", "ILCE-7M3").is_some(), "case and spacing are forgiven");
         assert!(find("SONY", "ILCE-7M9").is_none());
+        assert!(std::ptr::eq(find("Canon", "Canon EOS Rebel T8i").unwrap(), find("Canon", "Canon EOS 850D").unwrap()), "another market's name");
     }
 }

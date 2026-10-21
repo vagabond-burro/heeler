@@ -7,6 +7,8 @@ pub mod ahd;
 pub mod canon;
 pub mod cameras;
 pub mod color;
+pub mod cr3;
+pub mod crx;
 pub mod deflate;
 pub mod develop;
 pub mod dng;

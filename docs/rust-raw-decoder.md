@@ -963,6 +963,95 @@ the issue samples above are kept beside it. Its CR2, ARW and DNG files
   42), sRAW and mRAW (62), the A100 and A200 to A390 codings and
   Compressed RAW 2 (32), and the cameras without a calibration yet.
 
+## Phase 5: CR3 lossless
+
+### What was built
+
+- `cr3.rs` reads the container (ISO/IEC 14496-12, brand "crx "): Canon's
+  box in moov for IFD0 (CMT1), the third track's sample entry (CRAW) for
+  the codec's image header (CMP1: frame and tile sizes, bit depth,
+  planes, wavelet levels), the track's one sample for the tile, plane
+  and subband records and the planes' data, and the metadata track's
+  records (CTMD, type 8) for the maker notes' ColorData. The white
+  balance as shot and the black level per channel are ColorData's, at
+  places by its version (16 to 19: words 71 and 329; 32 and 33: 85 and
+  343; 34 and 48: 105 and 363; 64 to 66: 105 and 383). The image area,
+  CFA colors and white level come from geometry.rs as for CR2 (the
+  table's builder now reads CR3 too), the color from the calibration
+  table, where a camera's other market name (the Rebel T8i for the 850D)
+  takes the same row.
+- `crx.rs` decodes the lossless coding. The format's description and
+  Canon's patent (US 2016/0323602 A1) give the outline, close to JPEG-LS
+  (ITU-T T.87): median edge detection, a symbol per error coded
+  Golomb-Rice with an adaptive parameter, a run mode. Every detail they
+  leave open was found from the data against LibRaw's unpacked frame
+  (`examples/rawframe`), one rule at a time, each checked on whole planes:
+  - the escape: 41 zeros, then the symbol in 21 bits;
+  - K's update: from the symbol, or from the average of the symbol and
+    twice the difference of the samples above and above right (the
+    patent's estimate of the next symbol, unsigned), up 2 for a quotient
+    of 6 or more, up 1 for 3 or more, down 1 below half a step; the
+    symbol alone on the first line and at a line's end;
+  - the run context: left, above and above right equal (above left
+    plays no part);
+  - the run: a flag bit (0 an empty run, the run index untouched; 1 one
+    sample at least), then the rest as T.87 codes a run, with T.87's
+    table, the index falling by 1 when a run is cut short and not at a
+    line's end;
+  - the sample that ends a run: predicted by the left neighbor, or by
+    the one above where the two differ;
+  - the first line: the samples above it (and left of its start) are
+    half the range, which also makes a plane's first sample an empty run
+    predicted by half the range.
+  Each tile's four planes (one site of the 2 by 2 pattern each) decode
+  side by side. A test codes planes the other way round (runs that end
+  inside a line, at its end and across many blocks, escapes, flat
+  first lines) and decodes them.
+- C-RAW (the wavelet coding, 816 corpus files) and roll-burst files are
+  declined and stay LibRaw's.
+- `rustdiff` reports the develop's own black, white level and balance
+  against LibRaw's (they are not in the outputs, which take LibRaw's).
+
+### Verification
+
+- `rustdiff --any` over all 1,648 CR3s of both corpora: every lossless
+  file of a camera with calibrations (789, and the EOS RP's two that
+  first showed the half-range first line) matches LibRaw at every stage.
+  816 C-RAW files are declined, and 41 of the R5 C, R6 Mark III and C50,
+  which the calibration table does not have yet (the 850D's 27 under its
+  other name now develop).
+- 28 CR3 cameras join the verified list.
+- The own black against LibRaw's: the same on most files; of the 404
+  that differ, 257 differ by 1 level and 31 by 2. The EOS RP's crop mode
+  is the exception: LibRaw's black
+  climbs with ISO to 2193 at ISO 51200 where the camera states 2048,
+  and that file's masked border reads about 2200, so LibRaw is right
+  there and the stated level is not. On the R5 Mark II the border reads
+  some 25 below the stated 512, which LibRaw takes. The stated level is
+  kept; the RP crop case is open.
+- LibRaw's black for the R6 Mark III, C50 and PowerShot V1 is 0, 58, 113
+  and 145 (or 0, 32, 64, 96) across the pattern, where the masked border
+  reads 512 and ColorData states 512. The Rust path takes the stated
+  level, so the V1 (the only one of the three with calibrations) no
+  longer carries that fault.
+
+### Speed
+
+| | files | LibRaw s | Rust s | ratio | median | unpack, LibRaw / Rust |
+|---|---:|---:|---:|---:|---:|---|
+| CR3, full size | 33 | 10.21 | 3.15 | 0.31 | 0.32 | 4.08 / 1.04 |
+| CR3, half size | 33 | 6.13 | 1.18 | 0.19 | 0.23 | 4.09 / 1.03 |
+
+(`rawbench --ext CR3 --per-camera 3` over the first corpus, the median
+of 3 runs on a 16-core M4 Max.) A plane is one stream, so a frame of one
+tile decodes on four cores at most.
+
+### Not yet done
+
+- C-RAW: the wavelet coding (the patent's 5/3 transform, three levels,
+  the same entropy coding with per-subband rules), and roll-burst files.
+- Calibrations for the R5 C, R6 Mark III and C50.
+
 ## Color sources, measured
 
 Every non-DNG format needs a camera matrix the file does not carry, and

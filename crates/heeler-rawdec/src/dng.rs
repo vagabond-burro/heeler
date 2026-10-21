@@ -20,6 +20,7 @@ pub enum Format {
     Dng,
     Cr2,
     Arw,
+    Cr3,
 }
 
 impl Format {
@@ -28,6 +29,7 @@ impl Format {
             Format::Dng => "DNG",
             Format::Cr2 => "CR2",
             Format::Arw => "ARW",
+            Format::Cr3 => "CR3",
         }
     }
 }
@@ -52,6 +54,9 @@ pub enum Coding {
     /// 12-bit samples in three bytes, the first in the low byte and the low
     /// half of the next): the older Sony bodies' 12-bit uncompressed data.
     PackedLow,
+    /// Canon's lossless CRX planes (cr3.rs, crx.rs), each one site of the
+    /// 2 by 2 pattern in a tile of the frame.
+    Crx(Vec<crate::cr3::CrxPlane>),
 }
 
 /// A raw file in the terms a develop needs, which are the DNG
@@ -257,8 +262,11 @@ impl Dng {
         self.format == Format::Dng
     }
 
-    /// Any raw file this crate reads: a DNG, a CR2 or an ARW.
+    /// Any raw file this crate reads: a DNG, a CR2, a CR3 or an ARW.
     pub fn open(bytes: &[u8]) -> Result<Dng, Error> {
+        if crate::cr3::is_cr3(bytes) {
+            return crate::cr3::parse(bytes);
+        }
         if crate::canon::is_cr2(bytes) {
             return crate::canon::parse(bytes);
         }

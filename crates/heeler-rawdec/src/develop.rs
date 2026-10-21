@@ -71,6 +71,7 @@ impl Plan {
         match (dng.sample_format, dng.compression, dng.predictor) {
             (1, 1 | 7, _) if (8..=16).contains(&dng.bits) => {}
             (1, 32767, _) if dng.coding == Coding::SonyBlocks => {}
+            (1, 0, _) if matches!(dng.coding, Coding::Crx(_)) && (8..=16).contains(&dng.bits) => {}
             (3, 1, 1) | (3, 8, 3 | 34894 | 34895) if matches!(dng.bits, 16 | 24 | 32) && dng.linearization.is_none() => {}
             _ => return Err(Error::Unsupported("a sample format, depth or compression not read here")),
         }
@@ -332,6 +333,27 @@ fn put_run(out: Out, p: &Plan, r: usize, c: usize, samples: &[u16], lin: Option<
     }
 }
 
+/// put_run for samples two columns apart: samples[i] at row r, column
+/// c + 2i, those inside the active area.
+fn put_sites(out: Out, p: &Plan, r: usize, c: usize, samples: &[u16]) {
+    if r < p.top || r >= p.top + p.height {
+        return;
+    }
+    let row = (r - p.top) * p.width;
+    for (i, &v) in samples.iter().enumerate() {
+        let col = c + 2 * i;
+        if col < p.left {
+            continue;
+        }
+        if col >= p.left + p.width {
+            break;
+        }
+        // SAFETY: inside the active area's row r; each site belongs to
+        // exactly one plane.
+        unsafe { *out.at(row + col - p.left) = v };
+    }
+}
+
 /// The active area's samples through the linearization table, the tiles
 /// or strips decoded side by side.
 pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u16>, Error> {
@@ -448,6 +470,17 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
                 put_run(out, p, r0 + 2 * y + 1, c0, &bottom, lin);
             })?;
             Ok(())
+        })?;
+        return Ok(cfa);
+    }
+    if let Coding::Crx(planes) = &d.coding {
+        // The planes side by side, each line's samples to every second
+        // column of every second row of its tile.
+        planes.par_iter().try_for_each(|pl| -> Result<(), Error> {
+            stopped(stop)?;
+            crate::crx::decode_plane(&bytes[pl.at..pl.at + pl.len], pl.width, pl.height, d.bits, |y, line| {
+                put_sites(out, p, pl.y0 + 2 * y + pl.site.0, pl.x0 + pl.site.1, line);
+            })
         })?;
         return Ok(cfa);
     }

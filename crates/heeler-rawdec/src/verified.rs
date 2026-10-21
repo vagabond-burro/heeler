@@ -7,10 +7,10 @@
 //! have been compared.
 
 /// Format, then Make and Model as IFD0 of the file gives them.
-/// Generated from rustdiff over both corpora of 2026-10-20 (every DNG, CR2
-/// and ARW the develop's rules accept, LibRaw's matrix and levels given
-/// to both, since the develop's own color is the DNG model's and its own
-/// levels the file's, tested apart).
+/// Generated from rustdiff over both corpora of 2026-10-20 (every DNG,
+/// CR2, CR3 and ARW the develop's rules accept, LibRaw's matrix and
+/// levels given to both, since the develop's own color is the DNG model's
+/// and its own levels the file's, tested apart).
 const CAMERAS: &[(&str, &str, &str)] = &[
     ("DNG", "Apple", "iPhone 6s Plus"),
     ("DNG", "Apple", "iPhone 7 Plus"),
@@ -381,6 +381,34 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("ARW", "SONY", "ZV-E1"),
     ("ARW", "SONY", "ZV-E10"),
     ("ARW", "SONY", "ZV-E10M2"),
+    ("CR3", "Canon", "Canon EOS 200D II"),
+    ("CR3", "Canon", "Canon EOS 250D"),
+    ("CR3", "Canon", "Canon EOS 850D"),
+    ("CR3", "Canon", "Canon EOS 90D"),
+    ("CR3", "Canon", "Canon EOS KISS M"),
+    ("CR3", "Canon", "Canon EOS M200"),
+    ("CR3", "Canon", "Canon EOS M50"),
+    ("CR3", "Canon", "Canon EOS M50m2"),
+    ("CR3", "Canon", "Canon EOS M6 Mark II"),
+    ("CR3", "Canon", "Canon EOS R"),
+    ("CR3", "Canon", "Canon EOS R10"),
+    ("CR3", "Canon", "Canon EOS R100"),
+    ("CR3", "Canon", "Canon EOS R3"),
+    ("CR3", "Canon", "Canon EOS R5"),
+    ("CR3", "Canon", "Canon EOS R50"),
+    ("CR3", "Canon", "Canon EOS R50 V"),
+    ("CR3", "Canon", "Canon EOS R5m2"),
+    ("CR3", "Canon", "Canon EOS R6"),
+    ("CR3", "Canon", "Canon EOS R6m2"),
+    ("CR3", "Canon", "Canon EOS R7"),
+    ("CR3", "Canon", "Canon EOS R8"),
+    ("CR3", "Canon", "Canon EOS RP"),
+    ("CR3", "Canon", "Canon EOS Rebel T8i"),
+    ("CR3", "Canon", "Canon EOS-1D X Mark III"),
+    ("CR3", "Canon", "Canon PowerShot G5 X Mark II"),
+    ("CR3", "Canon", "Canon PowerShot G7 X Mark III"),
+    ("CR3", "Canon", "Canon PowerShot SX70 HS"),
+    ("CR3", "Canon", "Canon PowerShot V1"),
 ];
 
 pub fn camera(format: &str, make: &str, model: &str) -> bool {
