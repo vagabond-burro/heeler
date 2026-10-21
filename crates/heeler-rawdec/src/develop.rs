@@ -71,7 +71,8 @@ impl Plan {
         match (dng.sample_format, dng.compression, dng.predictor) {
             (1, 1 | 7, _) if (8..=16).contains(&dng.bits) => {}
             (1, 32767, _) if dng.coding == Coding::SonyBlocks => {}
-            (1, 0, _) if matches!(dng.coding, Coding::Crx(_)) && (8..=16).contains(&dng.bits) => {}
+            (1, 0, _) if matches!(&dng.coding, Coding::Crx(_)) && (8..=16).contains(&dng.bits) => {}
+            (1, 0, _) if matches!(&dng.coding, Coding::CrxWavelet(w) if w.maps.is_empty()) && (8..=16).contains(&dng.bits) => {}
             (3, 1, 1) | (3, 8, 3 | 34894 | 34895) if matches!(dng.bits, 16 | 24 | 32) && dng.linearization.is_none() => {}
             _ => return Err(Error::Unsupported("a sample format, depth or compression not read here")),
         }
@@ -481,6 +482,27 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
             crate::crx::decode_plane(&bytes[pl.at..pl.at + pl.len], pl.width, pl.height, d.bits, |y, line| {
                 put_sites(out, p, pl.y0 + 2 * y + pl.site.0, pl.x0 + pl.site.1, line);
             })
+        })?;
+        return Ok(cfa);
+    }
+    if let Coding::CrxWavelet(w) = &d.coding {
+        // The four planes side by side, each rebuilt whole, then its rows
+        // to every second column of every second row.
+        (0..4).into_par_iter().try_for_each(|site| -> Result<(), Error> {
+            stopped(stop)?;
+            let tiles: Vec<[crate::crx::Band; 10]> = w.sites[site]
+                .iter()
+                .map(|bands| -> Result<[crate::crx::Band; 10], Error> {
+                    let v: Vec<_> = bands.iter().map(|b| crate::crx::Band { data: &bytes[b.at..b.at + b.len], q: b.q }).collect();
+                    v.try_into().map_err(|_| Error::Corrupt("a C-RAW tile's plane without ten subbands"))
+                })
+                .collect::<Result<_, _>>()?;
+            let plane = crate::crx::reconstruct_plane(&tiles, w.width, w.height, w.tile, d.bits)?;
+            let (dy, dx) = (site >> 1, site & 1);
+            for y in 0..w.height {
+                put_sites(out, p, 2 * y + dy, dx, &plane[y * w.width..(y + 1) * w.width]);
+            }
+            Ok(())
         })?;
         return Ok(cfa);
     }

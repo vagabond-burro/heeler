@@ -57,6 +57,9 @@ pub enum Coding {
     /// Canon's lossless CRX planes (cr3.rs, crx.rs), each one site of the
     /// 2 by 2 pattern in a tile of the frame.
     Crx(Vec<crate::cr3::CrxPlane>),
+    /// Canon's C-RAW wavelet coding (cr3.rs, crx.rs): each plane rebuilt
+    /// from its tiles' subbands.
+    CrxWavelet(Box<crate::cr3::CrxWavelet>),
 }
 
 /// A raw file in the terms a develop needs, which are the DNG
