@@ -64,9 +64,13 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let frame = crate::ljpeg::frame(&bytes[offset..offset + count])?;
     let (width, height) = (frame.width * frame.components, frame.height);
     // The slices set the frame's width (a JPEG line can cover two of its
-    // rows); its height is what the samples then fill.
+    // rows); its height is what the samples then fill. Some bodies (the 6D
+    // Mark II) state no slices before the last: one slice, the frame's
+    // whole width. Others (the PowerShot G16 and S120) state no slices and
+    // no slice width, only a last width narrower than a JPEG line: their
+    // frame is the JPEG's own.
     let (coding, width, height) = match raw.get(0xc640).and_then(|e| t.uints(&e)).as_deref() {
-        Some(&[n, w, last]) if n > 0 => {
+        Some(&[n, w, last]) if (n > 0 || w > 0) && n * w + last > 0 => {
             let s = [n as usize, w as usize, last as usize];
             let w = s[0] * s[1] + s[2];
             if w == 0 || (width * height) % w != 0 {

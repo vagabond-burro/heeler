@@ -920,8 +920,39 @@ wrong results on DNG, CR2 and ARW:
 ### Second corpus
 
 A second public archive of sample raw files (CC0, 807 camera models,
-about 120 GB) is being mirrored to the sample storage, each file checked against its SHA-256;
-the issue samples above are kept beside it.
+about 120 GB) is mirrored to the sample storage, each file checked against its SHA-256;
+the issue samples above are kept beside it. Its CR2, ARW and DNG files
+(337 CR2 and ARW, 88 DNG), with the first corpus's, went through
+`rustdiff --any`:
+
+- 760 files matched LibRaw at every stage. The 22 that did not are the
+  known ones: the Pentax, Samsung GX and Ricoh GX200 ActiveArea readings,
+  the Leica SL2 crop and the 1D Mark III (none on the verified list),
+  and three damaged files that stay LibRaw's.
+- The 6D Mark II's CR2 states no slices before the last (0, 6384, 6384)
+  and codes four components, a JPEG line two frame rows: the reader took
+  only slice counts above zero, so its files went to LibRaw. A count of
+  zero with a slice width is now one slice the frame's width; a count of
+  zero and no width (the PowerShot G16's and S120's 0, 0, 4176, the last
+  narrower than a JPEG line) still means the JPEG's own frame. A test
+  holds both (`synthetic::cr2`).
+- LibRaw takes in the tile frame's padding for five Sony bodies it does
+  not know, as for the A7R VI above: the A1 II (8704 by 6144 developed
+  where the file states 8664 by 5784 of sensor data, tag 0x7038), the
+  A7 V, the RX1R III and the RX10 V. geometry.rs (`examples/geometry`,
+  which now takes further folders after its output) leaves out any
+  camera whose LibRaw area is larger than the data a file states, so
+  those files stay LibRaw's. The A1 II had matched LibRaw, padding and
+  all, and leaves the verified list. The app still shows that padding
+  through LibRaw; taking it off would move the geometry of documents
+  already made on those cameras, an owner's decision.
+- New on the verified list: the 6D Mark II (CR2) and the DJI FC3582
+  (DNG), the A1 II off it: 368 entries. The corpus test reads both
+  corpora when HEELER_RAW_CORPUS names both folders (separated as PATH's
+  are): 773 files from 368 cameras, to the bit.
+- Declined as expected: Sony's Medium and Small raw (not a CFA frame,
+  42), sRAW and mRAW (62), the A100 and A200 to A390 codings and
+  Compressed RAW 2 (32), and the cameras without a calibration yet.
 
 ## Color sources, measured
 

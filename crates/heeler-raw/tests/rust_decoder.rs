@@ -159,6 +159,26 @@ fn a_cr2_in_slices_develops_as_libraw_does() {
     assert_eq!((img.width, img.height), (theirs.width, theirs.height));
 }
 
+/// The slice tag as other bodies write it: no slices before the last (the
+/// 6D Mark II's, the frame one slice wide), and no slices and no slice
+/// width, the last narrower than the frame (the PowerShot G16's, the
+/// frame unsliced). Both unpack as LibRaw does.
+#[test]
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
+fn a_cr2_whose_slice_tag_states_one_slice_or_none_unpacks_as_libraw_does() {
+    let px = |y: usize, x: usize| 128 + (scene(y, x) >> 2).min(3900);
+    for slices in [[0, 3596, 3596], [0, 0, 3580]] {
+        let bytes = heeler_rawdec::synthetic::cr2("Canon EOS 20D", 3596, 2360, slices, [2000, 1024, 1024, 1500], &px);
+        let plan = heeler_rawdec::Plan::new(&bytes, &opts(DevelopOpts::default())).unwrap_or_else(|e| panic!("{slices:?}: {e}"));
+        let mine = heeler_rawdec::develop::unpack(&bytes, &plan, None).unwrap();
+        let expected: Vec<u16> = (plan.top..plan.top + plan.height).flat_map(|y| (plan.left..plan.left + plan.width).map(move |x| px(y, x))).collect();
+        assert!(mine == expected, "{slices:?}: the frame in place");
+        let (w, h, theirs) = heeler_raw::libraw_mosaic(&bytes).unwrap();
+        assert_eq!((plan.width, plan.height), (w, h));
+        assert!(mine == theirs, "{slices:?}: LibRaw's unpacked mosaic");
+    }
+}
+
 #[test]
 fn a_stopped_develop_ends_canceled() {
     let bytes = cfa_dng(&Spec { width: 76, pixel: &scene, ..Spec::default() });

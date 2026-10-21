@@ -4,7 +4,7 @@
 //! under Clip and Blend (to the bit too on Apple's arm64 build; elsewhere
 //! the float arithmetic can differ in the last place, and the summary
 //! says by how much). One line a file, then a tally. Paths, or the DNGs
-//! of the corpus at HEELER_RAW_CORPUS.
+//! of the corpus at HEELER_RAW_CORPUS (folders separated as PATH's are).
 //!
 //!   cargo run --release -p heeler-raw --example rustdiff -- [--quick] [paths]
 //!
@@ -21,9 +21,9 @@ fn files(args: &[String]) -> Vec<std::path::PathBuf> {
     if !paths.is_empty() {
         return paths;
     }
-    let root = std::env::var_os("HEELER_RAW_CORPUS").expect("paths or HEELER_RAW_CORPUS");
+    let roots = std::env::var_os("HEELER_RAW_CORPUS").expect("paths or HEELER_RAW_CORPUS");
     let mut out = Vec::new();
-    let mut stack = vec![std::path::PathBuf::from(root)];
+    let mut stack: Vec<_> = std::env::split_paths(&roots).collect();
     while let Some(d) = stack.pop() {
         for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
             let p = e.path();
@@ -107,6 +107,7 @@ fn main() {
         let plan = match heeler_rawdec::plan(&bytes, &opts_of(base)) {
             Ok(p) => p,
             Err(e) => {
+                println!("{name}: declined: {e}");
                 *tally.entry(format!("declined: {e}")).or_default() += 1;
                 continue;
             }

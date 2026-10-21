@@ -6,8 +6,10 @@
 //! camera still has a file the develop takes, so the list in
 //! heeler-rawdec's verified.rs names nothing untested.
 //!
-//! The corpus is a public sample archive (maker/camera/file), found at
-//! HEELER_RAW_CORPUS; the test passes, saying so, when that is unset.
+//! The corpus is a public archive of sample raw files (maker/camera/file),
+//! found at HEELER_RAW_CORPUS, which can name further folders (a second
+//! archive's mirror), separated as PATH's are; the test passes, saying so, when that is
+//! unset.
 //! A few minutes in release on a recent Mac.
 use heeler_raw::DevelopOpts;
 use heeler_rawdec::Opts;
@@ -19,8 +21,20 @@ fn opts(o: DevelopOpts) -> Opts {
 /// Held for a whole test: each turns heeler-raw's process-wide routing.
 static ROUTING: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-/// The corpus's files with one of `exts` (upper case).
-fn files(root: &std::path::Path, exts: &[&str]) -> Vec<std::path::PathBuf> {
+/// The files with one of `exts` (upper case) in the corpus folders
+/// `roots` names, each with the name it is reported by.
+fn files(roots: &std::ffi::OsStr, exts: &[&str]) -> Vec<(std::path::PathBuf, String)> {
+    let mut out = Vec::new();
+    for root in std::env::split_paths(roots) {
+        for p in files_in(&root, exts) {
+            let name = p.strip_prefix(&root).unwrap_or(&p).display().to_string();
+            out.push((p, name));
+        }
+    }
+    out
+}
+
+fn files_in(root: &std::path::Path, exts: &[&str]) -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(d) = stack.pop() {
@@ -54,12 +68,11 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
     let mut taken = 0;
     let mut cameras = std::collections::BTreeSet::new();
     let mut failures = Vec::new();
-    for path in files(std::path::Path::new(&root), &["DNG", "CR2", "ARW"]) {
+    for (path, name) in files(&root, &["DNG", "CR2", "ARW"]) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let Ok(plan) = heeler_rawdec::plan(&bytes, &opts(DevelopOpts::default())) else { continue };
         taken += 1;
         cameras.insert((plan.dng.format.name().to_string(), plan.dng.make.clone(), plan.dng.model.clone()));
-        let name = path.strip_prefix(&root).unwrap_or(&path).display().to_string();
         let mosaic = heeler_rawdec::develop::unpack(&bytes, &plan, None);
         match (mosaic, heeler_raw::libraw_mosaic(&bytes)) {
             (Ok(mine), Ok((_, _, theirs))) if mine == theirs => {}
@@ -111,9 +124,8 @@ fn every_corpus_linear_dng_the_module_takes_is_libraws_develop() {
     heeler_raw::rust_path::set_libraw_color(true);
     let mut taken = 0;
     let mut failures = Vec::new();
-    for path in files(std::path::Path::new(&root), &["DNG"]) {
+    for (path, name) in files(&root, &["DNG"]) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
-        let name = path.strip_prefix(&root).unwrap_or(&path).display().to_string();
         for highlight in [0, 2] {
             let o = DevelopOpts { highlight, ..DevelopOpts::default() };
             heeler_raw::rust_path::set_enabled(true);

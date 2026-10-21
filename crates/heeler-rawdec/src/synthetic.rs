@@ -407,7 +407,11 @@ pub fn opcode_list(ops: &[Vec<u8>]) -> Vec<u8> {
 /// A CR2 made in code: the four directories of IFD0's chain, the raw
 /// frame (`width` by `height`, `pixel` at each site, 12 bits) as one
 /// lossless JPEG strip of two components in `slices` (how many before the
-/// last, their width, the last one's width), and Canon maker notes with a
+/// last, their width, the last one's width; with none before the last and
+/// no width, the tag as some bodies write it with the frame unsliced; with
+/// one slice, four components, each JPEG line two frame rows, as the 6D
+/// Mark II writes it),
+/// and Canon maker notes with a
 /// 582-word ColorData whose as-shot white balance is `wb` (red, green,
 /// green, blue). Make "Canon", Model `model`, IFD0 Orientation 1.
 pub fn cr2(model: &str, width: usize, height: usize, slices: [usize; 3], wb: [u16; 4], pixel: &dyn Fn(usize, usize) -> u16) -> Vec<u8> {
@@ -416,19 +420,21 @@ pub fn cr2(model: &str, width: usize, height: usize, slices: [usize; 3], wb: [u1
 
 /// cr2 with IFD0 Orientation `orientation`.
 pub fn cr2_oriented(model: &str, width: usize, height: usize, slices: [usize; 3], wb: [u16; 4], orientation: u16, pixel: &dyn Fn(usize, usize) -> u16) -> Vec<u8> {
-    assert_eq!(slices[0] * slices[1] + slices[2], width);
+    let sliced = slices[0] > 0 || slices[1] > 0;
+    assert!(!sliced || slices[0] * slices[1] + slices[2] == width);
     // The JPEG's samples run slice by slice, each top to bottom.
     let mut stream = Vec::with_capacity(width * height);
     let mut x0 = 0;
     for s in 0..=slices[0] {
-        let w = if s < slices[0] { slices[1] } else { slices[2] };
+        let w = if s < slices[0] { slices[1] } else if sliced { slices[2] } else { width };
         for y in 0..height {
             stream.extend((x0..x0 + w).map(|x| pixel(y, x)));
         }
         x0 += w;
     }
-    let lines: Vec<Vec<u16>> = stream.chunks(width).map(<[u16]>::to_vec).collect();
-    let jpeg = lossless_jpeg(&lines, width / 2, 2, 12, 1, 0);
+    let comps = if slices[0] == 0 && slices[1] > 0 { 4 } else { 2 };
+    let lines: Vec<Vec<u16>> = stream.chunks(width * comps / 2).map(<[u16]>::to_vec).collect();
+    let jpeg = lossless_jpeg(&lines, width / 2, comps, 12, 1, 0);
     // Directory entries: tag, type, count, value bytes (inline when four
     // bytes or fewer, else placed after the directories).
     type E = (u16, u16, u32, Vec<u8>);

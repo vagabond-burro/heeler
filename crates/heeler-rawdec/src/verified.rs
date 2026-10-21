@@ -1,13 +1,13 @@
 //! The cameras, format by format, whose files the develop has been
-//! verified on: every file of theirs in the sample corpus
-//! developed the same as LibRaw's develop, to the bit, at every stage the
-//! tests compare (heeler-raw's rust_decoder_corpus.rs), given LibRaw's
+//! verified on: every file of theirs in the two sample corpora developed
+//! the same as LibRaw's develop, to the bit, at every stage the tests
+//! compare (heeler-raw's rust_decoder_corpus.rs), given LibRaw's
 //! matrix and levels. A camera's writer has its own habits (margins,
 //! levels, tile layouts), so a camera joins this list only once its files
 //! have been compared.
 
 /// Format, then Make and Model as IFD0 of the file gives them.
-/// Generated from rustdiff over the corpus of 2026-10-20 (every DNG, CR2
+/// Generated from rustdiff over both corpora of 2026-10-20 (every DNG, CR2
 /// and ARW the develop's rules accept, LibRaw's matrix and levels given
 /// to both, since the develop's own color is the DNG model's and its own
 /// levels the file's, tested apart).
@@ -65,6 +65,7 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("DNG", "Canon", "Canon PowerShot SX710 HS"),
     ("DNG", "DJI", "FC220"),
     ("DNG", "DJI", "FC350"),
+    ("DNG", "DJI", "FC3582"),
     ("DNG", "DJI", "FC4382"),
     ("DNG", "DJI", "FC6310"),
     ("DNG", "DJI", "FC7303"),
@@ -212,6 +213,7 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("CR2", "Canon", "Canon EOS 60D"),
     ("CR2", "Canon", "Canon EOS 650D"),
     ("CR2", "Canon", "Canon EOS 6D"),
+    ("CR2", "Canon", "Canon EOS 6D Mark II"),
     ("CR2", "Canon", "Canon EOS 700D"),
     ("CR2", "Canon", "Canon EOS 70D"),
     ("CR2", "Canon", "Canon EOS 750D"),
@@ -316,7 +318,6 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("ARW", "SONY", "ILCA-77M2"),
     ("ARW", "SONY", "ILCA-99M2"),
     ("ARW", "SONY", "ILCE-1"),
-    ("ARW", "SONY", "ILCE-1M2"),
     ("ARW", "SONY", "ILCE-3000"),
     ("ARW", "SONY", "ILCE-3500"),
     ("ARW", "SONY", "ILCE-5000"),
