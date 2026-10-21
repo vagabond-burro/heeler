@@ -41,6 +41,18 @@ pub fn is_arw(bytes: &[u8]) -> bool {
     ifd0.get(271).and_then(|e| t.ascii(&e)).is_some_and(|m| m.eq_ignore_ascii_case("SONY")) && ifd0.get(50706).is_none()
 }
 
+/// The width and height of sensor data a Sony raw file states in its raw
+/// directory (tag 0x7038): the image inside the frame's tile padding,
+/// from the frame's top left.
+pub fn stated_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    if !is_arw(bytes) {
+        return None;
+    }
+    let t = Tiff::new(bytes)?;
+    let v = t.ifds().into_iter().find_map(|i| i.get(0x7038).and_then(|e| t.uints(&e)))?;
+    Some((*v.first()?, *v.get(1)?))
+}
+
 /// The tone curve for 11-bit values: twice the value, linear between the
 /// knots (a quarter of each of the tag's four values), the slope doubling
 /// at each. The top of the curve can pass the white level; the develop's

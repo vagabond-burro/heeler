@@ -10,8 +10,8 @@
 //! image, stay where they were (the owner's decision of 2026-10-20). A
 //! camera whose files disagree is left out and reported, and so is one
 //! whose area LibRaw takes larger than the sensor data a Sony file states
-//! (tag 0x7038): LibRaw does not know that camera and develops the
-//! frame's padding with it.
+//! (tag 0x7038), a guard: heeler-raw's open keeps LibRaw's area to that
+//! size (open_buffer), so no row should take in a frame's padding.
 //!
 //!   cargo run --release -p heeler-raw --example geometry -- OUT.rs [folders]
 use std::collections::BTreeMap;

@@ -941,13 +941,22 @@ the issue samples above are kept beside it. Its CR2, ARW and DNG files
   where the file states 8664 by 5784 of sensor data, tag 0x7038), the
   A7 V, the RX1R III and the RX10 V. geometry.rs (`examples/geometry`,
   which now takes further folders after its output) leaves out any
-  camera whose LibRaw area is larger than the data a file states, so
-  those files stay LibRaw's. The A1 II had matched LibRaw, padding and
-  all, and leaves the verified list. The app still shows that padding
-  through LibRaw; taking it off would move the geometry of documents
-  already made on those cameras, an owner's decision.
+  camera whose LibRaw area is larger than the data a file states. The
+  A1 II had matched LibRaw, padding and all.
+- The owner decided (2026-10-20) that those cameras take the size the
+  file states, though documents made before move. heeler-raw's open of
+  a file (`open_buffer`) now keeps LibRaw's image area to the sensor data
+  a Sony file states (0x7038, from the frame's top left) wherever
+  LibRaw's is larger, so LibRaw's develop and the table agree: the
+  columns past it were measured as zeros (the A1 II's 8672 to 8704, the
+  A7 V's 7040 to 7168), the few between the stated width and the zeros
+  repeat the edge. Untiled files of those cameras (uncompressed, lossy)
+  state no such size and hold no padding. With the table rebuilt from
+  the trimmed areas, all 335 ARWs the Rust path takes match LibRaw, and
+  the A1 II is back on the verified list; the A7 V, A7R VI, RX1R III and
+  RX10 V wait for calibrations.
 - New on the verified list: the 6D Mark II (CR2) and the DJI FC3582
-  (DNG), the A1 II off it: 368 entries. The corpus test reads both
+  (DNG): 369 entries. The corpus test reads both
   corpora when HEELER_RAW_CORPUS names both folders (separated as PATH's
   are): 773 files from 368 cameras, to the bit.
 - Declined as expected: Sony's Medium and Small raw (not a CFA frame,

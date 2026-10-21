@@ -420,6 +420,10 @@ unsigned heeler_left_margin(libraw_data_t *d) { return d ? d->sizes.left_margin 
 unsigned heeler_active_width(libraw_data_t *d) { return d ? d->sizes.width : 0; }
 unsigned heeler_active_height(libraw_data_t *d) { return d ? d->sizes.height : 0; }
 unsigned heeler_filters(libraw_data_t *d) { return d ? d->idata.filters : 0; }
+// A new image area's size, from the same top left, after open.
+void heeler_set_area(libraw_data_t *d, unsigned width, unsigned height) {
+    if (d) { d->sizes.width = width; d->sizes.height = height; }
+}
 
 // OpcodeList3 runs after demosaic (heeler-rawdec's gain_map, apply_rgb): `stage3`
 // is called with the handle between LibRaw's demosaic and its color

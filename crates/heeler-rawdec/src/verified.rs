@@ -318,6 +318,7 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("ARW", "SONY", "ILCA-77M2"),
     ("ARW", "SONY", "ILCA-99M2"),
     ("ARW", "SONY", "ILCE-1"),
+    ("ARW", "SONY", "ILCE-1M2"),
     ("ARW", "SONY", "ILCE-3000"),
     ("ARW", "SONY", "ILCE-3500"),
     ("ARW", "SONY", "ILCE-5000"),

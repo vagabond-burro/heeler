@@ -88,7 +88,6 @@ extern "C" {
     fn heeler_linear_facts(d: *mut c_void, f: *mut Facts, lintable: *mut u16, outcurve: *mut u16) -> c_int;
     fn heeler_opcode_list3(d: *mut c_void, len: *mut usize) -> *const u8;
     fn heeler_linear_capture(d: *mut c_void, loaded: *mut u16, scaled: *mut u16, before_rgb: *mut u16, pixels: usize, maxima: *mut u32, pre_mul: *mut f32, rgb_cam: *mut f32);
-    fn libraw_open_buffer(d: *mut c_void, buf: *const c_void, size: usize) -> c_int;
     fn libraw_unpack(d: *mut c_void) -> c_int;
     fn libraw_dcraw_process(d: *mut c_void) -> c_int;
 }
@@ -657,7 +656,7 @@ fn read_facts(bytes: &[u8], opts: DevelopOpts) -> Result<Option<(Facts, Box<[u16
         return Ok(rust_facts(bytes, opts).and_then(|(f, lin, out, opcode3)| declined(&f, opcode3).is_none().then_some((f, lin, out, true))));
     }
     let handle: Handle = configured(opts)?;
-    if check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) }).is_err() {
+    if check(unsafe { crate::open_buffer(handle.0, bytes) }).is_err() {
         return Ok(None);
     }
     let mut facts = std::mem::MaybeUninit::<Facts>::zeroed();
@@ -783,7 +782,7 @@ pub fn rust_facts(bytes: &[u8], opts: DevelopOpts) -> Option<(Facts, Box<[u16]>,
 #[doc(hidden)]
 pub fn libraw_tables(bytes: &[u8], opts: DevelopOpts) -> Result<(Box<[u16]>, Box<[u16]>), RawError> {
     let handle: Handle = configured(opts)?;
-    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    check(unsafe { crate::open_buffer(handle.0, bytes) })?;
     let mut facts = std::mem::MaybeUninit::<Facts>::zeroed();
     let mut lintable = vec![0u16; 0x10000].into_boxed_slice();
     let mut outcurve = vec![0u16; 0x10000].into_boxed_slice();
@@ -798,7 +797,7 @@ pub fn libraw_tables(bytes: &[u8], opts: DevelopOpts) -> Result<(Box<[u16]>, Box
 #[doc(hidden)]
 pub fn declined_because(bytes: &[u8], opts: DevelopOpts) -> Result<Option<&'static str>, RawError> {
     let handle: Handle = configured(opts)?;
-    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    check(unsafe { crate::open_buffer(handle.0, bytes) })?;
     let mut facts = std::mem::MaybeUninit::<Facts>::zeroed();
     if unsafe { heeler_linear_facts(handle.0, facts.as_mut_ptr(), std::ptr::null_mut(), std::ptr::null_mut()) } == 0 {
         return Ok(Some("not open"));
@@ -815,7 +814,7 @@ pub fn declined_because(bytes: &[u8], opts: DevelopOpts) -> Result<Option<&'stat
 #[doc(hidden)]
 pub fn libraw_facts(bytes: &[u8], opts: DevelopOpts) -> Result<Facts, RawError> {
     let handle: Handle = configured(opts)?;
-    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    check(unsafe { crate::open_buffer(handle.0, bytes) })?;
     let mut facts = std::mem::MaybeUninit::<Facts>::zeroed();
     if unsafe { heeler_linear_facts(handle.0, facts.as_mut_ptr(), std::ptr::null_mut(), std::ptr::null_mut()) } == 0 {
         return Err(RawError::Unexpected);
@@ -886,7 +885,7 @@ pub struct Stages {
 #[doc(hidden)]
 pub fn libraw_stages(bytes: &[u8], opts: DevelopOpts) -> Result<Stages, RawError> {
     let handle: Handle = configured(opts)?;
-    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    check(unsafe { crate::open_buffer(handle.0, bytes) })?;
     let mut facts = std::mem::MaybeUninit::<Facts>::zeroed();
     unsafe { heeler_linear_facts(handle.0, facts.as_mut_ptr(), std::ptr::null_mut(), std::ptr::null_mut()) };
     let facts = unsafe { facts.assume_init() };

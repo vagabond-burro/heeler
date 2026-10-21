@@ -106,6 +106,7 @@ extern "C" {
     fn heeler_active_width(d: *mut c_void) -> c_uint;
     fn heeler_active_height(d: *mut c_void) -> c_uint;
     fn heeler_filters(d: *mut c_void) -> c_uint;
+    fn heeler_set_area(d: *mut c_void, width: c_uint, height: c_uint);
     fn heeler_black_at(d: *mut c_void, row: c_uint, col: c_uint) -> c_uint;
     fn heeler_black_period(d: *mut c_void, rows: *mut c_uint, cols: *mut c_uint);
     fn heeler_use_stage3_opcodes(d: *mut c_void, stage3: unsafe extern "C" fn(*mut c_void));
@@ -202,6 +203,28 @@ pub fn decode_sensor_half(bytes: &[u8]) -> Result<SensorImage, RawError> {
     decode_sensor_with(bytes, DevelopOpts { half_size: true, ..DevelopOpts::default() })
 }
 
+/// LibRaw's open of `bytes`, its image area kept to the sensor data the
+/// file states: for a Sony camera LibRaw does not know (the A1 II, A7 V,
+/// A7R VI, RX1R III, RX10 V), it takes the whole tile frame, padding
+/// included, as the image, where the file states the data's size (the
+/// owner's decision of 2026-10-20, though documents made before keep
+/// their geometry as fractions of the padded frame).
+///
+/// # Safety
+/// `d` is a live LibRaw handle; `bytes` outlives its use.
+pub(crate) unsafe fn open_buffer(d: *mut c_void, bytes: &[u8]) -> c_int {
+    let r = libraw_open_buffer(d, bytes.as_ptr() as *const c_void, bytes.len());
+    if r == 0 {
+        if let Some((w, h)) = heeler_rawdec::sony::stated_size(bytes) {
+            let (aw, ah) = (heeler_active_width(d), heeler_active_height(d));
+            if (aw > w || ah > h) && heeler_top_margin(d) == 0 && heeler_left_margin(d) == 0 && w > 0 && h > 0 {
+                heeler_set_area(d, aw.min(w), ah.min(h));
+            }
+        }
+    }
+    r
+}
+
 /// Header identification only: LibRaw has not unpacked sensor pixels yet.
 pub fn dimensions(bytes: &[u8]) -> Result<(usize, usize), RawError> {
     // A GPR answers from its header: LibRaw cannot open the VC-5 tile,
@@ -217,7 +240,7 @@ pub fn dimensions(bytes: &[u8]) -> Result<(usize, usize), RawError> {
     let p = unsafe { libraw_init(0) };
     if p.is_null() { return Err(RawError::Init); }
     let handle = Handle(p);
-    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    check(unsafe { crate::open_buffer(handle.0, bytes) })?;
     Ok(unsafe { (heeler_raw_width(handle.0) as usize, heeler_raw_height(handle.0) as usize) })
 }
 
@@ -250,7 +273,7 @@ pub fn demosaic_extra_bytes(bytes: &[u8]) -> usize {
         return 0;
     }
     let handle = Handle(p);
-    if check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) }).is_err() {
+    if check(unsafe { crate::open_buffer(handle.0, bytes) }).is_err() {
         return 0;
     }
     unsafe { heeler_xtrans_extra(handle.0) + heeler_ahd_extra(handle.0) }
@@ -308,7 +331,7 @@ pub fn picture_dimensions(bytes: &[u8]) -> Result<(usize, usize), RawError> {
     let p = unsafe { libraw_init(0) };
     if p.is_null() { return Err(RawError::Init); }
     let handle = Handle(p);
-    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    check(unsafe { crate::open_buffer(handle.0, bytes) })?;
     check(unsafe { libraw_adjust_sizes_info_only(handle.0) })?;
     let (w, h) = unsafe { (libraw_get_iwidth(handle.0) as usize, libraw_get_iheight(handle.0) as usize) };
     if w == 0 || h == 0 { return Err(RawError::Unexpected); }
@@ -357,7 +380,7 @@ pub fn with_libraw_numbers(bytes: &[u8], plan: &heeler_rawdec::Plan) -> Result<h
 
 fn libraw_black(bytes: &[u8], unpacked: bool) -> Result<[[u32; 8]; 8], RawError> {
     let handle = configured(DevelopOpts::default())?;
-    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    check(unsafe { crate::open_buffer(handle.0, bytes) })?;
     if unpacked {
         check(unsafe { libraw_unpack(handle.0) })?;
     }
@@ -377,7 +400,7 @@ fn libraw_black(bytes: &[u8], unpacked: bool) -> Result<[[u32; 8]; 8], RawError>
 #[doc(hidden)]
 pub fn libraw_mosaic(bytes: &[u8]) -> Result<(usize, usize, Vec<u16>), RawError> {
     let handle = configured(DevelopOpts::default())?;
-    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    check(unsafe { crate::open_buffer(handle.0, bytes) })?;
     check(unsafe { libraw_unpack(handle.0) })?;
     let raw = unsafe { heeler_cfa_image(handle.0) };
     if raw.is_null() {
@@ -391,6 +414,22 @@ pub fn libraw_mosaic(bytes: &[u8]) -> Result<(usize, usize, Vec<u16>), RawError>
         out.extend_from_slice(&all[r * pitch + left..r * pitch + left + w]);
     }
     Ok((w, h, out))
+}
+
+/// LibRaw's whole unpacked frame (raw width by raw height, masked
+/// margins and all), one sample a site, for the harnesses that hold a new
+/// decoder to LibRaw's before it knows a camera's image area.
+pub fn libraw_frame(bytes: &[u8]) -> Result<(usize, usize, Vec<u16>), RawError> {
+    let handle = configured(DevelopOpts::default())?;
+    check(unsafe { crate::open_buffer(handle.0, bytes) })?;
+    check(unsafe { libraw_unpack(handle.0) })?;
+    let raw = unsafe { heeler_cfa_image(handle.0) };
+    if raw.is_null() {
+        return Err(RawError::Unexpected);
+    }
+    let (pitch, w, h) = unsafe { (heeler_raw_pitch(handle.0) as usize / 2, heeler_raw_width(handle.0) as usize, heeler_raw_height(handle.0) as usize) };
+    let all = unsafe { std::slice::from_raw_parts(raw, h * pitch) };
+    Ok((w, h, (0..h).flat_map(|r| all[r * pitch..r * pitch + w].iter().copied()).collect()))
 }
 
 /// Applies a DNG's GainMap opcodes (OpcodeList2) to the unpacked sensor
@@ -509,7 +548,7 @@ pub fn develop_bytes(bytes: &[u8], opts: DevelopOpts) -> Result<usize, RawError>
         return Err(RawError::Init);
     }
     let handle = Handle(p);
-    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    check(unsafe { crate::open_buffer(handle.0, bytes) })?;
     let (width, height) = unsafe { (heeler_raw_width(handle.0) as usize, heeler_raw_height(handle.0) as usize) };
     if width == 0 || height == 0 {
         return Err(RawError::Unexpected);
@@ -570,7 +609,7 @@ fn develop(bytes: &[u8], opts: DevelopOpts, stop: Option<&AtomicBool>, mut times
     let converted = gpr::as_dng(bytes)?;
     let bytes = converted.as_deref().unwrap_or(bytes);
     let handle = configured(opts)?;
-    check(unsafe { libraw_open_buffer(handle.0, bytes.as_ptr() as *const c_void, bytes.len()) })?;
+    check(unsafe { crate::open_buffer(handle.0, bytes) })?;
     let (width, height) = unsafe { (heeler_raw_width(handle.0) as usize, heeler_raw_height(handle.0) as usize) };
     if width == 0 || height == 0 { return Err(RawError::Unexpected); }
     let sensor_data = unsafe { heeler_is_sensor_data(handle.0) } != 0;
