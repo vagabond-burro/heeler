@@ -12,10 +12,10 @@
 //! the planes' data in that order. The metadata track's records (CTMD)
 //! carry the rest of the maker notes, ColorData (0x4001) among them.
 //!
-//! Lossless frames and C-RAW frames of the header's first version (three
-//! wavelet levels, one row of tiles) are read (crx.rs); C-RAW of the
-//! second version (its records 0xFF11 to 0xFF13, a quantizer map ahead of
-//! each tile's planes) and other encodings are declined. The image area, the CFA
+//! Lossless frames and C-RAW frames (three wavelet levels, one row of
+//! tiles; in the second version, records 0xFF11 to 0xFF13, one tile with
+//! a map of quantizers ahead of its planes) are read (crx.rs); other
+//! encodings are declined. The image area, the CFA
 //! colors and the white level come from geometry.rs (LibRaw's, so
 //! documents keep their geometry), the calibrations from cameras.rs. The
 //! white balance as shot and the black level per channel are ColorData's,
@@ -69,10 +69,10 @@ pub struct CrxWavelet {
     pub height: usize,
     pub tile: usize,
     pub sites: Vec<Vec<Vec<CrxBand>>>,
-    /// The second version's quantizer map per tile (where, how long);
-    /// none in the first. With a map each band's q is its step against
-    /// the map's in quarters, 0 where it is not quantized.
-    pub maps: Vec<(usize, usize)>,
+    /// The second version's map of quantizers (its one tile's); none in
+    /// the first. With a map each band's q is its record's field
+    /// (crx::map_steps), 0 where it is not quantized.
+    pub map: Option<crate::crx::QuantMap>,
 }
 
 /// The boxes from `at` to `end`: type, content start, end.
@@ -298,8 +298,8 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
                 let band = records.iter().filter(|r| (r.0, r.1) == (t, p)).count();
                 // The subband's quantizer: bits 19 to 26 of the word after
                 // its size; in the second version that word's low bits are
-                // the subband's step against the map's, in quarters, and
-                // the next word 1 where it is not quantized (0 here).
+                // the subband's field (crx::map_steps), and the next word 1
+                // where it is not quantized (0 here).
                 let word = be32(bytes, at + 8).ok_or(Error::Corrupt("a CRX subband record"))? as u32;
                 let q = match (second, be32(bytes, at + 12)) {
                     (false, _) => word >> 19 & 0xff,
@@ -343,7 +343,20 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         for &(t, p, _, at, len, q) in &records {
             sites[p][t].push(CrxBand { at, len, q });
         }
-        Coding::CrxWavelet(Box::new(CrxWavelet { width: width / 2, height: height / 2, tile: tile_w / 2, sites, maps }))
+        // The map read now, so a frame whose map does not read stays
+        // LibRaw's: as wide as the plane's level 3, a line for each row of
+        // its level 1.
+        let map = match maps.first() {
+            Some(&(at, len)) => {
+                let mut w = width / 2;
+                for _ in 0..crate::crx::LEVELS {
+                    w = w.div_ceil(2);
+                }
+                Some(crate::crx::decode_quant_map(&bytes[at..at + len], w, (height / 2).div_ceil(2)).map_err(|_| Error::Unsupported("a C-RAW quantizer map not read here"))?)
+            }
+            None => None,
+        };
+        Coding::CrxWavelet(Box::new(CrxWavelet { width: width / 2, height: height / 2, tile: tile_w / 2, sites, map }))
     };
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
     if geometry.white == 0 {

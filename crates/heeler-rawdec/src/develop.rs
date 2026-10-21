@@ -72,7 +72,7 @@ impl Plan {
             (1, 1 | 7, _) if (8..=16).contains(&dng.bits) => {}
             (1, 32767, _) if dng.coding == Coding::SonyBlocks => {}
             (1, 0, _) if matches!(&dng.coding, Coding::Crx(_)) && (8..=16).contains(&dng.bits) => {}
-            (1, 0, _) if matches!(&dng.coding, Coding::CrxWavelet(w) if w.maps.is_empty()) && (8..=16).contains(&dng.bits) => {}
+            (1, 0, _) if matches!(&dng.coding, Coding::CrxWavelet(_)) && (8..=16).contains(&dng.bits) => {}
             (3, 1, 1) | (3, 8, 3 | 34894 | 34895) if matches!(dng.bits, 16 | 24 | 32) && dng.linearization.is_none() => {}
             _ => return Err(Error::Unsupported("a sample format, depth or compression not read here")),
         }
@@ -497,7 +497,15 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
                     v.try_into().map_err(|_| Error::Corrupt("a C-RAW tile's plane without ten subbands"))
                 })
                 .collect::<Result<_, _>>()?;
-            let plane = crate::crx::reconstruct_plane(&tiles, w.width, w.height, w.tile, d.bits)?;
+            let plane = match &w.map {
+                // The second version: each coefficient's step from the
+                // tile's map of quantizers.
+                Some(map) => {
+                    let fields: [u32; 10] = std::array::from_fn(|i| w.sites[site][0][i].q);
+                    crate::crx::reconstruct_plane_with(&tiles, w.width, w.height, w.tile, d.bits, &crate::crx::map_steps(map, fields))?
+                }
+                None => crate::crx::reconstruct_plane(&tiles, w.width, w.height, w.tile, d.bits)?,
+            };
             let (dy, dx) = (site >> 1, site & 1);
             for y in 0..w.height {
                 put_sites(out, p, 2 * y + dy, dx, &plane[y * w.width..(y + 1) * w.width]);

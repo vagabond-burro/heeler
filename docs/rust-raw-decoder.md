@@ -1040,21 +1040,49 @@ the issue samples above are kept beside it. Its CR2, ARW and DNG files
   them.
 - C-RAW of the second version (records 0xFF11 to 0xFF13: the R3, R5, R5
   Mark II, R5 C, R6, R6 Mark II, R6 Mark III, R7, R8, R10, R50, R50 V,
-  1D X Mark III, C50 and PowerShot V1) and roll-burst files are declined
-  and stay LibRaw's.
+  1D X Mark III, C50 and PowerShot V1) is read too. Found from the
+  forward transform of LibRaw's frame (each map cell's true step read
+  off level 1's coefficients), first on an R5, an R3 and an R50, then
+  checked on every file:
+  - the subbands are coded exactly as the first version's; each tile's
+    data opens with a map of quantizers (its size in the tile record,
+    padded to 8 bytes) before the planes;
+  - the steps of both versions are H.265's scaling (8.6.3): 40, 45, 51,
+    57, 64 and 72 by q's remainder after 6, doubled for each whole 6,
+    over 64 (`crx::quant_step`; the first version's 4, 16, 22, 26 and 32
+    give the steps it had);
+  - the map has an entry for every 4 columns of level 1 (the plane's LL3
+    width) and a line for every row of level 1; level 2 takes the mean
+    of its two level-1 rows' entries, rounded down, at half its
+    columns; level 3 is not quantized (the subband records' flag). With
+    S that scaling before its division by 64, the records' field takes
+    S / 64 at 4 (HL2, LH2), S / 32 at 8 (HH2, HL1, LH1) and twice that
+    at 16 (HH1), each rounded down;
+  - the map's header is 31 bits: 24 holding 1, then h in 5 and s in 2,
+    the base quantizer being 4h + s - 2 (20 for most files at moderate
+    ISO, up to 50 for the 1D X Mark III at ISO 819200). The entries,
+    each the quantizer less the base, follow line by line with the
+    lossless coding's tools: no runs, K from 0, carried from line to
+    line, each entry held at 0 or above; the first line predicted by the
+    entry to its left, its first four entries 0 (the first not coded,
+    the next three read only for K), the rest by median edge detection
+    (`crx::decode_quant_map`). The map must end in its stated size's
+    last byte, or the frame stays LibRaw's.
+  Tests code maps the other way round, and pin the steps the files use.
+  Roll-burst files are declined and stay LibRaw's.
 - `rustdiff` reports the develop's own black, white level and balance
   against LibRaw's (they are not in the outputs, which take LibRaw's).
 
 ### Verification
 
 - `rustdiff --any` over all 1,648 CR3s of both corpora: every file the
-  Rust path takes, 1,269 of them (791 lossless, 478 C-RAW of the first
-  version), matches LibRaw at every stage. 362 C-RAW files of the second
-  version are declined, 3 roll-burst files, and 14 of the R5 C, R6 Mark
-  III and C50, which the calibration table does not have yet (the 850D's
-  27 under its other name now develop). Before the tile rule was right,
-  the second tile of the EOS R, M6 Mark II and 90D frames (123 files)
-  failed; they are among the 478.
+  Rust path takes, 1,618 of them (lossless and C-RAW of both versions),
+  matches LibRaw at every stage. Declined: 26 of the R5 C, R6 Mark III
+  and C50, which the calibration table does not have yet, 3 roll-burst
+  files, and the one R6 file whose map does not read (below). The 850D's
+  27 develop under its other name. Before the tile rule was right, the
+  second tile of the EOS R, M6 Mark II and 90D frames (123 files)
+  failed.
 - 28 CR3 cameras join the verified list.
 - The own black against LibRaw's: the same on most files; of the 404
   that differ, 257 differ by 1 level and 31 by 2. The EOS RP's crop mode
@@ -1083,41 +1111,11 @@ tile decodes on four cores at most.
 
 ### Not yet done
 
-- C-RAW of the second version (records 0xFF11 to 0xFF13; `cr3.rs`
-  reads them, and the develop declines these frames for now). What the
-  data shows, from the forward transform of LibRaw's frame for an R5, an
-  R3 and an R50, then checked across a sample of every body:
-  - the subbands are coded exactly as the first version's (each ends
-    within a few bits of its stated size); each tile's data opens with a
-    map of quantizers (its size in the tile record, padded to 8 bytes)
-    before the planes;
-  - the steps of both versions are H.265's scaling (8.6.3): 40, 45, 51,
-    57, 64 and 72 by q's remainder after 6, doubled for each whole 6,
-    over 64 (`crx::quant_step`; the first version's 4, 16, 22, 26 and 32
-    give the steps it had);
-  - the map is 1 entry per 4 columns of level 1 (the frame's LL3 width)
-    by 1 per line of level 1; level 2 takes the mean of its two level-1
-    lines' entries, rounded down, at half its columns; level 3 is not
-    quantized (the records' flag). The subband records' field (4, 8 or
-    16) scales the step for HH2, HL1, LH1 (8) and HH1 (16);
-  - the map is coded after a 29-bit header (23 zeros and a 1, then 5
-    bits) line by line with the lossless coding's tools: median edge
-    detection, the first line predicted by a line of 20, no runs, K
-    carried from line to line, every entry held at a floor
-    (`crx::decode_quant_map`);
-  - with the header's 5-bit field 5 (most files at moderate ISO): K
-    starts at 2, the floor is 20, the entries are the quantizers, and
-    the field multiplies the step by 1, 2 or 4. This rebuilds plane 0 of
-    the R5, R6, R6 Mark II, R7, R10, R50, R50 V and 1D X Mark III files
-    tried exactly;
-  - with field 8 or more (high ISO, the electronic shutter): K starts at
-    0, the field adds 0, 6 or 12 to q, and the entries are q less an
-    offset, 10 with the field at 8 (R5, R7, R50 files exact). The R3's
-    files of this kind differ (a map one line short, the floor and
-    offset one off), and fields 10, 11 and 13 have no rule yet; the R5
-    Mark II and the dual-pixel R6 Mark II need the line count checked.
-  The search harness is not in the repository; the open part is the
-  offset of the second mode.
+- One file's map: an R6 at ISO 204800, whose first line's three entries
+  read for K are not the usual ones (1, 6 and 11 where every other file
+  has 1, 2 and 1); its map then does not end where its size states, so
+  it stays LibRaw's. Reading those three as entries held at 0 fits it
+  and no other file.
 - Roll-burst files.
 - Calibrations for the R5 C, R6 Mark III and C50.
 
