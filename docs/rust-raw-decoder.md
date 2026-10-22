@@ -1274,6 +1274,66 @@ tile decodes on four cores at most.
 - Calibrations for the DC-FZ45, L10, S5D and TZ220D.
 - The S5's high-resolution frames; the DMC-G7's 4816 by 3464 area.
 
+## Phase 8: ORF
+
+### What was built
+
+- `orf.rs` reads the container: TIFF-shaped with "RO" or "RS" for TIFF's
+  42 (`Tiff::with_magic`), the frame's size and strips in IFD0, and the
+  maker notes in their three headers: "OM SYSTEM" (entries at 16) and
+  "OLYMPUS" (at 12), offsets from the notes' start, and "OLYMP" (at 8),
+  offsets from the file's (`Tiff::with_order` reads directories without a
+  header). The balance as shot is ImageProcessing's (0x2040, an IFD at
+  an offset or inline) 0x0100, red then blue against 256, else the notes'
+  0x1017 and 0x1018; the black level ImageProcessing's 0x0600 (red, the
+  green on red's row, the other green, blue; stated for 12-bit samples,
+  four times it for 14-bit ones), else LibRaw's for the camera, which
+  geometry.rs's builder now writes (`ORF_BLACK`) with the area, CFA
+  colors and white level of every ORF camera.
+- Every layout derived from the data against LibRaw's unpacked frame:
+  - 16-bit words in the file's byte order, the sample in the top bits:
+    12 of a little-endian file's, 10 of a big-endian one's (the E-10 and
+    E-20), taken through a linearization table that shifts them down;
+  - 12-bit samples least significant bits first, 10 in 15 bytes and a
+    byte of 0 (the E-300, E-330, E-500 and some high-resolution frames);
+  - "RS" files (the C and SP series): 12-bit samples most significant
+    bits first in two fields, the even rows from the first strip and the
+    odd ones from the first strip after them, every strip its 16 rows
+    whole (the last rows past the stated counts), the odd stated height
+    a row short of the rows LibRaw reads;
+  - 12-bit samples most significant bits first inside 32-bit
+    little-endian words (the XZ-2, XZ-10 and SH-2);
+  - Olympus's compression, after a header of four 0 bytes (12-bit) or
+    five (14-bit) and 1, 0, 0: rows left to right, each column parity
+    with a state reset every row; a sample is 3 bits (a sign and the two
+    low bits of its difference), the high bits as a run of 0s ended by a
+    1 (twelve 0s escape to a field of 16 less the width, halved), then a
+    width that adapts to the last magnitude and to how many small ones
+    came; the difference carries a running mean and adds to a prediction
+    from the samples two to the left, two above and two above and left
+    (where the corner lies between, their sum less it when either
+    differs from it by more than 32, else their mean; otherwise the one
+    farther from it). The first rows of an E-PL1 fixed the reading; each
+    part was then held to the data by changing it (a threshold of 31 or
+    33 for the 32 breaks two thirds of 120 rows; the escape is taken 94
+    times in them). One stream, decoded on one core.
+- Tests: a frame coded the other way round and decoded (an escape among
+  its samples) and cut short; the padded and word layouts.
+
+### Verification
+
+- `rustdiff --any` over all 185 ORFs of both corpora: the 182 the Rust
+  path takes match LibRaw at every stage (132 compressed 12-bit, 6
+  compressed 14-bit, 20 in two fields, 10 padded, 8 in 16-bit words, 6
+  in 32-bit words), with LibRaw's own black, white and balance. Declined:
+  3 of the OM PEN (no calibrations yet).
+- 71 ORF cameras join the verified list.
+
+### Not yet done
+
+- Calibrations for the OM PEN.
+- Speed: the compressed frame is one stream and decodes on one core.
+
 ## Color sources, measured
 
 Every non-DNG format needs a camera matrix the file does not carry, and

@@ -23,6 +23,7 @@ pub enum Format {
     Cr3,
     Nef,
     Rw2,
+    Orf,
 }
 
 impl Format {
@@ -34,6 +35,7 @@ impl Format {
             Format::Cr3 => "CR3",
             Format::Nef => "NEF",
             Format::Rw2 => "RW2",
+            Format::Orf => "ORF",
         }
     }
 }
@@ -69,6 +71,9 @@ pub enum Coding {
     NikonHuffman(Box<crate::nef::Huffman>),
     /// Panasonic's 16-byte packets (rw2.rs): one span, row after row.
     Panasonic(crate::rw2::Panasonic),
+    /// Olympus's layouts beyond TIFF's (orf.rs): its compression, or 12-bit
+    /// samples padded to 16 bytes in tens.
+    Olympus(crate::orf::Olympus),
 }
 
 /// A raw file in the terms a develop needs, which are the DNG
@@ -274,8 +279,8 @@ impl Dng {
         self.format == Format::Dng
     }
 
-    /// Any raw file this crate reads: a DNG, a CR2, a CR3, an ARW, a NEF or
-    /// an RW2.
+    /// Any raw file this crate reads: a DNG, a CR2, a CR3, an ARW, a NEF, an
+    /// RW2 or an ORF.
     pub fn open(bytes: &[u8]) -> Result<Dng, Error> {
         if crate::cr3::is_cr3(bytes) {
             return crate::cr3::parse(bytes);
@@ -291,6 +296,9 @@ impl Dng {
         }
         if crate::rw2::is_rw2(bytes) {
             return crate::rw2::parse(bytes);
+        }
+        if crate::orf::is_orf(bytes) {
+            return crate::orf::parse(bytes);
         }
         Dng::parse(bytes)
     }

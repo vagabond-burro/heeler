@@ -17,6 +17,7 @@ pub mod geometry;
 pub mod ljpeg;
 pub mod nef;
 pub mod rw2;
+pub mod orf;
 pub mod sony;
 #[doc(hidden)]
 pub mod synthetic;

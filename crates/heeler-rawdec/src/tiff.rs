@@ -76,6 +76,17 @@ impl<'a> Tiff<'a> {
         (t.u16(2)? == magic).then_some(t)
     }
 
+    /// Directories in `d` of the given byte order whose offsets count from
+    /// its start, without a header (a raw format's maker notes).
+    pub fn with_order(d: &'a [u8], le: bool) -> Self {
+        Tiff { d, le }
+    }
+
+    /// Whether the file is little-endian.
+    pub fn little(&self) -> bool {
+        self.le
+    }
+
     pub fn data(&self) -> &'a [u8] {
         self.d
     }

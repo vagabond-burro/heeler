@@ -1,4 +1,4 @@
-//! Every DNG, CR2, CR3, ARW, NEF and RW2 of the sample corpus the Rust
+//! Every DNG, CR2, CR3, ARW, NEF, RW2 and ORF of the sample corpus the Rust
 //! develop takes (its rules and its verified cameras, heeler-rawdec's plan)
 //! develops as LibRaw does, to the bit, given LibRaw's matrix and levels: the unpacked
 //! mosaic, then full size and half, Clip and Blend, lens shading opcodes
@@ -70,7 +70,7 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
     let mut cameras = std::collections::BTreeSet::new();
     let mut failures = Vec::new();
     let mut unreadable = Vec::new();
-    for (path, name) in files(&root, &["DNG", "CR2", "CR3", "ARW", "NEF", "RW2"]) {
+    for (path, name) in files(&root, &["DNG", "CR2", "CR3", "ARW", "NEF", "RW2", "ORF"]) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let Ok(plan) = heeler_rawdec::plan(&bytes, &opts(DevelopOpts::default())) else { continue };
         let Ok((_, _, theirs)) = heeler_raw::libraw_mosaic(&bytes) else {

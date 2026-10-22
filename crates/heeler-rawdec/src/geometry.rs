@@ -1,5 +1,5 @@
 //! The image area Heeler develops of a raw frame for the formats whose
-//! files do not state it in LibRaw's terms (CR2, CR3, ARW, NEF, RW2):
+//! files do not state it in LibRaw's terms (CR2, CR3, ARW, NEF, RW2, ORF):
 //! LibRaw's own area for each camera and raw size, so documents made
 //! before the Rust path keep their geometry (crops and strokes are stored
 //! as fractions of the image), and its white level where the file does
@@ -35,4 +35,10 @@ pub fn find(make: &str, model: &str, raw: (u32, u32)) -> Option<&'static Geometr
 /// A NEF camera's white level for samples of `depth` bits (LibRaw's).
 pub fn nef_white(make: &str, model: &str, depth: u32) -> Option<u32> {
     NEF_WHITE.iter().find(|w| w.0 == make && w.1 == model && w.2 == depth).map(|w| w.3)
+}
+
+/// An ORF camera's black level as LibRaw takes it where the file states
+/// none: red, the green on red's row, the other green, blue.
+pub fn orf_black(make: &str, model: &str) -> Option<[u32; 4]> {
+    ORF_BLACK.iter().find(|b| b.0 == make && b.1 == model).map(|b| b.2)
 }

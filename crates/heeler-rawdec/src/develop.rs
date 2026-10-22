@@ -401,7 +401,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         }
         return Ok(cfa);
     }
-    if d.compression == 1 {
+    if d.compression == 1 && matches!(d.coding, Coding::Tiff | Coding::PackedLow) {
         // Uncompressed: every row of every piece found by arithmetic, so
         // the rows go side by side even when the file is one strip.
         let bits = d.bits as usize;
@@ -523,6 +523,22 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         // Rows below the image area are not decoded: some files' streams
         // stop at its last row.
         crate::nef::decode(&bytes[at..at + len], d.width, d.height.min(p.top + p.height), h, |r, line| put_run(out, p, r, 0, line, lin))?;
+        return Ok(cfa);
+    }
+    if let Coding::Olympus(layout) = d.coding {
+        // One span (the fields: whole strips); rows below the image area
+        // are not decoded.
+        let (at, len) = d.pieces.spans[0];
+        let data = bytes.get(at..at + len).unwrap_or(&[]);
+        stopped(stop)?;
+        let rows = d.height.min(p.top + p.height);
+        let put = |r: usize, line: &[u16]| put_run(out, p, r, 0, line, lin);
+        match layout {
+            crate::orf::Olympus::Compressed(header) => crate::orf::decode(data, header, d.width, rows, put)?,
+            crate::orf::Olympus::Padded => crate::orf::decode_padded(data, d.width, rows, put)?,
+            crate::orf::Olympus::Words => crate::orf::decode_words(data, d.width, rows, put)?,
+            crate::orf::Olympus::Fields(per_strip) => crate::orf::decode_fields(bytes, &d.pieces.spans, d.width, d.height, rows, per_strip, put)?,
+        }
         return Ok(cfa);
     }
     if let Coding::Panasonic(coding) = &d.coding {
