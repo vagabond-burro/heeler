@@ -61,13 +61,19 @@ impl<'a> Tiff<'a> {
     /// The file's byte order from its header, or None when it is not
     /// TIFF-shaped (II or MM, then 42).
     pub fn new(d: &'a [u8]) -> Option<Self> {
+        Self::with_magic(d, 42)
+    }
+
+    /// A TIFF-shaped file whose header holds `magic` where TIFF's has 42
+    /// (a raw format's own, such as Panasonic's 0x55).
+    pub fn with_magic(d: &'a [u8], magic: u16) -> Option<Self> {
         let le = match d.get(..2)? {
             b"II" => true,
             b"MM" => false,
             _ => return None,
         };
         let t = Tiff { d, le };
-        (t.u16(2)? == 42).then_some(t)
+        (t.u16(2)? == magic).then_some(t)
     }
 
     pub fn data(&self) -> &'a [u8] {

@@ -22,6 +22,7 @@ pub enum Format {
     Arw,
     Cr3,
     Nef,
+    Rw2,
 }
 
 impl Format {
@@ -32,6 +33,7 @@ impl Format {
             Format::Arw => "ARW",
             Format::Cr3 => "CR3",
             Format::Nef => "NEF",
+            Format::Rw2 => "RW2",
         }
     }
 }
@@ -65,6 +67,8 @@ pub enum Coding {
     /// Nikon's Huffman coding (nef.rs): one stream, each sample a
     /// prediction and a coded difference.
     NikonHuffman(Box<crate::nef::Huffman>),
+    /// Panasonic's 16-byte packets (rw2.rs): one span, row after row.
+    Panasonic(crate::rw2::Panasonic),
 }
 
 /// A raw file in the terms a develop needs, which are the DNG
@@ -270,7 +274,8 @@ impl Dng {
         self.format == Format::Dng
     }
 
-    /// Any raw file this crate reads: a DNG, a CR2, a CR3 or an ARW.
+    /// Any raw file this crate reads: a DNG, a CR2, a CR3, an ARW, a NEF or
+    /// an RW2.
     pub fn open(bytes: &[u8]) -> Result<Dng, Error> {
         if crate::cr3::is_cr3(bytes) {
             return crate::cr3::parse(bytes);
@@ -283,6 +288,9 @@ impl Dng {
         }
         if crate::nef::is_nef(bytes) {
             return crate::nef::parse(bytes);
+        }
+        if crate::rw2::is_rw2(bytes) {
+            return crate::rw2::parse(bytes);
         }
         Dng::parse(bytes)
     }

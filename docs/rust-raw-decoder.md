@@ -1191,6 +1191,89 @@ tile decodes on four cores at most.
 - Calibrations for the D810A and ZR.
 - Speed: the Huffman frame is one stream and decodes on one core.
 
+## Phase 7: RW2
+
+### What was built
+
+- `rw2.rs` reads the container: TIFF-shaped with 0x55 for TIFF's 42
+  (`Tiff::with_magic`), its raw facts in IFD0's own tags: the frame's
+  width and height (0x02, 0x03), the depth (0x0A), the coding
+  (RawFormat, 0x2D), the samples' offset (0x118), the black levels of
+  red, green and blue (0x1C to 0x1E; LibRaw's are these and 15 in
+  RawFormats 4 and 5, as stated in the others) and the balance as shot
+  (0x24 to 0x26, red, green, blue, LibRaw's as is). The image area and
+  CFA colors come from geometry.rs, whose builder now reads RW2; the
+  white level from it too, else (the S1RM2, whose 12 and 14-bit files
+  share a frame size) LibRaw's for the depth: 255/256 of the range in
+  RawFormats 6 to 8 below 16 bits.
+- Every coding derived from the data against LibRaw's unpacked frame:
+  - RawFormat 4 (12-bit, 14 samples a 16-byte packet): the packets in
+    blocks of 0x4000 bytes, each block's stream starting 0x1FF8 bytes in
+    and wrapping to its start; a packet one 128-bit little-endian number
+    read from its top bit. Even samples one color of the row, odd ones
+    the other; every third sample from the third starts a group of three
+    with a two-bit code, the shift of its steps (0, 1, 2, 4). A color's
+    first sample is 8 bits and 4 more (while those 8 are 0, the last
+    value again); after it an 8-bit field of 0 repeats the last value;
+    under shift 4, or while the last value is below 128 shifted, the
+    field shifted over the last value's low bits is the value; else the
+    last value plus the field less 128, shifted.
+  - RawFormat 5 (12 and 14-bit) and 7 (14-bit): whole samples packed
+    least significant bits first, 10 or 9 a packet; 5 in the turned
+    blocks of 4, 7 straight.
+  - RawFormat 6 (14-bit, 11 a packet; 12-bit, 14): the first two samples
+    whole, then groups of three, each a two-bit shift code and fields of
+    10 bits (8 for 12-bit); under shift 4 or while the last value of the
+    color is below the field's middle shifted, the field shifted is the
+    value, else the last value plus the field less its middle, shifted;
+    every value 15 less.
+  - RawFormat 8 (12, 14 and 16-bit): tiles in a grid, each its own
+    stream (offsets 0x44, places 0x45 with the top row in the high 16
+    bits, lengths in bits 0x46, widths 0x47, heights 0x48), one Huffman
+    code for all (0x40: 17 lengths and codes, the symbols 0 to 16). A
+    tile runs two rows at a time in 2 by 2 blocks, each block's samples
+    down then across; a sample is a symbol, its difference's number of
+    bits, then the difference (lossless JPEG's sign rule) from the same
+    site of the block before, a row pair's first block from the first
+    block of the pair above, 0 at the tile's top. The stream's bits run
+    from each byte's lowest, the codes and differences top bit first.
+    Where one code starts another (some files' table), the shorter is
+    read. The tiles decode across the cores.
+- LibRaw takes an RW2's samples of 0 as bad ones and fills each with the
+  mean, rounded down, of the nonzero samples of its color two rows or
+  columns away and diagonally (`develop::fill_zeros`, after the unpack);
+  found where the FZ80's develop differed around its 124 zero samples.
+- Declined and LibRaw's: RawFormat 7 frames taller than the sensor's
+  stated rows (the S5's high-resolution mode, whose last two rows LibRaw
+  leaves at 0, a rule two files cannot settle); other RawFormats and
+  depths; a RawFormat 8 layout whose tiles do not cover the frame once,
+  or whose symbols carry a shift (0x41); the DC-FZ45, L10, S5D and
+  TZ220D (no calibrations yet); the DMC-G7's 4816 by 3464 frames (its
+  files disagree on LibRaw's area).
+- Tests: RawFormat 4 and 6 packets coded and decoded (each mode: a
+  color's start, a 0 field, the absolute and step forms), whole samples,
+  a turned block's packets, a RawFormat 8 tile coded and decoded and cut
+  short, the shorter of two codes read.
+
+### Verification
+
+- `rustdiff --any` over all 781 RW2s of both corpora: the 752 the Rust
+  path takes match LibRaw at every stage (643 RawFormat 4, 20 of 5, 17
+  of 6, 2 of 7, 70 of 8), with LibRaw's own black, white and balance.
+  Declined: 17 without calibrations, 6 DMC-G7 frames without geometry,
+  2 S5 high-resolution frames.
+- Four files LibRaw cannot open (an input/output error): two FZ38 3:2
+  frames and two S1RM2 high-resolution frames (eight tiles in a 4 by 2
+  grid). Their data is whole and the Rust path develops them; nothing
+  holds them to LibRaw, so they were checked by eye (the FZ38's against
+  its own preview), and the corpus test counts them apart.
+- 111 RW2 cameras join the verified list.
+
+### Not yet done
+
+- Calibrations for the DC-FZ45, L10, S5D and TZ220D.
+- The S5's high-resolution frames; the DMC-G7's 4816 by 3464 area.
+
 ## Color sources, measured
 
 Every non-DNG format needs a camera matrix the file does not carry, and

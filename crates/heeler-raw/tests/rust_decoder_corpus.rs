@@ -1,10 +1,11 @@
-//! Every DNG, CR2, CR3, ARW and NEF of the sample corpus the Rust develop takes
-//! (its rules and its verified cameras, heeler-rawdec's plan) develops as
-//! LibRaw does, to the bit, given LibRaw's matrix and levels: the unpacked
+//! Every DNG, CR2, CR3, ARW, NEF and RW2 of the sample corpus the Rust
+//! develop takes (its rules and its verified cameras, heeler-rawdec's plan)
+//! develops as LibRaw does, to the bit, given LibRaw's matrix and levels: the unpacked
 //! mosaic, then full size and half, Clip and Blend, lens shading opcodes
 //! applied as heeler-raw applies them around LibRaw. And every verified
 //! camera still has a file the develop takes, so the list in
-//! heeler-rawdec's verified.rs names nothing untested.
+//! heeler-rawdec's verified.rs names nothing untested. A file LibRaw
+//! cannot open (a few RW2s) has nothing to be held to and is counted apart.
 //!
 //! The corpus is a public archive of sample raw files (maker/camera/file),
 //! found at HEELER_RAW_CORPUS, which can name further folders (a second
@@ -68,14 +69,18 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
     let mut taken = 0;
     let mut cameras = std::collections::BTreeSet::new();
     let mut failures = Vec::new();
-    for (path, name) in files(&root, &["DNG", "CR2", "CR3", "ARW", "NEF"]) {
+    let mut unreadable = Vec::new();
+    for (path, name) in files(&root, &["DNG", "CR2", "CR3", "ARW", "NEF", "RW2"]) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let Ok(plan) = heeler_rawdec::plan(&bytes, &opts(DevelopOpts::default())) else { continue };
+        let Ok((_, _, theirs)) = heeler_raw::libraw_mosaic(&bytes) else {
+            unreadable.push(name);
+            continue;
+        };
         taken += 1;
         cameras.insert((plan.dng.format.name().to_string(), plan.dng.make.clone(), plan.dng.model.clone()));
-        let mosaic = heeler_rawdec::develop::unpack(&bytes, &plan, None);
-        match (mosaic, heeler_raw::libraw_mosaic(&bytes)) {
-            (Ok(mine), Ok((_, _, theirs))) if mine == theirs => {}
+        match heeler_rawdec::develop::unpack(&bytes, &plan, None) {
+            Ok(mine) if mine == theirs => {}
             _ => failures.push(format!("{name}: the unpacked mosaic")),
         }
         // The matrix and levels are LibRaw's here: what this holds to
@@ -101,7 +106,7 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
     }
     #[cfg(feature = "rust-decoder")]
     heeler_raw::rust_path::set_enabled(true);
-    eprintln!("{taken} corpus files from {} cameras compared", cameras.len());
+    eprintln!("{taken} corpus files from {} cameras compared; {} LibRaw cannot open: {unreadable:?}", cameras.len(), unreadable.len());
     assert!(failures.is_empty(), "{} differ from LibRaw:\n{}", failures.len(), failures.join("\n"));
     let listed = heeler_rawdec::verified_cameras();
     let untested: Vec<_> = listed.iter().filter(|(f, m, n)| !cameras.contains(&(f.to_string(), m.to_string(), n.to_string()))).collect();

@@ -18,7 +18,7 @@ use heeler_engine::memory;
 use rayon::prelude::*;
 
 use crate::ahd::{self, Mosaic, Out};
-use crate::dng::{Coding, Dng};
+use crate::dng::{Coding, Dng, Format};
 use crate::gain_map::{self, PixelGains};
 use crate::{Error, Opts};
 
@@ -74,6 +74,7 @@ impl Plan {
             (1, 0, _) if matches!(&dng.coding, Coding::Crx(_)) && (8..=16).contains(&dng.bits) => {}
             (1, 0, _) if matches!(&dng.coding, Coding::CrxWavelet(_)) && (8..=16).contains(&dng.bits) => {}
             (1, 34713, _) if matches!(&dng.coding, Coding::NikonHuffman(_)) && (12..=14).contains(&dng.bits) => {}
+            (1, 34316, _) if matches!(&dng.coding, Coding::Panasonic(_)) && (12..=16).contains(&dng.bits) => {}
             (3, 1, 1) | (3, 8, 3 | 34894 | 34895) if matches!(dng.bits, 16 | 24 | 32) && dng.linearization.is_none() => {}
             _ => return Err(Error::Unsupported("a sample format, depth or compression not read here")),
         }
@@ -524,6 +525,13 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         crate::nef::decode(&bytes[at..at + len], d.width, d.height.min(p.top + p.height), h, |r, line| put_run(out, p, r, 0, line, lin))?;
         return Ok(cfa);
     }
+    if let Coding::Panasonic(coding) = &d.coding {
+        // Packets in one span, or tiles side by side; rows below the image
+        // area are not decoded.
+        stopped(stop)?;
+        crate::rw2::decode(bytes, &d.pieces.spans, d.width, d.height.min(p.top + p.height), coding, |r, c, line| put_run(out, p, r, c, line, lin))?;
+        return Ok(cfa);
+    }
     if d.coding == Coding::SonyBlocks {
         let (at, len) = d.pieces.spans[0];
         stopped(stop)?;
@@ -611,6 +619,38 @@ pub fn border_black(frame: &[u16], frame_width: usize, p: &Plan) -> Result<[u32;
         })
         .reduce(|| ([0; 4], [0; 4]), |a, b| ([0, 1, 2, 3].map(|i| a.0[i] + b.0[i]), [0, 1, 2, 3].map(|i| a.1[i] + b.1[i])));
     Ok([0, 1, 2, 3].map(|i| ((sum[i] + n[i] / 2) / n[i].max(1)) as u32))
+}
+
+/// LibRaw takes a Panasonic file's samples of 0 as bad ones: each becomes
+/// the mean, rounded down, of the samples of its color two rows or columns
+/// away (and diagonally) inside the image area that are not 0, in the
+/// order the rows run, as found against LibRaw's mosaic before its
+/// demosaic. Another format's mosaic is left as it is.
+pub fn fill_zeros(cfa: &mut [u16], p: &Plan) {
+    if p.dng.format != Format::Rw2 {
+        return;
+    }
+    let (w, h) = (p.width, p.height);
+    let zeros: Vec<usize> = cfa.par_iter().enumerate().filter(|(_, &v)| v == 0).map(|(i, _)| i).collect();
+    for i in zeros {
+        let (r, c) = (i / w, i % w);
+        let (mut sum, mut n) = (0u32, 0u32);
+        for rr in [r.wrapping_sub(2), r, r + 2] {
+            for cc in [c.wrapping_sub(2), c, c + 2] {
+                if (rr, cc) == (r, c) || rr >= h || cc >= w {
+                    continue;
+                }
+                let v = cfa[rr * w + cc];
+                if v > 0 {
+                    sum += v as u32;
+                    n += 1;
+                }
+            }
+        }
+        if n > 0 {
+            cfa[i] = (sum / n) as u16;
+        }
+    }
 }
 
 /// The image area's samples, as unpack gives them, and the black level
@@ -849,6 +889,7 @@ fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, 
     } else {
         (unpack(bytes, p, stop)?, p)
     };
+    fill_zeros(&mut cfa, p);
     let unpacked = t0.elapsed().as_secs_f64();
     stopped(stop)?;
     if !p.gains2.is_empty() {

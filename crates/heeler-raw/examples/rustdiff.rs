@@ -174,6 +174,7 @@ fn main() {
                 let o = DevelopOpts { highlight, ..base };
                 let stages = heeler_raw::linear_dng::libraw_stages(&bytes, o).unwrap();
                 let mut mine = heeler_rawdec::develop::unpack(&bytes, &plan, None).unwrap();
+                heeler_rawdec::develop::fill_zeros(&mut mine, &plan);
                 let max = heeler_rawdec::develop::subtract_black(&mut mine, &numbered);
                 let n = heeler_rawdec::develop::numbers(&numbered, &opts_of(o), max);
                 heeler_rawdec::develop::scale_mosaic(&mut mine, &plan, &n);
