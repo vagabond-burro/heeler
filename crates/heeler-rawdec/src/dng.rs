@@ -21,6 +21,7 @@ pub enum Format {
     Cr2,
     Arw,
     Cr3,
+    Nef,
 }
 
 impl Format {
@@ -30,6 +31,7 @@ impl Format {
             Format::Cr2 => "CR2",
             Format::Arw => "ARW",
             Format::Cr3 => "CR3",
+            Format::Nef => "NEF",
         }
     }
 }
@@ -60,6 +62,9 @@ pub enum Coding {
     /// Canon's C-RAW wavelet coding (cr3.rs, crx.rs): each plane rebuilt
     /// from its tiles' subbands.
     CrxWavelet(Box<crate::cr3::CrxWavelet>),
+    /// Nikon's Huffman coding (nef.rs): one stream, each sample a
+    /// prediction and a coded difference.
+    NikonHuffman(Box<crate::nef::Huffman>),
 }
 
 /// A raw file in the terms a develop needs, which are the DNG
@@ -275,6 +280,9 @@ impl Dng {
         }
         if crate::sony::is_arw(bytes) {
             return crate::sony::parse(bytes);
+        }
+        if crate::nef::is_nef(bytes) {
+            return crate::nef::parse(bytes);
         }
         Dng::parse(bytes)
     }

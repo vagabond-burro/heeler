@@ -73,6 +73,7 @@ impl Plan {
             (1, 32767, _) if dng.coding == Coding::SonyBlocks => {}
             (1, 0, _) if matches!(&dng.coding, Coding::Crx(_)) && (8..=16).contains(&dng.bits) => {}
             (1, 0, _) if matches!(&dng.coding, Coding::CrxWavelet(_)) && (8..=16).contains(&dng.bits) => {}
+            (1, 34713, _) if matches!(&dng.coding, Coding::NikonHuffman(_)) && (12..=14).contains(&dng.bits) => {}
             (3, 1, 1) | (3, 8, 3 | 34894 | 34895) if matches!(dng.bits, 16 | 24 | 32) && dng.linearization.is_none() => {}
             _ => return Err(Error::Unsupported("a sample format, depth or compression not read here")),
         }
@@ -512,6 +513,15 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
             }
             Ok(())
         })?;
+        return Ok(cfa);
+    }
+    if let Coding::NikonHuffman(h) = &d.coding {
+        // One stream, row after row.
+        let (at, len) = d.pieces.spans[0];
+        stopped(stop)?;
+        // Rows below the image area are not decoded: some files' streams
+        // stop at its last row.
+        crate::nef::decode(&bytes[at..at + len], d.width, d.height.min(p.top + p.height), h, |r, line| put_run(out, p, r, 0, line, lin))?;
         return Ok(cfa);
     }
     if d.coding == Coding::SonyBlocks {

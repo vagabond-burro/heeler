@@ -1,0 +1,422 @@
+//! Nikon NEF files, read into the DNG terms a develop needs (dng.rs).
+//!
+//! A NEF is TIFF; the raw frame is a SubIFD with CFA photometric. Its
+//! codings, as found from the data against LibRaw's unpacked frame:
+//! uncompressed 16-bit words in the file's byte order, or 12-bit samples
+//! packed most significant bits first; and, marked as Nikon's compression
+//! (34713) but stored whole, 12 and 14-bit samples packed least
+//! significant bits first, a row's bytes sometimes padded to 16. Nikon's
+//! Huffman coding, the High Efficiency coding and the small NEF are
+//! declined and stay LibRaw's.
+//!
+//! The white balance as shot is the maker notes' WB_RBLevels (0x000C: red,
+//! then blue, against green), which LibRaw takes as is; a file without it
+//! stays LibRaw's. The black level is the maker notes' BlackLevel
+//! (0x003D), stated for 14-bit data and scaled down for 12-bit, or 0. The
+//! image area and CFA colors come from geometry.rs (LibRaw's), the white
+//! level from its table by the samples' depth (else the depth's top), the
+//! calibrations from cameras.rs.
+
+use crate::dng::{Coding, Dng, Format, Pieces};
+use crate::tiff::{Ifd, Tiff};
+use crate::Error;
+
+/// The depth of a NEF's raw samples (its raw directory's BitsPerSample).
+pub fn depth(bytes: &[u8]) -> Option<u32> {
+    let t = Tiff::new(bytes)?;
+    let ifds = t.ifds();
+    let raw = ifds.iter().skip(1).find(|i| i.get(262).and_then(|e| t.uint(&e)) == Some(32803) && i.get(254).and_then(|e| t.uint(&e)).unwrap_or(0) == 0)?;
+    raw.get(258).and_then(|e| t.uints(&e)).and_then(|b| b.first().copied())
+}
+
+/// Whether `bytes` are a NEF this module reads: TIFF, made by Nikon, not a
+/// DNG.
+pub fn is_nef(bytes: &[u8]) -> bool {
+    let Some(t) = Tiff::new(bytes) else { return false };
+    let Some(ifd0) = t.ifds().into_iter().next() else { return false };
+    ifd0.get(271).and_then(|e| t.ascii(&e)).is_some_and(|m| m.to_ascii_uppercase().starts_with("NIKON")) && ifd0.get(50706).is_none()
+}
+
+/// The maker notes (EXIF 0x927C, "Nikon" and a TIFF of their own) and
+/// their first directory.
+fn maker_notes<'a>(t: &Tiff<'a>, ifds: &[Ifd]) -> Option<(Tiff<'a>, Ifd)> {
+    let e = ifds.iter().find_map(|i| i.get(37500))?;
+    let notes = t.bytes(&e)?;
+    if !notes.starts_with(b"Nikon\0") {
+        return None;
+    }
+    let mt = Tiff::new(notes.get(10..)?)?;
+    let (ifd, _) = mt.ifd(mt.u32(4)? as usize)?;
+    Some((mt, ifd))
+}
+
+pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
+    let t = Tiff::new(bytes).ok_or(Error::Unsupported("not a TIFF"))?;
+    let ifds = t.ifds();
+    let ifd0 = ifds.first().ok_or(Error::Unsupported("no directory"))?;
+    let uint = |ifd: &Ifd, tag| ifd.get(tag).and_then(|e| t.uint(&e));
+    let uints = |ifd: &Ifd, tag| ifd.get(tag).and_then(|e| t.uints(&e));
+    let raw = ifds[1..]
+        .iter()
+        .find(|i| uint(i, 262) == Some(32803) && uint(i, 254).unwrap_or(0) == 0)
+        .ok_or(Error::Unsupported("no CFA raw frame"))?;
+    let ascii = |tag| ifd0.get(tag).and_then(|e| t.ascii(&e)).unwrap_or_default();
+    let (make, model) = (ascii(271), ascii(272));
+    let width = uint(raw, 256).ok_or(Error::Corrupt("ImageWidth"))? as usize;
+    let height = uint(raw, 257).ok_or(Error::Corrupt("ImageLength"))? as usize;
+    let bits_tag = uints(raw, 258).and_then(|b| b.first().copied()).unwrap_or(0) as usize;
+    if width == 0 || height == 0 || !(12..=14).contains(&bits_tag) {
+        return Err(Error::Unsupported("a NEF frame of this size or depth"));
+    }
+    let offsets = uints(raw, 273).ok_or(Error::Corrupt("StripOffsets"))?;
+    let counts = uints(raw, 279).ok_or(Error::Corrupt("StripByteCounts"))?;
+    if offsets.is_empty() || offsets.len() != counts.len() || offsets.iter().zip(&counts).any(|(&o, &n)| (o as usize).checked_add(n as usize).is_none_or(|e| e > bytes.len())) {
+        return Err(Error::Corrupt("a raw strip past the end of the file"));
+    }
+    let count: usize = counts.iter().map(|&n| n as usize).sum();
+    let rows_per_strip = uint(raw, 278).map_or(height, |r| (r as usize).min(height));
+    let notes = maker_notes(&t, &ifds);
+    let note = |tag| notes.as_ref().and_then(|(mt, ifd)| ifd.get(tag).map(|e| (mt, e)));
+    // Each strip a piece of whole rows, as the file lays them out.
+    let strips = || Pieces { width, height: rows_per_strip, spans: offsets.iter().zip(&counts).map(|(&o, &n)| (o as usize, n as usize)).collect() };
+    let mut linearization = None;
+    let (coding, bits, pieces) = match uint(raw, 259) {
+        Some(1) if count >= width * height * 2 => (Coding::Tiff, 16, strips()),
+        Some(1) if bits_tag == 12 && count >= width * height * 3 / 2 => (Coding::Tiff, 12, strips()),
+        // Stored whole under Nikon's compression: one strip, each row's
+        // samples least significant bits first, the row padded to 16
+        // bytes in some files (each row then its own piece).
+        Some(34713) if offsets.len() == 1 && count % height == 0 && count / height >= (width * bits_tag).div_ceil(8) && count / height < (width * bits_tag).div_ceil(8) + 16 => {
+            let (at, stride) = (offsets[0] as usize, count / height);
+            let pieces = if stride == (width * bits_tag).div_ceil(8) {
+                strips()
+            } else {
+                Pieces { width, height: 1, spans: (0..height).map(|r| (at + r * stride, stride)).collect() }
+            };
+            (Coding::PackedLow, bits_tag as u32, pieces)
+        }
+        Some(34713) if offsets.len() == 1 => {
+            let (mt, e) = note(0x0096).ok_or(Error::Unsupported("no NEFLinearizationTable"))?;
+            let (code, curve) = huffman_code(mt, e, bits_tag)?;
+            // The row a lossy frame's second code starts at, after a curve
+            // of 257 points (0 none).
+            let points = mt.u16(e.offset() + 10);
+            let later = match (code != LOSSLESS_12 && code != LOSSLESS_14 && points == Some(257), mt.u16(e.offset() + 562)) {
+                (true, Some(row)) if e.count >= 564 && row > 0 => Some((row as usize, if code == LOSSY_12 { LOSSY_12_LATER } else { LOSSY_14_LATER })),
+                _ => None,
+            };
+            let seeds = note(0x0096).and_then(|(mt, e)| (0..4).map(|k| mt.u16(e.offset() + 2 + 2 * k)).collect::<Option<Vec<_>>>()).ok_or(Error::Corrupt("NEFLinearizationTable"))?;
+            linearization = curve;
+            (Coding::NikonHuffman(Box::new(Huffman { code, seeds: [[seeds[0], seeds[1]], [seeds[2], seeds[3]]], later })), bits_tag as u32, strips())
+        }
+        _ => return Err(Error::Unsupported("a Nikon coding not read here")),
+    };
+    if pieces.spans.len() != height.div_ceil(pieces.height) {
+        return Err(Error::Corrupt("the strip layout"));
+    }
+    // The white balance as shot: WB_RBLevels, red then blue.
+    let wb = note(0x000c).and_then(|(mt, e)| mt.reals(&e)).filter(|w| w.len() >= 2 && w[0] > 0.0 && w[1] > 0.0).ok_or(Error::Unsupported("no stated white balance"))?;
+    // The black level, stated for 14-bit data.
+    let black = match note(0x003d).and_then(|(mt, e)| mt.uints(&e)) {
+        Some(b) if b.len() == 4 => b.iter().map(|&v| (v >> (14 - bits_tag)) as f64).collect::<Vec<_>>(),
+        Some(_) => return Err(Error::Unsupported("a black level not read here")),
+        None => vec![0.0; 4],
+    };
+    let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
+    // The white level for the samples' depth (geometry.rs), else the
+    // depth's top.
+    let white = crate::geometry::nef_white(&make, &model, bits_tag as u32).unwrap_or((1 << bits_tag) - 1) as f64;
+    let orientation = uint(ifd0, 274).unwrap_or(1);
+    if !(1..=8).contains(&orientation) {
+        return Err(Error::Unsupported("an orientation tag outside 1 to 8"));
+    }
+    let calibration = crate::cameras::find(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
+    let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
+    let (top, left) = (geometry.top as usize, geometry.left as usize);
+    Ok(Dng {
+        format: Format::Nef,
+        make,
+        model: model.clone(),
+        unique_model: model,
+        version: [0, 0, 0, 0],
+        orientation: orientation as u16,
+        width,
+        height,
+        bits,
+        compression: if matches!(coding, Coding::NikonHuffman(_)) { 34713 } else { 1 },
+        photometric: 32803,
+        samples: 1,
+        sample_format: 1,
+        predictor: 1,
+        pieces,
+        cfa_dim: (2, 2),
+        cfa: geometry.colors.to_vec(),
+        cfa_layout: 1,
+        linearization,
+        black_dim: (2, 2),
+        // Each site's channel: red, the green on red's row, the other
+        // green, blue.
+        black: (0..4)
+            .map(|k| {
+                let c = geometry.colors[k];
+                let red_row = geometry.colors[(k & 2)..(k & 2) + 2].contains(&0);
+                black[match c {
+                    0 => 0,
+                    2 => 3,
+                    _ if red_row => 1,
+                    _ => 2,
+                }]
+            })
+            .collect(),
+        black_delta_h: Vec::new(),
+        black_delta_v: Vec::new(),
+        white: vec![white],
+        active: (top, left, top + geometry.height as usize, left + geometry.width as usize),
+        default_crop: None,
+        default_scale: (1.0, 1.0),
+        as_shot_neutral: Some(vec![1.0 / wb[0], 1.0, 1.0 / wb[1]]),
+        as_shot_white_xy: None,
+        color_matrix: [m(&calibration.color_matrix[0]), m(&calibration.color_matrix[1]), None],
+        camera_calibration: [None, None, None],
+        illuminant: [calibration.illuminants[0], calibration.illuminants[1], 0],
+        analog_balance: None,
+        forward_matrix: [m(&calibration.forward_matrix[0]), m(&calibration.forward_matrix[1]), None],
+        opcodes: [Vec::new(), Vec::new(), Vec::new()],
+        profile_tables: calibration.tables,
+        baseline_exposure: 0.0,
+        coding,
+        cam_mul: Some([wb[0] as f32, 1.0, wb[1] as f32, 1.0]),
+        border_black: false,
+    })
+}
+
+/// The code of a frame in Nikon's Huffman coding and its curve, from the
+/// maker notes' NEFLinearizationTable (0x0096): two version bytes (0x46
+/// lossless, 0x44 lossy), the four seeds, then for a lossy frame the
+/// curve's length and points. A curve of 257 points spans the samples'
+/// range (their depth, or two bits less in version 0x40), a point every
+/// 256th of it, linear between; another is the whole table. Past its end
+/// a sample passes through as it is, up to 14 bits.
+fn huffman_code(mt: &Tiff, e: crate::tiff::Entry, bits: usize) -> Result<(HuffmanCode, Option<Vec<u16>>), Error> {
+    let blob = mt.bytes(&e).ok_or(Error::Corrupt("NEFLinearizationTable"))?;
+    let at = e.offset();
+    match (blob.first(), blob.get(1), bits) {
+        (Some(0x46), Some(0x30), 12) => Ok((LOSSLESS_12, None)),
+        (Some(0x46), Some(0x30), 14) => Ok((LOSSLESS_14, None)),
+        (Some(0x44), Some(0x10 | 0x20 | 0x40), 12 | 14) => {
+            // The samples' range: the depth, or (version 0x40) two bits
+            // less.
+            let range = if blob[1] == 0x40 { bits - 2 } else { bits };
+            let n = mt.u16(at + 10).ok_or(Error::Corrupt("NEFLinearizationTable"))? as usize;
+            let points = (0..n).map(|k| mt.u16(at + 12 + 2 * k)).collect::<Option<Vec<u16>>>().ok_or(Error::Corrupt("NEFLinearizationTable"))?;
+            if n < 2 {
+                return Err(Error::Unsupported("a NEF curve of under 2 points"));
+            }
+            let mut curve: Vec<u16> = if n == 257 {
+                let step = (1usize << range) / 256;
+                (0..=(n - 1) * step)
+                    .map(|v| {
+                        let (i, r) = (v / step, v % step);
+                        let (a, b): (usize, usize) = (points[i] as usize, points[(i + 1).min(n - 1)] as usize);
+                        (a + (b.saturating_sub(a)) * r / step) as u16
+                    })
+                    .collect()
+            } else {
+                points
+            };
+            // Samples past the curve's end pass through as they are, to 14
+            // bits; a larger one takes the 14-bit top's.
+            let from = curve.len();
+            curve.extend((from..1 << 14).map(|v| v as u16));
+            Ok((if bits == 12 { LOSSY_12 } else { LOSSY_14 }, Some(curve)))
+        }
+        _ => Err(Error::Unsupported("a Nikon Huffman kind not read here")),
+    }
+}
+
+/// One of Nikon's Huffman codes: each symbol's code (its length and bits),
+/// found from the data against LibRaw's frame. A symbol is a category, the
+/// difference's length in bits, and in its high four bits a shift: the
+/// low bits of a difference the coding left out (decode). The symbols a
+/// code was not seen to use have no entry; a file that uses one stays
+/// LibRaw's.
+pub type HuffmanCode = &'static [(u8, u16, u8)];
+
+/// Lossless, 12-bit samples.
+pub const LOSSLESS_12: HuffmanCode = &[(2, 0b00, 5), (3, 0b010, 4), (3, 0b011, 6), (3, 0b100, 3), (4, 0b1100, 2), (4, 0b1101, 8), (5, 0b11100, 1), (5, 0b11101, 9), (5, 0b11110, 0), (6, 0b111110, 10), (3, 0b101, 7), (7, 0b1111110, 11), (7, 0b1111111, 12)];
+/// Lossless, 14-bit samples.
+pub const LOSSLESS_14: HuffmanCode = &[(2, 0b00, 7), (3, 0b010, 6), (3, 0b011, 8), (3, 0b100, 5), (3, 0b101, 9), (4, 0b1100, 4), (4, 0b1101, 10), (5, 0b11100, 3), (5, 0b11101, 11), (6, 0b111101, 2), (6, 0b111110, 0), (7, 0b1111110, 1), (6, 0b111100, 12), (8, 0b11111110, 13), (8, 0b11111111, 14)];
+/// Lossy, 12-bit samples.
+pub const LOSSY_12: HuffmanCode = &[(2, 0b00, 5), (3, 0b010, 4), (3, 0b011, 3), (3, 0b100, 6), (3, 0b101, 2), (3, 0b110, 7), (4, 0b1110, 1), (5, 0b11110, 0), (6, 0b111110, 8), (7, 0b1111110, 9), (9, 0b111111110, 10)];
+/// Lossy, 12-bit samples, from the row the curve's record names on.
+pub const LOSSY_12_LATER: HuffmanCode = &[(3, 0b011, 8 | 3 << 4), (3, 0b100, 7 | 2 << 4), (3, 0b101, 6 | 1 << 4), (3, 0b110, 5), (4, 0b1110, 4), (5, 0b11110, 3), (6, 0b111110, 2), (7, 0b1111110, 1), (8, 0b11111110, 0), (2, 0b00, 9 | 3 << 4), (3, 0b010, 10 | 5 << 4)];
+/// Lossy, 14-bit samples, from the row the curve's record names on.
+pub const LOSSY_14_LATER: HuffmanCode = &[(2, 0b00, 8), (3, 0b100, 10 | 3 << 4), (3, 0b101, 9 | 2 << 4), (3, 0b110, 7), (4, 0b1110, 6), (5, 0b11110, 5), (6, 0b111110, 4), (7, 0b1111110, 3), (8, 0b11111110, 2), (10, 0b1111111110, 0), (3, 0b011, 11 | 4 << 4), (9, 0b111111110, 1), (3, 0b010, 12 | 5 << 4)];
+/// Lossy, 14-bit samples.
+pub const LOSSY_14: HuffmanCode = &[(2, 0b00, 5), (3, 0b010, 6), (3, 0b011, 4), (3, 0b100, 7), (3, 0b101, 8), (4, 0b1100, 3), (4, 0b1101, 9), (4, 0b1110, 2), (5, 0b11110, 1), (6, 0b111110, 0), (7, 0b1111110, 10), (8, 0b11111110, 11), (9, 0b111111110, 12)];
+
+/// A frame in Nikon's Huffman coding: its code, and the predictions the
+/// first two samples of the first rows of each parity start from; for
+/// some lossy frames a second code from a row on.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Huffman {
+    pub code: HuffmanCode,
+    pub seeds: [[u16; 2]; 2],
+    pub later: Option<(usize, HuffmanCode)>,
+}
+
+/// The frame's samples row by row into `line` (the row, its samples): each
+/// sample its prediction plus a difference coded as a symbol (its Huffman
+/// code, bits most significant first), a category and a shift, then the
+/// category less the shift in bits: those bits, a 1 and the shift's zeros
+/// after them halved make the difference's magnitude bits, a leading 0
+/// marking a negative difference as in ITU-T T.81 (with a shift, its
+/// magnitude one more). A row's
+/// first two samples are predicted by the same columns of the last row of
+/// its parity (the seeds above the first two rows), the others by the
+/// sample two columns to the left; each sample held to 0 to 2^14 - 1 once
+/// predicted from.
+pub fn decode(data: &[u8], width: usize, height: usize, h: &Huffman, mut line: impl FnMut(usize, &[u16])) -> Result<(), Error> {
+    // Every max_len-bit prefix to its code's length and symbol.
+    let table = |code: HuffmanCode| {
+        let max_len = code.iter().map(|e| e.0).max().unwrap_or(1) as u32;
+        let mut lookup = vec![(0u8, 0u8); 1 << max_len];
+        for &(len, bits, sym) in code {
+            let shift = max_len - len as u32;
+            for low in 0..1usize << shift {
+                lookup[((bits as usize) << shift) | low] = (len, sym);
+            }
+        }
+        (max_len, lookup)
+    };
+    let (mut max_len, mut lookup) = table(h.code);
+    let (mut cache, mut have, mut at) = (0u64, 0u32, 0usize);
+    fn fill(data: &[u8], cache: &mut u64, have: &mut u32, at: &mut usize) {
+        while *have <= 56 {
+            *cache |= (*data.get(*at).unwrap_or(&0) as u64) << (56 - *have);
+            *at += 1;
+            *have += 8;
+        }
+    }
+    let mut seeds = h.seeds.map(|r| r.map(|v| v as i32));
+    let mut row = vec![0u16; width];
+    for y in 0..height {
+        if let Some((row, code)) = h.later {
+            if y == row {
+                (max_len, lookup) = table(code);
+            }
+        }
+        let mut left = [0i32; 2];
+        for x in 0..width {
+            fill(data, &mut cache, &mut have, &mut at);
+            let (len, sym) = lookup[(cache >> (64 - max_len)) as usize];
+            if len == 0 {
+                return Err(Error::Unsupported("a Nikon Huffman code not read here"));
+            }
+            cache <<= len;
+            have -= len as u32;
+            let (cat, shl) = ((sym & 15) as u32, (sym >> 4) as u32);
+            let diff = if cat == 0 {
+                0
+            } else if shl >= cat {
+                return Err(Error::Corrupt("a Nikon Huffman shift past its category"));
+            } else {
+                let n = cat - shl;
+                let v = (cache >> (64 - n)) as i32;
+                cache <<= n;
+                have -= n;
+                let d = ((v << 1) + 1) << shl >> 1;
+                if d & (1 << (cat - 1)) == 0 { d - (1 << cat) + i32::from(shl == 0) } else { d }
+            };
+            let pred = if x < 2 { seeds[y & 1][x] } else { left[x & 1] };
+            // The prediction runs on unbounded; the sample is held to 14
+            // bits.
+            let v = pred + diff;
+            if x < 2 {
+                seeds[y & 1][x] = v;
+            }
+            left[x & 1] = v;
+            row[x] = v.clamp(0, 0x3fff) as u16;
+        }
+        if at > data.len() + 8 {
+            return Err(Error::Corrupt("a Nikon Huffman frame's data ends early"));
+        }
+        line(y, &row);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Rows coded as `decode`'s notes state it, with a code of unshifted
+    /// symbols.
+    fn encode(rows: &[Vec<i32>], code: HuffmanCode, seeds: [[i32; 2]; 2]) -> Vec<u8> {
+        let mut out: Vec<bool> = Vec::new();
+        let put = |out: &mut Vec<bool>, v: u32, n: u32| (0..n).rev().for_each(|i| out.push(v >> i & 1 == 1));
+        let mut seeds = seeds;
+        for (y, row) in rows.iter().enumerate() {
+            for x in 0..row.len() {
+                let pred = if x < 2 { seeds[y & 1][x] } else { row[x - 2] };
+                let d = row[x] - pred;
+                let cat = d.unsigned_abs().checked_ilog2().map_or(0, |l| l + 1);
+                let &(len, bits, _) = code.iter().find(|e| e.2 as u32 == cat).expect("a category the code has");
+                put(&mut out, bits as u32, len as u32);
+                put(&mut out, if d >= 0 { d as u32 } else { (d + (1 << cat) - 1) as u32 }, cat);
+                if x < 2 {
+                    seeds[y & 1][x] = row[x];
+                }
+            }
+        }
+        out.chunks(8).map(|c| c.iter().enumerate().fold(0u8, |v, (i, &b)| v | (b as u8) << (7 - i))).collect()
+    }
+
+    #[test]
+    fn rows_decode_as_they_were_coded() {
+        let mut seed = 99u32;
+        let mut noise = move || {
+            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
+            (seed >> 16) as i32
+        };
+        // Smooth rows, jumps of every category to the depth's, both edges.
+        for (code, depth) in [(LOSSLESS_12, 12), (LOSSLESS_14, 14)] {
+            let (w, h) = (37, 9);
+            let rows: Vec<Vec<i32>> = (0..h)
+                .map(|y| (0..w).map(|x| if (x + y) % 11 == 0 { noise() % (1 << depth) } else { 600 + noise() % 40 + 3 * x as i32 }).collect())
+                .collect();
+            let data = encode(&rows, code, [[512, 512], [512, 512]]);
+            let mut got = Vec::new();
+            decode(&data, w, h, &Huffman { code, seeds: [[512, 512], [512, 512]], later: None }, |_, line| got.push(line.iter().map(|&v| v as i32).collect::<Vec<_>>())).unwrap();
+            assert!(got == rows, "{depth}-bit");
+        }
+    }
+
+    #[test]
+    fn a_shifted_symbol_leaves_out_low_bits() {
+        // One row of one sample: the code 011 (category 8, shift 3 in the
+        // 12-bit later code), then 5 bits 10110: the magnitude bits are
+        // 10110, a 1 and 2 zeros halved, 10110100 (180), positive.
+        let h = Huffman { code: LOSSY_12_LATER, seeds: [[100, 100], [100, 100]], later: None };
+        let mut got = 0;
+        decode(&[0b0111_0110, 0], 1, 1, &h, |_, line| got = line[0]).unwrap();
+        assert_eq!(got, 100 + 180);
+        // 00110: a leading 0, so negative: 00110100 (52) less 256, -204.
+        let h = Huffman { seeds: [[1000, 1000], [1000, 1000]], ..h };
+        decode(&[0b0110_0110, 0], 1, 1, &h, |_, line| got = line[0]).unwrap();
+        assert_eq!(got, 1000 - 204);
+    }
+
+    #[test]
+    fn codes_are_prefix_free() {
+        for code in [LOSSLESS_12, LOSSLESS_14, LOSSY_12, LOSSY_14, LOSSY_12_LATER, LOSSY_14_LATER] {
+            for (i, a) in code.iter().enumerate() {
+                for b in &code[i + 1..] {
+                    let (s, l) = if a.0 <= b.0 { (a, b) } else { (b, a) };
+                    assert_ne!(l.1 >> (l.0 - s.0), s.1, "{a:?} and {b:?}");
+                    assert_ne!(a.2, b.2, "{a:?} and {b:?} code one symbol");
+                }
+            }
+        }
+    }
+}

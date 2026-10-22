@@ -1119,6 +1119,78 @@ tile decodes on four cores at most.
 - Roll-burst files.
 - Calibrations for the R5 C, R6 Mark III and C50.
 
+## Phase 6: NEF
+
+### What was built
+
+- `nef.rs` reads the container: TIFF, the raw frame the SubIFD with CFA
+  photometric, the maker notes ("Nikon" and a TIFF of their own) for
+  WB_RBLevels (0x000C, red then blue against green, LibRaw's balance as
+  is), BlackLevel (0x003D, stated for 14-bit samples and shifted down for
+  12-bit ones; 0 without it), the compression (0x0093) and the
+  linearization record (0x0096). The image area and CFA colors come from
+  geometry.rs, whose builder now reads NEF; the white level from a table
+  the same builder writes by camera and sample depth (`NEF_WHITE`: a
+  camera's 12-bit and 14-bit files share a frame size but not a level,
+  the D600's 14-bit level being 15879), else the depth's top.
+- The uncompressed codings, found against LibRaw's frame: 16-bit words
+  in the file's byte order, or 12-bit samples packed most significant
+  bits first; and, marked as Nikon's compression but stored whole (NEF
+  compression 6 and 10, and Z bodies without the tag), 12 and 14-bit
+  samples packed least significant bits first, a row padded to 16 bytes
+  in some files.
+- Nikon's Huffman coding, which no file and no prose documents (its
+  tables live only in code), derived from the data: for each sample of
+  LibRaw's frame (a lossy frame's back through its curve) the
+  difference from its prediction is known, so the code is what makes
+  the stream read as those differences. A search over the first few
+  thousand samples, backtracking where a category's code length is
+  ambiguous, then a learner over whole files (each candidate code
+  judged by how far the samples after it decode), found:
+  - a row's first two samples predicted by the same columns of the last
+    row of its parity (the record's four seeds above the first rows),
+    the others by the sample two to the left; each difference a Huffman
+    symbol and then its bits, ITU-T T.81's sign rule; a sample held to
+    0 to 2^14 - 1 (the prediction runs on unbounded);
+  - six codes: lossless 12 and 14-bit, lossy 12 and 14-bit, and, from a
+    row the record names (the 16-bit word at its byte 562, after a
+    257-point curve), a second lossy code for each depth whose symbols
+    carry a shift: the difference's low bits left out, filled by a 1
+    and zeros halved (the high-ISO files' coarse differences);
+  - the lossy curve: 257 points over the samples' range (their depth,
+    or two bits less in record version 0x40), a point every 256th of
+    it, linear between and including the last; an older record (version
+    0x10) holds the whole table; a sample past the curve passes through,
+    up to 14 bits.
+  Each code is stored as the codes the corpus uses; a symbol it never
+  used reads as unsupported, and the file stays LibRaw's. One stream, so
+  the frame decodes on one core.
+- Declined and LibRaw's: High Efficiency (and its starred variant) of
+  the Z8, Z9, Z f, Z50 II, Z5 II and Z6 III; the small NEF; the D100's
+  own coding and the D1X's compressed files; files without a stated
+  balance (the D1, D1H, D1X, D2H, D50, D70 and D70s, a few D2Hs and D2X
+  files, the Coolpix E series); scanner files; the D810A and ZR (no
+  calibrations yet).
+- Tests: rows coded the other way round and decoded (both lossless
+  codes, jumps of every category), a shifted symbol's bits, and every
+  code prefix-free.
+
+### Verification
+
+- `rustdiff --any` over all 548 NEFs of both corpora: the 444 the Rust
+  path takes match LibRaw at every stage, and its own black, white and
+  balance are LibRaw's (the balance as ratios; LibRaw states some bodies'
+  in 256ths). Declined: 62 High Efficiency, small, D100 and D1X files,
+  24 without a stated balance, 13 of the D810A and ZR, 5 scanner files.
+- 71 NEF cameras join the verified list.
+
+### Not yet done
+
+- The balance of the bodies that keep it only in ColorBalance (0x0097),
+  enciphered from version 0200 on; High Efficiency; the small NEF.
+- Calibrations for the D810A and ZR.
+- Speed: the Huffman frame is one stream and decodes on one core.
+
 ## Color sources, measured
 
 Every non-DNG format needs a camera matrix the file does not carry, and
