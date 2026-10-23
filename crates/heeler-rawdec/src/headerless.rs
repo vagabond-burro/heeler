@@ -35,6 +35,9 @@ pub struct Layout {
     shift: u32,
     /// The even rows from the offset and the odd from half the file.
     fields: bool,
+    /// Samples of 0 are bad ones, filled from their neighbors as LibRaw
+    /// fills them (develop's fill_zeros).
+    pub zeros_bad: bool,
 }
 
 /// One size's camera: Make, Model, the frame's size, its layout and black.
@@ -51,17 +54,17 @@ struct Entry {
 }
 
 const fn packed(width: usize, bits: u32, word: usize) -> Layout {
-    Layout { offset: Some(0), stride: width * bits as usize / 8, bits, word, shift: 0, fields: false }
+    Layout { offset: Some(0), stride: width * bits as usize / 8, bits, word, shift: 0, fields: false, zeros_bad: false }
 }
 
 const fn words(width: usize, word: usize, shift: u32) -> Layout {
-    Layout { offset: Some(0), stride: width * 2, bits: 16, word, shift, fields: false }
+    Layout { offset: Some(0), stride: width * 2, bits: 16, word, shift, fields: false, zeros_bad: false }
 }
 
 /// Canon's add-on firmware: 16-bit little-endian words, 10 or 12 bits a
-/// sample.
+/// sample, samples of 0 bad ones (but the D10's).
 const fn canon(size: usize, model: &'static str, width: usize, height: usize, bits: u32) -> Entry {
-    Entry { size, make: "Canon", model, width, height, layout: packed(width, bits, 2), black: None }
+    Entry { size, make: "Canon", model, width, height, layout: Layout { zeros_bad: true, ..packed(width, bits, 2) }, black: None }
 }
 
 const ENTRIES: &[Entry] = &[
@@ -76,7 +79,7 @@ const ENTRIES: &[Entry] = &[
     canon(15467760, "Canon PowerShot SX110 IS", 3720, 2772, 12),
     canon(15636240, "Canon PowerShot A650 IS", 4104, 3048, 10),
     canon(18653760, "Canon PowerShot SX20 IS", 4080, 3048, 12),
-    canon(18763488, "Canon PowerShot D10", 4104, 3048, 12),
+    Entry { size: 18763488, make: "Canon", model: "Canon PowerShot D10", width: 4104, height: 3048, layout: packed(4104, 12, 2), black: None },
     canon(19131120, "Canon PowerShot SX220 HS", 4168, 3060, 12),
     canon(19167840, "Canon PowerShot SX40 HS", 4176, 3060, 12),
     canon(21936096, "Canon PowerShot SX30 IS", 4464, 3276, 12),
@@ -217,7 +220,7 @@ mod tests {
     fn words_are_read_last_byte_first() {
         // Two 12-bit samples, 0x0F2 and 0x1B2, then 8 bits of a third, in
         // one 32-bit little-endian word.
-        let l = Layout { offset: Some(0), stride: 8, bits: 12, word: 4, shift: 0, fields: false };
+        let l = Layout { offset: Some(0), stride: 8, bits: 12, word: 4, shift: 0, fields: false, zeros_bad: false };
         let mut line = [0u16; 3];
         unpack_row(&[0x09, 0xb2, 0x21, 0x0f, 0xf1, 0x09, 0x67, 0x61], &l, &mut line);
         assert_eq!(line, [0x0f2, 0x1b2, 0x096]);
@@ -230,7 +233,7 @@ mod tests {
 
     #[test]
     fn fields_take_odd_rows_from_half_the_file() {
-        let l = Layout { offset: Some(0), stride: 2, bits: 16, word: 1, shift: 0, fields: true };
+        let l = Layout { offset: Some(0), stride: 2, bits: 16, word: 1, shift: 0, fields: true, zeros_bad: false };
         let bytes = [0, 1, 0, 3, 0, 2, 0, 4];
         let got = std::sync::Mutex::new(vec![0u16; 4]);
         decode(&bytes, 1, 4, 4, &l, |r, line| got.lock().unwrap()[r] = line[0]).unwrap();
@@ -239,7 +242,7 @@ mod tests {
 
     #[test]
     fn a_short_file_is_corrupt() {
-        let l = Layout { offset: None, stride: 4, bits: 16, word: 2, shift: 0, fields: false };
+        let l = Layout { offset: None, stride: 4, bits: 16, word: 2, shift: 0, fields: false, zeros_bad: false };
         assert!(decode(&[0; 6], 2, 2, 2, &l, |_, _| {}).is_err());
     }
 }

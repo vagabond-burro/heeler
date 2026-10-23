@@ -32,6 +32,34 @@ pub enum Format {
     Headerless,
 }
 
+/// Make and Model as a raw file of any format this crate reads gives
+/// them: IFD0's (a CR3's in its CMT1 box, a headerless file's as LibRaw
+/// names its camera).
+pub fn make_model(bytes: &[u8]) -> Option<(String, String)> {
+    if crate::cr3::is_cr3(bytes) {
+        return crate::cr3::make_model(bytes);
+    }
+    if crate::rw2::is_rw2(bytes) {
+        return crate::rw2::make_model(bytes);
+    }
+    if crate::orf::is_orf(bytes) {
+        return crate::orf::make_model(bytes);
+    }
+    if crate::mrw::is_mrw(bytes) {
+        return crate::mrw::make_model(bytes);
+    }
+    if crate::crw::is_crw(bytes) {
+        return crate::crw::make_model(bytes);
+    }
+    if crate::headerless::is_headerless(bytes) {
+        return crate::headerless::make_model(bytes);
+    }
+    let t = crate::tiff::Tiff::new(bytes)?;
+    let ifd0 = t.ifds().into_iter().next()?;
+    let ascii = |tag| ifd0.get(tag).and_then(|e| t.ascii(&e));
+    Some((ascii(271)?, ascii(272)?))
+}
+
 impl Format {
     pub fn name(self) -> &'static str {
         match self {

@@ -649,8 +649,13 @@ const BORDER_MARGIN: usize = 2;
 /// The frame's black level from its masked border: for each site of the
 /// 2 by 2 pattern (counted from the image area's top left), the rounded
 /// mean of the masked columns left of the area, over the area's rows.
+/// A headerless file's border takes in light in places (the firmware's
+/// frames differ from camera to camera, and LibRaw names some by another
+/// camera's size): its black is measured over the masked columns on
+/// either side of the area that read darkest, within 6 of the darkest
+/// (columns below 16 are dead, not dark), each site's mean rounded down.
 pub fn border_black(frame: &[u16], frame_width: usize, p: &Plan) -> Result<[u32; 4], Error> {
-    let cols = BORDER_MARGIN..p.left.saturating_sub(BORDER_MARGIN);
+    let cols: Vec<usize> = if p.dng.format == Format::Headerless { darkest_columns(frame, frame_width, p) } else { (BORDER_MARGIN..p.left.saturating_sub(BORDER_MARGIN)).collect() };
     if cols.len() < 4 {
         return Err(Error::Unsupported("no masked border to measure black on"));
     }
@@ -659,7 +664,7 @@ pub fn border_black(frame: &[u16], frame_width: usize, p: &Plan) -> Result<[u32;
         .map(|r| {
             let mut sum = [0u64; 4];
             let mut n = [0u64; 4];
-            for c in cols.clone() {
+            for &c in &cols {
                 // The site counted from the area's top left (c - left has
                 // the parity of c + left).
                 let k = ((r - p.top) & 1) << 1 | ((c + p.left) & 1);
@@ -669,18 +674,31 @@ pub fn border_black(frame: &[u16], frame_width: usize, p: &Plan) -> Result<[u32;
             (sum, n)
         })
         .reduce(|| ([0; 4], [0; 4]), |a, b| ([0, 1, 2, 3].map(|i| a.0[i] + b.0[i]), [0, 1, 2, 3].map(|i| a.1[i] + b.1[i])));
-    // The mean rounded (a CRW's, as LibRaw takes it, rounded down).
-    let half = if p.dng.format == Format::Crw { 0 } else { 1 };
+    // The mean rounded (a CRW's, as LibRaw takes it, and a headerless
+    // file's rounded down).
+    let half = if matches!(p.dng.format, Format::Crw | Format::Headerless) { 0 } else { 1 };
     Ok([0, 1, 2, 3].map(|i| ((sum[i] + half * n[i] / 2) / n[i].max(1)) as u32))
+}
+
+/// The masked columns left and right of the image area that read darkest
+/// over its rows (border_black).
+fn darkest_columns(frame: &[u16], frame_width: usize, p: &Plan) -> Vec<usize> {
+    let border: Vec<usize> = (0..p.left).chain(p.left + p.width..frame_width).collect();
+    let mean = |c: usize| (p.top..p.top + p.height).map(|r| frame[r * frame_width + c] as u64).sum::<u64>() as f64 / p.height.max(1) as f64;
+    let means: Vec<(usize, f64)> = border.par_iter().map(|&c| (c, mean(c))).filter(|&(_, m)| m >= 16.0).collect();
+    let darkest = means.iter().map(|&(_, m)| m).fold(f64::MAX, f64::min);
+    means.into_iter().filter(|&(_, m)| m <= darkest + 6.0).map(|(c, _)| c).collect()
 }
 
 /// LibRaw takes a Panasonic file's samples of 0 as bad ones: each becomes
 /// the mean, rounded down, of the samples of its color two rows or columns
 /// away (and diagonally) inside the image area that are not 0, in the
 /// order the rows run, as found against LibRaw's mosaic before its
-/// demosaic. Another format's mosaic is left as it is.
+/// demosaic; so a headerless file whose layout says so (headerless.rs).
+/// Another format's mosaic is left as it is.
 pub fn fill_zeros(cfa: &mut [u16], p: &Plan) {
-    if p.dng.format != Format::Rw2 {
+    let bad = p.dng.format == Format::Rw2 || matches!(p.dng.coding, Coding::Headerless(l) if l.zeros_bad);
+    if !bad {
         return;
     }
     let (w, h) = (p.width, p.height);

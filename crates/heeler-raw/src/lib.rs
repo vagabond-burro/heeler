@@ -379,15 +379,16 @@ pub fn with_libraw_numbers(bytes: &[u8], plan: &heeler_rawdec::Plan) -> Result<h
     Ok(p)
 }
 
-/// `plan` (with LibRaw's numbers) given, for a file stating no balance,
-/// the multipliers LibRaw's develop takes from the picture in `opts`'s
-/// highlight mode, where the shipped develop takes daylight (tested
-/// apart). Other files' plans come back as they are.
+/// `plan` (with LibRaw's numbers) given, for a file stating no balance
+/// (LibRaw's camera multipliers -1, or 0), the multipliers LibRaw's
+/// develop takes from the picture in `opts`'s highlight mode, where the
+/// shipped develop takes daylight (tested apart). Other files' plans come
+/// back as they are.
 #[doc(hidden)]
 pub fn with_libraw_balance(bytes: &[u8], plan: &heeler_rawdec::Plan, opts: DevelopOpts) -> heeler_rawdec::Plan {
     let mut p = plan.clone();
-    if linear_dng::libraw_facts(bytes, DevelopOpts::default()).is_ok_and(|f| f.cam_mul[0] == -1.0) {
-        if let Ok(s) = linear_dng::libraw_stages(bytes, DevelopOpts { half_size: false, ..opts }) {
+    if linear_dng::libraw_facts(bytes, DevelopOpts::default()).is_ok_and(|f| f.cam_mul[0] <= 0.0 || f.cam_mul[2] <= 0.0) {
+        if let Ok(s) = linear_dng::libraw_stages(bytes, opts) {
             p.cam_mul = s.pre_mul;
         }
     }

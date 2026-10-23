@@ -42,32 +42,6 @@ fn files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
     out
 }
 
-/// Make and Model as IFD0 gives them (a CR3's in its CMT1 box).
-fn make_model(bytes: &[u8]) -> Option<(String, String)> {
-    if heeler_rawdec::cr3::is_cr3(bytes) {
-        return heeler_rawdec::cr3::make_model(bytes);
-    }
-    if heeler_rawdec::rw2::is_rw2(bytes) {
-        return heeler_rawdec::rw2::make_model(bytes);
-    }
-    if heeler_rawdec::orf::is_orf(bytes) {
-        return heeler_rawdec::orf::make_model(bytes);
-    }
-    if heeler_rawdec::mrw::is_mrw(bytes) {
-        return heeler_rawdec::mrw::make_model(bytes);
-    }
-    if heeler_rawdec::crw::is_crw(bytes) {
-        return heeler_rawdec::crw::make_model(bytes);
-    }
-    if heeler_rawdec::headerless::is_headerless(bytes) {
-        return heeler_rawdec::headerless::make_model(bytes);
-    }
-    let t = Tiff::new(bytes)?;
-    let ifd0 = t.ifds().into_iter().next()?;
-    let ascii = |tag| ifd0.get(tag).and_then(|e| t.ascii(&e));
-    Some((ascii(271)?, ascii(272)?))
-}
-
 /// The sensor data's width and height a Sony file states in its raw
 /// directory (0x7038), inside the frame's padding.
 fn stated_size(bytes: &[u8]) -> Option<(u32, u32)> {
@@ -94,7 +68,7 @@ fn main() {
     let mut padded = std::collections::BTreeSet::new();
     for (root, path) in roots.iter().flat_map(|r| files(r).into_iter().map(move |p| (r, p))) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
-        let Some((make, model)) = make_model(&bytes) else { continue };
+        let Some((make, model)) = heeler_rawdec::dng::make_model(&bytes) else { continue };
         let Ok(f) = heeler_raw::linear_dng::libraw_facts(&bytes, heeler_raw::DevelopOpts::default()) else { continue };
         // Bayer images only (a 2 by 2 pattern repeated down the rows).
         if f.filters < 1000 || f.colors != 3 {
