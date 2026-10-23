@@ -757,6 +757,24 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("MRW", "Minolta Co., Ltd.", "DiMAGE 7Hi"),
     ("MRW", "Minolta Co., Ltd.", "DiMAGE 7i"),
     ("MRW", "Minolta Co., Ltd.", "DiMAGE A1"),
+    // CRW, from rustdiff over both corpora of 2026-10-23 (bodies stating no
+    // balance given the one LibRaw's develop takes from the picture).
+    ("CRW", "Canon", "Canon EOS 10D"),
+    ("CRW", "Canon", "Canon EOS 300D DIGITAL"),
+    ("CRW", "Canon", "Canon EOS D30"),
+    ("CRW", "Canon", "Canon EOS D60"),
+    ("CRW", "Canon", "Canon EOS DIGITAL REBEL"),
+    ("CRW", "Canon", "Canon PowerShot G2"),
+    ("CRW", "Canon", "Canon PowerShot G3"),
+    ("CRW", "Canon", "Canon PowerShot G5"),
+    ("CRW", "Canon", "Canon PowerShot G6"),
+    ("CRW", "Canon", "Canon PowerShot Pro1"),
+    ("CRW", "Canon", "Canon PowerShot S30"),
+    ("CRW", "Canon", "Canon PowerShot S40"),
+    ("CRW", "Canon", "Canon PowerShot S45"),
+    ("CRW", "Canon", "Canon PowerShot S50"),
+    ("CRW", "Canon", "Canon PowerShot S60"),
+    ("CRW", "Canon", "Canon PowerShot S70"),
 ];
 
 pub fn camera(format: &str, make: &str, model: &str) -> bool {

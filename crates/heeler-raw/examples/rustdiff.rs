@@ -146,8 +146,15 @@ fn main() {
                         }
                     }
                 }
-                if plan.white != f.maximum || plan.cam_mul[..3] != f.cam_mul[..3] {
-                    notes.push(format!("own white {} vs {}, balance {:?} vs {:?}", plan.white, f.maximum, plan.cam_mul, f.cam_mul));
+                // LibRaw's white once it has unpacked (a few formats' settle
+                // only then), and its balance as ratios to green (formats
+                // state it in different units).
+                let unpacked_white = heeler_raw::linear_dng::libraw_facts_unpacked(&bytes, base).map_or(f.maximum, |u| u.maximum);
+                let ratio = |m: &[f32]| [m[0] / m[1], m[2] / m[1]];
+                let (mine, theirs) = (ratio(&plan.cam_mul), ratio(&f.cam_mul));
+                let balance_differs = f.cam_mul[..3].iter().all(|&v| v > 0.0) && mine.iter().zip(&theirs).any(|(a, b)| (a - b).abs() > 1e-4 * b.abs());
+                if plan.white != unpacked_white || balance_differs {
+                    notes.push(format!("own white {} vs {}, balance {:?} vs {:?}", plan.white, unpacked_white, plan.cam_mul, f.cam_mul));
                     *tally.entry("own white or balance differs (not in the outputs)".into()).or_default() += 1;
                 }
             }
@@ -175,6 +182,7 @@ fn main() {
                 let stages = heeler_raw::linear_dng::libraw_stages(&bytes, o).unwrap();
                 let mut mine = heeler_rawdec::develop::unpack(&bytes, &plan, None).unwrap();
                 heeler_rawdec::develop::fill_zeros(&mut mine, &plan);
+                let numbered = heeler_raw::with_libraw_balance(&bytes, &numbered, o);
                 let max = heeler_rawdec::develop::subtract_black(&mut mine, &numbered);
                 let n = heeler_rawdec::develop::numbers(&numbered, &opts_of(o), max);
                 heeler_rawdec::develop::scale_mosaic(&mut mine, &plan, &n);
@@ -200,6 +208,7 @@ fn main() {
             if let Some(m) = libraw_matrix {
                 with.rgb_cam = m;
             }
+            with = heeler_raw::with_libraw_balance(&bytes, &with, o);
             let (mine, _) = match heeler_rawdec::develop::develop_with(&bytes, &with, &opts_of(o), None) {
                 Ok(m) => m,
                 Err(e) => {

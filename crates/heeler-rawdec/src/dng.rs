@@ -27,6 +27,8 @@ pub enum Format {
     Pef,
     Srw,
     Mrw,
+    Iiq,
+    Crw,
 }
 
 impl Format {
@@ -42,6 +44,8 @@ impl Format {
             Format::Pef => "PEF",
             Format::Srw => "SRW",
             Format::Mrw => "MRW",
+            Format::Iiq => "IIQ",
+            Format::Crw => "CRW",
         }
     }
 }
@@ -89,6 +93,10 @@ pub enum Coding {
     /// Pentax's Huffman coding (pef.rs): one stream, its code from the
     /// maker notes.
     Pentax(crate::pef::PentaxCode),
+    /// Phase One's coding (iiq.rs): rows each at its own offset.
+    PhaseOne(Box<crate::iiq::PhaseOne>),
+    /// Canon's CRW coding (crw.rs): one stream of 64-sample blocks.
+    CanonCrw(crate::crw::CanonCrw),
 }
 
 /// A raw file in the terms a develop needs, which are the DNG
@@ -295,7 +303,7 @@ impl Dng {
     }
 
     /// Any raw file this crate reads: a DNG, a CR2, a CR3, an ARW, a NEF, an
-    /// RW2, an ORF, a PEF, an SRW or an MRW.
+    /// RW2, an ORF, a PEF, an SRW, an MRW, an IIQ or a CRW.
     pub fn open(bytes: &[u8]) -> Result<Dng, Error> {
         if crate::cr3::is_cr3(bytes) {
             return crate::cr3::parse(bytes);
@@ -323,6 +331,12 @@ impl Dng {
         }
         if crate::mrw::is_mrw(bytes) {
             return crate::mrw::parse(bytes);
+        }
+        if crate::iiq::is_iiq(bytes) {
+            return crate::iiq::parse(bytes);
+        }
+        if crate::crw::is_crw(bytes) {
+            return crate::crw::parse(bytes);
         }
         Dng::parse(bytes)
     }

@@ -1,6 +1,6 @@
 //! Builds heeler-rawdec's table of camera geometry (src/geometry_table.rs)
 //! for the raw formats whose files do not state it the way LibRaw reads
-//! them: for every CR2, CR3, ARW, NEF, RW2, ORF, PEF, SRW and MRW (and
+//! them: for every CR2, CR3, ARW, NEF, RW2, ORF, PEF, SRW, MRW and IIQ (and
 //! their variants: NRW, RAW, RWL, ORI) of the corpus at
 //! HEELER_RAW_CORPUS (and of any further folders given after OUT.rs, such
 //! as a second corpus), the image area LibRaw develops (its margins and
@@ -32,7 +32,7 @@ fn files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
             let ext = name.rsplit('.').next().unwrap_or("").to_ascii_uppercase();
             if p.is_dir() {
                 stack.push(p);
-            } else if ["CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW"].contains(&ext.as_str()) {
+            } else if ["CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "IIQ", "CRW"].contains(&ext.as_str()) {
                 out.push(p);
             }
         }
@@ -54,6 +54,9 @@ fn make_model(bytes: &[u8]) -> Option<(String, String)> {
     }
     if heeler_rawdec::mrw::is_mrw(bytes) {
         return heeler_rawdec::mrw::make_model(bytes);
+    }
+    if heeler_rawdec::crw::is_crw(bytes) {
+        return heeler_rawdec::crw::make_model(bytes);
     }
     let t = Tiff::new(bytes)?;
     let ifd0 = t.ifds().into_iter().next()?;

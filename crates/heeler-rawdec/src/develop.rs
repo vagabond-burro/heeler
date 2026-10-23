@@ -142,7 +142,10 @@ impl Plan {
         if !opts.half_size && opts.demosaic != -1 {
             return Err(Error::Unsupported("a demosaic other than the default"));
         }
-        let neutral = dng.as_shot_neutral.as_deref().filter(|n| n.len() == 3 && n.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no AsShotNeutral"))?;
+        // A file that states no balance develops in daylight, as LibRaw
+        // falls back to it: the neutral of the camera's D65 calibration.
+        let daylight = if dng.as_shot_neutral.is_none() && dng.cam_mul.is_none() { daylight_neutral(&dng) } else { None };
+        let neutral = dng.as_shot_neutral.as_deref().or(daylight.as_deref()).filter(|n| n.len() == 3 && n.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no AsShotNeutral"))?;
         // A DNG's: the reciprocal in single precision, as LibRaw takes it;
         // another format's as the file states it.
         let inv = |v: f64| 1.0f32 / v as f32;
@@ -526,6 +529,22 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         crate::nef::decode(&bytes[at..at + len], d.width, d.height.min(p.top + p.height), h, |r, line| put_run(out, p, r, 0, line, lin))?;
         return Ok(cfa);
     }
+    if let Coding::CanonCrw(c) = &d.coding {
+        // One stream, row after row; rows below the image area are not
+        // decoded.
+        let (at, len) = d.pieces.spans[0];
+        stopped(stop)?;
+        crate::crw::decode(&bytes[at..at + len], d.width, d.height.min(p.top + p.height), c, |r, line| put_run(out, p, r, 0, line, lin))?;
+        return Ok(cfa);
+    }
+    if let Coding::PhaseOne(p1) = &d.coding {
+        // Rows each at their own offset, across the cores; rows below the
+        // image area are not decoded.
+        let (at, len) = d.pieces.spans[0];
+        stopped(stop)?;
+        crate::iiq::decode(&bytes[at..at + len], d.width, d.height.min(p.top + p.height), p1, |r, line| put_run(out, p, r, 0, line, lin))?;
+        return Ok(cfa);
+    }
     if let Coding::Pentax(code) = &d.coding {
         // One stream, row after row; rows below the image area are not
         // decoded.
@@ -643,7 +662,9 @@ pub fn border_black(frame: &[u16], frame_width: usize, p: &Plan) -> Result<[u32;
             (sum, n)
         })
         .reduce(|| ([0; 4], [0; 4]), |a, b| ([0, 1, 2, 3].map(|i| a.0[i] + b.0[i]), [0, 1, 2, 3].map(|i| a.1[i] + b.1[i])));
-    Ok([0, 1, 2, 3].map(|i| ((sum[i] + n[i] / 2) / n[i].max(1)) as u32))
+    // The mean rounded (a CRW's, as LibRaw takes it, rounded down).
+    let half = if p.dng.format == Format::Crw { 0 } else { 1 };
+    Ok([0, 1, 2, 3].map(|i| ((sum[i] + half * n[i] / 2) / n[i].max(1)) as u32))
 }
 
 /// LibRaw takes a Panasonic file's samples of 0 as bad ones: each becomes
@@ -769,6 +790,16 @@ pub fn subtract_black(cfa: &mut [u16], p: &Plan) -> u16 {
         })
         .max()
         .unwrap_or(0)
+}
+
+/// The camera's neutral under D65 (EXIF light source 21): its D65 color
+/// matrix applied to D65's white (x 0.3127, y 0.3290), green 1.
+fn daylight_neutral(dng: &Dng) -> Option<Vec<f64>> {
+    let k = dng.illuminant.iter().position(|&i| i == 21)?;
+    let m = dng.color_matrix[k].as_ref().filter(|m| m.len() == 9)?;
+    let xyz = [0.3127 / 0.3290, 1.0, (1.0 - 0.3127 - 0.3290) / 0.3290];
+    let n: Vec<f64> = (0..3).map(|r| (0..3).map(|c| m[r * 3 + c] * xyz[c]).sum()).collect();
+    (n[1] > 0.0).then(|| n.iter().map(|v| v / n[1]).collect())
 }
 
 /// The brightest sample of the whole 2 by 2 blocks (the half-size

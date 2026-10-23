@@ -822,6 +822,19 @@ pub fn libraw_facts(bytes: &[u8], opts: DevelopOpts) -> Result<Facts, RawError> 
     Ok(unsafe { facts.assume_init() })
 }
 
+/// LibRaw's facts for `bytes` once it has unpacked them (a few formats'
+/// levels settle only then: a CRW's white without low bits).
+pub fn libraw_facts_unpacked(bytes: &[u8], opts: DevelopOpts) -> Result<Facts, RawError> {
+    let handle: Handle = configured(opts)?;
+    check(unsafe { crate::open_buffer(handle.0, bytes) })?;
+    check(unsafe { libraw_unpack(handle.0) })?;
+    let mut facts = std::mem::MaybeUninit::<Facts>::zeroed();
+    if unsafe { heeler_linear_facts(handle.0, facts.as_mut_ptr(), std::ptr::null_mut(), std::ptr::null_mut()) } == 0 {
+        return Err(RawError::Unexpected);
+    }
+    Ok(unsafe { facts.assume_init() })
+}
+
 /// The raw image's tiles, row by row, from the file's own directory: the
 /// one directory with the frame's size, LinearRaw and the facts'
 /// compression. Strips (read only through rust_facts) are tiles the

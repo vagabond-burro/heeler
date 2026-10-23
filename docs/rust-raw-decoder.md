@@ -1469,6 +1469,66 @@ wrong under the verified cameras, but the Coolpix NRWs did under
   G600 files wrapped in JPEG, a headerless Z2) and stay LibRaw's with the
   headerless formats. The MRW cameras join the verified list.
 
+## Phase 12: CRW
+
+### What was built
+
+- `crw.rs` reads Canon's CIFF container: "II", the header's length,
+  "HEAPCCDR", then a heap of records with its directory at the end,
+  records being heaps of their own where their tag says so. Read: the
+  samples (0x2005), the code table set (0x1835), the sensor's size
+  (0x1031), Make and Model (0x080A), the rotation (0x1810) and the balance
+  as shot (0x10A9 on the EOS bodies; 0x102C on the G2, S30 and S40, as
+  LibRaw takes them).
+- The coding, from the data against LibRaw's frame: blocks of 64 samples
+  in JPEG's run and size symbols with byte stuffing, a first difference
+  carried from block to block, each sample adding its difference to the
+  last of its column parity in the row (512 at each row's start). Where
+  the frame has 12-bit samples, their 2 low bits come first, a quarter
+  byte each; the coded 10-bit part starts 514 bytes after them. Those 514
+  bytes are zeros, or on the later PowerShots a baseline JPEG header that
+  ends where the coded part starts.
+- The three table sets were learned from the corpus files against
+  LibRaw's frame. Each is a whole JPEG code table (12 first-difference
+  symbols, 162 run symbols, codes in canonical order), and sets 0 and 1
+  are exactly the tables the PowerShots' JPEG headers state, which filled
+  in the few symbols no file had used.
+- On the 2672-wide sensor (G5, S50, S60), LibRaw's frame holds every
+  sample below 512 (low bits included) 2 higher than the coding gives,
+  found from the data and kept.
+- Bodies stating no balance (the D30 and the PowerShots with JPEG
+  headers) get the daylight balance of the camera's matrix, where
+  LibRaw's develop balances from the picture. Without low bits the white
+  level is 1023. The develop's own black is the masked border's mean,
+  rounded down.
+- Declined: the G1 and Pro70, whose sensors have four colors (cyan,
+  magenta, yellow, green); the develop is three-color.
+
+### Verification
+
+- `rustdiff --any` over all 41 CRWs of both corpora: the 38 from 16 RGB
+  cameras match LibRaw at every stage, full size and half, Clip and
+  Blend, given LibRaw's black, white and balance. For the bodies stating
+  no balance, the comparisons give the develop the multipliers LibRaw's
+  develop takes from the picture in each highlight mode
+  (`with_libraw_balance`). The 16 cameras join the verified list.
+- The develop's own black, which the comparisons replace, is within 1 of
+  LibRaw's on most bodies and within 2 on the G5, S50 and S60. LibRaw's
+  value there is no simple mean of either masked border.
+
+### Not yet done
+
+- Four-color sensors (G1, Pro70 and the other CMYG PowerShots).
+
+## In progress: IIQ
+
+- `iiq.rs` reads Phase One's container (a directory of 16-byte entries
+  at byte 8) and decodes coding 3, which matches LibRaw's unpacked frame
+  on all 33 such files of the corpora. The sensor calibration LibRaw
+  applies after it (per-half black and gain, the flat field, defects) is
+  not yet modeled closely enough on backs with more than one sensor half,
+  so no IIQ camera is on the verified list and every IIQ stays LibRaw's.
+
 ## Color sources, measured
 
 Every non-DNG format needs a camera matrix the file does not carry, and

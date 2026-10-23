@@ -374,8 +374,24 @@ pub fn with_libraw_numbers(bytes: &[u8], plan: &heeler_rawdec::Plan) -> Result<h
     p.black_rows = 8;
     p.black_cols = 8;
     p.dng.border_black = false;
-    p.white = f.maximum;
+    // The white level as LibRaw holds it once unpacked.
+    p.white = linear_dng::libraw_facts_unpacked(bytes, DevelopOpts::default()).map_or(f.maximum, |u| u.maximum);
     Ok(p)
+}
+
+/// `plan` (with LibRaw's numbers) given, for a file stating no balance,
+/// the multipliers LibRaw's develop takes from the picture in `opts`'s
+/// highlight mode, where the shipped develop takes daylight (tested
+/// apart). Other files' plans come back as they are.
+#[doc(hidden)]
+pub fn with_libraw_balance(bytes: &[u8], plan: &heeler_rawdec::Plan, opts: DevelopOpts) -> heeler_rawdec::Plan {
+    let mut p = plan.clone();
+    if linear_dng::libraw_facts(bytes, DevelopOpts::default()).is_ok_and(|f| f.cam_mul[0] == -1.0) {
+        if let Ok(s) = linear_dng::libraw_stages(bytes, DevelopOpts { half_size: false, ..opts }) {
+            p.cam_mul = s.pre_mul;
+        }
+    }
+    p
 }
 
 fn libraw_black(bytes: &[u8], unpacked: bool) -> Result<[[u32; 8]; 8], RawError> {
