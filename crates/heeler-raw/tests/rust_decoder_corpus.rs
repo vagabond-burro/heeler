@@ -157,3 +157,30 @@ fn every_corpus_linear_dng_the_module_takes_is_libraws_develop() {
     assert!(failures.is_empty(), "{} differ from LibRaw:\n{}", failures.len(), failures.join("\n"));
     assert!(taken >= 10, "only {taken} linear DNGs taken");
 }
+
+/// Every headerless file of the corpus of a size heeler-rawdec knows
+/// decodes to LibRaw's whole frame, to the sample, whether or not its
+/// camera has the calibrations a develop needs.
+#[test]
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
+fn every_corpus_headerless_frame_is_libraws() {
+    let Some(root) = std::env::var_os("HEELER_RAW_CORPUS") else {
+        eprintln!("HEELER_RAW_CORPUS not set; skipping the headerless comparison");
+        return;
+    };
+    let _routing = ROUTING.lock().unwrap_or_else(|e| e.into_inner());
+    let mut taken = 0;
+    let mut failures = Vec::new();
+    for (path, name) in files(&root, &["CRW", "CR2", "RAW", "MRW"]) {
+        let Ok(bytes) = std::fs::read(&path) else { continue };
+        let Ok((w, h, mine)) = heeler_rawdec::headerless::frame(&bytes) else { continue };
+        taken += 1;
+        match heeler_raw::libraw_frame(&bytes) {
+            Ok((lw, lh, theirs)) if (lw, lh) == (w, h) && theirs == mine => {}
+            Ok((lw, lh, _)) => failures.push(format!("{name}: {w}x{h} vs LibRaw's {lw}x{lh}, or samples differ")),
+            Err(e) => failures.push(format!("{name}: LibRaw: {e:?}")),
+        }
+    }
+    eprintln!("{taken} headerless corpus files compared");
+    assert!(failures.is_empty(), "{} differ from LibRaw:\n{}", failures.len(), failures.join("\n"));
+}

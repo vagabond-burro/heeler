@@ -443,6 +443,10 @@ unsigned short *heeler_rgb_image(libraw_data_t *d) { return d && d->image ? &d->
 unsigned heeler_iwidth(libraw_data_t *d) { return d ? d->sizes.iwidth : 0; }
 unsigned heeler_iheight(libraw_data_t *d) { return d ? d->sizes.iheight : 0; }
 int heeler_colors(libraw_data_t *d) { return d ? d->idata.colors : 0; }
+// The camera LibRaw names an open file's writer, for the harnesses that
+// hold heeler-rawdec to LibRaw on files without a header to name it.
+const char *heeler_make(libraw_data_t *d) { return d ? d->idata.make : ""; }
+const char *heeler_model(libraw_data_t *d) { return d ? d->idata.model : ""; }
 
 // The black level LibRaw will subtract at (row, col) of the active
 // area, as copy_bayer will: the common level, the per-color level of

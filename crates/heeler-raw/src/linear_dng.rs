@@ -89,6 +89,9 @@ extern "C" {
     fn heeler_opcode_list3(d: *mut c_void, len: *mut usize) -> *const u8;
     fn heeler_linear_capture(d: *mut c_void, loaded: *mut u16, scaled: *mut u16, before_rgb: *mut u16, pixels: usize, maxima: *mut u32, pre_mul: *mut f32, rgb_cam: *mut f32);
     fn libraw_unpack(d: *mut c_void) -> c_int;
+    fn libraw_unpack_function_name(d: *mut c_void) -> *const std::ffi::c_char;
+    fn heeler_make(d: *mut c_void) -> *const std::ffi::c_char;
+    fn heeler_model(d: *mut c_void) -> *const std::ffi::c_char;
     fn libraw_dcraw_process(d: *mut c_void) -> c_int;
 }
 
@@ -820,6 +823,16 @@ pub fn libraw_facts(bytes: &[u8], opts: DevelopOpts) -> Result<Facts, RawError> 
         return Err(RawError::Unexpected);
     }
     Ok(unsafe { facts.assume_init() })
+}
+
+/// The camera LibRaw names when it opens `bytes` (Make, Model) and the
+/// name of the routine it would unpack them with. For the harnesses.
+#[doc(hidden)]
+pub fn libraw_identity(bytes: &[u8]) -> Result<(String, String, String), RawError> {
+    let handle: Handle = configured(DevelopOpts::default())?;
+    check(unsafe { crate::open_buffer(handle.0, bytes) })?;
+    let text = |p: *const std::ffi::c_char| if p.is_null() { String::new() } else { unsafe { std::ffi::CStr::from_ptr(p) }.to_string_lossy().into_owned() };
+    Ok(unsafe { (text(heeler_make(handle.0)), text(heeler_model(handle.0)), text(libraw_unpack_function_name(handle.0))) })
 }
 
 /// LibRaw's facts for `bytes` once it has unpacked them (a few formats'

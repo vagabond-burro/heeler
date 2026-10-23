@@ -537,6 +537,13 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         crate::crw::decode(&bytes[at..at + len], d.width, d.height.min(p.top + p.height), c, |r, line| put_run(out, p, r, 0, line, lin))?;
         return Ok(cfa);
     }
+    if let Coding::Headerless(layout) = &d.coding {
+        // Rows found by arithmetic, across the cores; rows below the image
+        // area are not decoded.
+        stopped(stop)?;
+        crate::headerless::decode(bytes, d.width, d.height, d.height.min(p.top + p.height), layout, |r, line| put_run(out, p, r, 0, line, lin))?;
+        return Ok(cfa);
+    }
     if let Coding::PhaseOne(p1) = &d.coding {
         // Rows each at their own offset, across the cores; rows below the
         // image area are not decoded.

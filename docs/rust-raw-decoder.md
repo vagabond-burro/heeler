@@ -1520,6 +1520,43 @@ wrong under the verified cameras, but the Coolpix NRWs did under
 
 - Four-color sensors (G1, Pro70 and the other CMYG PowerShots).
 
+## Phase 13: headerless files
+
+### What was built
+
+- `headerless.rs` reads raw files with no header: known by their size
+  alone, as LibRaw knows them, and named as LibRaw names them (it names
+  an ELPH 180 "IXUS 160", and every camera that writes a size by that
+  size's first camera). Most come from the add-on firmware of Canon's
+  compacts; the others from Gitup action cameras and the cameras writing
+  their sizes, the Samsung WB550's size, the Minolta DiMAGE G600 and Z2,
+  and the Pentax Optio S4.
+- The layouts, from the data against LibRaw's frame, are one row reader:
+  rows from an offset (or ending at the file's end), the bytes in words
+  of 1, 2 or 4, little-endian, read top bit first, a fixed number of bits
+  a sample, shifted down where LibRaw shifts it. Canon's firmware writes
+  10 or 12 bits in 16-bit words; Gitup 16-bit words; the WB550's size
+  16-bit words shifted down 6; the G600 big-endian words ending at the
+  file's end; the Optio S4 12 bits in rows of 3520 bytes; the Z2 12 bits
+  in 32-bit words, in two fields (the even rows from the start, the odd
+  from half the file).
+- The image area, CFA colors and white level come from the geometry
+  table; Canon's firmware files measure their black level on the masked
+  columns, the others take a fixed one (Gitup's 3200 or 4160, else 0).
+- Left out: the size the A610 and S2 IS share (LibRaw tells them apart
+  by the picture, which two files cannot pin down), the S100's (its own
+  CR2s take another image area under the same name), the Kodak C330 and
+  C603 (8-bit samples through a curve, or not a mosaic), the Raspberry
+  Pi's and the RD175.
+
+### Verification
+
+- `every_corpus_headerless_frame_is_libraws`: the 62 corpus files of the
+  sizes the table knows (23 sizes) decode to LibRaw's whole frame, to
+  the sample.
+- None of their cameras has a calibration in Heeler's table, so the
+  develop declines them all for now.
+
 ## In progress: IIQ
 
 - `iiq.rs` reads Phase One's container (a directory of 16-byte entries

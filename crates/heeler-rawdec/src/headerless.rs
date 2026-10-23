@@ -1,0 +1,245 @@
+//! Raw files with no header to name their camera, read into the DNG terms
+//! a develop needs (dng.rs): known by their size alone, as LibRaw knows
+//! them, and named as LibRaw names them (two cameras that write the same
+//! size take one name; a size whose camera's own raw files LibRaw reads
+//! with another image area, the S100's, is left out). The add-on firmware of Canon's compact cameras
+//! writes most of them; a few action cameras and older compacts the rest.
+//!
+//! The layouts, as found from the data against LibRaw's frame: rows one
+//! after another from an offset (or ending at the file's end), each a
+//! whole number of bytes; the bytes taken in words of 1, 2 or 4,
+//! little-endian, read top bit first, each sample a fixed number of
+//! bits, shifted down where LibRaw shifts it; one camera's frame in two
+//! fields, the even rows from the start and the odd from half the file.
+//! The image area, CFA colors and white level come from geometry.rs, the
+//! calibrations from cameras.rs. The black level is fixed per camera, or
+//! where the frame has masked columns measured on them (border_black).
+
+use rayon::prelude::*;
+
+use crate::dng::{Coding, Dng, Format, Pieces};
+use crate::Error;
+
+/// Where a frame's rows lie and how their samples are packed.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Layout {
+    /// The first row's offset; None where the rows end at the file's end.
+    offset: Option<usize>,
+    /// Each row's bytes.
+    stride: usize,
+    /// Each sample's bits.
+    bits: u32,
+    /// The bytes of a word, little-endian, read top bit first.
+    word: usize,
+    /// Each sample shifted down so many bits.
+    shift: u32,
+    /// The even rows from the offset and the odd from half the file.
+    fields: bool,
+}
+
+/// One size's camera: Make, Model, the frame's size, its layout and black.
+struct Entry {
+    size: usize,
+    make: &'static str,
+    model: &'static str,
+    width: usize,
+    height: usize,
+    layout: Layout,
+    /// The black level, or None where it is measured on the masked
+    /// columns.
+    black: Option<u32>,
+}
+
+const fn packed(width: usize, bits: u32, word: usize) -> Layout {
+    Layout { offset: Some(0), stride: width * bits as usize / 8, bits, word, shift: 0, fields: false }
+}
+
+const fn words(width: usize, word: usize, shift: u32) -> Layout {
+    Layout { offset: Some(0), stride: width * 2, bits: 16, word, shift, fields: false }
+}
+
+/// Canon's add-on firmware: 16-bit little-endian words, 10 or 12 bits a
+/// sample.
+const fn canon(size: usize, model: &'static str, width: usize, height: usize, bits: u32) -> Entry {
+    Entry { size, make: "Canon", model, width, height, layout: packed(width, bits, 2), black: None }
+}
+
+const ENTRIES: &[Entry] = &[
+    Entry { size: 5869568, make: "Minolta", model: "DiMAGE Z2", width: 2288, height: 1710, layout: Layout { fields: true, ..packed(2288, 12, 4) }, black: Some(0) },
+    Entry { size: 6114240, make: "Pentax", model: "Optio S4", width: 2346, height: 1737, layout: Layout { stride: 3520, ..packed(2346, 12, 1) }, black: Some(0) },
+    canon(7710960, "Canon PowerShot S3 IS", 2888, 2136, 10),
+    canon(9219600, "Canon PowerShot A620", 3152, 2340, 10),
+    canon(10341600, "Canon PowerShot A720 IS", 3336, 2480, 10),
+    canon(10383120, "Canon PowerShot A630", 3344, 2484, 10),
+    Entry { size: 12170688, make: "Minolta", model: "DiMAGE G600", width: 2848, height: 2136, layout: Layout { offset: None, ..words(2848, 1, 0) }, black: Some(0) },
+    canon(12945240, "Canon PowerShot A640", 3736, 2772, 10),
+    canon(15467760, "Canon PowerShot SX110 IS", 3720, 2772, 12),
+    canon(15636240, "Canon PowerShot A650 IS", 4104, 3048, 10),
+    canon(18653760, "Canon PowerShot SX20 IS", 4080, 3048, 12),
+    canon(18763488, "Canon PowerShot D10", 4104, 3048, 12),
+    canon(19131120, "Canon PowerShot SX220 HS", 4168, 3060, 12),
+    canon(19167840, "Canon PowerShot SX40 HS", 4176, 3060, 12),
+    canon(21936096, "Canon PowerShot SX30 IS", 4464, 3276, 12),
+    Entry { size: 23887872, make: "GITUP", model: "GIT2 16:9", width: 4608, height: 2592, layout: words(4608, 2, 0), black: Some(3200) },
+    Entry { size: 24000000, make: "Samsung", model: "WB550", width: 4000, height: 3000, layout: words(4000, 2, 6), black: Some(0) },
+    Entry { size: 24192768, make: "GITUP", model: "GIT2P 16:9", width: 4624, height: 2616, layout: words(4624, 2, 0), black: Some(4160) },
+    canon(24724224, "Canon PowerShot A3300 IS", 4704, 3504, 12),
+    canon(30858240, "Canon IXUS 160", 5248, 3920, 12),
+    canon(31663200, "Canon PowerShot SX710 HS", 5344, 3950, 12),
+    Entry { size: 31850496, make: "GITUP", model: "GIT2 4:3", width: 4608, height: 3456, layout: words(4608, 2, 0), black: Some(3200) },
+    Entry { size: 32257024, make: "GITUP", model: "GIT2P 4:3", width: 4624, height: 3488, layout: words(4624, 2, 0), black: Some(4160) },
+];
+
+fn entry(bytes: &[u8]) -> Option<&'static Entry> {
+    ENTRIES.iter().find(|e| e.size == bytes.len())
+}
+
+/// Whether `bytes` are a headerless raw file of a size this module knows.
+/// Called after every format with a header has had its turn.
+pub fn is_headerless(bytes: &[u8]) -> bool {
+    !bytes.starts_with(b"II*\0") && !bytes.starts_with(b"MM\0*") && entry(bytes).is_some()
+}
+
+/// Make and Model as LibRaw names the camera.
+pub fn make_model(bytes: &[u8]) -> Option<(String, String)> {
+    is_headerless(bytes).then(|| entry(bytes)).flatten().map(|e| (e.make.to_string(), e.model.to_string()))
+}
+
+pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
+    let e = entry(bytes).ok_or(Error::Unsupported("a headerless file of an unknown size"))?;
+    let (width, height) = (e.width, e.height);
+    let geometry = crate::geometry::find(e.make, e.model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
+    let white = match geometry.white {
+        0 => ((1u32 << e.layout.bits) - 1) >> e.layout.shift,
+        w => w,
+    } as f64;
+    let calibration = crate::cameras::find(e.make, e.model).ok_or(Error::Unsupported("a camera without calibrations"))?;
+    let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
+    let (top, left) = (geometry.top as usize, geometry.left as usize);
+    Ok(Dng {
+        format: Format::Headerless,
+        make: e.make.to_string(),
+        model: e.model.to_string(),
+        unique_model: e.model.to_string(),
+        version: [0, 0, 0, 0],
+        orientation: 1,
+        width,
+        height,
+        bits: 16,
+        compression: 1,
+        photometric: 32803,
+        samples: 1,
+        sample_format: 1,
+        predictor: 1,
+        pieces: Pieces { width, height, spans: vec![(0, bytes.len())] },
+        cfa_dim: (2, 2),
+        cfa: geometry.colors.to_vec(),
+        cfa_layout: 1,
+        linearization: None,
+        black_dim: (2, 2),
+        black: vec![e.black.unwrap_or(0) as f64; 4],
+        black_delta_h: Vec::new(),
+        black_delta_v: Vec::new(),
+        white: vec![white],
+        active: (top, left, top + geometry.height as usize, left + geometry.width as usize),
+        default_crop: None,
+        default_scale: (1.0, 1.0),
+        as_shot_neutral: None,
+        as_shot_white_xy: None,
+        color_matrix: [m(&calibration.color_matrix[0]), m(&calibration.color_matrix[1]), None],
+        camera_calibration: [None, None, None],
+        illuminant: [calibration.illuminants[0], calibration.illuminants[1], 0],
+        analog_balance: None,
+        forward_matrix: [m(&calibration.forward_matrix[0]), m(&calibration.forward_matrix[1]), None],
+        opcodes: [Vec::new(), Vec::new(), Vec::new()],
+        profile_tables: calibration.tables,
+        baseline_exposure: 0.0,
+        coding: Coding::Headerless(e.layout),
+        cam_mul: None,
+        border_black: e.black.is_none(),
+    })
+}
+
+/// The whole raw frame of a headerless file: width, height and samples,
+/// whether or not its camera has calibrations. For the harnesses that
+/// hold the decode to LibRaw's.
+#[doc(hidden)]
+pub fn frame(bytes: &[u8]) -> Result<(usize, usize, Vec<u16>), Error> {
+    let e = entry(bytes).filter(|_| is_headerless(bytes)).ok_or(Error::Unsupported("a headerless file of an unknown size"))?;
+    let out = std::sync::Mutex::new(vec![0u16; e.width * e.height]);
+    decode(bytes, e.width, e.height, e.height, &e.layout, |r, line| out.lock().unwrap()[r * e.width..(r + 1) * e.width].copy_from_slice(line))?;
+    Ok((e.width, e.height, out.into_inner().unwrap()))
+}
+
+/// One row of `line.len()` samples from `row`.
+fn unpack_row(row: &[u8], l: &Layout, line: &mut [u16]) {
+    // The row's bytes in reading order: each word's last byte first.
+    let byte = |j: usize| *row.get(j / l.word * l.word + (l.word - 1 - j % l.word)).unwrap_or(&0) as u64;
+    let (mut acc, mut have, mut at) = (0u64, 0u32, 0usize);
+    let mask = (1u64 << l.bits) - 1;
+    for v in line.iter_mut() {
+        while have < l.bits {
+            acc = acc << 8 | byte(at);
+            at += 1;
+            have += 8;
+        }
+        have -= l.bits;
+        *v = (((acc >> have) & mask) >> l.shift) as u16;
+    }
+}
+
+/// Decodes the frame's first `rows` rows of `width` samples from the whole
+/// file, handing each row to `put`, across the cores.
+pub fn decode(bytes: &[u8], width: usize, height: usize, rows: usize, l: &Layout, put: impl Fn(usize, &[u16]) + Sync) -> Result<(), Error> {
+    let start = match l.offset {
+        Some(at) => at,
+        None => bytes.len().checked_sub(height * l.stride).ok_or(Error::Corrupt("a headerless file shorter than its rows"))?,
+    };
+    (0..rows).into_par_iter().try_for_each(|r| {
+        let at = match (l.fields, r % 2) {
+            (false, _) => start + r * l.stride,
+            (true, 0) => start + r / 2 * l.stride,
+            (true, _) => bytes.len() / 2 + r / 2 * l.stride,
+        };
+        let row = bytes.get(at..at + l.stride).ok_or(Error::Corrupt("a headerless file shorter than its rows"))?;
+        let mut line = vec![0u16; width];
+        unpack_row(row, l, &mut line);
+        put(r, &line);
+        Ok(())
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn words_are_read_last_byte_first() {
+        // Two 12-bit samples, 0x0F2 and 0x1B2, then 8 bits of a third, in
+        // one 32-bit little-endian word.
+        let l = Layout { offset: Some(0), stride: 8, bits: 12, word: 4, shift: 0, fields: false };
+        let mut line = [0u16; 3];
+        unpack_row(&[0x09, 0xb2, 0x21, 0x0f, 0xf1, 0x09, 0x67, 0x61], &l, &mut line);
+        assert_eq!(line, [0x0f2, 0x1b2, 0x096]);
+        // 10-bit samples in 16-bit words.
+        let l = Layout { word: 2, bits: 10, stride: 4, ..l };
+        let mut line = [0u16; 3];
+        unpack_row(&[0x40, 0xff, 0x80, 0x01], &l, &mut line);
+        assert_eq!(line, [0x3fd, 0x000, 0x060]);
+    }
+
+    #[test]
+    fn fields_take_odd_rows_from_half_the_file() {
+        let l = Layout { offset: Some(0), stride: 2, bits: 16, word: 1, shift: 0, fields: true };
+        let bytes = [0, 1, 0, 3, 0, 2, 0, 4];
+        let got = std::sync::Mutex::new(vec![0u16; 4]);
+        decode(&bytes, 1, 4, 4, &l, |r, line| got.lock().unwrap()[r] = line[0]).unwrap();
+        assert_eq!(*got.lock().unwrap(), [1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn a_short_file_is_corrupt() {
+        let l = Layout { offset: None, stride: 4, bits: 16, word: 2, shift: 0, fields: false };
+        assert!(decode(&[0; 6], 2, 2, 2, &l, |_, _| {}).is_err());
+    }
+}

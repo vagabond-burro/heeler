@@ -23,6 +23,7 @@ pub mod srw;
 pub mod mrw;
 pub mod iiq;
 pub mod crw;
+pub mod headerless;
 pub mod sony;
 #[doc(hidden)]
 pub mod synthetic;

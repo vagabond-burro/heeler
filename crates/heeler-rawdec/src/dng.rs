@@ -29,6 +29,7 @@ pub enum Format {
     Mrw,
     Iiq,
     Crw,
+    Headerless,
 }
 
 impl Format {
@@ -46,6 +47,7 @@ impl Format {
             Format::Mrw => "MRW",
             Format::Iiq => "IIQ",
             Format::Crw => "CRW",
+            Format::Headerless => "headerless",
         }
     }
 }
@@ -97,6 +99,8 @@ pub enum Coding {
     PhaseOne(Box<crate::iiq::PhaseOne>),
     /// Canon's CRW coding (crw.rs): one stream of 64-sample blocks.
     CanonCrw(crate::crw::CanonCrw),
+    /// A headerless file's rows (headerless.rs).
+    Headerless(crate::headerless::Layout),
 }
 
 /// A raw file in the terms a develop needs, which are the DNG
@@ -303,7 +307,8 @@ impl Dng {
     }
 
     /// Any raw file this crate reads: a DNG, a CR2, a CR3, an ARW, a NEF, an
-    /// RW2, an ORF, a PEF, an SRW, an MRW, an IIQ or a CRW.
+    /// RW2, an ORF, a PEF, an SRW, an MRW, an IIQ, a CRW or a headerless
+    /// file of a known size.
     pub fn open(bytes: &[u8]) -> Result<Dng, Error> {
         if crate::cr3::is_cr3(bytes) {
             return crate::cr3::parse(bytes);
@@ -337,6 +342,9 @@ impl Dng {
         }
         if crate::crw::is_crw(bytes) {
             return crate::crw::parse(bytes);
+        }
+        if crate::headerless::is_headerless(bytes) {
+            return crate::headerless::parse(bytes);
         }
         Dng::parse(bytes)
     }

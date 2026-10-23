@@ -1,7 +1,8 @@
 //! Builds heeler-rawdec's table of camera geometry (src/geometry_table.rs)
 //! for the raw formats whose files do not state it the way LibRaw reads
-//! them: for every CR2, CR3, ARW, NEF, RW2, ORF, PEF, SRW, MRW and IIQ (and
-//! their variants: NRW, RAW, RWL, ORI) of the corpus at
+//! them: for every CR2, CR3, ARW, NEF, RW2, ORF, PEF, SRW, MRW, IIQ and CRW
+//! (and their variants: NRW, RAW, RWL, ORI), and every headerless file of a
+//! size heeler-rawdec knows, of the corpus at
 //! HEELER_RAW_CORPUS (and of any further folders given after OUT.rs, such
 //! as a second corpus), the image area LibRaw develops (its margins and
 //! size within the raw frame), the CFA colors at that area's top left, and
@@ -57,6 +58,9 @@ fn make_model(bytes: &[u8]) -> Option<(String, String)> {
     }
     if heeler_rawdec::crw::is_crw(bytes) {
         return heeler_rawdec::crw::make_model(bytes);
+    }
+    if heeler_rawdec::headerless::is_headerless(bytes) {
+        return heeler_rawdec::headerless::make_model(bytes);
     }
     let t = Tiff::new(bytes)?;
     let ifd0 = t.ifds().into_iter().next()?;
