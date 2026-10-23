@@ -10,9 +10,15 @@
 //! declined and stay LibRaw's.
 //!
 //! The white balance as shot is the maker notes' WB_RBLevels (0x000C: red,
-//! then blue, against green), which LibRaw takes as is; a file without it
-//! stays LibRaw's. The black level is the maker notes' BlackLevel
-//! (0x003D), stated for 14-bit data and scaled down for 12-bit, or 0. The
+//! then blue, against green), which LibRaw takes as is, else a Coolpix
+//! NRW's record (0x0014, `nrw_balance`); a file without either stays
+//! LibRaw's. The black level is the maker notes' BlackLevel
+//! (0x003D), stated for 14-bit data and scaled down for 12-bit, else
+//! LibRaw's for the camera (geometry.rs), else 0. A Coolpix NRW of NEF
+//! compression 9 packs 12-bit samples most significant bits first; of 7
+//! holds 16-bit big-endian words (their top 12 bits where LibRaw's white
+//! level is 12-bit); uncompressed and 12-bit, it holds the samples in
+//! 32-bit little-endian words. The
 //! image area and CFA colors come from geometry.rs (LibRaw's), the white
 //! level from its table by the samples' depth (else the depth's top), the
 //! calibrations from cameras.rs.
@@ -80,9 +86,29 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     // Each strip a piece of whole rows, as the file lays them out.
     let strips = || Pieces { width, height: rows_per_strip, spans: offsets.iter().zip(&counts).map(|(&o, &n)| (o as usize, n as usize)).collect() };
     let mut linearization = None;
+    // The NEF compression (0x0093) and each row's bytes, for the Coolpix
+    // NRW's layouts under Nikon's compression.
+    let nef_compression = note(0x0093).and_then(|(mt, e)| mt.uint(&e));
+    let stride = if count % height == 0 { count / height } else { 0 };
     let (coding, bits, pieces) = match uint(raw, 259) {
         Some(1) if count >= width * height * 2 => (Coding::Tiff, 16, strips()),
+        // A Coolpix NRW's 12-bit samples most significant bits first in
+        // 32-bit little-endian words (as some Olympus files hold them).
+        Some(1) if bits_tag == 12 && model.starts_with("COOLPIX") && offsets.len() == 1 && count >= width * height * 3 / 2 && (width * 3 / 2) % 4 == 0 => {
+            (Coding::Olympus(crate::orf::Olympus::Words), 12, Pieces { width, height, spans: vec![(offsets[0] as usize, width * height * 3 / 2)] })
+        }
         Some(1) if bits_tag == 12 && count >= width * height * 3 / 2 => (Coding::Tiff, 12, strips()),
+        // NEF compression 9: 12-bit samples packed most significant bits
+        // first; 7: 16-bit big-endian words, whatever the file's order.
+        Some(34713) if offsets.len() == 1 && bits_tag == 12 && nef_compression == Some(9) && stride == width * 3 / 2 => (Coding::Tiff, 12, strips()),
+        Some(34713) if offsets.len() == 1 && bits_tag == 12 && nef_compression == Some(7) && stride == width * 2 => {
+            // LibRaw takes the words as they are where its white level is
+            // above 12 bits, else their top 12 bits.
+            if crate::geometry::nef_white(&make, &model, 12).is_none_or(|w| w <= 4095) {
+                linearization = Some((0..=u16::MAX).map(|v| v >> 4).collect());
+            }
+            (Coding::BigWords, 16, strips())
+        }
         // Stored whole under Nikon's compression: one strip, each row's
         // samples least significant bits first, the row padded to 16
         // bytes in some files (each row then its own piece).
@@ -115,12 +141,17 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         return Err(Error::Corrupt("the strip layout"));
     }
     // The white balance as shot: WB_RBLevels, red then blue.
-    let wb = note(0x000c).and_then(|(mt, e)| mt.reals(&e)).filter(|w| w.len() >= 2 && w[0] > 0.0 && w[1] > 0.0).ok_or(Error::Unsupported("no stated white balance"))?;
+    // As LibRaw's camera multipliers: red, green, blue, the other green.
+    let cam_mul: [f64; 4] = match note(0x000c).and_then(|(mt, e)| mt.reals(&e)).filter(|w| w.len() >= 2 && w[0] > 0.0 && w[1] > 0.0) {
+        Some(w) => [w[0], 1.0, w[1], 1.0],
+        None => note(0x0014).and_then(|(mt, e)| nrw_balance(mt.bytes(&e)?)).ok_or(Error::Unsupported("no stated white balance"))?,
+    };
     // The black level, stated for 14-bit data.
     let black = match note(0x003d).and_then(|(mt, e)| mt.uints(&e)) {
         Some(b) if b.len() == 4 => b.iter().map(|&v| (v >> (14 - bits_tag)) as f64).collect::<Vec<_>>(),
         Some(_) => return Err(Error::Unsupported("a black level not read here")),
-        None => vec![0.0; 4],
+        // None stated: LibRaw's for the camera (geometry.rs), else 0.
+        None => crate::geometry::black(&make, &model).map_or(vec![0.0; 4], |b| b.iter().map(|&v| v as f64).collect()),
     };
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
     // The white level for the samples' depth (geometry.rs), else the
@@ -174,7 +205,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         active: (top, left, top + geometry.height as usize, left + geometry.width as usize),
         default_crop: None,
         default_scale: (1.0, 1.0),
-        as_shot_neutral: Some(vec![1.0 / wb[0], 1.0, 1.0 / wb[1]]),
+        as_shot_neutral: Some(vec![cam_mul[1] / cam_mul[0], 1.0, cam_mul[1] / cam_mul[2]]),
         as_shot_white_xy: None,
         color_matrix: [m(&calibration.color_matrix[0]), m(&calibration.color_matrix[1]), None],
         camera_calibration: [None, None, None],
@@ -185,9 +216,24 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         profile_tables: calibration.tables,
         baseline_exposure: 0.0,
         coding,
-        cam_mul: Some([wb[0] as f32, 1.0, wb[1] as f32, 1.0]),
+        cam_mul: Some(cam_mul.map(|v| v as f32)),
         border_black: false,
     })
+}
+
+/// A Coolpix NRW's balance as shot, from its record (maker notes 0x0014):
+/// "NRW 0100" holds red, green, the other green and blue as 32-bit
+/// little-endian numbers at byte 1556, "NRW 0101" and later at 56; LibRaw
+/// doubles red and blue.
+fn nrw_balance(record: &[u8]) -> Option<[f64; 4]> {
+    let at = match record.get(..8)? {
+        b"NRW 0100" => 1556,
+        v if v.starts_with(b"NRW 01") => 56,
+        _ => return None,
+    };
+    let n = |k: usize| record.get(at + 4 * k..at + 4 * k + 4).map(|b| u32::from_le_bytes(b.try_into().unwrap()) as f64);
+    let (r, g, g2, b) = (n(0)?, n(1)?, n(2)?, n(3)?);
+    (r > 0.0 && g > 0.0 && g2 > 0.0 && b > 0.0).then_some([2.0 * r, g, 2.0 * b, g2])
 }
 
 /// The code of a frame in Nikon's Huffman coding and its curve, from the

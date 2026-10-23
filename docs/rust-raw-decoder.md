@@ -1334,6 +1334,141 @@ tile decodes on four cores at most.
 - Calibrations for the OM PEN.
 - Speed: the compressed frame is one stream and decodes on one core.
 
+## The variants: NRW, RAW, RWL and ORI
+
+The corpus test and the comparisons had picked files by extension, so
+the variants whose headers the NEF, RW2 and ORF readers already accept
+had never been compared. Over their 159 files (2026-10-22) none decoded
+wrong under the verified cameras, but the Coolpix NRWs did under
+`--any`, and most were declined. Now:
+
+- NRW (the Coolpix bodies), each layout from the data against LibRaw's
+  frame: NEF compression 9, 12-bit samples packed most significant bits
+  first; 7, 16-bit big-endian words in a little-endian file (`Coding::
+  BigWords`), their top 12 bits where LibRaw's white level is 12-bit (the
+  P330); uncompressed 12-bit from a "COOLPIX" body, the samples in 32-bit
+  little-endian words (as the XZ-2's ORFs hold them). The balance of the
+  bodies without WB_RBLevels is their NRW record's (0x0014: red, green,
+  the other green, blue at byte 56, or at 1556 in "NRW 0100"), red and
+  blue doubled as LibRaw takes them. The black level where none is
+  stated is LibRaw's for the camera (geometry.rs's `BLACK`, which the
+  builder now writes for ORF, NEF and RW2 cameras).
+- Older Panasonic RAW and Leica RAW and RWL: no RawFormat, 16-bit words
+  with the sample in their top 12 bits (whatever depth is stated);
+  RawFormat 2, 10 whole samples a packet; RawFormat 3, the RawFormat 4
+  coding without the turned blocks; the balance in 0x11 and 0x12
+  against 256 where 0x24 to 0x26 are missing; the samples' offset the
+  strip's where 0x118 is missing.
+- A fix found on the way: RawFormat 5's black level is as stated (only 3
+  and 4 add 15), and where 0 is stated LibRaw's table level is taken
+  (the G10's 0). The comparisons hold the develop to LibRaw's own
+  levels, so the outputs had matched while the levels Heeler would use
+  did not; every comparison run now also checks Heeler's own black, white
+  and balance against LibRaw's.
+- The same audit over the verified cameras' CR2, CR3, ARW and DNG files
+  (2,678): one more fault, the 12-bit uncompressed ARWs of the A7R II,
+  whose samples are 16-bit words at 14-bit scale but whose SR2 black was
+  quartered as for 12-bit packed data (128 for LibRaw's 512); the quarter
+  is now taken only for packed data. The rest are the CR2 and CR3 black
+  measured on the masked border (within 2 levels of LibRaw's but for the
+  EOS RP's ISO 102400 crop frames, where LibRaw's region reads 248 more
+  than the left border), the PowerShot V1's (LibRaw's own level runs 0
+  to 121 across the pattern's sites; Heeler's is the stated 512), and two
+  CR2s whose balance LibRaw does not read.
+- The geometry builder, the corpus test and the comparisons read the
+  variants' extensions.
+- A half-size fault the variants showed: where the image area's height
+  or width is odd, LibRaw's half size leaves the last row or column out
+  of the brightest sample as it leaves it out of the blocks, so a frame
+  whose brightest sample lay there (an FZ50's 2439 rows) developed a
+  little darker; the half-size develop now takes its brightest sample
+  from the whole blocks only. (The comparisons' tally had counted such a
+  file as exact on its full-size outputs; they now count any differing
+  half-size sample too.)
+
+## Phase 9: PEF
+
+### What was built
+
+- `pef.rs` reads the container: TIFF, the frame and its one strip in
+  IFD0, the maker notes in two headers ("AOC", entries at 6, offsets from
+  the file's start; "PENTAX", entries at 10, offsets from the notes'
+  start; each in the notes' byte order). The black level (0x0200) and
+  balance as shot (0x0201) are red, green, the other green, blue, as
+  LibRaw takes them. Samsung's Pentax-made bodies are left to LibRaw,
+  which reads neither from their notes.
+- The codings, from the data against LibRaw's frame:
+  - Pentax's Huffman coding (compression 65535), its code in the maker
+    notes (0x0220): a 16-bit count c, 12 bytes, c + 12 codes aligned to
+    the top of 12 bits, then their lengths; the symbols are lossless
+    JPEG's difference sizes. A row's first two samples add to the same
+    columns two rows above (0 at the top), the others to the sample two
+    to the left. One stream, one core.
+  - Compression 32773, though nothing is run-length coded: 12-bit
+    samples packed most significant bits first.
+  - Compression 1: 16-bit big-endian words.
+- Tests: rows coded the other way round, decoded, and cut short.
+
+### Verification
+
+- `rustdiff --any` over all 78 PEFs of both corpora: 74 match LibRaw at
+  every stage with LibRaw's own black, white and balance. Declined: the
+  K-3 Mark III Monochrome (2, no balance; not a mosaic), the GX-1L and
+  GX-1S (Samsung's).
+- 30 PEF cameras join the verified list, with 12 Coolpix NRW cameras and
+  22 RW2 cameras of older Panasonic and Leica files.
+
+### Not yet done
+
+- Monochrome PEFs and Samsung's Pentax-made bodies.
+
+## Phase 10: SRW, uncompressed and packed
+
+### What was built
+
+- `srw.rs` reads the container: TIFF, the raw frame the SubIFD with a CFA
+  pattern (0x828D, no photometric tag), the maker notes an IFD at their
+  start with offsets from there. LibRaw's balance is 0xA021 less the first
+  four values of 0xA020 and its black level 0xA028 less the same (red,
+  green, the other green, blue), as the corpus shows on every body.
+- The codings, from the data against LibRaw's frame: compression 32769,
+  16-bit little-endian words whatever the file's order (`Coding::
+  LittleWords`), shifted down one bit where the stated depth is 12 (the
+  EX2F); 32770 at 1.5 bytes a sample, 12-bit samples packed most
+  significant bits first where SamplesPerPixel states 1 (NX5, NX10, NX11,
+  NX100) and least significant first where it states 3 (NX20 to NX1100).
+- On the bodies packing most significant bits first LibRaw measures the
+  black level instead: the mean, rounded down, of each pattern site over
+  the masked columns left and right of the image area, along its rows.
+  `srw.rs` measures it from the packed samples while it reads the file.
+- Declined and LibRaw's: Samsung's three compressed codings (32770 in
+  fewer bytes than packing, 32772, 32773: NX300, NX30, NX2000, NX mini,
+  NX3000, NX3300, NX1, NX500, EK-GN120).
+
+### Verification
+
+- `rustdiff --any` over all 51 SRWs of both corpora: the 26 the Rust path
+  takes match LibRaw at every stage, full size and half, with LibRaw's
+  own black, white and balance. 12 cameras join the verified list.
+
+### Not yet done
+
+- Samsung's compressed codings.
+
+## Phase 11: MRW
+
+- `mrw.rs` reads the container: "\0MRM", the header's length, blocks of a
+  name and a length. PRD gives the sensor's size and the storage, 0x59
+  for 12-bit samples packed most significant bits first and 0x52 for
+  16-bit big-endian words (both from the data against LibRaw's frame);
+  WBG the balance as shot (red, green, the other green, blue after 4
+  bytes, LibRaw's as is); TTW a TIFF with Make, Model and orientation.
+  The black level is 0, as LibRaw takes it.
+- `rustdiff --any` over all 25 MRWs of both corpora: the 22 MRM files
+  match LibRaw at every stage; the other three are not MRM files (two
+  G600 files wrapped in JPEG, a headerless Z2) and stay LibRaw's with the
+  headerless formats. The MRW cameras join the verified list.
+
 ## Color sources, measured
 
 Every non-DNG format needs a camera matrix the file does not carry, and

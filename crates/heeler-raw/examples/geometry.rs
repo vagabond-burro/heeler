@@ -1,6 +1,7 @@
 //! Builds heeler-rawdec's table of camera geometry (src/geometry_table.rs)
 //! for the raw formats whose files do not state it the way LibRaw reads
-//! them: for every CR2, CR3, ARW, NEF, RW2 and ORF of the corpus at
+//! them: for every CR2, CR3, ARW, NEF, RW2, ORF, PEF, SRW and MRW (and
+//! their variants: NRW, RAW, RWL, ORI) of the corpus at
 //! HEELER_RAW_CORPUS (and of any further folders given after OUT.rs, such
 //! as a second corpus), the image area LibRaw develops (its margins and
 //! size within the raw frame), the CFA colors at that area's top left, and
@@ -31,7 +32,7 @@ fn files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
             let ext = name.rsplit('.').next().unwrap_or("").to_ascii_uppercase();
             if p.is_dir() {
                 stack.push(p);
-            } else if ["CR2", "CR3", "ARW", "NEF", "RW2", "ORF"].contains(&ext.as_str()) {
+            } else if ["CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW"].contains(&ext.as_str()) {
                 out.push(p);
             }
         }
@@ -50,6 +51,9 @@ fn make_model(bytes: &[u8]) -> Option<(String, String)> {
     }
     if heeler_rawdec::orf::is_orf(bytes) {
         return heeler_rawdec::orf::make_model(bytes);
+    }
+    if heeler_rawdec::mrw::is_mrw(bytes) {
+        return heeler_rawdec::mrw::make_model(bytes);
     }
     let t = Tiff::new(bytes)?;
     let ifd0 = t.ifds().into_iter().next()?;
@@ -76,10 +80,10 @@ fn main() {
     // A NEF's white level varies with its samples' depth: (make, model,
     // depth) -> LibRaw's level, None where the files disagree.
     let mut nef_white: BTreeMap<(String, String, u32), Option<u32>> = BTreeMap::new();
-    // An ORF camera's black level where its files state none: (make,
-    // model) -> LibRaw's, red, the green on red's row, the other green,
-    // blue; None where the files disagree.
-    let mut orf_black: BTreeMap<(String, String), Option<[u32; 4]>> = BTreeMap::new();
+    // An ORF, NEF or RW2 camera's black level for files that state none:
+    // (make, model) -> LibRaw's, red, the green on red's row, the other
+    // green, blue; None where the files disagree.
+    let mut black_of: BTreeMap<(String, String), Option<[u32; 4]>> = BTreeMap::new();
     let mut padded = std::collections::BTreeSet::new();
     for (root, path) in roots.iter().flat_map(|r| files(r).into_iter().map(move |p| (r, p))) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
@@ -97,10 +101,10 @@ fn main() {
                 }
             }
         }
-        if heeler_rawdec::orf::is_orf(&bytes) {
+        if heeler_rawdec::orf::is_orf(&bytes) || heeler_rawdec::nef::is_nef(&bytes) || heeler_rawdec::rw2::is_rw2(&bytes) {
             // LibRaw's per-color levels: red, green, blue, the other green.
             let b = if f.cblack[4] == 0 && f.cblack[5] == 0 { Some([0, 1, 3, 2].map(|i| f.black + f.cblack[i])) } else { None };
-            let e = orf_black.entry((make.clone(), model.clone())).or_insert(b);
+            let e = black_of.entry((make.clone(), model.clone())).or_insert(b);
             if *e != b {
                 *e = None;
             }
@@ -163,13 +167,14 @@ fn main() {
         }
     }
     src += "];\n";
-    src += "// An ORF camera's black level as LibRaw reads it (red, the green on red's\n\
-            // row, the other green, blue), the cameras whose files agree.\n\
-            pub(crate) const ORF_BLACK: &[(&str, &str, [u32; 4])] = &[\n";
-    for ((make, model), black) in &orf_black {
+    src += "// An ORF, NEF or RW2 camera's black level as LibRaw reads it (red, the green\n\
+            // on red's row, the other green, blue), the cameras whose files agree,\n\
+            // for files that state none.\n\
+            pub(crate) const BLACK: &[(&str, &str, [u32; 4])] = &[\n";
+    for ((make, model), black) in &black_of {
         match black {
             Some(b) => src += &format!("    ({make:?}, {model:?}, {b:?}),\n"),
-            None => eprintln!("left out, its ORFs' black levels disagree: {make} {model}"),
+            None => eprintln!("left out, its files' black levels disagree: {make} {model}"),
         }
     }
     src += "];\n";

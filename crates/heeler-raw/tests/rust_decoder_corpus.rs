@@ -1,7 +1,8 @@
-//! Every DNG, CR2, CR3, ARW, NEF, RW2 and ORF of the sample corpus the Rust
-//! develop takes (its rules and its verified cameras, heeler-rawdec's plan)
-//! develops as LibRaw does, to the bit, given LibRaw's matrix and levels: the unpacked
-//! mosaic, then full size and half, Clip and Blend, lens shading opcodes
+//! Every DNG, CR2, CR3, ARW, NEF (and NRW), RW2 (and RAW, RWL), ORF (and
+//! ORI), PEF, SRW and MRW of the sample corpus the Rust develop takes (its
+//! rules and its verified cameras, heeler-rawdec's plan) develops as LibRaw
+//! does, to the bit, given LibRaw's matrix and levels: the unpacked mosaic,
+//! then full size and half, Clip and Blend, lens shading opcodes
 //! applied as heeler-raw applies them around LibRaw. And every verified
 //! camera still has a file the develop takes, so the list in
 //! heeler-rawdec's verified.rs names nothing untested. A file LibRaw
@@ -70,7 +71,7 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
     let mut cameras = std::collections::BTreeSet::new();
     let mut failures = Vec::new();
     let mut unreadable = Vec::new();
-    for (path, name) in files(&root, &["DNG", "CR2", "CR3", "ARW", "NEF", "RW2", "ORF"]) {
+    for (path, name) in files(&root, &["DNG", "CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW"]) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let Ok(plan) = heeler_rawdec::plan(&bytes, &opts(DevelopOpts::default())) else { continue };
         let Ok((_, _, theirs)) = heeler_raw::libraw_mosaic(&bytes) else {

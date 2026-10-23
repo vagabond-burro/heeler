@@ -247,7 +247,8 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let reals = |tag| raw.get(tag).and_then(|e| t.reals(&e));
     // The older bodies keep them only in the enciphered SR2 block, the
     // black level there in 14-bit units (a quarter of it for 12-bit
-    // uncompressed data).
+    // samples packed in three bytes; 12-bit files in 16-bit words hold
+    // them at 14-bit scale).
     let sr2 = sr2_block(&t, ifd0);
     let sr2_reals = |tag| {
         let (copy, at) = sr2.as_ref()?;
@@ -257,7 +258,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     };
     let four = |v: Option<Vec<f64>>| v.filter(|v| v.len() == 4);
     let black = four(reals(0x7310))
-        .or_else(|| four(sr2_reals(0x7310)).map(|b| if compression == 1 && bits_tag == 12 { b.iter().map(|v| v / 4.0).collect() } else { b }))
+        .or_else(|| four(sr2_reals(0x7310)).map(|b| if coding == Coding::PackedLow { b.iter().map(|v| v / 4.0).collect() } else { b }))
         .ok_or(Error::Unsupported("no stated black level"))?;
     let wb = four(reals(0x7313)).or_else(|| four(sr2_reals(0x7313))).filter(|w| w.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no stated white balance"))?;
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;

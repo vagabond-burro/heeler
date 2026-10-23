@@ -178,7 +178,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
             let up = if bits == 14 { 2 } else { 0 };
             [v[0], v[1], v[2], v[3]].map(|v| (v << up) as f64)
         }
-        _ => crate::geometry::orf_black(&make, &model).ok_or(Error::Unsupported("no stated black level"))?.map(|v| v as f64),
+        _ => crate::geometry::black(&make, &model).ok_or(Error::Unsupported("no stated black level"))?.map(|v| v as f64),
     };
     let white = match geometry.white {
         0 => ((1u32 << bits) - 1) >> shift.unwrap_or(0),

@@ -75,6 +75,7 @@ impl Plan {
             (1, 0, _) if matches!(&dng.coding, Coding::CrxWavelet(_)) && (8..=16).contains(&dng.bits) => {}
             (1, 34713, _) if matches!(&dng.coding, Coding::NikonHuffman(_)) && (12..=14).contains(&dng.bits) => {}
             (1, 34316, _) if matches!(&dng.coding, Coding::Panasonic(_)) && (12..=16).contains(&dng.bits) => {}
+            (1, 65535, _) if matches!(&dng.coding, Coding::Pentax(_)) && (12..=14).contains(&dng.bits) => {}
             (3, 1, 1) | (3, 8, 3 | 34894 | 34895) if matches!(dng.bits, 16 | 24 | 32) && dng.linearization.is_none() => {}
             _ => return Err(Error::Unsupported("a sample format, depth or compression not read here")),
         }
@@ -401,12 +402,12 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         }
         return Ok(cfa);
     }
-    if d.compression == 1 && matches!(d.coding, Coding::Tiff | Coding::PackedLow) {
+    if d.compression == 1 && matches!(d.coding, Coding::Tiff | Coding::PackedLow | Coding::BigWords | Coding::LittleWords) {
         // Uncompressed: every row of every piece found by arithmetic, so
         // the rows go side by side even when the file is one strip.
         let bits = d.bits as usize;
         let row_bytes = (pw * bits).div_ceil(8);
-        let little = bytes.starts_with(b"II");
+        let little = (bytes.starts_with(b"II") && d.coding != Coding::BigWords) || d.coding == Coding::LittleWords;
         let rows: Vec<(usize, usize)> = (0..d.pieces.spans.len()).flat_map(|i| (0..ph).map(move |r| (i, r))).collect();
         rows.par_chunks(64).try_for_each(|chunk| -> Result<(), Error> {
             stopped(stop)?;
@@ -523,6 +524,14 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         // Rows below the image area are not decoded: some files' streams
         // stop at its last row.
         crate::nef::decode(&bytes[at..at + len], d.width, d.height.min(p.top + p.height), h, |r, line| put_run(out, p, r, 0, line, lin))?;
+        return Ok(cfa);
+    }
+    if let Coding::Pentax(code) = &d.coding {
+        // One stream, row after row; rows below the image area are not
+        // decoded.
+        let (at, len) = d.pieces.spans[0];
+        stopped(stop)?;
+        crate::pef::decode(&bytes[at..at + len], d.width, d.height.min(p.top + p.height), code, |r, line| put_run(out, p, r, 0, line, lin))?;
         return Ok(cfa);
     }
     if let Coding::Olympus(layout) = d.coding {
@@ -762,6 +771,13 @@ pub fn subtract_black(cfa: &mut [u16], p: &Plan) -> u16 {
         .unwrap_or(0)
 }
 
+/// The brightest sample of the whole 2 by 2 blocks (the half-size
+/// develop's).
+fn blocks_max(cfa: &[u16], p: &Plan) -> u16 {
+    let (w, h) = (p.width, p.height);
+    cfa[..(h / 2 * 2) * w].par_chunks(w).map(|row| row[..w / 2 * 2].iter().copied().max().unwrap_or(0)).max().unwrap_or(0)
+}
+
 /// The white level, white balance multipliers and clip level for the
 /// develop, from the brightest sample after the black.
 pub fn numbers(p: &Plan, opts: &Opts, data_max: u16) -> Numbers {
@@ -913,6 +929,9 @@ fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, 
         gain_map::apply_cfa(&p.gains2, &mut img, |r, c| p.black[(r as usize % p.black_rows) * p.black_cols + c as usize % p.black_cols]);
     }
     let data_max = subtract_black(&mut cfa, &p);
+    // At half size the odd last row and column make no block, and LibRaw
+    // leaves them out of the brightest sample too.
+    let data_max = if opts.half_size && (p.width % 2 == 1 || p.height % 2 == 1) { blocks_max(&cfa, p) } else { data_max };
     let n = numbers(&p, opts, data_max);
     scale_mosaic(&mut cfa, &p, &n);
     stopped(stop)?;

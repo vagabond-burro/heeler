@@ -4,12 +4,17 @@
 //! own tags: the frame's width and height (0x02, 0x03), the samples' depth
 //! (0x0A), the coding (RawFormat, 0x2D), where the samples start (0x118),
 //! the black levels of red, green and blue (0x1C to 0x1E) and the white
-//! balance as shot (0x24 to 0x26, red, green and blue). The samples run
+//! balance as shot (0x24 to 0x26, red, green and blue; in the oldest files
+//! red and blue against 256, 0x11 and 0x12). The samples run
 //! from there to the end of the file, row after row, in 16-byte packets,
 //! as found from the data against LibRaw's unpacked frame:
 //!
-//! - RawFormat 4, 12-bit: 14 samples a packet, each a step from the last
-//!   of its color, coded below;
+//! - no RawFormat (the oldest bodies): 16-bit little-endian words, the
+//!   sample in their top 12 bits, whatever depth the file states;
+//! - RawFormat 2, 12-bit: whole samples packed least significant bits
+//!   first, 10 a packet;
+//! - RawFormat 3 and 4, 12-bit: 14 samples a packet, each a step from the
+//!   last of its color, coded below;
 //! - RawFormat 5: whole samples packed least significant bits first, 10 of
 //!   12 bits or 9 of 14 a packet;
 //! - RawFormat 6: 11 samples of 14 bits or 14 of 12 a packet, each a step
@@ -17,7 +22,7 @@
 //! - RawFormat 7: as 5, a frame taller than the sensor's stated rows
 //!   (the high-resolution mode's) declined.
 //!
-//! In RawFormats 4 and 5 the packets run in blocks of 0x4000 bytes, each
+//! In RawFormats 4 and 5 (not 2 and 3) the packets run in blocks of 0x4000 bytes, each
 //! block turned: its stream starts 0x1FF8 bytes in, runs to the block's
 //! end and goes on from its start. A packet of 4 or 6 is one 128-bit
 //! little-endian number read from its top bit down.
@@ -33,8 +38,9 @@
 //! bits run from each byte's lowest, the codes and differences from their
 //! top bit.
 //!
-//! The black level of RawFormats 4 and 5 is the stated one and 15, of the
-//! others as stated. The image area and CFA colors come from geometry.rs
+//! The black level of RawFormats 3 and 4 is the stated one and 15 (where
+//! 0 is stated, LibRaw's for the camera from geometry.rs if it has one), of
+//! the others as stated. The image area and CFA colors come from geometry.rs
 //! (LibRaw's), the white level from its table (else LibRaw's for the
 //! depth), the calibrations from cameras.rs. A sample of 0 is filled from
 //! its neighbors before the develop, as LibRaw fills it
@@ -69,13 +75,15 @@ const SHIFT: [u32; 4] = [0, 1, 2, 4];
 impl Panasonic {
     /// The codings read here.
     fn known(&self) -> bool {
-        matches!((self.version, self.bits), (4, 12) | (5 | 6 | 7, 12 | 14) | (8, 12 | 14 | 16))
+        matches!((self.version, self.bits), (0 | 5 | 6 | 7, 12 | 14) | (2 | 3 | 4, 12) | (8, 12 | 14 | 16))
     }
 
     /// The samples in one 16-byte packet.
     pub fn per_packet(&self) -> usize {
         match (self.version, self.bits) {
-            (4, _) | (6, 12) => 14,
+            // Words, row by row (decode).
+            (0, _) => 1,
+            (3 | 4, _) | (6, 12) => 14,
             (6, _) => 11,
             (_, b) => 128 / b as usize,
         }
@@ -89,7 +97,7 @@ impl Panasonic {
     /// The bytes `packets` packets take, in whole blocks where they are
     /// turned.
     fn span(&self, packets: usize) -> usize {
-        let n = packets * 16;
+        let n = if self.version == 0 { packets * 2 } else { packets * 16 };
         if self.turned() {
             n.div_ceil(BLOCK) * BLOCK
         } else {
@@ -124,6 +132,10 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     if !coding.known() {
         return Err(Error::Unsupported("a Panasonic coding not read here"));
     }
+    // Words hold 12 bits whatever the depth tag says.
+    if coding.version == 0 {
+        coding.bits = 12;
+    }
     if width == 0 || height == 0 {
         return Err(Error::Unsupported("an RW2 frame of this size"));
     }
@@ -142,21 +154,32 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         if coding.version == 7 && uint(0x04).zip(uint(0x06)).is_none_or(|(top, bottom)| (top + bottom) as usize != height) {
             return Err(Error::Unsupported("a RawFormat 7 frame taller than its sensor's rows"));
         }
-        let at = uint(0x118).ok_or(Error::Corrupt("RawDataOffset"))? as usize;
+        // The samples' offset, in the oldest files the strip's.
+        let at = uint(0x118).or_else(|| uint(273)).ok_or(Error::Corrupt("RawDataOffset"))? as usize;
         vec![(at, coding.span(width / coding.per_packet() * height))]
     };
     if spans.iter().any(|&(at, len)| at.checked_add(len).is_none_or(|e| e > bytes.len())) {
         return Err(Error::Corrupt("RW2 samples past the end of the file"));
     }
-    // The white balance as shot: red, green, blue.
-    let wb = [uint(0x24), uint(0x25), uint(0x26)];
+    // The white balance as shot: red, green, blue; in the oldest files red
+    // and blue against 256 (0x11, 0x12).
+    let wb = match (uint(0x24), uint(0x11)) {
+        (None, Some(_)) => [uint(0x11), Some(256), uint(0x12)],
+        _ => [uint(0x24), uint(0x25), uint(0x26)],
+    };
     let [Some(r), Some(g), Some(b)] = wb.map(|v| v.filter(|&v| v > 0)) else {
         return Err(Error::Unsupported("no stated white balance"));
     };
-    let lift = if coding.turned() { 15 } else { 0 };
-    let black = [0x1c, 0x1d, 0x1e].map(|tag| uint(tag).map(|v| (v + lift) as f64));
-    let [Some(black_r), Some(black_g), Some(black_b)] = black else {
+    let stated = [0x1c, 0x1d, 0x1e].map(uint);
+    let [Some(r0), Some(g0), Some(b0)] = stated else {
         return Err(Error::Unsupported("no stated black level"));
+    };
+    // RawFormats 3 and 4: the stated level and 15; where 0 is stated,
+    // LibRaw's for the camera (geometry.rs) if it has one.
+    let lift = if matches!(coding.version, 3 | 4) { 15 } else { 0 };
+    let [black_r, black_g, black_b] = match crate::geometry::black(&make, &model) {
+        Some(b) if lift > 0 && [r0, g0, b0] == [0, 0, 0] => [b[0], b[1], b[3]].map(|v| v as f64),
+        _ => [r0, g0, b0].map(|v| (v + lift) as f64),
     };
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
     // The white level from geometry.rs, else (a camera whose files of two
@@ -520,6 +543,17 @@ pub fn decode(bytes: &[u8], spans: &[(usize, usize)], width: usize, rows: usize,
     }
     let &(at, len) = spans.first().ok_or(Error::Corrupt("no RW2 samples"))?;
     let data = bytes.get(at..at + len).ok_or(Error::Corrupt("RW2 samples past the end of the file"))?;
+    if coding.version == 0 {
+        // Words, the sample in their top 12 bits.
+        if data.len() < width * rows * 2 {
+            return Err(Error::Corrupt("RW2 samples that end early"));
+        }
+        (0..rows).into_par_iter().for_each(|r| {
+            let line: Vec<u16> = data[r * width * 2..(r + 1) * width * 2].chunks_exact(2).map(|w| u16::from_le_bytes([w[0], w[1]]) >> 4).collect();
+            put(r, 0, &line);
+        });
+        return Ok(());
+    }
     let per = coding.per_packet();
     let packets = width / per;
     if width % per != 0 || data.len() < coding.span(packets * rows) {
@@ -530,7 +564,7 @@ pub fn decode(bytes: &[u8], spans: &[(usize, usize)], width: usize, rows: usize,
         for (k, out) in line.chunks_exact_mut(per).enumerate() {
             let p = packet(data, r * packets + k, coding.turned());
             match coding.version {
-                4 => steps_4(p, out),
+                3 | 4 => steps_4(p, out),
                 6 => steps_6(p, coding.bits, out),
                 _ => whole(p, coding.bits, out),
             }

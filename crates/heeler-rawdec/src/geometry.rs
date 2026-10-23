@@ -37,8 +37,8 @@ pub fn nef_white(make: &str, model: &str, depth: u32) -> Option<u32> {
     NEF_WHITE.iter().find(|w| w.0 == make && w.1 == model && w.2 == depth).map(|w| w.3)
 }
 
-/// An ORF camera's black level as LibRaw takes it where the file states
-/// none: red, the green on red's row, the other green, blue.
-pub fn orf_black(make: &str, model: &str) -> Option<[u32; 4]> {
-    ORF_BLACK.iter().find(|b| b.0 == make && b.1 == model).map(|b| b.2)
+/// An ORF, NEF or RW2 camera's black level as LibRaw takes it where the
+/// file states none: red, the green on red's row, the other green, blue.
+pub fn black(make: &str, model: &str) -> Option<[u32; 4]> {
+    BLACK.iter().find(|b| b.0 == make && b.1 == model).map(|b| b.2)
 }

@@ -24,6 +24,9 @@ pub enum Format {
     Nef,
     Rw2,
     Orf,
+    Pef,
+    Srw,
+    Mrw,
 }
 
 impl Format {
@@ -36,6 +39,9 @@ impl Format {
             Format::Nef => "NEF",
             Format::Rw2 => "RW2",
             Format::Orf => "ORF",
+            Format::Pef => "PEF",
+            Format::Srw => "SRW",
+            Format::Mrw => "MRW",
         }
     }
 }
@@ -60,6 +66,12 @@ pub enum Coding {
     /// 12-bit samples in three bytes, the first in the low byte and the low
     /// half of the next): the older Sony bodies' 12-bit uncompressed data.
     PackedLow,
+    /// Uncompressed 16-bit words big-endian in a little-endian file (some
+    /// Coolpix NRWs).
+    BigWords,
+    /// Uncompressed 16-bit words little-endian in a big-endian file (some
+    /// SRWs).
+    LittleWords,
     /// Canon's lossless CRX planes (cr3.rs, crx.rs), each one site of the
     /// 2 by 2 pattern in a tile of the frame.
     Crx(Vec<crate::cr3::CrxPlane>),
@@ -74,6 +86,9 @@ pub enum Coding {
     /// Olympus's layouts beyond TIFF's (orf.rs): its compression, or 12-bit
     /// samples padded to 16 bytes in tens.
     Olympus(crate::orf::Olympus),
+    /// Pentax's Huffman coding (pef.rs): one stream, its code from the
+    /// maker notes.
+    Pentax(crate::pef::PentaxCode),
 }
 
 /// A raw file in the terms a develop needs, which are the DNG
@@ -280,7 +295,7 @@ impl Dng {
     }
 
     /// Any raw file this crate reads: a DNG, a CR2, a CR3, an ARW, a NEF, an
-    /// RW2 or an ORF.
+    /// RW2, an ORF, a PEF, an SRW or an MRW.
     pub fn open(bytes: &[u8]) -> Result<Dng, Error> {
         if crate::cr3::is_cr3(bytes) {
             return crate::cr3::parse(bytes);
@@ -299,6 +314,15 @@ impl Dng {
         }
         if crate::orf::is_orf(bytes) {
             return crate::orf::parse(bytes);
+        }
+        if crate::pef::is_pef(bytes) {
+            return crate::pef::parse(bytes);
+        }
+        if crate::srw::is_srw(bytes) {
+            return crate::srw::parse(bytes);
+        }
+        if crate::mrw::is_mrw(bytes) {
+            return crate::mrw::parse(bytes);
         }
         Dng::parse(bytes)
     }
