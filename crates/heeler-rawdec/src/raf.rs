@@ -84,15 +84,32 @@ pub fn depth(bytes: &[u8]) -> Option<u32> {
     f.get(0xf003).and_then(|e| t.uint(&e))
 }
 
-pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
-    let (make, model) = make_model(bytes).ok_or(Error::Unsupported("a RAF without Make and Model"))?;
+/// The later bodies' raw section: the frame's size and depth, how its
+/// samples are coded, each CFA site's black level and the balance as
+/// shot (green, red, blue).
+struct Section {
+    width: usize,
+    height: usize,
+    bits: usize,
+    data: usize,
+    count: usize,
+    coding: Coding,
+    black: Vec<u32>,
+    balance: Option<Vec<u32>>,
+}
+
+/// The X-Trans pattern's colors from the frame's top left: record 0x131
+/// read backwards.
+fn xtrans(bytes: &[u8]) -> Option<[[u8; 6]; 6]> {
+    let p = record(bytes, 0x131).filter(|p| p.len() == 36 && p.iter().all(|&c| c < 3))?;
+    Some(std::array::from_fn(|r| std::array::from_fn(|c| p[(5 - r) * 6 + 5 - c])))
+}
+
+fn section(bytes: &[u8]) -> Result<Section, Error> {
     let (at, len) = (u32be(bytes, 100).ok_or(Error::Corrupt("the RAF header"))?, u32be(bytes, 104).ok_or(Error::Corrupt("the RAF header"))?);
     let raw = bytes.get(at..at.checked_add(len).ok_or(Error::Corrupt("the RAF header"))?).ok_or(Error::Corrupt("a RAF raw section past the end of the file"))?;
     if !raw.starts_with(b"II*\0") {
         return Err(Error::Unsupported("an earlier RAF layout not read here"));
-    }
-    if record(bytes, 0x131).is_some() {
-        return Err(Error::Unsupported("an X-Trans sensor"));
     }
     let t = Tiff::with_order(raw, true);
     let (ifd, _) = t.ifd(u32::from_le_bytes(raw[4..8].try_into().unwrap()) as usize).ok_or(Error::Corrupt("the RAF raw directory"))?;
@@ -109,14 +126,53 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     if off.checked_add(count).is_none_or(|e| e > len) {
         return Err(Error::Corrupt("RAF samples past the end of the raw section"));
     }
-    let (coding, row) = match (uint(0xf004).unwrap_or(0), uint(0xf006).unwrap_or(0)) {
-        (0, _) => (Coding::Headerless(crate::headerless::Layout::words_at(data, width, 2)), width * 2),
-        (4, 1) => (Coding::Headerless(crate::headerless::Layout::packed_at(data, width, bits as u32, 4)), width * bits / 8),
-        (4, 0) if bits == 12 => (Coding::PackedLow, width * 3 / 2),
-        _ => return Err(Error::Unsupported("a RAF packing not read here")),
+    let coding = match crate::fuji::Fuji::read(bytes, data, count, width, height, bits as u32, xtrans(bytes))? {
+        Some(f) => Coding::Fuji(Box::new(f)),
+        None => {
+            let (coding, row) = match (uint(0xf004).unwrap_or(0), uint(0xf006).unwrap_or(0)) {
+                (0, _) => (Coding::Headerless(crate::headerless::Layout::words_at(data, width, 2)), width * 2),
+                (4, 1) => (Coding::Headerless(crate::headerless::Layout::packed_at(data, width, bits as u32, 4)), width * bits / 8),
+                (4, 0) if bits == 12 => (Coding::PackedLow, width * 3 / 2),
+                _ => return Err(Error::Unsupported("a RAF packing not read here")),
+            };
+            if count < row * height {
+                return Err(Error::Unsupported("a RAF coding not read here"));
+            }
+            coding
+        }
     };
-    if count < row * height {
-        return Err(Error::Unsupported("Fujifilm's compression"));
+    Ok(Section { width, height, bits, data, count, coding, black: uints(0xf00a).unwrap_or_default(), balance: uints(0xf00e) })
+}
+
+/// The whole raw frame of a later body's RAF, Bayer or X-Trans: width,
+/// height and samples. For the harnesses that hold the decode to LibRaw's.
+#[doc(hidden)]
+pub fn frame(bytes: &[u8]) -> Result<(usize, usize, Vec<u16>), Error> {
+    let s = section(bytes)?;
+    let (w, h) = (s.width, s.height);
+    let out = std::sync::Mutex::new(vec![0u16; w * h]);
+    let put = |r: usize, line: &[u16]| out.lock().unwrap()[r * w..(r + 1) * w].copy_from_slice(&line[..w]);
+    match &s.coding {
+        Coding::Fuji(f) => crate::fuji::decode(bytes, f, h, put)?,
+        Coding::Headerless(l) => crate::headerless::decode(bytes, w, h, h, l, put)?,
+        _ => {
+            let row = w * 3 / 2;
+            let mut line = vec![0u16; w];
+            for r in 0..h {
+                let d = bytes.get(s.data + r * row..s.data + (r + 1) * row).ok_or(Error::Corrupt("RAF samples that end early"))?;
+                crate::develop::unpack_row_low(d, 12, &mut line);
+                put(r, &line);
+            }
+        }
+    }
+    Ok((w, h, out.into_inner().unwrap()))
+}
+
+pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
+    let (make, model) = make_model(bytes).ok_or(Error::Unsupported("a RAF without Make and Model"))?;
+    let Section { width, height, bits, data, count, coding, black, balance } = section(bytes)?;
+    if xtrans(bytes).is_some() {
+        return Err(Error::Unsupported("an X-Trans sensor"));
     }
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
     // The camera's level for the depth where its files of two depths share
@@ -127,8 +183,8 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         (None, w) => w,
     } as f64;
     // Red, green, blue from green, red, blue.
-    let wb = uints(0xf00e).filter(|v| v.len() >= 3 && v[..3].iter().all(|&x| x > 0)).ok_or(Error::Unsupported("no stated white balance"))?;
-    let black = uints(0xf00a).filter(|v| v.len() == 4).ok_or(Error::Unsupported("no stated black level"))?;
+    let wb = balance.filter(|v| v.len() >= 3 && v[..3].iter().all(|&x| x > 0)).ok_or(Error::Unsupported("no stated white balance"))?;
+    let black = Some(black).filter(|v| v.len() == 4).ok_or(Error::Unsupported("no stated black level"))?;
     let orientation = exif(bytes).and_then(|t| t.ifds().into_iter().next().and_then(|i| i.get(274).and_then(|e| t.uint(&e)))).unwrap_or(1);
     if !(1..=8).contains(&orientation) {
         return Err(Error::Unsupported("an orientation tag outside 1 to 8"));

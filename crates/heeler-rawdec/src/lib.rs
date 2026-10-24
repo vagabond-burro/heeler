@@ -12,6 +12,7 @@ pub mod crx;
 pub mod deflate;
 pub mod develop;
 pub mod dng;
+pub mod fuji;
 pub mod gain_map;
 pub mod geometry;
 pub mod ljpeg;

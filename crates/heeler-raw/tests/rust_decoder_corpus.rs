@@ -190,3 +190,31 @@ fn every_corpus_headerless_frame_is_libraws() {
     eprintln!("{taken} headerless corpus files compared");
     assert!(failures.is_empty(), "{} differ from LibRaw:\n{}", failures.len(), failures.join("\n"));
 }
+
+/// Every RAF of the corpus whose samples heeler-rawdec reads (Bayer and
+/// X-Trans, Fujifilm's lossless compression among them) decodes to
+/// LibRaw's whole frame, to the sample, whether or not the develop takes
+/// the file yet.
+#[test]
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
+fn every_corpus_raf_frame_is_libraws() {
+    let Some(root) = std::env::var_os("HEELER_RAW_CORPUS") else {
+        eprintln!("HEELER_RAW_CORPUS not set; skipping the RAF frame comparison");
+        return;
+    };
+    let _routing = ROUTING.lock().unwrap_or_else(|e| e.into_inner());
+    let mut taken = 0;
+    let mut failures = Vec::new();
+    for (path, name) in files(&root, &["RAF"]) {
+        let Ok(bytes) = std::fs::read(&path) else { continue };
+        let Ok((w, h, mine)) = heeler_rawdec::raf::frame(&bytes) else { continue };
+        taken += 1;
+        match heeler_raw::libraw_frame(&bytes) {
+            Ok((lw, lh, theirs)) if (lw, lh) == (w, h) && theirs == mine => {}
+            Ok((lw, lh, _)) => failures.push(format!("{name}: {w}x{h} vs LibRaw's {lw}x{lh}, or samples differ")),
+            Err(e) => failures.push(format!("{name}: LibRaw: {e:?}")),
+        }
+    }
+    eprintln!("{taken} RAF frames compared");
+    assert!(failures.is_empty(), "{} differ from LibRaw:\n{}", failures.len(), failures.join("\n"));
+}

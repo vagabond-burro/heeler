@@ -1656,17 +1656,37 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
 - The white level is LibRaw's for the camera and depth (the GFX bodies'
   14-bit files 15872, their 16-bit ones 65535; the geometry table's NEF
   depth table now holds RAF too).
-- Declined for now: Fujifilm's compression (122 files), X-Trans sensors
-  (154; their 6 by 6 pattern needs its own demosaic), and the earlier
-  bodies without the TIFF raw section (35; most with the sensor turned 45
-  degrees).
+- Fujifilm's lossless compression (`fuji.rs`), Bayer and X-Trans: a
+  header ("IS", lossless or lossy, the raw type, the depth, the frame's
+  size, a block's width, the lines), each block's length, then blocks of
+  768 columns read on their own (across the cores), six rows at a time
+  as color lines read in pairs, each sample from its neighbors above with
+  an adaptive Golomb-like code in one of 41 contexts per pair kind. Its
+  structure was recalled rather than derived from a published description
+  (the owner's decision of 2026-10-24, as with ORF), then each part
+  confirmed against LibRaw's frame: the header and the block table
+  against every file's samples' length, the coding and the lines'
+  arrangement sample for sample on whole frames. X-Trans files read some
+  even samples from the line above where the sensor's pixels never use
+  them, and their 6 by 6 pattern is record 0x131 read backwards; both
+  found from the data.
+- Declined for now: Fujifilm's lossy compression (46 files: one byte a
+  six rows of each block, a step, ahead of the blocks; the recalled rule
+  for it did not reproduce LibRaw's frame), X-Trans sensors in the
+  develop (154; their 6 by 6 pattern needs its own demosaic), and the
+  earlier bodies without the TIFF raw section (35; most with the sensor
+  turned 45 degrees).
 
 ### Verification
 
-- `rustdiff --any` over all 304 RAFs of both corpora: the 71 the Rust path
-  takes match LibRaw at every stage, full size and half, with LibRaw's
-  black, white and balance, and with its own. 32 cameras join the
-  verified list.
+- `rustdiff --any` over all 304 RAFs of both corpora: the 71 uncompressed
+  Bayer files and the 26 losslessly compressed GFX files match LibRaw at
+  every stage, full size and half, with LibRaw's black, white and
+  balance, and with its own. 32 cameras join the verified list.
+- `every_corpus_raf_frame_is_libraws`: every RAF whose samples are read
+  (the X-Trans ones too, 76 losslessly compressed among them) decodes to
+  LibRaw's whole frame, to the sample. A lossless compressed frame takes
+  55 to 177 ms.
 
 ## Cameras without a converter calibration
 

@@ -134,6 +134,9 @@ pub enum Coding {
     CanonCrw(crate::crw::CanonCrw),
     /// A headerless file's rows (headerless.rs).
     Headerless(crate::headerless::Layout),
+    /// Fujifilm's compression (fuji.rs): blocks of columns, each read on
+    /// its own.
+    Fuji(Box<crate::fuji::Fuji>),
 }
 
 /// A raw file in the terms a develop needs, which are the DNG
