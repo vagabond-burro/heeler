@@ -84,6 +84,12 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
             Ok(mine) if mine == theirs => {}
             _ => failures.push(format!("{name}: the unpacked mosaic")),
         }
+        // The shipped develop, with its own levels and color, finishes: one
+        // that fails goes to LibRaw without a word, which this would hide.
+        let shipped = Opts { libraw_color: false, ..opts(DevelopOpts::default()) };
+        if let Err(e) = heeler_rawdec::develop(&bytes, &shipped, None) {
+            failures.push(format!("{name}: the shipped develop: {e}"));
+        }
         // The matrix and levels are LibRaw's here: what this holds to
         // LibRaw is the decode and develop, not where those numbers come
         // from (LibRaw's own tables can round a camera's matrix apart from

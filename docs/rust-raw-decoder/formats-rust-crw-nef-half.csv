@@ -1,0 +1,230 @@
+file,maker,camera,format,megapixels,decoder,half,runs,status,total_ms,open_ms,unpack_ms,develop_ms,out_width,out_height
+Canon/A570 IS/CRW_2554.CRW,Canon,A570 IS,CRW,1.81,rust,1,3,ok,3.82,0.07,2.04,1.61,1556,1164
+Canon/Canon IXUS900Ti/RAW_CANON_IXUS900TI_CHDK.CRW,Canon,Canon IXUS900Ti,CRW,2.53,rust,1,3,ok,5.00,0.07,2.70,2.07,1836,1380
+Canon/Canon PowerShot A540/CANON_A540_CHDK_CRW_0015.CRW,Canon,Canon PowerShot A540,CRW,1.51,rust,1,3,ok,3.46,0.07,1.89,1.45,1420,1064
+Canon/Canon PowerShot A610/IMG_1574.CRW,Canon,Canon PowerShot A610,CRW,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot A620/Canon_PowerShot_A620_CHDK_1.0.0.1892.CRW,Canon,Canon PowerShot A620,CRW,1.81,rust,1,3,ok,3.78,0.07,1.98,1.57,1556,1164
+Canon/Canon PowerShot A630/RAW_CANON_POWERSHOT_A630_CHDK.CRW,Canon,Canon PowerShot A630,CRW,2.03,rust,1,3,ok,4.10,0.07,2.18,1.70,1644,1236
+Canon/Canon PowerShot A710 IS/RAW_CANON_A710.CRW,Canon,Canon PowerShot A710 IS,CRW,1.81,rust,1,3,ok,3.82,0.07,2.05,1.57,1556,1164
+Canon/Canon PowerShot ELPH 130 IS/CANON_IXUS140_ELPH130_CHDK_CRW_5646.CRW,Canon,Canon PowerShot ELPH 130 IS,CRW,4.04,rust,1,3,ok,6.92,0.07,3.75,2.93,2320,1740
+Canon/Canon PowerShot ELPH 180/CANON_IXUS175_ELPH180_CHDK_CRW_0195.CRW,Canon,Canon PowerShot ELPH 180,CRW,5.04,rust,1,3,ok,8.52,0.07,4.64,3.65,2592,1944
+Canon/Canon PowerShot S2 IS/RAW_CANON_S2IS.CRW,Canon,Canon PowerShot S2 IS,CRW,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Canon PowerShot S3IS/CRW_8760.CRW,Canon,Canon PowerShot S3IS,CRW,1.51,rust,1,3,ok,3.35,0.07,1.85,1.29,1420,1064
+Canon/Canon PowerShot S5 IS/RAW_CANON_S5IS.CRW,Canon,Canon PowerShot S5 IS,CRW,2.04,rust,1,3,ok,4.17,0.07,2.11,1.85,1649,1235
+Canon/Canon PowerShot SD750/RAW_CANON_SD750.CRW,Canon,Canon PowerShot SD750,CRW,1.81,rust,1,3,ok,3.85,0.07,2.17,1.50,1556,1164
+Canon/Canon Powershot A650/RAW_CANON_POWERSHOT_A650_CHDK.CRW,Canon,Canon Powershot A650,CRW,3.05,rust,1,3,ok,5.29,0.07,2.76,2.32,2016,1512
+Canon/EOS 10D/CRW_7673.CRW,Canon,EOS 10D,CRW,1.59,rust,1,3,ok,9.57,0.01,8.13,1.41,1544,1028
+Canon/EOS 10D/crw_2127.crw,Canon,EOS 10D,CRW,1.59,rust,1,3,ok,9.45,0.01,8.01,1.40,1544,1028
+Canon/EOS 10D/crw_2455.crw,Canon,EOS 10D,CRW,1.59,rust,1,3,ok,10.65,0.01,9.32,1.32,1544,1028
+Canon/EOS 300D/103_0333.crw,Canon,EOS 300D,CRW,1.59,rust,1,3,ok,9.61,0.01,8.11,1.43,1028,1544
+Canon/EOS 300D/CRW_8395.CRW,Canon,EOS 300D,CRW,1.59,rust,1,3,ok,9.25,0.01,7.79,1.44,1028,1544
+Canon/EOS D30/CRW_2444.CRW,Canon,EOS D30,CRW,0.79,rust,1,3,ok,4.93,0.01,4.04,0.84,1088,724
+Canon/EOS D60/CRW_0099.CRW,Canon,EOS D60,CRW,1.59,rust,1,3,ok,10.04,0.01,8.56,1.46,1544,1028
+Canon/EOS Digital Rebel/CRW_2390.CRW,Canon,EOS Digital Rebel,CRW,1.59,rust,1,3,ok,9.06,0.01,7.74,1.33,1544,1028
+Canon/IXY 220F/canon_ixy_220f.CRW,Canon,IXY 220F,CRW,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot A550/CRW_0007.CRW,Canon,PowerShot A550,CRW,1.81,rust,1,3,ok,3.76,0.07,1.97,1.55,1556,1164
+Canon/PowerShot D10/CANON_D10_CHDK_CRW_0627.CRW,Canon,PowerShot D10,CRW,3.01,rust,1,3,ok,5.08,0.07,2.61,2.27,2006,1502
+Canon/PowerShot G1/crw_1693.crw,Canon,PowerShot G1,CRW,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot G2/RAW_CANON_G2.CRW,Canon,PowerShot G2,CRW,0.99,rust,1,3,ok,6.62,0.01,5.49,1.04,1156,860
+Canon/PowerShot G3/RAW_CANON_G3.CRW,Canon,PowerShot G3,CRW,0.99,rust,1,3,ok,6.44,0.01,5.44,1.01,1156,860
+Canon/PowerShot G5/105_0506.CRW,Canon,PowerShot G5,CRW,1.28,rust,1,3,ok,7.40,0.01,6.15,1.14,1308,980
+Canon/PowerShot G6/CRW_2097.CRW,Canon,PowerShot G6,CRW,1.81,rust,1,3,ok,10.17,0.01,8.60,1.53,1556,1164
+Canon/PowerShot G7 X/CANON_G7X_CHDK_CRW_6739.CRW,Canon,PowerShot G7 X,CRW,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot Pro1/RAW_CANON_PRO1_ARGB.CRW,Canon,PowerShot Pro1,CRW,2.03,rust,1,3,ok,11.21,0.01,9.47,1.61,1644,1236
+Canon/PowerShot Pro70/RAW_CANON_PRO70_SRGB.CRW,Canon,PowerShot Pro70,CRW,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot S100/CRW_1376.CRW,Canon,PowerShot S100,CRW,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/PowerShot S30/RAW_CANON_S30.CRW,Canon,PowerShot S30,CRW,0.81,rust,1,3,ok,5.65,0.01,4.81,0.84,1044,775
+Canon/PowerShot S40/RAW_CANON_S40.CRW,Canon,PowerShot S40,CRW,0.99,rust,1,3,ok,6.14,0.01,5.17,0.94,1156,860
+Canon/PowerShot S45/RAW_CANON_S45.CRW,Canon,PowerShot S45,CRW,0.99,rust,1,3,ok,6.37,0.01,5.46,0.90,1156,860
+Canon/PowerShot S50/RAW_CANON_S50.CRW,Canon,PowerShot S50,CRW,1.28,rust,1,3,ok,8.57,0.01,7.37,1.17,1308,980
+Canon/PowerShot S60/RAW_CANON_S60_SRGB.CRW,Canon,PowerShot S60,CRW,1.28,rust,1,3,ok,8.09,0.01,6.86,1.23,980,1308
+Canon/PowerShot S70/RAW_CANON_S70_SRGB.CRW,Canon,PowerShot S70,CRW,1.81,rust,1,3,ok,11.04,0.01,9.47,1.54,1556,1164
+Canon/PowerShot SX110 IS/CRW_5178.CRW,Canon,PowerShot SX110 IS,CRW,2.54,rust,1,3,ok,5.56,0.07,2.92,2.08,1842,1380
+Canon/PowerShot SX160 IS/CANON_SX160IS_CHDK_CRW_5151.CRW,Canon,PowerShot SX160 IS,CRW,4.04,rust,1,3,ok,7.12,0.07,3.94,2.95,2320,1740
+Canon/PowerShot SX20 IS/CRW_6488.CRW,Canon,PowerShot SX20 IS,CRW,3.05,rust,1,3,ok,5.87,0.08,3.16,2.43,2016,1512
+Canon/PowerShot SX220 HS/CRW_7732.CRW,Canon,PowerShot SX220 HS,CRW,3.10,rust,1,3,ok,6.51,0.07,3.72,2.54,2036,1521
+Canon/PowerShot SX260 HS/CRW_3026.CRW,Canon,PowerShot SX260 HS,CRW,3.10,rust,1,3,ok,5.76,0.07,3.13,2.37,2036,1522
+Canon/PowerShot SX710 HS/CANON_SX710HS_CHDK_CRW_0717.CRW,Canon,PowerShot SX710 HS,CRW,5.16,rust,1,3,ok,8.76,0.07,4.84,3.68,2624,1966
+Canon/Powershot A620/Portulaca_1216.CRW,Canon,Powershot A620,CRW,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/Powershot A640/CRW_0441.CRW,Canon,Powershot A640,CRW,2.53,rust,1,3,ok,5.03,0.07,2.65,2.11,1836,1380
+Canon/Powershot A720IS/IMG_2115.CRW,Canon,Powershot A720IS,CRW,2.04,rust,1,3,ok,4.14,0.07,2.08,1.82,1649,1235
+Canon/Poweshot S3IS/RAW_CANON_S3IS.CRW,Canon,Poweshot S3IS,CRW,1.51,rust,1,3,ok,3.33,0.07,1.75,1.35,1420,1064
+Canon/ixus 75/2008-06-10_Moscow_0012.CRW,Canon,ixus 75,CRW,1.81,rust,1,3,ok,3.79,0.07,2.02,1.55,1556,1164
+NIKON CORPORATION/NIKON D200/20071013-10273016-NIKON_D200.nef,NIKON CORPORATION,NIKON D200,NEF,2.55,rust,1,3,ok,8.25,0.01,6.37,1.78,1949,1308
+NIKON CORPORATION/NIKON D2X/_ABA4604.NEF,NIKON CORPORATION,NIKON D2X,NEF,3.09,rust,1,3,ok,3.44,0.01,1.47,1.90,2156,1434
+NIKON CORPORATION/NIKON D2X/_ABA4605.NEF,NIKON CORPORATION,NIKON D2X,NEF,3.09,rust,1,3,ok,9.96,0.01,7.97,1.89,2156,1434
+NIKON CORPORATION/NIKON D2Xs/DSC_0034.NEF,NIKON CORPORATION,NIKON D2Xs,NEF,3.09,rust,1,3,ok,9.53,0.01,7.60,1.88,2156,1434
+NIKON CORPORATION/NIKON D5300/DSC_0089-14bit-uncompressed.NEF,NIKON CORPORATION,NIKON D5300,NEF,6.04,rust,1,3,ok,21.78,0.03,15.84,5.85,3008,2008
+NIKON CORPORATION/NIKON D5300/DSC_0090-12bit-uncompressed.NEF,NIKON CORPORATION,NIKON D5300,NEF,6.04,rust,1,3,ok,21.22,0.01,15.20,6.02,3008,2008
+NIKON CORPORATION/NIKON Z fc/Nikon_Z_fc_12bit.NEF,NIKON CORPORATION,NIKON Z fc,NEF,5.22,rust,1,3,ok,23.79,0.01,18.64,5.16,2800,1864
+NIKON CORPORATION/NIKON Z fc/Nikon_Z_fc_12bit_uncompressed.NEF,NIKON CORPORATION,NIKON Z fc,NEF,5.22,rust,1,3,ok,5.99,0.01,2.26,3.75,2800,1864
+NIKON CORPORATION/NIKON Z fc/Nikon_Z_fc_14bit.NEF,NIKON CORPORATION,NIKON Z fc,NEF,5.22,rust,1,3,ok,18.54,0.01,13.22,5.16,2800,1864
+NIKON CORPORATION/NIKON Z50_2/DSC_0060_DX_Lossless.NEF,NIKON CORPORATION,NIKON Z50_2,NEF,5.22,rust,1,3,ok,23.93,0.01,18.71,5.37,2800,1864
+NIKON CORPORATION/NIKON Z50_2/DSC_0061_DX_HE_Star.NEF,NIKON CORPORATION,NIKON Z50_2,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+NIKON CORPORATION/NIKON Z50_2/DSC_0062_DX_HE.NEF,NIKON CORPORATION,NIKON Z50_2,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+NIKON CORPORATION/NIKON Z5_2/High_Efficiency_1-1.NEF,NIKON CORPORATION,NIKON Z5_2,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+NIKON CORPORATION/NIKON Z5_2/High_Efficiency_16-9.NEF,NIKON CORPORATION,NIKON Z5_2,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+NIKON CORPORATION/NIKON Z5_2/High_Efficiency_DX.NEF,NIKON CORPORATION,NIKON Z5_2,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+NIKON CORPORATION/NIKON Z6_3/Nikon_Z6__3_High_Efficiency_16_9.NEF,NIKON CORPORATION,NIKON Z6_3,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+NIKON CORPORATION/NIKON Z6_3/Nikon_Z6__3_High_Efficiency_1_1.NEF,NIKON CORPORATION,NIKON Z6_3,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+NIKON CORPORATION/NIKON Z6_3/Nikon_Z6__3_High_Efficiency_DX.NEF,NIKON CORPORATION,NIKON Z6_3,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/1 AW1/_DSC0521.NEF,Nikon,1 AW1,NEF,3.56,rust,1,3,ok,10.71,0.01,8.59,2.07,2310,1541
+Nikon/1 J1/_DSC0355.NEF,Nikon,1 J1,NEF,2.54,rust,1,3,ok,11.18,0.01,9.48,1.64,1952,1302
+Nikon/1 J1/_DSC7434.NEF,Nikon,1 J1,NEF,2.54,rust,1,3,ok,10.92,0.01,9.14,1.70,1952,1302
+Nikon/1 J1/_DSC8140.NEF,Nikon,1 J1,NEF,2.54,rust,1,3,ok,10.79,0.01,9.09,1.64,1952,1302
+Nikon/1 J2/DSC_0451.NEF,Nikon,1 J2,NEF,2.54,rust,1,3,ok,10.77,0.01,8.89,1.82,1952,1302
+Nikon/1 J3/DSC_0091.NEF,Nikon,1 J3,NEF,3.56,rust,1,3,ok,13.50,0.02,11.28,2.15,2310,1541
+Nikon/1 J4/Copenhagen_Day_10_City_Hall_Sq._Streetworks_DSC_3459_19072016_407.NEF,Nikon,1 J4,NEF,4.59,rust,1,3,ok,17.54,0.01,14.14,3.33,2624,1751
+Nikon/1 J5/20151027-10311989-NIKON_1_J5.nef,Nikon,1 J5,NEF,5.20,rust,1,3,ok,22.49,0.01,17.18,5.20,2792,1862
+Nikon/1 J5/20151027-10431071-NIKON_1_J5.nef,Nikon,1 J5,NEF,5.20,rust,1,3,ok,106.12,0.01,100.89,5.15,2792,1862
+Nikon/1 S1/DSC_0076.NEF,Nikon,1 S1,NEF,2.57,rust,1,3,ok,9.64,0.01,7.97,1.55,1974,1301
+Nikon/1 S2/RAW_NIKON_1S2.NEF,Nikon,1 S2,NEF,3.55,rust,1,3,ok,12.31,0.01,9.37,2.88,1539,2304
+Nikon/1 V1/DSC_4157.NEF,Nikon,1 V1,NEF,2.54,rust,1,3,ok,11.02,0.01,9.30,1.66,1952,1302
+Nikon/1 V1/DSC_4167.NEF,Nikon,1 V1,NEF,2.54,rust,1,3,ok,11.00,0.01,9.30,1.64,1952,1302
+Nikon/1 V2/Nikon_1_V2_ISO-200.NEF,Nikon,1 V2,NEF,3.56,rust,1,3,ok,13.37,0.01,11.13,2.21,2310,1541
+Nikon/1 V3/DSC_3313.NEF,Nikon,1 V3,NEF,4.59,rust,1,3,ok,17.20,0.01,13.86,3.28,2624,1751
+Nikon/Coolpix A/_DSC0010.NEF,Nikon,Coolpix A,NEF,4.06,rust,1,3,ok,15.00,0.03,12.55,2.38,2474,1640
+Nikon/Coolpix E8800/DSCN6207.NEF,Nikon,Coolpix E8800,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/D1/RAW_NIKON_D1.NEF,Nikon,D1,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/D100/DSC_2376.NEF,Nikon,D100,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/D1H/DSC_3671.NEF,Nikon,D1H,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/D1X/D1x_20040730_ub20_035.NEF,Nikon,D1X,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/D1X/DSC_0494.NEF,Nikon,D1X,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/D200/pbs_7117.nef,Nikon,D200,NEF,2.55,rust,1,3,ok,3.13,0.01,1.21,1.87,1949,1308
+Nikon/D2H/D2A_0005.NEF,Nikon,D2H,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/D2H/D2H_3957.NEF,Nikon,D2H,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/D2Hs/DSC_5858.NEF,Nikon,D2Hs,NEF,1.02,rust,1,3,ok,1.38,0.01,0.51,0.80,1241,824
+Nikon/D2Xs/DSC_0035.NEF,Nikon,D2Xs,NEF,3.09,rust,1,3,ok,3.27,0.01,1.41,1.85,2156,1434
+Nikon/D3/JD1_8203.NEF,Nikon,D3,NEF,3.05,rust,1,3,ok,9.24,0.01,7.39,1.81,2142,1422
+Nikon/D3/JD1_8204.NEF,Nikon,D3,NEF,3.05,rust,1,3,ok,3.35,0.01,1.47,1.86,2142,1422
+Nikon/D3/JD1_8205.NEF,Nikon,D3,NEF,3.05,rust,1,3,ok,9.01,0.01,7.11,1.86,2142,1422
+Nikon/D300/MMC_2821.NEF,Nikon,D300,NEF,3.10,rust,1,3,ok,9.66,0.01,7.77,1.84,2160,1434
+Nikon/D300/MMC_2822.NEF,Nikon,D300,NEF,3.10,rust,1,3,ok,9.40,0.03,7.43,1.86,2160,1434
+Nikon/D300/MMC_2823.NEF,Nikon,D300,NEF,3.10,rust,1,3,ok,2.45,0.01,0.53,1.86,2160,1434
+Nikon/D3000/DSC_0009.NEF,Nikon,D3000,NEF,2.55,rust,1,3,ok,11.17,0.01,9.32,1.82,1950,1306
+Nikon/D300S/_DSC4612.NEF,Nikon,D300S,NEF,3.10,rust,1,3,ok,10.25,0.01,8.27,1.81,2160,1434
+Nikon/D300S/_DSC4613.NEF,Nikon,D300S,NEF,3.10,rust,1,3,ok,9.76,0.03,7.80,1.86,2160,1434
+Nikon/D300S/_DSC4614.NEF,Nikon,D300S,NEF,3.10,rust,1,3,ok,2.46,0.01,0.56,1.88,2160,1434
+Nikon/D3100/DSC_0359.NEF,Nikon,D3100,NEF,3.58,rust,1,3,ok,11.15,0.01,9.01,2.08,2322,1542
+Nikon/D3200/DSC_0059.NEF,Nikon,D3200,NEF,6.05,rust,1,3,ok,20.14,0.01,15.05,5.04,3017,2006
+Nikon/D3300/DSC_0028.NEF,Nikon,D3300,NEF,6.04,rust,1,3,ok,20.28,0.01,14.12,5.93,3008,2008
+Nikon/D3400/DSC_0202.NEF,Nikon,D3400,NEF,6.04,rust,1,3,ok,21.60,0.02,15.28,6.11,3008,2008
+Nikon/D3400/DSC_0330_bad.NEF,Nikon,D3400,NEF,6.04,rust,1,3,ok,34.40,0.01,28.37,5.95,3008,2008
+Nikon/D3500/DSC_0043.NEF,Nikon,D3500,NEF,6.04,rust,1,3,ok,21.40,0.01,15.42,5.89,3008,2008
+Nikon/D3S/_CB32157.NEF,Nikon,D3S,NEF,3.05,rust,1,3,ok,9.96,0.01,8.05,1.85,2142,1422
+Nikon/D3S/_CB32158.NEF,Nikon,D3S,NEF,3.05,rust,1,3,ok,10.03,0.03,8.03,1.89,2142,1422
+Nikon/D3S/_CB32159.NEF,Nikon,D3S,NEF,3.05,rust,1,3,ok,2.47,0.01,0.57,1.86,2142,1422
+Nikon/D3X/RAW_NIKON_D3X.NEF,Nikon,D3X,NEF,6.15,rust,1,3,ok,20.11,0.01,14.80,5.25,2022,3040
+Nikon/D3X/_RLC8083.NEF,Nikon,D3X,NEF,6.15,rust,1,3,ok,4.32,0.01,0.92,3.31,3040,2022
+Nikon/D4/_DSC2250[1].NEF,Nikon,D4,NEF,4.07,rust,1,3,ok,3.29,0.01,0.67,2.54,2470,1646
+Nikon/D4/_DSC2252[1].NEF,Nikon,D4,NEF,4.07,rust,1,3,ok,12.82,0.03,10.34,2.37,2470,1646
+Nikon/D4/_DSC2254[1].NEF,Nikon,D4,NEF,4.07,rust,1,3,ok,13.99,0.01,10.36,3.57,2470,1646
+Nikon/D40/DSC_1842.NEF,Nikon,D40,NEF,1.53,rust,1,3,ok,7.19,0.01,5.98,1.19,1519,1007
+Nikon/D40X/DSC_4670.NEF,Nikon,D40X,NEF,2.55,rust,1,3,ok,9.97,0.01,8.12,1.80,1950,1306
+Nikon/D4S/FU9_3802.NEF,Nikon,D4S,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/D4S/FU9_3803.NEF,Nikon,D4S,NEF,4.06,rust,1,3,ok,15.22,0.01,12.12,3.05,2468,1644
+Nikon/D4S/FU9_3804.NEF,Nikon,D4S,NEF,4.06,rust,1,3,ok,12.84,0.03,9.83,2.92,2468,1644
+Nikon/D5/20170603_CCSG_on_Nikon_D5-DSC3096.NEF,Nikon,D5,NEF,5.20,rust,1,3,ok,4.62,0.01,0.79,3.75,2792,1864
+Nikon/D5/LV5_4402.NEF,Nikon,D5,NEF,5.20,rust,1,3,ok,57.60,0.03,52.24,5.21,2792,1864
+Nikon/D50/DSC_5155.NEF,Nikon,D50,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/D500/Nikon_D500_RAWL_12bit_Compressed.NEF,Nikon,D500,NEF,5.22,rust,1,3,ok,19.28,0.02,15.49,3.69,2800,1864
+Nikon/D500/Nikon_D500_RAWL_12bit_LosslessCompressed.NEF,Nikon,D500,NEF,5.22,rust,1,3,ok,15.45,0.01,11.54,3.73,2800,1864
+Nikon/D500/Nikon_D500_RAWL_12bit_Uncompressed.NEF,Nikon,D500,NEF,5.22,rust,1,3,ok,6.03,0.01,2.22,3.77,2800,1864
+Nikon/D5000/2017-03-30T14-24-27+0800_DSC_3614.NEF,Nikon,D5000,NEF,3.09,rust,1,3,ok,17.72,0.01,15.86,1.83,2155,1434
+Nikon/D5000/DSC_5349.NEF,Nikon,D5000,NEF,3.09,rust,1,3,ok,9.51,0.01,7.63,1.81,2155,1434
+Nikon/D5100/00.nikon.12b-lossy-raw.nef,Nikon,D5100,NEF,4.06,rust,1,3,ok,12.79,0.03,10.20,2.39,2474,1640
+Nikon/D5100/01.nikonhackers.12b-lossless-raw.nef,Nikon,D5100,NEF,4.06,rust,1,3,ok,14.12,0.01,10.60,3.46,2474,1640
+Nikon/D5100/02.nikonhackers.12b-uncompressed-raw.nef,Nikon,D5100,NEF,4.06,rust,1,3,ok,3.05,0.01,0.69,2.31,2474,1640
+Nikon/D5200/NIKON_D5200_14_bit_compressed.NEF,Nikon,D5200,NEF,6.07,rust,1,3,ok,20.88,0.03,15.58,5.17,3018,2010
+Nikon/D5200/_DSC7535.NEF,Nikon,D5200,NEF,6.07,rust,1,3,ok,42.13,0.03,36.88,5.11,3018,2010
+Nikon/D5500/DSC_0258.NEF,Nikon,D5500,NEF,6.04,rust,1,3,ok,43.53,0.03,37.15,6.10,3008,2008
+Nikon/D5500/DSC_5097.NEF,Nikon,D5500,NEF,6.04,rust,1,3,ok,21.69,0.03,15.46,6.10,3008,2008
+Nikon/D5500/DSC_5098.NEF,Nikon,D5500,NEF,6.04,rust,1,3,ok,20.76,0.02,14.82,5.86,3008,2008
+Nikon/D5600/2018-01-20_01-14_0792.NEF,Nikon,D5600,NEF,6.04,rust,1,3,ok,40.58,0.03,34.51,5.86,3008,2008
+Nikon/D5600/2018-01-20_01-14_0793.NEF,Nikon,D5600,NEF,6.04,rust,1,3,ok,41.14,0.01,35.17,5.98,3008,2008
+Nikon/D5600/DSC_0027.NEF,Nikon,D5600,NEF,6.04,rust,1,3,ok,21.36,0.01,15.43,5.90,3008,2008
+Nikon/D6/D06_0312.NEF,Nikon,D6,NEF,5.20,rust,1,3,ok,6.59,0.01,2.75,3.83,2792,1864
+Nikon/D6/D06_0313.NEF,Nikon,D6,NEF,5.20,rust,1,3,ok,17.07,0.01,11.84,5.14,2792,1864
+Nikon/D6/D06_0314.NEF,Nikon,D6,NEF,5.20,rust,1,3,ok,17.69,0.01,12.36,5.26,2792,1864
+Nikon/D60/DSC_8294.NEF,Nikon,D60,NEF,2.55,rust,1,3,ok,10.06,0.01,8.21,1.81,1950,1306
+Nikon/D600/DSC_3294.NEF,Nikon,D600,NEF,6.08,rust,1,3,ok,19.93,0.01,14.89,5.01,3017,2014
+Nikon/D600/DSC_3295.NEF,Nikon,D600,NEF,6.08,rust,1,3,ok,20.41,0.03,15.41,5.01,3017,2014
+Nikon/D600/DSC_3296.NEF,Nikon,D600,NEF,6.08,rust,1,3,ok,19.38,0.01,14.33,5.04,3017,2014
+Nikon/D610/ESP_0352.NEF,Nikon,D610,NEF,6.08,rust,1,3,ok,19.33,0.01,14.34,4.95,3017,2014
+Nikon/D610/ESP_0353.NEF,Nikon,D610,NEF,6.08,rust,1,3,ok,20.22,0.01,14.96,5.13,3017,2014
+Nikon/D610/ESP_0354.NEF,Nikon,D610,NEF,6.08,rust,1,3,ok,19.92,0.01,14.87,4.97,3017,2014
+Nikon/D70/20170902_0047.NEF,Nikon,D70,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/D700/_GDN0443.NEF,Nikon,D700,NEF,3.05,rust,1,3,ok,9.98,0.01,8.15,1.86,2142,1422
+Nikon/D700/_GDN0444.NEF,Nikon,D700,NEF,3.05,rust,1,3,ok,10.02,0.03,8.08,1.82,2142,1422
+Nikon/D700/_GDN0445.NEF,Nikon,D700,NEF,3.05,rust,1,3,ok,2.45,0.01,0.56,1.89,2142,1422
+Nikon/D7000/Compressed 12-bit D7000 NIK_3876.NEF,Nikon,D7000,NEF,4.06,rust,1,3,ok,12.14,0.01,9.81,2.36,2474,1640
+Nikon/D7000/Compressed 14-bit D7000 NIK_3875.NEF,Nikon,D7000,NEF,4.06,rust,1,3,ok,12.43,0.03,9.98,2.35,2474,1640
+Nikon/D7000/DSE61507.nef,Nikon,D7000,NEF,4.06,rust,1,3,ok,41.91,0.03,38.22,3.57,2474,1640
+Nikon/D70s/RAW_NIKON_D70S.NEF,Nikon,D70s,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/D7100/JCR_4305.NEF,Nikon,D7100,NEF,6.07,rust,1,3,ok,19.56,0.01,14.58,4.90,3018,2010
+Nikon/D7100/JCR_4306.NEF,Nikon,D7100,NEF,6.07,rust,1,3,ok,19.25,0.01,14.20,4.95,3018,2010
+Nikon/D7100/JCR_4308.NEF,Nikon,D7100,NEF,6.07,rust,1,3,ok,20.16,0.04,14.98,5.05,3018,2010
+Nikon/D7200/DSC_0977.NEF,Nikon,D7200,NEF,6.04,rust,1,3,ok,21.23,0.01,15.40,5.80,3008,2008
+Nikon/D7200/DSC_0978.NEF,Nikon,D7200,NEF,6.04,rust,1,3,ok,21.97,0.03,15.80,5.93,3008,2008
+Nikon/D7200/DSC_0979.NEF,Nikon,D7200,NEF,6.04,rust,1,3,ok,20.84,0.02,14.92,5.78,3008,2008
+Nikon/D750/compressed_12_bit.NEF,Nikon,D750,NEF,6.08,rust,1,3,ok,18.95,0.02,14.47,4.41,3016,2016
+Nikon/D750/compressed_14_bit.NEF,Nikon,D750,NEF,6.08,rust,1,3,ok,25.58,0.03,19.48,5.98,3016,2016
+Nikon/D750/lossless_compressed_12_bit.NEF,Nikon,D750,NEF,6.08,rust,1,3,ok,24.85,0.01,18.70,6.07,3016,2016
+Nikon/D7500/RAW_NIKON_D7500_12BIT_COMPRESSED.NEF,Nikon,D7500,NEF,5.22,rust,1,3,ok,21.94,0.02,18.09,3.78,2800,1864
+Nikon/D7500/RAW_NIKON_D7500_12BIT_LOSSLESS_COMPRESSED.NEF,Nikon,D7500,NEF,5.22,rust,1,3,ok,23.61,0.01,18.26,5.28,2800,1864
+Nikon/D7500/RAW_NIKON_D7500_14BIT_COMPRESSED.NEF,Nikon,D7500,NEF,5.22,rust,1,3,ok,24.42,0.03,19.05,5.25,2800,1864
+Nikon/D780/DSC_0334.NEF,Nikon,D780,NEF,6.12,rust,1,3,ok,22.16,0.01,15.51,6.05,3032,2020
+Nikon/D780/DSC_0336.NEF,Nikon,D780,NEF,6.12,rust,1,3,ok,21.72,0.01,15.54,6.07,3032,2020
+Nikon/D780/DSC_0338.NEF,Nikon,D780,NEF,6.12,rust,1,3,ok,22.42,0.01,16.25,6.04,3032,2020
+Nikon/D80/DSC_1114.NEF,Nikon,D80,NEF,2.55,rust,1,3,ok,11.25,0.01,9.43,1.77,1950,1306
+Nikon/D800/D800-12b-comp.NEF,Nikon,D800,NEF,9.08,rust,1,3,ok,29.65,0.02,21.94,7.51,3689,2462
+Nikon/D800/D800-12b-lossless-comp.NEF,Nikon,D800,NEF,9.08,rust,1,3,ok,38.30,0.01,30.92,7.30,3689,2462
+Nikon/D800/D800-12b-no-comp.NEF,Nikon,D800,NEF,9.08,rust,1,3,ok,8.44,0.01,3.50,4.88,3689,2462
+Nikon/D800E/NikonD800EDyLght0EV.NEF,Nikon,D800E,NEF,9.08,rust,1,3,ok,36.02,0.01,28.60,7.35,3689,2462
+Nikon/D800E/_D8E3567.NEF,Nikon,D800E,NEF,9.08,rust,1,3,ok,6.24,0.01,1.36,4.84,3689,2462
+Nikon/D810/DSC_1882.NEF,Nikon,D810,NEF,9.09,rust,1,3,ok,30.19,0.01,21.35,8.76,3690,2464
+Nikon/D810/DSC_1883.NEF,Nikon,D810,NEF,9.09,rust,1,3,ok,31.18,0.03,22.33,8.67,3690,2464
+Nikon/D810/DSC_1884.NEF,Nikon,D810,NEF,9.09,rust,1,3,ok,7.74,0.01,1.34,6.39,3690,2464
+Nikon/D850/Nikon-D850-12bit-compressed.NEF,Nikon,D850,NEF,11.44,rust,1,3,ok,38.71,0.02,27.70,11.10,4144,2760
+Nikon/D850/Nikon-D850-12bit-lossless-compressed.NEF,Nikon,D850,NEF,11.44,rust,1,3,ok,37.27,0.01,26.24,10.95,4144,2760
+Nikon/D850/Nikon-D850-12bit-uncompressed.NEF,Nikon,D850,NEF,11.44,rust,1,3,ok,12.24,0.01,4.39,7.83,4144,2760
+Nikon/D90/00001.NEF,Nikon,D90,NEF,3.09,rust,1,3,ok,11.09,0.01,9.19,1.84,2155,1434
+Nikon/Df/DSC_6792_Df12compr.NEF,Nikon,Df,NEF,4.07,rust,1,3,ok,12.55,0.01,9.95,2.60,1646,2470
+Nikon/Df/DSC_6793_Df12uncompr.NEF,Nikon,Df,NEF,4.07,rust,1,3,ok,4.26,0.01,1.66,2.48,1646,2470
+Nikon/Df/DSC_6794_Df12losslesscompr.NEF,Nikon,Df,NEF,4.07,rust,1,3,ok,14.29,0.01,11.73,2.61,1646,2470
+Nikon/E5400/RAW_NIKON_E5400.NEF,Nikon,E5400,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/E5700/20080115-DSCN1758.NEF,Nikon,E5700,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/E8400/DSCN1565.NEF,Nikon,E8400,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/Nikon COOLSCAN IV ED/NEF_from_Nikon_Scan_4.0.3_at_600dpi.nef,Nikon,Nikon COOLSCAN IV ED,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/Nikon COOLSCAN V ED/Image21-600pixels.nef,Nikon,Nikon COOLSCAN V ED,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/Z 30/NIKON_Z30_12BIT.NEF,Nikon,Z 30,NEF,5.22,rust,1,3,ok,22.08,0.01,16.87,5.13,2800,1864
+Nikon/Z 30/NIKON_Z30_14BIT.NEF,Nikon,Z 30,NEF,5.22,rust,1,3,ok,21.99,0.01,16.86,5.10,2800,1864
+Nikon/Z 30/_DSC0028.NEF,Nikon,Z 30,NEF,5.22,rust,1,3,ok,21.54,0.01,16.07,5.42,1864,2800
+Nikon/Z 5/DSC_0517.NEF,Nikon,Z 5,NEF,6.09,rust,1,3,ok,28.09,0.01,21.96,6.08,3020,2016
+Nikon/Z 5/DSC_0518.NEF,Nikon,Z 5,NEF,6.09,rust,1,3,ok,27.11,0.01,21.09,5.95,3020,2016
+Nikon/Z 5/DSC_0519.NEF,Nikon,Z 5,NEF,6.09,rust,1,3,ok,25.78,0.01,19.74,5.97,3020,2016
+Nikon/Z 50/DSC_0441.NEF,Nikon,Z 50,NEF,5.22,rust,1,3,ok,22.97,0.01,17.30,5.65,2800,1864
+Nikon/Z 50/DSC_0450.NEF,Nikon,Z 50,NEF,5.22,rust,1,3,ok,22.76,0.01,17.57,5.16,2800,1864
+Nikon/Z 6/DSC_0750.NEF,Nikon,Z 6,NEF,6.12,rust,1,3,ok,7.32,0.01,3.00,4.28,3032,2020
+Nikon/Z 6/DSC_0751.NEF,Nikon,Z 6,NEF,6.12,rust,1,3,ok,20.77,0.01,14.82,5.94,3032,2020
+Nikon/Z 6/DSC_0752.NEF,Nikon,Z 6,NEF,6.12,rust,1,3,ok,20.71,0.01,14.37,6.11,3032,2020
+Nikon/Z 6_2/CZP_0299.NEF,Nikon,Z 6_2,NEF,6.12,rust,1,3,ok,23.03,0.01,16.69,6.12,3032,2020
+Nikon/Z 6_2/CZP_0300.NEF,Nikon,Z 6_2,NEF,6.12,rust,1,3,ok,41.34,0.02,35.34,5.91,3032,2020
+Nikon/Z 6_2/CZP_0301.NEF,Nikon,Z 6_2,NEF,6.12,rust,1,3,ok,7.37,0.01,2.99,4.30,3032,2020
+Nikon/Z 7/1-Nikon-Z7-RAW-14bit-uncompressed-L.NEF,Nikon,Z 7,NEF,11.44,rust,1,3,ok,13.58,0.01,5.80,7.72,4144,2760
+Nikon/Z 7/2-Nikon-Z7-RAW-14bit-compressed-L.NEF,Nikon,Z 7,NEF,11.44,rust,1,3,ok,38.98,0.02,27.77,11.10,4144,2760
+Nikon/Z 7/3-Nikon-Z7-RAW-14bit-lossless-compressed-L.NEF,Nikon,Z 7,NEF,11.44,rust,1,3,ok,37.81,0.01,26.83,10.90,4144,2760
+Nikon/Z 7_2/Z72_0027.NEF,Nikon,Z 7_2,NEF,11.44,rust,1,3,ok,37.70,0.01,26.77,10.89,4144,2760
+Nikon/Z 7_2/Z72_0028.NEF,Nikon,Z 7_2,NEF,11.44,rust,1,3,ok,36.93,0.01,25.90,11.01,4144,2760
+Nikon/Z 7_2/Z72_0029.NEF,Nikon,Z 7_2,NEF,11.44,rust,1,3,ok,38.77,0.01,27.66,11.00,4144,2760
+Nikon/Z 8/Nikon_Z8_high_efficiency_low.NEF,Nikon,Z 8,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/Z 8/Nikon_Z8_raw_14_bit_lossless_compression.NEF,Nikon,Z 8,NEF,11.43,rust,1,3,ok,48.15,0.01,37.17,10.89,4140,2760
+Nikon/Z 8/Nikon_Z8_raw_high_efficiency_hight.NEF,Nikon,Z 8,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/Z 9/Nikon_-_NIKON_Z_9_-_14bit_compressed_(Lossless).NEF,Nikon,Z 9,NEF,11.43,rust,1,3,ok,46.98,0.01,36.07,10.82,4140,2760
+Nikon/Z 9/Nikon_-_NIKON_Z_9_-_14bit_compressed_(Lossy_High_Efficiency).NEF,Nikon,Z 9,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/Z 9/Nikon_-_NIKON_Z_9_-_14bit_compressed_(Lossy_High_Efficiency_Star).NEF,Nikon,Z 9,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/Z f/DSC_0040.NEF,Nikon,Z f,NEF,6.12,rust,1,3,ok,21.38,0.01,15.23,6.06,3032,2020
+Nikon/Z f/DSC_0042.NEF,Nikon,Z f,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/Z f/DSC_0043.NEF,Nikon,Z f,NEF,0.00,rust,1,3,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Nikon/Z fc/_DSC0018.nef,Nikon,Z fc,NEF,5.22,rust,1,3,ok,18.22,0.01,12.89,5.26,2800,1864
+Nikon/Z fc/_DSC0070.nef,Nikon,Z fc,NEF,5.22,rust,1,3,ok,21.63,0.01,16.31,5.25,2800,1864

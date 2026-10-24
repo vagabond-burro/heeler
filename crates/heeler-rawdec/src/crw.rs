@@ -288,7 +288,184 @@ fn signed(v: u32, len: u32) -> i32 {
 
 /// Decodes the frame's first `rows` rows of `width` samples from the
 /// samples' record `data`, handing each row to `put`.
-pub fn decode(data: &[u8], width: usize, rows: usize, c: &CanonCrw, put: impl Fn(usize, &[u16])) -> Result<(), Error> {
+///
+/// The stream is read across the cores: its stuffing taken out, then cut
+/// into pieces, each read block by block from its own start and fallen
+/// into step with the true reading at a block's start (as huffman.rs
+/// reads a stream of single codes); the first differences are carried
+/// from block to block, and each row then summed on its own.
+pub fn decode(data: &[u8], width: usize, rows: usize, c: &CanonCrw, put: impl Fn(usize, &[u16]) + Sync) -> Result<(), Error> {
+    use rayon::prelude::*;
+    if rows == 0 {
+        return Ok(());
+    }
+    let stream_at = if c.low_bits { width * c.height / 4 + 514 } else { 514 };
+    let stuffed = data.get(stream_at..).ok_or(Error::Corrupt("CRW samples that end early"))?;
+    let samples = width * rows;
+    if width % 2 != 0 || stuffed.len() < 1 << 18 {
+        return decode_in_order(data, width, rows, c, put);
+    }
+    // JPEG's stuffing: a 0 after 0xFF dropped.
+    let mut s = Vec::with_capacity(stuffed.len());
+    let mut i = 0;
+    while i < stuffed.len() {
+        s.push(stuffed[i]);
+        i += if stuffed[i] == 0xff && stuffed.get(i + 1) == Some(&0) { 2 } else { 1 };
+    }
+    let (firsts, rest) = (lookup(CODES[c.table][0]), lookup(CODES[c.table][1]));
+    let blocks = samples.div_ceil(64);
+    let Some(d) = blocks_across(&s, &firsts, &rest, blocks) else {
+        return decode_in_order(data, width, rows, c, put);
+    };
+    // The first differences carried from block to block.
+    let mut d = d;
+    let mut carry = 0i16;
+    for b in d.chunks_exact_mut(64) {
+        b[0] = b[0].wrapping_add(carry);
+        carry = b[0];
+    }
+    (0..rows).into_par_iter().for_each_init(
+        || vec![0u16; width],
+        |line, row| {
+            let mut base = [512i32; 2];
+            for (x, (v, &dx)) in line.iter_mut().zip(&d[row * width..(row + 1) * width]).enumerate() {
+                base[x & 1] += dx as i32;
+                *v = base[x & 1].clamp(0, 1023) as u16;
+            }
+            if c.low_bits {
+                let at = row * width / 4;
+                for (x, v) in line.iter_mut().enumerate() {
+                    let byte = *data.get(at + x / 4).unwrap_or(&0);
+                    *v = (*v << 2) | ((byte >> (2 * (x % 4))) & 3) as u16;
+                }
+            }
+            if c.lift {
+                for v in line.iter_mut().filter(|v| **v < 512) {
+                    *v += 2;
+                }
+            }
+            put(row, line);
+        },
+    );
+    Ok(())
+}
+
+/// One block's 64 differences from `r` (the first not yet carried), or
+/// None at bits no code has.
+#[inline(always)]
+fn block(r: &mut crate::huffman::Reader, firsts: &[(u8, u8)], rest: &[(u8, u8)], out: &mut [i16]) -> Option<()> {
+    out.fill(0);
+    let mut i = 0usize;
+    while i < 64 {
+        let table = if i == 0 { firsts } else { rest };
+        let (sym, len) = table[r.peek(16) as usize];
+        if len == 0 {
+            return None;
+        }
+        r.skip(len as u32);
+        if i > 0 && sym == 0 {
+            break;
+        }
+        let (run, l) = if i == 0 { (0, sym as u32) } else { ((sym >> 4) as usize, (sym & 15) as u32) };
+        i += run;
+        if l > 0 {
+            let v = r.peek(l);
+            r.skip(l);
+            if i < 64 {
+                out[i] = signed(v, l) as i16;
+            }
+        }
+        i += 1;
+    }
+    Some(())
+}
+
+/// The first `blocks` blocks of the unstuffed stream `s`, read across the
+/// cores; None where the reading does not come out whole, or its last
+/// block ends past the stream's end (the stream is then read in order,
+/// which reports what is wrong).
+fn blocks_across(s: &[u8], firsts: &[(u8, u8)], rest: &[(u8, u8)], blocks: usize) -> Option<Vec<i16>> {
+    use crate::huffman::Reader;
+    use rayon::prelude::*;
+    // The block starts a piece is fallen into step at.
+    const REMEMBERED: usize = 4096;
+    let piece = (s.len() / (rayon::current_num_threads() * 4)).max(1 << 16);
+    let pieces = s.len().div_ceil(piece);
+    let bits = s.len() as u64 * 8;
+    let start = |k: usize| (k * piece) as u64 * 8;
+    let stop = |k: usize| if k + 1 < pieces { start(k + 1) } else { bits };
+    // Each piece's own reading: where its blocks began, its blocks, and the
+    // bit it stopped at.
+    let read: Vec<(Vec<u64>, Vec<i16>, u64)> = (0..pieces)
+        .into_par_iter()
+        .map(|k| {
+            let (mut starts, mut out) = (Vec::with_capacity(piece / 16), Vec::with_capacity(piece * 4));
+            let mut r = Reader::new(s, start(k));
+            while r.bit() < stop(k) {
+                let at = r.bit();
+                let n = out.len();
+                out.resize(n + 64, 0);
+                if block(&mut r, firsts, rest, &mut out[n..]).is_none() {
+                    // Start afresh a bit on.
+                    starts.clear();
+                    out.clear();
+                    r = Reader::new(s, at + 1);
+                    continue;
+                }
+                starts.push(at);
+            }
+            (starts, out, r.bit())
+        })
+        .collect();
+    let want = blocks * 64;
+    let mut d: Vec<i16> = Vec::with_capacity(want);
+    let mut at = 0u64;
+    // Where the last block wanted ends.
+    let mut last = 0u64;
+    let mut buf = [0i16; 64];
+    for (k, (starts, out, end)) in read.iter().enumerate() {
+        if d.len() >= want {
+            break;
+        }
+        let mut r = Reader::new(s, at);
+        let mut met = None;
+        let near = &starts[..starts.len().min(REMEMBERED)];
+        while met.is_none() && d.len() < want && r.bit() <= *near.last().unwrap_or(&0) {
+            if let Ok(i) = near.binary_search(&r.bit()) {
+                met = Some(i);
+            } else {
+                block(&mut r, firsts, rest, &mut buf)?;
+                d.extend_from_slice(&buf);
+                last = r.bit();
+            }
+        }
+        match met {
+            Some(i) => {
+                let n = (want - d.len()).div_ceil(64).min(starts.len() - i);
+                d.extend_from_slice(&out[i * 64..]);
+                last = starts.get(i + n).copied().unwrap_or(*end);
+                at = *end;
+            }
+            None => {
+                // Never in step: the rest of the piece in order.
+                while r.bit() < stop(k) && d.len() < want {
+                    block(&mut r, firsts, rest, &mut buf)?;
+                    d.extend_from_slice(&buf);
+                    last = r.bit();
+                }
+                at = r.bit();
+            }
+        }
+    }
+    if d.len() < want || last > bits + 64 {
+        return None;
+    }
+    d.truncate(want);
+    Some(d)
+}
+
+/// `decode`, one block after another.
+fn decode_in_order(data: &[u8], width: usize, rows: usize, c: &CanonCrw, put: impl Fn(usize, &[u16])) -> Result<(), Error> {
     if rows == 0 {
         return Ok(());
     }

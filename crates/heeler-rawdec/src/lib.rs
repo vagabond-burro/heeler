@@ -24,6 +24,7 @@ pub mod mrw;
 pub mod iiq;
 pub mod crw;
 pub mod headerless;
+pub mod huffman;
 pub mod sony;
 #[doc(hidden)]
 pub mod synthetic;

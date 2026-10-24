@@ -655,7 +655,10 @@ const BORDER_MARGIN: usize = 2;
 /// either side of the area that read darkest, within 6 of the darkest
 /// (columns below 16 are dead, not dark), each site's mean rounded down.
 pub fn border_black(frame: &[u16], frame_width: usize, p: &Plan) -> Result<[u32; 4], Error> {
-    let cols: Vec<usize> = if p.dng.format == Format::Headerless { darkest_columns(frame, frame_width, p) } else { (BORDER_MARGIN..p.left.saturating_sub(BORDER_MARGIN)).collect() };
+    let left: Vec<usize> = (BORDER_MARGIN..p.left.saturating_sub(BORDER_MARGIN)).collect();
+    // Where the left border is too narrow to measure (a CRW of the Pro1 or
+    // S30), the darkest columns of both, as a headerless file's.
+    let cols = if p.dng.format == Format::Headerless || left.len() < 4 { darkest_columns(frame, frame_width, p) } else { left };
     if cols.len() < 4 {
         return Err(Error::Unsupported("no masked border to measure black on"));
     }

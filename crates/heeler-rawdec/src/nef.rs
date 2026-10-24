@@ -322,7 +322,69 @@ pub struct Huffman {
 /// its parity (the seeds above the first two rows), the others by the
 /// sample two columns to the left; each sample held to 0 to 2^14 - 1 once
 /// predicted from.
-pub fn decode(data: &[u8], width: usize, height: usize, h: &Huffman, mut line: impl FnMut(usize, &[u16])) -> Result<(), Error> {
+///
+/// The prediction runs on unbounded, so the differences are read first,
+/// across the cores (huffman.rs), then the first two columns down the
+/// rows, then each row on its own.
+pub fn decode(data: &[u8], width: usize, height: usize, h: &Huffman, line: impl Fn(usize, &[u16]) + Sync) -> Result<(), Error> {
+    use rayon::prelude::*;
+    if width < 2 {
+        return decode_in_order(data, width, height, h, line);
+    }
+    let table = |code: HuffmanCode| crate::huffman::Table::new(code.iter().map(|&(len, bits, sym)| (len as u32, bits as u32, sym)));
+    let first = table(h.code)?;
+    let later = h.later.map(|(row, code)| table(code).map(|t| (row * width, t))).transpose()?;
+    let mut codes = vec![(0, &first)];
+    if let Some((from, t)) = &later {
+        codes.push((*from, t));
+    }
+    let diff = |sym: u8, r: &mut crate::huffman::Reader| -> Result<i32, Error> {
+        let (cat, shl) = ((sym & 15) as u32, (sym >> 4) as u32);
+        if cat == 0 {
+            return Ok(0);
+        }
+        if shl >= cat {
+            return Err(Error::Corrupt("a Nikon Huffman shift past its category"));
+        }
+        let n = cat - shl;
+        let v = r.peek(n) as i32;
+        r.skip(n);
+        let d = ((v << 1) + 1) << shl >> 1;
+        Ok(if d & (1 << (cat - 1)) == 0 { d - (1 << cat) + i32::from(shl == 0) } else { d })
+    };
+    let piece = (data.len() / (rayon::current_num_threads() * 4)).max(1 << 16);
+    let d = crate::huffman::parallel(data, &codes, width * height, piece, &diff).map_err(|e| match e {
+        Error::Corrupt("a Huffman code not in its table") => Error::Unsupported("a Nikon Huffman code not read here"),
+        Error::Corrupt("a Huffman stream that ends early") => Error::Corrupt("a Nikon Huffman frame's data ends early"),
+        e => e,
+    })?;
+    let mut seeds = h.seeds.map(|r| r.map(|v| v as i32));
+    let first: Vec<[i32; 2]> = (0..height)
+        .map(|y| {
+            for c in 0..2 {
+                seeds[y & 1][c] += d[y * width + c];
+            }
+            seeds[y & 1]
+        })
+        .collect();
+    (0..height).into_par_iter().for_each_init(
+        || vec![0u16; width],
+        |row, y| {
+            let mut left = first[y];
+            for (x, (o, &dx)) in row.iter_mut().zip(&d[y * width..(y + 1) * width]).enumerate() {
+                if x >= 2 {
+                    left[x & 1] += dx;
+                }
+                *o = left[x & 1].clamp(0, 0x3fff) as u16;
+            }
+            line(y, row);
+        },
+    );
+    Ok(())
+}
+
+/// `decode`, one sample after another.
+fn decode_in_order(data: &[u8], width: usize, height: usize, h: &Huffman, line: impl Fn(usize, &[u16])) -> Result<(), Error> {
     // Every max_len-bit prefix to its code's length and symbol.
     let table = |code: HuffmanCode| {
         let max_len = code.iter().map(|e| e.0).max().unwrap_or(1) as u32;
@@ -432,9 +494,12 @@ mod tests {
                 .map(|y| (0..w).map(|x| if (x + y) % 11 == 0 { noise() % (1 << depth) } else { 600 + noise() % 40 + 3 * x as i32 }).collect())
                 .collect();
             let data = encode(&rows, code, [[512, 512], [512, 512]]);
-            let mut got = Vec::new();
-            decode(&data, w, h, &Huffman { code, seeds: [[512, 512], [512, 512]], later: None }, |_, line| got.push(line.iter().map(|&v| v as i32).collect::<Vec<_>>())).unwrap();
-            assert!(got == rows, "{depth}-bit");
+            let got = std::sync::Mutex::new(vec![Vec::new(); h]);
+            decode(&data, w, h, &Huffman { code, seeds: [[512, 512], [512, 512]], later: None }, |y, line| got.lock().unwrap()[y] = line.iter().map(|&v| v as i32).collect::<Vec<_>>()).unwrap();
+            assert!(got.into_inner().unwrap() == rows, "{depth}-bit");
+            let got = std::sync::Mutex::new(vec![Vec::new(); h]);
+            decode_in_order(&data, w, h, &Huffman { code, seeds: [[512, 512], [512, 512]], later: None }, |y, line| got.lock().unwrap()[y] = line.iter().map(|&v| v as i32).collect::<Vec<_>>()).unwrap();
+            assert!(got.into_inner().unwrap() == rows, "{depth}-bit in order");
         }
     }
 
@@ -444,13 +509,13 @@ mod tests {
         // 12-bit later code), then 5 bits 10110: the magnitude bits are
         // 10110, a 1 and 2 zeros halved, 10110100 (180), positive.
         let h = Huffman { code: LOSSY_12_LATER, seeds: [[100, 100], [100, 100]], later: None };
-        let mut got = 0;
-        decode(&[0b0111_0110, 0], 1, 1, &h, |_, line| got = line[0]).unwrap();
-        assert_eq!(got, 100 + 180);
+        let got = std::sync::atomic::AtomicU16::new(0);
+        decode(&[0b0111_0110, 0], 1, 1, &h, |_, line| got.store(line[0], std::sync::atomic::Ordering::Relaxed)).unwrap();
+        assert_eq!(got.load(std::sync::atomic::Ordering::Relaxed), 100 + 180);
         // 00110: a leading 0, so negative: 00110100 (52) less 256, -204.
         let h = Huffman { seeds: [[1000, 1000], [1000, 1000]], ..h };
-        decode(&[0b0110_0110, 0], 1, 1, &h, |_, line| got = line[0]).unwrap();
-        assert_eq!(got, 1000 - 204);
+        decode(&[0b0110_0110, 0], 1, 1, &h, |_, line| got.store(line[0], std::sync::atomic::Ordering::Relaxed)).unwrap();
+        assert_eq!(got.load(std::sync::atomic::Ordering::Relaxed), 1000 - 204);
     }
 
     #[test]

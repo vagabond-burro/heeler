@@ -257,7 +257,23 @@ struct Bits<'a> {
 }
 
 impl<'a> Bits<'a> {
+    #[inline(always)]
     fn fill(&mut self) {
+        if self.n > 56 {
+            return;
+        }
+        // Eight bytes at once where the stream has them, keeping as many
+        // whole bytes as the buffer has room for.
+        if let Some(w) = self.d.get(self.at..self.at + 8) {
+            let w = u64::from_be_bytes(w.try_into().unwrap());
+            let room = (64 - self.n) / 8;
+            let kept = self.n + room * 8;
+            let mask = if kept >= 64 { u64::MAX } else { !(u64::MAX >> kept) };
+            self.buf |= (w >> self.n) & mask;
+            self.at += room as usize;
+            self.n = kept;
+            return;
+        }
         while self.n <= 56 {
             let b = self.d.get(self.at).copied().unwrap_or(0);
             self.at += 1;
@@ -309,56 +325,81 @@ impl<'a> Bits<'a> {
 /// or columns; else, where nw lies between w and n, w + n - nw when either
 /// differs from nw by more than 32 and their mean otherwise, and where it
 /// does not, whichever of w and n lies farther from nw.
+///
+/// The bits are read on a thread of their own, a row at a time, while the
+/// predictions are made on this one.
 pub fn decode(data: &[u8], header: usize, width: usize, rows: usize, put: impl Fn(usize, &[u16])) -> Result<(), Error> {
-    let mut bits = Bits { d: data.get(header..).unwrap_or(&[]), at: 0, buf: 0, n: 0 };
-    // The rows two above, by the row's parity, and the row decoding.
-    let mut above = [vec![0u16; width], vec![0u16; width]];
-    let mut line = vec![0u16; width];
-    for r in 0..rows {
-        // State per column parity: magnitude, mean, small count.
-        let mut state = [[0i32; 3]; 2];
-        let up = &above[r % 2];
-        for c in 0..width {
-            let s = &mut state[c & 1];
-            let extra = if s[2] < 3 { 2 } else { 0 };
-            let mut nb = 2 + extra;
-            while (s[0] & 0xffff) >> (nb + extra) != 0 {
-                nb += 1;
-            }
-            let head = bits.take(3) as i32;
-            let low = head & 3;
-            let high = match bits.zeros(12) {
-                12 => (bits.take(16 - nb as u32) >> 1) as i32,
-                z => z as i32,
-            };
-            s[0] = high << nb | bits.take(nb as u32) as i32;
-            let diff = (if head & 4 != 0 { !s[0] } else { s[0] }) + s[1];
-            s[1] = (diff * 3 + s[1]) >> 5;
-            s[2] = if s[0] > 16 { 0 } else { s[2] + 1 };
-            let pred = match (r < 2, c < 2) {
-                (true, true) => 0,
-                (true, false) => line[c - 2] as i32,
-                (false, true) => up[c] as i32,
-                (false, false) => {
-                    let (w, n, nw) = (line[c - 2] as i32, up[c] as i32, up[c - 2] as i32);
-                    if (w < nw && nw < n) || (n < nw && nw < w) {
-                        if (w - nw).abs() > 32 || (n - nw).abs() > 32 { w + n - nw } else { (w + n) >> 1 }
-                    } else if (w - nw).abs() > (n - nw).abs() {
-                        w
-                    } else {
-                        n
-                    }
+    let data = data.get(header..).unwrap_or(&[]);
+    std::thread::scope(|scope| {
+        let (rows_out, rows_in) = std::sync::mpsc::sync_channel::<Vec<i32>>(16);
+        let reader = scope.spawn(move || -> Result<(), Error> {
+            let mut bits = Bits { d: data, at: 0, buf: 0, n: 0 };
+            for _ in 0..rows {
+                let mut row = vec![0i32; width];
+                read_row(&mut bits, &mut row);
+                if bits.overrun() {
+                    return Err(Error::Corrupt("an ORF stream that ends early"));
                 }
-            };
-            line[c] = (pred + (diff << 2 | low)) as u16;
+                if rows_out.send(row).is_err() {
+                    break;
+                }
+            }
+            Ok(())
+        });
+        // The rows two above, by the row's parity, and the row decoding.
+        let mut above = [vec![0u16; width], vec![0u16; width]];
+        let mut line = vec![0u16; width];
+        for (r, coded) in rows_in.iter().enumerate() {
+            let up = &above[r % 2];
+            for c in 0..width {
+                let pred = match (r < 2, c < 2) {
+                    (true, true) => 0,
+                    (true, false) => line[c - 2] as i32,
+                    (false, true) => up[c] as i32,
+                    (false, false) => {
+                        let (w, n, nw) = (line[c - 2] as i32, up[c] as i32, up[c - 2] as i32);
+                        if (w < nw && nw < n) || (n < nw && nw < w) {
+                            if (w - nw).abs() > 32 || (n - nw).abs() > 32 { w + n - nw } else { (w + n) >> 1 }
+                        } else if (w - nw).abs() > (n - nw).abs() {
+                            w
+                        } else {
+                            n
+                        }
+                    }
+                };
+                line[c] = (pred + coded[c]) as u16;
+            }
+            put(r, &line);
+            std::mem::swap(&mut above[r % 2], &mut line);
         }
-        if bits.overrun() {
-            return Err(Error::Corrupt("an ORF stream that ends early"));
+        reader.join().unwrap_or(Err(Error::Corrupt("an ORF stream's reader failed")))
+    })
+}
+
+/// One row's coded values (each difference over the two low bits, with
+/// them), its state starting afresh.
+fn read_row(bits: &mut Bits, row: &mut [i32]) {
+    // State per column parity: magnitude, mean, small count.
+    let mut state = [[0i32; 3]; 2];
+    for (c, out) in row.iter_mut().enumerate() {
+        let s = &mut state[c & 1];
+        let extra = if s[2] < 3 { 2 } else { 0 };
+        let mut nb = 2 + extra;
+        while (s[0] & 0xffff) >> (nb + extra) != 0 {
+            nb += 1;
         }
-        put(r, &line);
-        std::mem::swap(&mut above[r % 2], &mut line);
+        let head = bits.take(3) as i32;
+        let low = head & 3;
+        let high = match bits.zeros(12) {
+            12 => (bits.take(16 - nb as u32) >> 1) as i32,
+            z => z as i32,
+        };
+        s[0] = high << nb | bits.take(nb as u32) as i32;
+        let diff = (if head & 4 != 0 { !s[0] } else { s[0] }) + s[1];
+        s[1] = (diff * 3 + s[1]) >> 5;
+        s[2] = if s[0] > 16 { 0 } else { s[2] + 1 };
+        *out = diff << 2 | low;
     }
-    Ok(())
 }
 
 /// The two-field layout's first `rows` rows of `width` samples, from the

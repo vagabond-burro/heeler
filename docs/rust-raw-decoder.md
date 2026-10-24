@@ -1592,13 +1592,49 @@ both decoders developed. CSVs in `docs/rust-raw-decoder/formats-*.csv`.
 | ORI | 7 | 3.16 | 2.29 | 0.72 | 2.00 / 1.69 | 0.69 |
 
 - The uncompressed and packed formats, RW2 and the headerless files reach
-  the target, most near 0.2.
-- NEF, ORF and PEF reach only the floor, and ORI and some cameras fall
-  below it: each frame is one Huffman stream, decoded on one core, and
-  their unpack is barely faster than LibRaw's (NEF 18.8 s against 23.4).
-  The Z f and Z fc also develop slower than LibRaw (1.26 and 1.47), and
-  the CRW of the Pro1 and S30 is slower (1.29, 1.30). These need a faster
-  stream decode (a parallel one, as the CR2's) before they meet the goal.
+  the target, most near 0.2. NEF, ORF and PEF reached only the floor and
+  ORI fell below it: each frame is one coded stream, decoded on one core.
+
+### Faster streams
+
+- `huffman.rs` reads a stream of Huffman-coded differences across the
+  cores: the stream cut into pieces, each read from its own start (a
+  reading from mid-code that meets bits no code has starts afresh a bit
+  on), then each fallen into step with the true reading where the piece
+  before it truly ended, at a code start the piece remembers; a piece
+  that never falls into step is read on in order, and a true reading that
+  goes wrong sends the whole stream to the reader in order, so a damaged
+  stream reports the same either way. A frame whose code changes partway
+  down (some lossy NEFs) is read with each code, and the piece the change
+  falls in is read in order. The prediction runs on unbounded in both
+  formats, so the differences come first, then the first two columns down
+  the rows, then each row on its own. NEF and PEF use it.
+- CRW reads the same way at a block's start, its stuffing taken out
+  first; the first differences are then carried from block to block.
+- ORF's coding keeps state per row and predicts from the rows above, so
+  it reads its bits on a thread of its own while the predictions are made
+  on another, and its bit reader takes eight bytes at a time.
+
+| Format | Files | Full: LibRaw s | Rust s | Ratio | Unpack, LibRaw / Rust s | Half ratio |
+|---|---:|---:|---:|---:|---|---:|
+| NEF | 147 | 50.46 | 11.84 | 0.23 | 23.44 / 2.18 | 0.09 |
+| ORF | 82 | 32.94 | 13.07 | 0.40 | 18.84 / 8.15 | 0.37 |
+| PEF | 35 | 11.59 | 2.67 | 0.23 | 5.66 / 0.49 | 0.09 |
+| CRW | 43 | 6.58 | 1.24 | 0.19 | 1.76 / 0.20 | 0.08 |
+| ORI | 7 | 3.16 | 1.32 | 0.42 | 2.00 / 0.92 | 0.42 |
+
+Every camera of these formats is now under the 0.50 target at full size
+and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
+`formats-rust-crw-nef-*.csv`, the same timing as above.
+
+- Found on the way: the shipped develop (the develop's own levels, which
+  the comparisons replace with LibRaw's) failed on the CRWs of the Pro1
+  and S30, whose left border is too narrow to measure black on, and
+  heeler-raw then developed them with LibRaw without a word. They now
+  measure on the darkest columns of both borders, as a headerless file
+  does (the Pro1's level LibRaw's, the S30's within 1), and the corpus
+  test now holds every file it compares to finishing the shipped develop
+  too. The Z f and Z fc's slow develop in the first timing did not recur.
 
 ## Cameras without a converter calibration
 

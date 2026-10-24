@@ -181,7 +181,57 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
 /// that many bits of the difference (as lossless JPEG signs it). A row's
 /// first two samples add to the same columns of the row two above (0 at
 /// the top), the others to the sample two to the left.
-pub fn decode(data: &[u8], width: usize, rows: usize, code: &PentaxCode, put: impl Fn(usize, &[u16])) -> Result<(), Error> {
+///
+/// The differences are read first, across the cores (huffman.rs), then
+/// the first two columns down the rows, then each row on its own.
+pub fn decode(data: &[u8], width: usize, rows: usize, code: &PentaxCode, put: impl Fn(usize, &[u16]) + Sync) -> Result<(), Error> {
+    use rayon::prelude::*;
+    if width < 2 || code.0.len() > 255 {
+        return decode_in_order(data, width, rows, code, put);
+    }
+    let t = crate::huffman::Table::new(code.0.iter().enumerate().map(|(k, &(len, c))| (len, c, k as u8)))?;
+    let diff = |s: u8, r: &mut crate::huffman::Reader| -> Result<i32, Error> {
+        let s = s as u32;
+        if s > 16 {
+            return Err(Error::Corrupt("a Pentax difference longer than 16 bits"));
+        }
+        let d = r.peek(s) as i32;
+        r.skip(s);
+        Ok(if s == 0 { 0 } else if d < 1 << (s - 1) { d - (1 << s) + 1 } else { d })
+    };
+    let piece = (data.len() / (rayon::current_num_threads() * 4)).max(1 << 16);
+    let d = crate::huffman::parallel(data, &[(0, &t)], width * rows, piece, &diff).map_err(|e| match e {
+        Error::Corrupt("a Huffman code not in its table") => Error::Corrupt("a Pentax code not in its table"),
+        Error::Corrupt("a Huffman stream that ends early") => Error::Corrupt("a Pentax stream that ends early"),
+        e => e,
+    })?;
+    let mut above = [[0i32; 2]; 2];
+    let first: Vec<[i32; 2]> = (0..rows)
+        .map(|r| {
+            for c in 0..2 {
+                above[r & 1][c] += d[r * width + c];
+            }
+            above[r & 1]
+        })
+        .collect();
+    (0..rows).into_par_iter().for_each_init(
+        || vec![0u16; width],
+        |line, r| {
+            let mut left = first[r];
+            for (c, (o, &dc)) in line.iter_mut().zip(&d[r * width..(r + 1) * width]).enumerate() {
+                if c >= 2 {
+                    left[c & 1] += dc;
+                }
+                *o = left[c & 1].clamp(0, 0xffff) as u16;
+            }
+            put(r, line);
+        },
+    );
+    Ok(())
+}
+
+/// `decode`, one sample after another.
+fn decode_in_order(data: &[u8], width: usize, rows: usize, code: &PentaxCode, put: impl Fn(usize, &[u16])) -> Result<(), Error> {
     let longest = code.0.iter().map(|c| c.0).max().ok_or(Error::Corrupt("an empty Pentax code"))?;
     // For every value of the longest code's bits, the symbol whose code
     // they start with and its length (0 none); a shorter code read first.
@@ -286,9 +336,12 @@ mod tests {
             }
         }
         let data: Vec<u8> = bits.chunks(8).map(|b| b.iter().enumerate().fold(0u8, |a, (i, &v)| a | (v as u8) << (7 - i))).collect();
-        let got = std::cell::RefCell::new(Vec::new());
-        decode(&data, width, rows, &code, |_, l| got.borrow_mut().push(l.to_vec())).unwrap();
-        assert_eq!(got.into_inner(), frame);
+        let got = std::sync::Mutex::new(vec![Vec::new(); rows]);
+        decode(&data, width, rows, &code, |r, l| got.lock().unwrap()[r] = l.to_vec()).unwrap();
+        assert_eq!(got.into_inner().unwrap(), frame);
         assert!(decode(&data[..data.len() / 3], width, rows, &code, |_, _| {}).is_err());
+        let got = std::sync::Mutex::new(vec![Vec::new(); rows]);
+        decode_in_order(&data, width, rows, &code, |r, l| got.lock().unwrap()[r] = l.to_vec()).unwrap();
+        assert_eq!(got.into_inner().unwrap(), frame);
     }
 }
