@@ -1570,6 +1570,36 @@ wrong under the verified cameras, but the Coolpix NRWs did under
   size's one file differs at half size and is not listed. The Optio S4,
   WB550 and G600, which LibRaw develops without a matrix, stay declined.
 
+## Speed of the formats from NEF to the headerless files
+
+Timed on 2026-10-23 with `rawbench --ext NEF,NRW,RW2,RAW,RWL,ORF,ORI,PEF,SRW,MRW,CRW --per-camera 3 --runs 3`
+over the first corpus, each decoder on its own with nothing else running
+(the median of 3 runs after one untimed, on a 16-core M4 Max); 683 files
+both decoders developed. CSVs in `docs/rust-raw-decoder/formats-*.csv`.
+
+| Format | Files | Full: LibRaw s | Rust s | Ratio | Unpack, LibRaw / Rust s | Half ratio |
+|---|---:|---:|---:|---:|---|---:|
+| RW2 | 291 | 82.07 | 20.16 | 0.25 | 22.24 / 3.61 | 0.11 |
+| NEF | 147 | 50.46 | 29.05 | 0.58 | 23.44 / 18.76 | 0.60 |
+| ORF | 82 | 32.94 | 21.48 | 0.65 | 18.84 / 15.37 | 0.63 |
+| CRW | 43 | 6.58 | 2.06 | 0.31 | 1.76 / 0.89 | 0.29 |
+| PEF | 35 | 11.59 | 5.85 | 0.51 | 5.66 / 3.82 | 0.52 |
+| RAW | 21 | 2.57 | 0.67 | 0.26 | 0.14 / 0.04 | 0.08 |
+| RWL | 17 | 3.43 | 0.70 | 0.20 | 0.79 / 0.05 | 0.06 |
+| MRW | 14 | 1.01 | 0.25 | 0.24 | 0.18 / 0.01 | 0.06 |
+| SRW | 14 | 2.69 | 0.70 | 0.26 | 0.59 / 0.02 | 0.05 |
+| NRW | 12 | 1.78 | 0.50 | 0.28 | 0.33 / 0.02 | 0.06 |
+| ORI | 7 | 3.16 | 2.29 | 0.72 | 2.00 / 1.69 | 0.69 |
+
+- The uncompressed and packed formats, RW2 and the headerless files reach
+  the target, most near 0.2.
+- NEF, ORF and PEF reach only the floor, and ORI and some cameras fall
+  below it: each frame is one Huffman stream, decoded on one core, and
+  their unpack is barely faster than LibRaw's (NEF 18.8 s against 23.4).
+  The Z f and Z fc also develop slower than LibRaw (1.26 and 1.47), and
+  the CRW of the Pro1 and S30 is slower (1.29, 1.30). These need a faster
+  stream decode (a parallel one, as the CR2's) before they meet the goal.
+
 ## Cameras without a converter calibration
 
 - Heeler's calibration table comes from DNGs a converter wrote, so a
