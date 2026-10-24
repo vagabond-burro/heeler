@@ -40,6 +40,20 @@ pub struct Layout {
     pub zeros_bad: bool,
 }
 
+impl Layout {
+    /// 16-bit little-endian words (`word` 2) of a frame `width` wide, from
+    /// `at` in the file.
+    pub(crate) const fn words_at(at: usize, width: usize, word: usize) -> Layout {
+        Layout { offset: Some(at), ..words(width, word, 0) }
+    }
+
+    /// Samples of `bits` packed in `word`-byte little-endian words read top
+    /// bit first, rows of a frame `width` wide, from `at` in the file.
+    pub(crate) const fn packed_at(at: usize, width: usize, bits: u32, word: usize) -> Layout {
+        Layout { offset: Some(at), ..packed(width, bits, word) }
+    }
+}
+
 /// One size's camera: Make, Model, the frame's size, its layout and black.
 struct Entry {
     size: usize,

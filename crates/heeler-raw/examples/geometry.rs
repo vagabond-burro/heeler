@@ -33,7 +33,7 @@ fn files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
             let ext = name.rsplit('.').next().unwrap_or("").to_ascii_uppercase();
             if p.is_dir() {
                 stack.push(p);
-            } else if ["CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "IIQ", "CRW"].contains(&ext.as_str()) {
+            } else if ["CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "IIQ", "CRW", "RAF"].contains(&ext.as_str()) {
                 out.push(p);
             }
         }
@@ -58,8 +58,8 @@ fn main() {
     type Row = (u32, u32, u32, u32, [u8; 4], u32);
     let mut rows: BTreeMap<(String, String, u32, u32), (Row, String)> = BTreeMap::new();
     let mut disagree = std::collections::BTreeSet::new();
-    // A NEF's white level varies with its samples' depth: (make, model,
-    // depth) -> LibRaw's level, None where the files disagree.
+    // A NEF's or RAF's white level varies with its samples' depth: (make,
+    // model, depth) -> LibRaw's level, None where the files disagree.
     let mut nef_white: BTreeMap<(String, String, u32), Option<u32>> = BTreeMap::new();
     // An ORF, NEF or RW2 camera's black level for files that state none:
     // (make, model) -> LibRaw's, red, the green on red's row, the other
@@ -74,8 +74,8 @@ fn main() {
         if f.filters < 1000 || f.colors != 3 {
             continue;
         }
-        if heeler_rawdec::nef::is_nef(&bytes) {
-            if let Some(depth) = heeler_rawdec::nef::depth(&bytes) {
+        if heeler_rawdec::nef::is_nef(&bytes) || heeler_rawdec::raf::is_raf(&bytes) {
+            if let Some(depth) = heeler_rawdec::nef::depth(&bytes).or_else(|| heeler_rawdec::raf::depth(&bytes)) {
                 let e = nef_white.entry((make.clone(), model.clone(), depth)).or_insert(Some(f.maximum));
                 if *e != Some(f.maximum) {
                     *e = None;

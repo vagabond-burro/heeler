@@ -30,6 +30,7 @@ pub enum Format {
     Iiq,
     Crw,
     Headerless,
+    Raf,
 }
 
 /// Make and Model as a raw file of any format this crate reads gives
@@ -50,6 +51,9 @@ pub fn make_model(bytes: &[u8]) -> Option<(String, String)> {
     }
     if crate::crw::is_crw(bytes) {
         return crate::crw::make_model(bytes);
+    }
+    if crate::raf::is_raf(bytes) {
+        return crate::raf::make_model(bytes);
     }
     if crate::headerless::is_headerless(bytes) {
         return crate::headerless::make_model(bytes);
@@ -76,6 +80,7 @@ impl Format {
             Format::Iiq => "IIQ",
             Format::Crw => "CRW",
             Format::Headerless => "headerless",
+            Format::Raf => "RAF",
         }
     }
 }
@@ -370,6 +375,9 @@ impl Dng {
         }
         if crate::crw::is_crw(bytes) {
             return crate::crw::parse(bytes);
+        }
+        if crate::raf::is_raf(bytes) {
+            return crate::raf::parse(bytes);
         }
         if crate::headerless::is_headerless(bytes) {
             return crate::headerless::parse(bytes);

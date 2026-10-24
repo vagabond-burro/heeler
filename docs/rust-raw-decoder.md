@@ -1636,6 +1636,38 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   test now holds every file it compares to finishing the shipped develop
   too. The Z f and Z fc's slow develop in the first timing did not recur.
 
+## Phase 14: RAF, Bayer and uncompressed
+
+### What was built
+
+- `raf.rs` reads Fujifilm's container: "FUJIFILMCCD-RAW ", then at 84
+  big-endian offsets and lengths of the preview JPEG (its EXIF gives Make,
+  Model and the orientation), a block of records (a count, then a 16-bit
+  tag, a 16-bit length and data each), and the raw section. The later
+  bodies' raw section is a little-endian TIFF whose directory at 0xF000
+  gives the frame's width, height and depth (0xF001 to 0xF003), the
+  samples' offset and length (0xF007, 0xF008), their packing (0xF004,
+  0xF006), each CFA site's black level (0xF00A) and the balance as shot,
+  green, red, blue (0xF00E), all as LibRaw takes them.
+- The layouts, from the data against LibRaw's frame: 16-bit
+  little-endian words; samples of the depth in 32-bit little-endian words
+  read top bit first; 12-bit samples packed least significant bits first.
+  The first two read through headerless.rs's row reader.
+- The white level is LibRaw's for the camera and depth (the GFX bodies'
+  14-bit files 15872, their 16-bit ones 65535; the geometry table's NEF
+  depth table now holds RAF too).
+- Declined for now: Fujifilm's compression (122 files), X-Trans sensors
+  (154; their 6 by 6 pattern needs its own demosaic), and the earlier
+  bodies without the TIFF raw section (35; most with the sensor turned 45
+  degrees).
+
+### Verification
+
+- `rustdiff --any` over all 304 RAFs of both corpora: the 71 the Rust path
+  takes match LibRaw at every stage, full size and half, with LibRaw's
+  black, white and balance, and with its own. 32 cameras join the
+  verified list.
+
 ## Cameras without a converter calibration
 
 - Heeler's calibration table comes from DNGs a converter wrote, so a

@@ -32,7 +32,7 @@ pub fn find(make: &str, model: &str, raw: (u32, u32)) -> Option<&'static Geometr
     GEOMETRY.iter().find(|g| g.make == make && g.model == model && g.raw == raw)
 }
 
-/// A NEF camera's white level for samples of `depth` bits (LibRaw's).
+/// A NEF or RAF camera's white level for samples of `depth` bits (LibRaw's).
 pub fn nef_white(make: &str, model: &str, depth: u32) -> Option<u32> {
     NEF_WHITE.iter().find(|w| w.0 == make && w.1 == model && w.2 == depth).map(|w| w.3)
 }

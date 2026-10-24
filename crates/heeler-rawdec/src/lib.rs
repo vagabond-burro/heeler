@@ -19,6 +19,7 @@ pub mod nef;
 pub mod rw2;
 pub mod orf;
 pub mod pef;
+pub mod raf;
 pub mod srw;
 pub mod mrw;
 pub mod iiq;
