@@ -367,7 +367,10 @@ pub fn with_libraw_numbers(bytes: &[u8], plan: &heeler_rawdec::Plan) -> Result<h
     p.rgb_cam = f.rgb_cam.map(|r| [r[0], r[1], r[2]]);
     // LibRaw's white balance too: it reads some files' stated balance as
     // none (unity), where the shipped develop takes the file's.
-    if f.cam_mul.iter().take(3).all(|&v| v > 0.0) {
+    // A Sony M or S size LibRaw develops without a white balance (its
+    // samples come balanced): the plan's unit multipliers stand.
+    let unbalanced = plan.three() && plan.dng.format == heeler_rawdec::dng::Format::Arw;
+    if f.cam_mul.iter().take(3).all(|&v| v > 0.0) && !unbalanced {
         p.cam_mul = [f.cam_mul[0], f.cam_mul[1], f.cam_mul[2], if f.cam_mul[3] > 0.0 { f.cam_mul[3] } else { f.cam_mul[1] }];
     }
     p.black = black.iter().flatten().copied().collect();

@@ -27,6 +27,10 @@ pub struct Frame {
     pub point_transform: u32,
     /// MCUs between restart markers, 0 for none.
     pub restart: usize,
+    /// The first component's sampling factors, horizontal and vertical:
+    /// (1, 1) but in a subsampled frame (decode_subsampled), whose lines
+    /// are then MCU rows and whose components the MCU's samples.
+    pub sampling: (usize, usize),
     /// Where the entropy-coded data starts.
     data: usize,
     /// The Huffman table each component decodes with.
@@ -258,12 +262,22 @@ fn be16(d: &[u8], at: usize) -> Result<usize, Error> {
 
 /// The frame and its tables, from the markers before the scan.
 fn headers(data: &[u8]) -> Result<(Frame, Vec<Option<Huffman>>), Error> {
+    headers_of(data, false)
+}
+
+/// The frame and its tables; with `subsampled`, a frame of three
+/// components whose first is sampled 2 by 1 or 2 by 2 and the others 1 by
+/// 1 (a Canon sRAW's YCbCr) is taken as MCU rows of single samples, the
+/// first component's samples first, then the second's and third's, each
+/// predicted from the same place in the MCU before it.
+fn headers_of(data: &[u8], subsampled: bool) -> Result<(Frame, Vec<Option<Huffman>>), Error> {
     if data.get(..2) != Some(&[0xff, 0xd8]) {
         return Err(Error::Corrupt("not a JPEG stream"));
     }
     let mut at = 2;
     let mut tables: Vec<Option<Huffman>> = vec![None, None, None, None];
     let mut sof: Option<(u32, usize, usize, Vec<u8>)> = None;
+    let mut sampling = (1, 1);
     let mut restart = 0;
     loop {
         // Fill bytes before a marker are allowed (B.1.1.2).
@@ -287,9 +301,12 @@ fn headers(data: &[u8]) -> Result<(Frame, Vec<Option<Huffman>>), Error> {
                 }
                 let mut ids = Vec::with_capacity(n);
                 for c in 0..n {
-                    let (id, sampling) = (body[6 + 3 * c], body[7 + 3 * c]);
-                    if sampling != 0x11 {
-                        return Err(Error::Unsupported("subsampled lossless JPEG"));
+                    let (id, factors) = (body[6 + 3 * c], body[7 + 3 * c]);
+                    if factors != 0x11 {
+                        if !(subsampled && n == 3 && c == 0 && matches!(factors, 0x21 | 0x22)) {
+                            return Err(Error::Unsupported("subsampled lossless JPEG"));
+                        }
+                        sampling = ((factors >> 4) as usize, (factors & 15) as usize);
                     }
                     ids.push(id);
                 }
@@ -340,7 +357,18 @@ fn headers(data: &[u8]) -> Result<(Frame, Vec<Option<Huffman>>), Error> {
                 if !(2..=16).contains(&precision) || point_transform >= precision || width == 0 || height == 0 {
                     return Err(Error::Corrupt("a frame's precision or size"));
                 }
-                let frame = Frame { precision, height, width, components: n, predictor, point_transform, restart, data: at + 2 + len, table };
+                let (h, v) = sampling;
+                let (width, height, n, table) = if (h, v) == (1, 1) {
+                    (width, height, n, table)
+                } else {
+                    if width % h != 0 || height % v != 0 {
+                        return Err(Error::Corrupt("a subsampled frame of a size its MCUs do not fill"));
+                    }
+                    let mut t = vec![table[0]; h * v];
+                    t.extend(&table[1..]);
+                    (width / h, height / v, h * v + 2, t)
+                };
+                let frame = Frame { precision, height, width, components: n, predictor, point_transform, restart, sampling, data: at + 2 + len, table };
                 return Ok((frame, tables));
             }
             0xffd9 => return Err(Error::Corrupt("an image with no scan")),
@@ -353,6 +381,125 @@ fn headers(data: &[u8]) -> Result<(Frame, Vec<Option<Huffman>>), Error> {
 /// The frame header alone.
 pub fn frame(data: &[u8]) -> Result<Frame, Error> {
     headers(data).map(|(f, _)| f)
+}
+
+/// The frame header of a scan that may be subsampled (headers_of).
+pub fn frame_subsampled(data: &[u8]) -> Result<Frame, Error> {
+    headers_of(data, true).map(|(f, _)| f)
+}
+
+/// Decodes a subsampled scan as a Sony M or S size ARW's tiles are coded:
+/// each sample from its left neighbor in its own component's plane (T.81's
+/// predictor 1), a plane row's first sample from above (the luma's first
+/// row from the first luma sample of the MCU row above), the scan's first
+/// from the midpoint; every rule found against LibRaw's image. Each line is an MCU row in
+/// the stream's order, as decode_subsampled hands it over.
+pub fn decode_subsampled_planes(data: &[u8], mut line: impl FnMut(usize, &[u16])) -> Result<Frame, Error> {
+    let (f, tables) = headers_of(data, true)?;
+    if f.sampling == (1, 1) || f.point_transform != 0 || f.restart != 0 || f.predictor != 1 {
+        return Err(Error::Unsupported("a subsampled scan of another kind"));
+    }
+    let huff: Vec<&Huffman> = f.table.iter().map(|&t| tables[t].as_ref().unwrap()).collect();
+    let (w, n) = (f.width, f.components);
+    let (h, v) = f.sampling;
+    let ny = h * v;
+    let mut bits = Bits { data, at: f.data, acc: 0, count: 0, marker: false };
+    let mut cur = vec![0u16; w * n];
+    let initial = 1u16 << (f.precision - 1);
+    // The plane rows' first samples and last samples: luma rows 0..v of
+    // this MCU row, then Cb and Cr.
+    let mut above_first: Vec<Option<u16>> = vec![None; v + 2];
+    for y in 0..f.height {
+        let mut left = vec![0u16; v + 2];
+        let mut first = vec![0u16; v + 2];
+        for m in 0..w {
+            for k in 0..n {
+                let row = if k < ny { k / h } else { v + k - ny };
+                let d = bits.diff(huff[k])?;
+                let col0 = m == 0 && (k >= ny || k % h == 0);
+                let p = if col0 {
+                    // The plane row above: the luma row before in this MCU
+                    // row, else the last of the MCU row above.
+                    // The luma's first row of an MCU row from the first
+                    // luma sample of the MCU row above; its later rows from
+                    // the sample above them (as the data shows, not T.81's
+                    // plane neighbor above for the first row); Cb and Cr
+                    // from the first of theirs above.
+                    let above = if k < ny && row > 0 { Some(first[row - 1]) } else if k < ny { above_first[0] } else { above_first[row] };
+                    above.unwrap_or(initial)
+                } else {
+                    left[row]
+                };
+                let val = p.wrapping_add(d as u16);
+                if col0 {
+                    first[row] = val;
+                }
+                left[row] = val;
+                cur[m * n + k] = val;
+            }
+        }
+        for r in 0..v + 2 {
+            above_first[r] = Some(first[r]);
+        }
+        line(y, &cur);
+    }
+    Ok(f)
+}
+
+/// A subsampled scan's coded differences in stream order, for the
+/// harnesses that work out how a writer predicts.
+#[doc(hidden)]
+pub fn subsampled_differences(data: &[u8]) -> Result<(Frame, Vec<i32>), Error> {
+    let (f, tables) = headers_of(data, true)?;
+    let huff: Vec<&Huffman> = f.table.iter().map(|&t| tables[t].as_ref().unwrap()).collect();
+    let mut bits = Bits { data, at: f.data, acc: 0, count: 0, marker: false };
+    let mut out = Vec::with_capacity(f.width * f.height * f.components);
+    for _ in 0..f.width * f.height {
+        for h in &huff {
+            out.push(bits.diff(h)?);
+        }
+    }
+    Ok((f, out))
+}
+
+/// Decodes a subsampled scan (headers_of): each line an MCU row, its
+/// MCUs' samples in order. Predictor 1 only, and no restart markers (a
+/// Canon sRAW's): each component's samples in a line are predicted from
+/// the one before them in the stream, the first component's MCU samples
+/// one chain whatever their place in the MCU (as the data shows, not each
+/// from its left neighbor in the component's plane), and a line's first
+/// sample of each component from the first of the line above, the first
+/// line's from the midpoint.
+pub fn decode_subsampled(data: &[u8], mut line: impl FnMut(usize, &[u16])) -> Result<Frame, Error> {
+    let (f, tables) = headers_of(data, true)?;
+    if f.sampling == (1, 1) || f.point_transform != 0 || f.restart != 0 || f.predictor != 1 {
+        return Err(Error::Unsupported("a subsampled scan of another kind"));
+    }
+    let huff: Vec<&Huffman> = f.table.iter().map(|&t| tables[t].as_ref().unwrap()).collect();
+    let (w, n) = (f.width, f.components);
+    let ny = n - 2;
+    let mut bits = Bits { data, at: f.data, acc: 0, count: 0, marker: false };
+    let mut cur = vec![0u16; w * n];
+    let initial = 1u16 << (f.precision - 1);
+    // The first sample of each of the three chains in the line above.
+    let mut first = [initial; 3];
+    for y in 0..f.height {
+        let mut last = first;
+        for m in 0..w {
+            for k in 0..n {
+                let chain = if k < ny { 0 } else { k - ny + 1 };
+                let d = bits.diff(huff[k])?;
+                let v = last[chain].wrapping_add(d as u16);
+                if m == 0 && (k == 0 || k >= ny) {
+                    first[chain] = v;
+                }
+                last[chain] = v;
+                cur[m * n + k] = v;
+            }
+        }
+        line(y, &cur);
+    }
+    Ok(f)
 }
 
 /// Decodes the scan, handing each line (width times components samples,

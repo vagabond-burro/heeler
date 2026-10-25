@@ -95,6 +95,11 @@ pub enum Coding {
     /// slices, top to bottom, slice after slice (CR2): how many slices
     /// before the last, their width, and the last one's width.
     Slices([usize; 3]),
+    /// A Canon sRAW or mRAW (sraw.rs): YCbCr turned into RGB, three samples
+    /// a pixel.
+    Sraw(Box<crate::sraw::Sraw>),
+    /// A Sony M or S size (sony_ycc.rs): YCbCr tiles turned into RGB.
+    SonyYcc(Box<crate::sony_ycc::SonyYcc>),
     /// Sony's compressed blocks (sony.rs), one strip, through the
     /// linearization table (its tone curve).
     SonyBlocks,
@@ -385,7 +390,33 @@ impl Dng {
         if crate::headerless::is_headerless(bytes) {
             return crate::headerless::parse(bytes);
         }
-        Dng::parse(bytes)
+        Dng::parse(bytes).map(Dng::with_libraw_area)
+    }
+
+    /// A camera's DNG whose stated image area (the whole frame where it
+    /// states none) LibRaw develops smaller, given the area LibRaw develops
+    /// (geometry.rs's DNG rows, LibRaw's own table for the camera), so
+    /// documents keep their geometry; the CFA pattern, stated from the
+    /// image area's top left, moves with it. An area an odd number of rows
+    /// or columns in, or outside the stated one, is left as the file
+    /// states it.
+    fn with_libraw_area(mut self) -> Dng {
+        if self.cfa_dim != (2, 2) || !self.black_delta_h.is_empty() || !self.black_delta_v.is_empty() {
+            return self;
+        }
+        let Some(g) = crate::geometry::find_dng(&self.make, &self.model, (self.width as u32, self.height as u32)) else { return self };
+        let (top, left) = (g.top as usize, g.left as usize);
+        let (t, l, b, r) = self.active;
+        if top < t || left < l || (top - t) % 2 == 1 || (left - l) % 2 == 1 || top + g.height as usize > b || left + g.width as usize > r {
+            return self;
+        }
+        let cfa: Vec<u8> = (0..4).map(|k| self.color_at(top + k / 2, left + k % 2)).collect();
+        if cfa != g.colors {
+            return self;
+        }
+        self.active = (top, left, top + g.height as usize, left + g.width as usize);
+        self.cfa = cfa;
+        self
     }
 
     /// The black level at (row, col) of the active area: the BlackLevel

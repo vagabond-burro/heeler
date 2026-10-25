@@ -883,6 +883,36 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("RAF", "FUJIFILM", "X70"),
     ("RAF", "FUJIFILM", "XQ1"),
     ("RAF", "FUJIFILM", "XQ2"),
+    // Found exact by a census of every corpus file the develop's rules took
+    // but no verified camera named, 2026-10-25; DNGs naming no Make are
+    // keyed by their UniqueCameraModel (camera_key).
+    ("DNG", "", "Blackmagic Micro Cinema Camera"),
+    ("DNG", "", "Blackmagic Pocket Cinema Camera"),
+    ("DNG", "", "Blackmagic Pocket Cinema Camera 4K"),
+    ("DNG", "", "Blackmagic Pocket Cinema Camera 6K Pro"),
+    ("DNG", "", "Blackmagic URSA 4K"),
+    ("DNG", "", "Parrot Anafi"),
+    ("DNG", "Canon", "Canon PowerShot A610"),
+    ("DNG", "Canon", "Canon PowerShotS3IS"),
+    ("DNG", "XIAOYI", "YDXJ 2"),
+    ("CR3", "Canon", "Canon EOS Rebel SL3"),
+    ("CR2", "Canon", "Canon EOS-1D Mark III"),
+    // In-camera DNGs whose area LibRaw takes from its own table (dng.rs,
+    // geometry.rs's DNG rows), 2026-10-25.
+    ("DNG", "LEICA CAMERA AG", "LEICA SL2"),
+    ("DNG", "PENTAX Corporation", "PENTAX K10D"),
+    ("DNG", "PENTAX", "PENTAX 645D"),
+    ("DNG", "PENTAX", "PENTAX K-5"),
+    ("DNG", "PENTAX", "PENTAX K-5 II"),
+    ("DNG", "PENTAX", "PENTAX K-5 II s"),
+    ("DNG", "PENTAX", "PENTAX K-7"),
+    ("DNG", "PENTAX", "PENTAX K-r"),
+    ("DNG", "PENTAX", "PENTAX K-x"),
+    ("DNG", "PENTAX", "PENTAX K200D"),
+    ("DNG", "PENTAX", "PENTAX K20D"),
+    ("DNG", "RICOH", "RICOH GX200"),
+    ("DNG", "SAMSUNG TECHWIN Co.", "SAMSUNG GX10"),
+    ("DNG", "SAMSUNG TECHWIN Co.", "SAMSUNG GX20"),
 ];
 
 pub fn camera(format: &str, make: &str, model: &str) -> bool {

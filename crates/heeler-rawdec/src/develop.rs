@@ -66,6 +66,9 @@ impl Plan {
     /// leaves the file to LibRaw.
     pub fn new(bytes: &[u8], opts: &Opts) -> Result<Plan, Error> {
         let dng = Dng::open(bytes)?;
+        if matches!(dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_)) {
+            return Plan::three_colors(dng, opts);
+        }
         if dng.photometric != 32803 {
             return Err(Error::Unsupported("not a CFA image"));
         }
@@ -180,6 +183,32 @@ impl Plan {
         Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern, xtrans, black, black_rows: rows, black_cols: cols, white, cam_mul, rgb_cam, flip: dng.flip(), gains2, stage3, table_period, dng })
     }
 
+    /// The plan for an image of three samples a pixel (a Canon sRAW): no
+    /// CFA and no black level, the camera's balance and matrix as for its
+    /// raw frames. LibRaw develops it whole at either size.
+    fn three_colors(dng: Dng, opts: &Opts) -> Result<Plan, Error> {
+        if !(opts.camera_wb && opts.camera_matrix) {
+            return Err(Error::Unsupported("a develop without the camera's white balance and matrix"));
+        }
+        if !matches!(opts.highlight, 0 | 2) {
+            return Err(Error::Unsupported("a highlight rebuild"));
+        }
+        if dng.black.iter().any(|&b| b != 0.0) {
+            return Err(Error::Unsupported("a three-color image with a black level"));
+        }
+        let (t, l, b, r) = dng.active;
+        let neutral = dng.as_shot_neutral.clone().filter(|n| n.len() == 3 && n.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no AsShotNeutral"))?;
+        let cam_mul = dng.cam_mul.ok_or(Error::Unsupported("no stated white balance"))?;
+        let rgb_cam = develop_matrix(&dng, [neutral[0], neutral[1], neutral[2]], opts.libraw_color)?.map(|row| row.map(|v| v as f32));
+        let white = dng.white.first().copied().unwrap_or(65535.0).clamp(1.0, 65535.0) as u32;
+        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 1], [1, 2]], xtrans: None, black: vec![0], black_rows: 1, black_cols: 1, white, cam_mul, rgb_cam, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, dng })
+    }
+
+    /// Whether the image is three samples a pixel (three_colors).
+    pub fn three(&self) -> bool {
+        matches!(self.dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_))
+    }
+
     /// The output's size (turned when the file says so).
     pub fn output_size(&self, half: bool) -> (usize, usize) {
         let (w, h) = if half { self.half_size() } else { (self.width, self.height) };
@@ -207,6 +236,9 @@ impl Plan {
     /// or column has no block of its own and is left out, as LibRaw leaves
     /// it; an X-Trans area's makes blocks of its own, as LibRaw's does.
     fn half_size(&self) -> (usize, usize) {
+        if self.three() {
+            return (self.width, self.height);
+        }
         if self.xtrans.is_some() { (self.width.div_ceil(2), self.height.div_ceil(2)) } else { (self.width / 2, self.height / 2) }
     }
 
@@ -631,6 +663,22 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         }
         stopped(stop)?;
         let h = d.height;
+        // A 3984-wide CR2 frame (the EOS-1D Mark III's) is laid out by
+        // LibRaw two samples on: its first two samples dropped, every other
+        // two places earlier (found against LibRaw's frame).
+        if d.format == Format::Cr2 && d.width == 3984 {
+            let mut frame = memory::vector(d.width * h + 2, 0u16, "RAW lossless JPEG samples")?;
+            let mut base = 0;
+            for s in 0..=n {
+                let ws = if s < n { w } else { last };
+                for r in 0..h {
+                    frame[r * d.width + s * w..][..ws].copy_from_slice(&samples[base + r * ws..base + (r + 1) * ws]);
+                }
+                base += ws * h;
+            }
+            (0..h).into_par_iter().for_each(|r| put_run(out, p, r, 0, &frame[r * d.width + 2..(r + 1) * d.width + 2], lin));
+            return Ok(cfa);
+        }
         (0..h).into_par_iter().for_each(|r| {
             let mut base = 0;
             for s in 0..=n {
@@ -1006,6 +1054,9 @@ pub fn develop_with(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBoo
 fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, t0: std::time::Instant) -> Result<(Image, Times), Error> {
     let _job = memory::Job::admit(p.bytes(opts.half_size)?, "RAW develop")?;
     let open = t0.elapsed().as_secs_f64();
+    if p.three() {
+        return develop_three(bytes, p, opts, stop, t0, open);
+    }
     let measured;
     let (mut cfa, p) = if p.dng.border_black {
         let (cfa, black) = unpack_measuring_black(bytes, p, stop)?;
@@ -1032,6 +1083,53 @@ fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, 
     let headroom = if opts.highlight >= 2 { headroom(&n) } else { 1.0 };
     let done = t0.elapsed().as_secs_f64();
     Ok((Image { headroom, ..img }, Times { open, unpack: unpacked - open, develop: done - unpacked }))
+}
+
+/// An image of three samples a pixel (Plan::three_colors): its area's
+/// samples, the brightest of them for the white level, each channel
+/// scaled by its multiplier, then each pixel finished, at full size
+/// whatever the size asked for (LibRaw shrinks a CFA only).
+fn develop_three(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, t0: std::time::Instant, open: f64) -> Result<(Image, Times), Error> {
+    stopped(stop)?;
+    // The decode is LibRaw's image already (sraw.rs, sony_ycc.rs), the
+    // area within it.
+    let (all, image) = match &p.dng.coding {
+        Coding::Sraw(s) => {
+            let (at, len) = p.dng.pieces.spans[0];
+            (crate::sraw::decode(&bytes[at..at + len], s)?, s.image)
+        }
+        Coding::SonyYcc(s) => (crate::sony_ycc::decode(bytes, s)?, s.image),
+        _ => return Err(Error::Unsupported("a three-color coding not read here")),
+    };
+    let fw = image.0;
+    if p.left + p.width > image.0 || p.top + p.height > image.1 {
+        return Err(Error::Corrupt("an image area outside the sRAW's image"));
+    }
+    let mut rgb = memory::vector(p.width * p.height * 3, 0u16, "RAW samples")?;
+    rgb.par_chunks_mut(p.width * 3).enumerate().for_each(|(r, row)| row.copy_from_slice(&all[((p.top + r) * fw + p.left) * 3..][..p.width * 3]));
+    drop(all);
+    let unpacked = t0.elapsed().as_secs_f64();
+    stopped(stop)?;
+    let data_max = rgb.par_iter().copied().max().unwrap_or(0);
+    let n = numbers(p, opts, data_max);
+    let (ow, oh) = p.output_size(false);
+    let mut out = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;
+    let o = Out(out.as_mut_ptr());
+    let g = p.pixel_gains(false);
+    let (w, h) = (p.width, p.height);
+    rgb.par_chunks(w * 3).enumerate().for_each(|(r, row)| {
+        let o = o;
+        for c in 0..w {
+            let px: [u16; 3] = std::array::from_fn(|k| scale(row[c * 3 + k], n.scale_mul[k]));
+            let px = finish(px, r, c, p, &n, &g);
+            let (oy, ox) = to_output(p.flip, w, h, r, c);
+            // SAFETY: each output pixel is written by its own source pixel.
+            unsafe { std::ptr::copy_nonoverlapping(px.as_ptr(), o.at((oy * ow + ox) * 3), 3) };
+        }
+    });
+    let headroom = if opts.highlight >= 2 { headroom(&n) } else { 1.0 };
+    let done = t0.elapsed().as_secs_f64();
+    Ok((Image { width: ow, height: oh, rgb: out, headroom }, Times { open, unpack: unpacked - open, develop: done - unpacked }))
 }
 
 /// The white balance's headroom: the largest multiplier over the smallest.

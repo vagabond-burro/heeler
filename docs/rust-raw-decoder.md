@@ -1747,6 +1747,102 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   LibRaw's whole frame, to the sample. A lossless compressed frame takes
   55 to 177 ms.
 
+## Phase 15: the remaining formats, by census
+
+### The census (2026-10-25)
+
+- Every raw file of both corpora the app opens (heeler-io's raw
+  extensions), 5074, through the Rust plan, with the routine LibRaw
+  unpacks each with: 4408 develop in Rust on verified cameras; 34 LibRaw
+  itself cannot open (out of scope: the app cannot open them today
+  either); the rest are the gaps this phase works through, largest
+  first.
+- Nikon's high-efficiency NEF coding (HE and HE*, from the Z 9 on) is a
+  licensed codec with no public description. LibRaw declines it on the
+  Z 9, Z 8, Z f and Z6 III, and misreads it on the Z5 II and Z50 II as a
+  plain NEF (its image is noise). Neither path can show these files;
+  once LibRaw is gone they say so instead of showing noise.
+
+### Smaller gaps
+
+- Ten cameras the develop already read exactly but no verified camera
+  named join the verified list: five Blackmagic cinema cameras, Parrot's
+  Anafi, a YI action camera, Canon's PowerShot A610 and S3 IS (CHDK DNGs)
+  and the Rebel SL3. A DNG naming no Make (the cinema and action
+  cameras) is verified by its UniqueCameraModel (`camera_key`).
+- The EOS-1D Mark III's CR2 frame is 3984 samples wide; LibRaw lays its
+  samples two places early (its first two dropped), found against its
+  frame. Both files of the corpora now match at every stage.
+- DNGs whose stated image area LibRaw develops smaller (13 Pentax,
+  Samsung and Ricoh bodies' in-camera DNGs, which state none, and
+  Leica's SL2, whose area LibRaw takes 19 rows shorter): LibRaw's own
+  table for the camera decides, so documents keep their geometry. The
+  geometry generator records such DNGs' areas in a table of their own
+  (`DNG_GEOMETRY`, `geometry::find_dng`), and the DNG reader takes a
+  row's area when it lies within the stated one an even number of rows
+  and columns in, the CFA pattern moved with it.
+
+### Canon sRAW and mRAW
+
+- `sraw.rs`, every rule found against LibRaw's unpacked image: the frame
+  is YCbCr in lossless JPEG, the luma sampled 2 by 1 (sRAW) or 2 by 2
+  (mRAW). Its scan predicts each component's samples in a line from the
+  one before it in the stream, the MCU's luma samples one chain (not
+  each from its left neighbor in its plane, as T.81 would), a line's
+  first sample of each component from the first of the line above. The
+  samples fill the CR2's slices, counted in samples; some bodies' mRAWs
+  (from the 6D on) state their scan across the image's short side, and
+  the slices lay the image out. Each pixel's chroma is its MCU's at the
+  MCU's first pixel, the rounded-up mean of its MCU's and the next one's
+  (along the row, then the column, then both) elsewhere, the image's last
+  row and column their own MCU's (LibRaw's image, which on the 50D and
+  5D Mark II mRAWs is a few columns narrower than the frame). The
+  conversion is integer: with Cb and Cr less 16384,
+  R = (Y + Cr) m_r >> 10, G = (Y + ((-778 Cb - 2048 Cr) >> 12)) m_g >> 10,
+  B = (Y + Cb) m_b >> 10, the multipliers a ColorData level set's
+  (entry 78, 123 or 128 by the ColorData version) each times the set's
+  green over 1024. The 40D takes 512 off the luma first. The ColorData
+  version 6, 7 and 9 bodies (50D, 5D Mark II, 7D, 60D, 1D Mark IV)
+  convert otherwise, with chroma times 4 plus an offset and weights over
+  16384; those weights are the least-squares fit to LibRaw's image times
+  4096, then confirmed on every pixel, and their shape matched what was
+  recalled of how such conversions are written: flagged, as for ORF and
+  Fujifilm's compression.
+- The develop takes an image of three samples a pixel (`Plan::three`):
+  no CFA and no black level; the brightest sample sets the white level as
+  for a mosaic; each channel is scaled by its multiplier; each pixel is
+  finished as a demosaiced one is. LibRaw shrinks only a mosaic, so a
+  three-color image develops at full size whichever size is asked for.
+  The geometry generator records such images' areas and white levels in
+  a table of their own (`RGB_GEOMETRY`, `geometry::find_rgb`).
+
+### Sony M and S sizes
+
+- `sony_ycc.rs`: the raw directory is YCbCr (photometric 6), the luma
+  sampled 2 by 2, in tiles of lossless JPEG. The scan predicts each
+  sample from its left neighbor in its component's plane, as T.81 does,
+  but a plane row's first sample from above: the luma's first row from
+  the first luma sample of the MCU row above, its second from the
+  sample above it. Every pixel takes its own MCU's chroma (2 by 2 for an
+  M size, 2 by 1 for an S). With Cb and Cr less 16383, in single
+  precision, each step a fused multiply-add, truncated, 1024 off:
+  R = Y + 1.402 Cr, G = (Y - 0.34414 Cb) - 0.71414 Cr, B = Y + 1.772 Cb;
+  those weights, the order and the fused steps decide the sums that fall
+  within a hair of a whole number (about one pixel in twenty thousand),
+  each tried against every pixel of the corpus's files. LibRaw then
+  holds a black level of 1024 (already off) and a white level of 17536,
+  so 16512, and develops these files with no white balance (its
+  multipliers are all 1: the samples come balanced). The image is the
+  sensor data's size the directory states (0x7038), from the top left,
+  or LibRaw's own area for the frame where smaller. All 40 such files of
+  the corpora (seven bodies) match LibRaw's develop.
+
+### Still to do in this phase
+
+- Nikon's small raw (D810, D810A, D4S): 12-bit YCbCr 4:2:2 packed least
+  significant bits first, two luma, Cb, Cr; LibRaw's conversion includes
+  a curve not yet worked out. Nikon's film scanner NEFs (Coolscan).
+
 ## Cameras without a converter calibration
 
 - Heeler's calibration table comes from DNGs a converter wrote, so a

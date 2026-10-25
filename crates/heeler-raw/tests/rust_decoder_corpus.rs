@@ -92,16 +92,21 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
     for (path, name) in files(&root, &["DNG", "CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "CRW", "RAF"]) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let Ok(plan) = heeler_rawdec::plan(&bytes, &opts(DevelopOpts::default())) else { continue };
-        let Ok((_, _, theirs)) = heeler_raw::libraw_mosaic(&bytes) else {
-            unreadable.push(name);
-            continue;
-        };
-        taken += 1;
-        cameras.insert((plan.dng.format.name().to_string(), plan.dng.make.clone(), plan.dng.model.clone()));
-        match heeler_rawdec::develop::unpack(&bytes, &plan, None) {
-            Ok(mine) if mine == theirs => {}
-            _ => failures.push(format!("{name}: the unpacked mosaic")),
+        // An image of three samples a pixel (a Canon sRAW) has no mosaic:
+        // its outputs below are what is held to LibRaw's.
+        if !plan.three() {
+            let Ok((_, _, theirs)) = heeler_raw::libraw_mosaic(&bytes) else {
+                unreadable.push(name);
+                continue;
+            };
+            match heeler_rawdec::develop::unpack(&bytes, &plan, None) {
+                Ok(mine) if mine == theirs => {}
+                _ => failures.push(format!("{name}: the unpacked mosaic")),
+            }
         }
+        taken += 1;
+        let (format, make, model) = heeler_rawdec::camera_key(&plan);
+        cameras.insert((format.to_string(), make, model));
         // The shipped develop, with its own levels and color, finishes: one
         // that fails goes to LibRaw without a word, which this would hide.
         let shipped = Opts { libraw_color: false, ..opts(DevelopOpts::default()) };

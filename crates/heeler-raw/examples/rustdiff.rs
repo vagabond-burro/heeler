@@ -13,6 +13,8 @@
 //! pixels lie in the border band and inside, and the first few.
 //! --any takes every file the develop's rules accept, not only the
 //! verified cameras'.
+//! --own develops with the plan's own levels and balance (the shipped
+//! develop's), only the matrix LibRaw's.
 use heeler_raw::DevelopOpts;
 use heeler_rawdec::Opts;
 
@@ -93,6 +95,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let quick = args.iter().any(|a| a == "--quick");
     let wher = args.iter().any(|a| a == "--where");
+    let own = args.iter().any(|a| a == "--own");
     if args.iter().any(|a| a == "--any") {
         heeler_rawdec::set_verified_only(false);
     }
@@ -120,8 +123,12 @@ fn main() {
         let libraw_matrix = heeler_raw::linear_dng::libraw_facts(&bytes, base).ok().map(|f| f.rgb_cam.map(|r| [r[0], r[1], r[2]]));
         // LibRaw's black and white levels too, for formats whose levels the
         // develop reads its own way (a DNG's are the same either way).
-        let numbered = heeler_raw::with_libraw_numbers(&bytes, &plan).unwrap_or_else(|_| plan.clone());
-        if !quick {
+        // --own keeps the plan's levels and balance (the shipped develop's),
+        // LibRaw's matrix only.
+        let numbered = if own { plan.clone() } else { heeler_raw::with_libraw_numbers(&bytes, &plan).unwrap_or_else(|_| plan.clone()) };
+        // An image of three samples a pixel has no mosaic: its outputs are
+        // what is compared.
+        if !quick && !plan.three() {
             // The develop matrix, to the bit.
             if let Ok(f) = heeler_raw::linear_dng::libraw_facts(&bytes, base) {
                 let ulps: Vec<i64> = (0..9).map(|k| (plan.rgb_cam[k / 3][k % 3].to_bits() as i64 - f.rgb_cam[k / 3][k % 3].to_bits() as i64).abs()).collect();
@@ -208,7 +215,9 @@ fn main() {
             if let Some(m) = libraw_matrix {
                 with.rgb_cam = m;
             }
-            with = heeler_raw::with_libraw_balance(&bytes, &with, o);
+            if !own {
+                with = heeler_raw::with_libraw_balance(&bytes, &with, o);
+            }
             let (mine, _) = match heeler_rawdec::develop::develop_with(&bytes, &with, &opts_of(o), None) {
                 Ok(m) => m,
                 Err(e) => {

@@ -32,6 +32,20 @@ pub fn find(make: &str, model: &str, raw: (u32, u32)) -> Option<&'static Geometr
     GEOMETRY.iter().find(|g| g.make == make && g.model == model && g.raw == raw)
 }
 
+/// The area LibRaw develops of a camera's DNG of `raw` size that states
+/// no image area of its own (Pentax, Samsung and Ricoh bodies, Leica's
+/// SL2): LibRaw's table for the camera.
+pub fn find_dng(make: &str, model: &str, raw: (u32, u32)) -> Option<&'static Geometry> {
+    DNG_GEOMETRY.iter().find(|g| g.make == make && g.model == model && g.raw == raw)
+}
+
+/// The area and white level LibRaw develops of a camera's image of three
+/// samples a pixel (a Canon sRAW or mRAW, a Sony M or S size) of `raw`
+/// size.
+pub fn find_rgb(make: &str, model: &str, raw: (u32, u32)) -> Option<&'static Geometry> {
+    RGB_GEOMETRY.iter().find(|g| g.make == make && g.model == model && g.raw == raw)
+}
+
 /// A NEF or RAF camera's white level for samples of `depth` bits (LibRaw's).
 pub fn nef_white(make: &str, model: &str, depth: u32) -> Option<u32> {
     NEF_WHITE.iter().find(|w| w.0 == make && w.1 == model && w.2 == depth).map(|w| w.3)

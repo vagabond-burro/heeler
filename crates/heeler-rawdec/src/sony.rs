@@ -199,10 +199,16 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let ifd0 = ifds.first().ok_or(Error::Unsupported("no directory"))?;
     let uint = |ifd: &crate::tiff::Ifd, tag| ifd.get(tag).and_then(|e| t.uint(&e));
     let uints = |ifd: &crate::tiff::Ifd, tag| ifd.get(tag).and_then(|e| t.uints(&e));
+    // The raw directory: a CFA frame, or an M or S size's YCbCr tiles.
     let raw = ifds[1..]
         .iter()
         .find(|i| uint(i, 262) == Some(32803) && uint(i, 254).unwrap_or(0) == 0)
+        .or_else(|| ifds[1..].iter().find(|i| uint(i, 262) == Some(6) && uint(i, 259) == Some(7) && uint(i, 254).unwrap_or(0) == 0))
         .ok_or(Error::Unsupported("no CFA raw frame"))?;
+    let ycc = uint(raw, 262) == Some(6);
+    if ycc && !matches!(uints(raw, 530).as_deref(), Some(&[2, 2] | &[2, 1])) {
+        return Err(Error::Unsupported("a YCbCr frame sampled otherwise"));
+    }
     let ascii = |tag| ifd0.get(tag).and_then(|e| t.ascii(&e)).unwrap_or_default();
     let (make, model) = (ascii(271), ascii(272));
     let width = uint(raw, 256).ok_or(Error::Corrupt("ImageWidth"))? as usize;
@@ -230,6 +236,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let bits_tag = uints(raw, 258).and_then(|b| b.first().copied()).unwrap_or(0);
     let tiled = pieces.spans.len() > 1 || pieces.width != width;
     let (coding, bits, compression, linearization) = match uint(raw, 259) {
+        Some(7) if ycc && tiled && pieces.width % 2 == 0 && pieces.height % 2 == 0 => (Coding::SonyYcc(Box::new(crate::sony_ycc::SonyYcc { tile: (pieces.width, pieces.height), sampling: (2, 2), spans: pieces.spans.clone(), frame_width: width, image: (0, 0) })), 16, 7, None),
         // A few older bodies mark 12-bit packed uncompressed data so.
         Some(32767) if !tiled && count == width * height * 3 / 2 && bits_tag == 12 => (Coding::PackedLow, 12, 1, None),
         Some(32767) if !tiled && count >= width * height && width % 32 == 0 => {
@@ -261,11 +268,28 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         .or_else(|| four(sr2_reals(0x7310)).map(|b| if coding == Coding::PackedLow { b.iter().map(|v| v / 4.0).collect() } else { b }))
         .ok_or(Error::Unsupported("no stated black level"))?;
     let wb = four(reals(0x7313)).or_else(|| four(sr2_reals(0x7313))).filter(|w| w.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no stated white balance"))?;
-    let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
+    // An M or S size's image: the sensor data's size the directory states
+    // (0x7038), from the frame's top left, as LibRaw takes it, or LibRaw's
+    // own area for the frame where that is smaller.
+    let stated = uints(raw, 0x7038).filter(|v| v.len() == 2 && v[0] > 0 && v[1] > 0 && v[0] as usize <= width && v[1] as usize <= height);
+    let ycc_geometry;
+    let geometry = if ycc {
+        // LibRaw's table for the camera and frame size can make it smaller
+        // (the geometry table's three-color row, where its files agree).
+        let v = stated.ok_or(Error::Unsupported("an M or S size without its image's size"))?;
+        let row = crate::geometry::find_rgb(&make, &model, (width as u32, height as u32));
+        let (w, h) = row.map_or((v[0], v[1]), |g| (v[0].min(g.width), v[1].min(g.height)));
+        ycc_geometry = crate::geometry::Geometry { make: "", model: "", raw: (width as u32, height as u32), top: 0, left: 0, width: w, height: h, colors: [0; 4], white: 0 };
+        &ycc_geometry
+    } else {
+        crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?
+    };
     // The white level the frame states, else the camera's (geometry.rs).
     let white = reals(0xc61d)
         .and_then(|w| w.first().copied())
         .or((geometry.white > 0).then_some(geometry.white as f64))
+        // An M or S size's is set below.
+        .or(ycc.then_some(0.0))
         .ok_or(Error::Unsupported("no white level"))?;
     // A file whose IFD0 orientation is no orientation at all (some Canon
     // firmware writes 0) states the camera's way up only in maker notes
@@ -278,6 +302,18 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let calibration = crate::cameras::find(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
     let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
     let (top, left) = (geometry.top as usize, geometry.left as usize);
+    // An M or S size: LibRaw's image, its black level (1024) already off
+    // in the conversion (sony_ycc.rs), its white level then 16512 (LibRaw's
+    // 17536 once unpacked, less that black), and no white balance to apply
+    // (LibRaw's multipliers for it are all 1: the samples come balanced).
+    let (coding, white, wb) = match coding {
+        Coding::SonyYcc(mut s) => {
+            s.image = (geometry.width as usize, geometry.height as usize);
+            s.sampling = match uints(raw, 530).as_deref() { Some(&[2, 1]) => (2, 1), _ => (2, 2) };
+            (Coding::SonyYcc(s), 16512.0, vec![1.0; 4])
+        }
+        c => (c, white, wb),
+    };
     Ok(Dng {
         format: Format::Arw,
         make,
@@ -289,19 +325,19 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         height,
         bits,
         compression,
-        photometric: 32803,
-        samples: 1,
+        photometric: if ycc { 34892 } else { 32803 },
+        samples: if ycc { 3 } else { 1 },
         sample_format: 1,
         predictor: 1,
         pieces,
-        cfa_dim: (2, 2),
-        cfa: geometry.colors.to_vec(),
+        cfa_dim: if ycc { (0, 0) } else { (2, 2) },
+        cfa: if ycc { Vec::new() } else { geometry.colors.to_vec() },
         cfa_layout: 1,
         linearization,
-        black_dim: (2, 2),
+        black_dim: if ycc { (1, 1) } else { (2, 2) },
         // Each site's channel: red, the green on red's row, the other
         // green, blue.
-        black: (0..4)
+        black: if ycc { vec![0.0] } else { (0..4)
             .map(|k| {
                 let c = geometry.colors[k];
                 let red_row = geometry.colors[(k & 2)..(k & 2) + 2].contains(&0);
@@ -312,7 +348,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
                     _ => 2,
                 }]
             })
-            .collect(),
+            .collect() },
         black_delta_h: Vec::new(),
         black_delta_v: Vec::new(),
         white: vec![white],

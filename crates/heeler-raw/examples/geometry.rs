@@ -34,7 +34,7 @@ fn files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
             let ext = name.rsplit('.').next().unwrap_or("").to_ascii_uppercase();
             if p.is_dir() {
                 stack.push(p);
-            } else if ["CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "IIQ", "CRW", "RAF"].contains(&ext.as_str()) {
+            } else if ["CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "IIQ", "CRW", "RAF", "DNG"].contains(&ext.as_str()) {
                 out.push(p);
             }
         }
@@ -67,13 +67,55 @@ fn main() {
     // green, blue; None where the files disagree.
     let mut black_of: BTreeMap<(String, String), Option<[u32; 4]>> = BTreeMap::new();
     let mut padded = std::collections::BTreeSet::new();
+    // A camera's DNG whose stated image area (the whole frame if none)
+    // LibRaw develops smaller, its own table's area:
+    // (make, model, width, height) -> the area, None where files disagree.
+    let mut dng_rows: BTreeMap<(String, String, u32, u32), Option<Row>> = BTreeMap::new();
+    // An image of three samples a pixel: (make, model, raw width, raw
+    // height) -> LibRaw's area and white level, None where files disagree.
+    let mut rgb_rows: BTreeMap<(String, String, u32, u32), Option<Row>> = BTreeMap::new();
     for (root, path) in roots.iter().flat_map(|r| files(r).into_iter().map(move |p| (r, p))) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let Some((make, model)) = heeler_rawdec::dng::make_model(&bytes) else { continue };
         let Ok(f) = heeler_raw::linear_dng::libraw_facts(&bytes, heeler_raw::DevelopOpts::default()) else { continue };
-        // Bayer images (a 2 by 2 pattern repeated down the rows) and
-        // X-Trans ones (6 by 6).
-        if !(f.filters >= 1000 || f.filters == 9) || f.colors != 3 {
+        // Bayer images (a 2 by 2 pattern repeated down the rows), X-Trans
+        // ones (6 by 6), and images of three samples a pixel (a Canon sRAW,
+        // a Sony M or S size), whose areas are a table of their own.
+        if !(f.filters >= 1000 || f.filters == 9 || f.filters == 0) || f.colors != 3 {
+            continue;
+        }
+        if f.filters == 0 && !path.extension().is_some_and(|e| e.eq_ignore_ascii_case("dng")) {
+            let row: Row = (f.top_margin, f.left_margin, f.width, f.height, [0; 4], f.maximum);
+            let e = rgb_rows.entry((make.clone(), model.clone(), f.raw_width, f.raw_height)).or_insert(Some(row));
+            if *e != Some(row) {
+                *e = None;
+            }
+            continue;
+        }
+        // A DNG's area as the file states it (Dng::open applies these rows).
+        let named_dng = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("dng"));
+        let stated = if named_dng { heeler_rawdec::dng::Dng::open(&bytes).ok().filter(|d| d.is_dng()).and_then(|_| heeler_rawdec::dng::Dng::parse(&bytes).ok()) } else { None };
+        if named_dng && std::env::var_os("GEOMETRY_DEBUG").is_some() {
+            eprintln!("{}: {:?} libraw {}x{} at ({},{}) raw {}x{} filters {}", path.display(), stated.as_ref().map(|d| (d.width, d.height, d.active, d.cfa_dim)), f.width, f.height, f.top_margin, f.left_margin, f.raw_width, f.raw_height, f.filters);
+        }
+        if named_dng {
+            let Some(d) = stated else { continue };
+            let (w, h) = (d.width as u32, d.height as u32);
+            // LibRaw's area inside the stated one (the whole frame where
+            // the file states none) and not the same, on the same frame.
+            let (t, l, b, r) = d.active;
+            let (ft, fl) = (f.top_margin as usize, f.left_margin as usize);
+            let inside = ft >= t && fl >= l && ft + f.height as usize <= b && fl + f.width as usize <= r && (ft - t) % 2 == 0 && (fl - l) % 2 == 0;
+            let differs = (ft, fl, ft + f.height as usize, fl + f.width as usize) != d.active;
+            if (f.raw_width, f.raw_height) == (w, h) && inside && differs && f.filters >= 1000 && d.cfa_dim == (2, 2) {
+                let color = |r: u32, c: u32| ((f.filters >> ((((r << 1) & 14) | (c & 1)) << 1)) & 3) as u8;
+                let g = |v: u8| if v == 3 { 1 } else { v };
+                let row: Row = (f.top_margin, f.left_margin, f.width, f.height, [g(color(0, 0)), g(color(0, 1)), g(color(1, 0)), g(color(1, 1))], 0);
+                let e = dng_rows.entry((d.make.clone(), d.model.clone(), w, h)).or_insert(Some(row));
+                if *e != Some(row) {
+                    *e = None;
+                }
+            }
             continue;
         }
         let xtrans = if f.filters == 9 { heeler_raw::linear_dng::libraw_xtrans(&bytes).ok().flatten() } else { None };
@@ -143,6 +185,31 @@ fn main() {
         src += &format!(
             "    Geometry {{ make: {make:?}, model: {model:?}, raw: ({rw}, {rh}), top: {top}, left: {left}, width: {w}, height: {h}, colors: {colors:?}, white: {max} }},\n"
         );
+    }
+    src += "];\n";
+    src += "// A camera's DNG whose stated image area (the whole frame where it states\n\
+            // none) LibRaw develops smaller, the area LibRaw develops (its own table\n\
+            // for the camera); the white level is the file's own.\n\
+            pub(crate) const DNG_GEOMETRY: &[Geometry] = &[\n";
+    for ((make, model, rw, rh), row) in &dng_rows {
+        match row {
+            Some((top, left, w, h, colors, _)) => src += &format!(
+                "    Geometry {{ make: {make:?}, model: {model:?}, raw: ({rw}, {rh}), top: {top}, left: {left}, width: {w}, height: {h}, colors: {colors:?}, white: 0 }},\n"
+            ),
+            None => eprintln!("left out, its DNGs' areas disagree: {make} {model}"),
+        }
+    }
+    src += "];\n";
+    src += "// An image of three samples a pixel (a Canon sRAW or mRAW, a Sony M or S\n\
+            // size): the area LibRaw develops of its frame and its white level.\n\
+            pub(crate) const RGB_GEOMETRY: &[Geometry] = &[\n";
+    for ((make, model, rw, rh), row) in &rgb_rows {
+        match row {
+            Some((top, left, w, h, _, max)) => src += &format!(
+                "    Geometry {{ make: {make:?}, model: {model:?}, raw: ({rw}, {rh}), top: {top}, left: {left}, width: {w}, height: {h}, colors: [0, 0, 0, 0], white: {max} }},\n"
+            ),
+            None => eprintln!("left out, its three-color files' areas disagree: {make} {model}"),
+        }
     }
     src += "];\n";
     src += "// A NEF camera's white level for each depth of its samples, as LibRaw\n\

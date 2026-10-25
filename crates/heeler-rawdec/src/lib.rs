@@ -28,6 +28,8 @@ pub mod crw;
 pub mod headerless;
 pub mod huffman;
 pub mod sony;
+pub mod sony_ycc;
+pub mod sraw;
 #[doc(hidden)]
 pub mod synthetic;
 pub mod tiff;
@@ -87,10 +89,20 @@ pub fn verified_cameras() -> &'static [(&'static str, &'static str, &'static str
 /// develop's rules (Plan::new) and the verified cameras (verified.rs).
 pub fn plan(bytes: &[u8], opts: &Opts) -> Result<Plan, Error> {
     let p = Plan::new(bytes, opts)?;
-    if VERIFIED_ONLY.load(std::sync::atomic::Ordering::Relaxed) && !verified::camera(p.dng.format.name(), &p.dng.make, &p.dng.model) {
+    let (format, make, model) = camera_key(&p);
+    if VERIFIED_ONLY.load(std::sync::atomic::Ordering::Relaxed) && !verified::camera(format, &make, &model) {
         return Err(Error::Unsupported("a camera not verified against LibRaw"));
     }
     Ok(p)
+}
+
+/// The camera a plan's file is verified as: format, Make and Model, or for
+/// a DNG that names no Make, its UniqueCameraModel in place of the Model
+/// (cinema and action cameras write no Make).
+#[doc(hidden)]
+pub fn camera_key(p: &Plan) -> (&'static str, String, String) {
+    let model = if p.dng.make.trim().is_empty() && p.dng.is_dng() { p.dng.unique_model.trim().to_string() } else { p.dng.model.clone() };
+    (p.dng.format.name(), p.dng.make.clone(), model)
 }
 
 /// Develops `bytes`, stopping with Canceled once `stop` is set.
