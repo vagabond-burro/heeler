@@ -4,7 +4,6 @@
 // XYZ-to-camera matrix for D65.
 pub(crate) const LIBRAW_MATRICES: &[Calibration] = &[
     Calibration { make: "Canon", model: "Canon EOS R5 C", illuminants: [21, 0], color_matrix: [Some([0.976600, -0.295300, -0.125400, -0.427600, 1.211600, 0.243300, -0.043700, 0.133600, 0.513100]), None], forward_matrix: [None, None], tables: false },
-    Calibration { make: "Canon", model: "Canon EOS R6 Mark III", illuminants: [21, 0], color_matrix: [Some([0.953900, -0.279500, -0.122400, -0.417500, 1.199800, 0.245800, -0.046500, 0.175500, 0.604800]), None], forward_matrix: [None, None], tables: false },
     Calibration { make: "Canon", model: "Canon IXUS 160", illuminants: [21, 0], color_matrix: [Some([1.165700, -0.378100, -0.113600, -0.354400, 1.126200, 0.228300, -0.016000, 0.121900, 0.470000]), None], forward_matrix: [None, None], tables: false },
     Calibration { make: "Canon", model: "Canon PowerShot A3300 IS", illuminants: [21, 0], color_matrix: [Some([1.082600, -0.365400, -0.102300, -0.321500, 1.131000, 0.190600, 0.000000, 0.099900, 0.496000]), None], forward_matrix: [None, None], tables: false },
     Calibration { make: "Canon", model: "Canon PowerShot A620", illuminants: [21, 0], color_matrix: [Some([1.526500, -0.619300, -0.155800, -0.412500, 1.211600, 0.201000, -0.088800, 0.163900, 0.522000]), None], forward_matrix: [None, None], tables: false },
@@ -35,7 +34,5 @@ pub(crate) const LIBRAW_MATRICES: &[Calibration] = &[
     Calibration { make: "Phase One A/S", model: "iXU-RS1000 NIR", illuminants: [21, 0], color_matrix: [Some([1.099778, 0.035433, -0.074154, -0.459051, 1.334245, 0.093745, -0.106030, 0.216637, 0.812010]), None], forward_matrix: [None, None], tables: false },
     Calibration { make: "Phase One A/S", model: "iXU180", illuminants: [21, 0], color_matrix: [Some([1.162941, -0.009094, -0.088396, -0.336778, 1.274845, 0.041563, -0.088559, 0.266207, 0.751234]), None], forward_matrix: [None, None], tables: false },
     Calibration { make: "SONY", model: "DSC-RX10M5", illuminants: [21, 0], color_matrix: [Some([0.667900, -0.182500, -0.074500, -0.504700, 1.325600, 0.195300, -0.158000, 0.242200, 0.518300]), None], forward_matrix: [None, None], tables: false },
-    Calibration { make: "SONY", model: "DSC-RX1RM3", illuminants: [21, 0], color_matrix: [Some([0.634400, -0.161200, -0.046200, -0.486300, 1.247700, 0.268100, -0.086500, 0.178600, 0.689900]), None], forward_matrix: [None, None], tables: false },
-    Calibration { make: "SONY", model: "ILCE-7M5", illuminants: [21, 0], color_matrix: [Some([0.527100, -0.071200, -0.034700, -0.615300, 1.365300, 0.276300, -0.160100, 0.236600, 0.724200]), None], forward_matrix: [None, None], tables: false },
     Calibration { make: "SONY", model: "ILCE-7RM6", illuminants: [21, 0], color_matrix: [Some([0.491300, -0.054100, -0.020200, -0.613000, 1.351300, 0.290600, -0.156400, 0.215100, 0.718300]), None], forward_matrix: [None, None], tables: false },
 ];

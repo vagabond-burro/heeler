@@ -1,6 +1,7 @@
 //! Builds heeler-rawdec's table of camera color calibrations
 //! (src/calibrations.rs) for the raw formats whose files carry none: for
-//! each camera folder of the corpus at HEELER_RAW_CORPUS, a DNG converter
+//! each camera folder of the corpora at HEELER_RAW_CORPUS (a list of
+//! folders, as PATH is), a DNG converter
 //! writes a small DNG from one of the camera's files, and the camera
 //! profile tags in it (the two calibration illuminants, ColorMatrix1/2,
 //! ForwardMatrix1/2, and whether the profile also carries hue and
@@ -83,14 +84,16 @@ fn main() {
         std::process::exit(2);
     }
     let (converter, work, out) = (&args[0], PathBuf::from(&args[1]), &args[2]);
-    let root = PathBuf::from(std::env::var_os("HEELER_RAW_CORPUS").expect("HEELER_RAW_CORPUS"));
+    let roots: Vec<PathBuf> = std::env::split_paths(&std::env::var_os("HEELER_RAW_CORPUS").expect("HEELER_RAW_CORPUS")).collect();
     std::fs::create_dir_all(&work).unwrap();
-    let mut folders: Vec<PathBuf> = Vec::new();
-    for maker in std::fs::read_dir(&root).unwrap().flatten() {
-        if maker.path().is_dir() {
-            for cam in std::fs::read_dir(maker.path()).unwrap().flatten() {
-                if cam.path().is_dir() {
-                    folders.push(cam.path());
+    let mut folders: Vec<(PathBuf, PathBuf)> = Vec::new();
+    for root in &roots {
+        for maker in std::fs::read_dir(root).unwrap().flatten() {
+            if maker.path().is_dir() {
+                for cam in std::fs::read_dir(maker.path()).unwrap().flatten() {
+                    if cam.path().is_dir() {
+                        folders.push((root.clone(), cam.path()));
+                    }
                 }
             }
         }
@@ -98,14 +101,14 @@ fn main() {
     folders.sort();
     let mut rows: BTreeMap<(String, String), Row> = BTreeMap::new();
     let mut failed = Vec::new();
-    for (n, folder) in folders.iter().enumerate() {
+    for (n, (root, folder)) in folders.iter().enumerate() {
         let mut files: Vec<PathBuf> = std::fs::read_dir(folder).unwrap().flatten().map(|e| e.path()).filter(|p| {
             let name = p.file_name().unwrap().to_string_lossy().to_string();
             let ext = p.extension().map(|e| e.to_string_lossy().to_ascii_uppercase()).unwrap_or_default();
             !name.starts_with('.') && p.is_file() && ext != "DNG"
         }).collect();
         files.sort();
-        let rel = folder.strip_prefix(&root).unwrap().display().to_string();
+        let rel = folder.strip_prefix(root).unwrap().display().to_string();
         let mut done = false;
         for file in files.iter().take(3) {
             let dir = work.join(format!("{n}"));
@@ -117,7 +120,7 @@ fn main() {
                 continue;
             }
             let Some(mut row) = profile(&std::fs::read(&dng).unwrap()) else { continue };
-            row.sample = file.strip_prefix(&root).unwrap().display().to_string();
+            row.sample = file.strip_prefix(root).unwrap().display().to_string();
             row.libraw = against_libraw(&std::fs::read(file).unwrap(), &row);
             eprintln!("[{}/{}] {rel}: {} {} ({})", n + 1, folders.len(), row.make, row.model, row.libraw);
             rows.entry((row.make.clone(), row.model.clone())).or_insert(row);

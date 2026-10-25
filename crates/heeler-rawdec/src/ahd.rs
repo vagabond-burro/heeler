@@ -91,7 +91,7 @@ impl Lab {
     }
 
     #[inline(always)]
-    fn of(&self, rgb: [u16; 3]) -> [i16; 3] {
+    pub(crate) fn of(&self, rgb: [u16; 3]) -> [i16; 3] {
         // Rounded to the nearest table entry; each product and sum one
         // fused multiply-add, as the arm64 build of LibRaw computes it.
         let mut xyz = [0.5f32; 3];

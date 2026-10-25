@@ -1,8 +1,9 @@
 //! Builds heeler-rawdec's table of LibRaw's matrices (src/libraw_matrices.rs)
 //! for the cameras the calibration table (src/calibrations.rs) lacks
 //! because no DNG converter reads their files: for every raw file of the
-//! corpus at HEELER_RAW_CORPUS (and of any further folders given after
-//! OUT.rs) whose camera has no calibration, the develop matrix LibRaw opens
+//! corpora at HEELER_RAW_CORPUS (a list of folders, as PATH is, and of
+//! any further folders given after OUT.rs) whose camera has no
+//! calibration, the develop matrix LibRaw opens
 //! it with, turned back into an XYZ-to-camera matrix for D65 (the matrix
 //! inverted, each row scaled back by LibRaw's daylight multiplier, then
 //! sRGB's primaries in XYZ), keyed by Make and Model as
@@ -40,7 +41,7 @@ fn files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
 
 fn main() {
     let out = std::env::args().nth(1).expect("OUT.rs");
-    let mut roots = vec![std::path::PathBuf::from(std::env::var_os("HEELER_RAW_CORPUS").expect("HEELER_RAW_CORPUS"))];
+    let mut roots: Vec<std::path::PathBuf> = std::env::split_paths(&std::env::var_os("HEELER_RAW_CORPUS").expect("HEELER_RAW_CORPUS")).collect();
     roots.extend(std::env::args().skip(2).map(std::path::PathBuf::from));
     // (make, model) -> (XYZ-to-camera, a file), None where files disagree.
     let mut rows: BTreeMap<(String, String), Option<([[f64; 3]; 3], String)>> = BTreeMap::new();

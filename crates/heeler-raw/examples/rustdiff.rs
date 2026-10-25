@@ -104,7 +104,10 @@ fn main() {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let name = path.to_string_lossy().into_owned();
         let base = DevelopOpts::default();
-        let plan = match heeler_rawdec::plan(&bytes, &opts_of(base)) {
+        // A develop the Rust path takes at half size only (X-Trans, until
+        // its demosaic) is compared at half size only.
+        let half_only = matches!(heeler_rawdec::plan(&bytes, &opts_of(base)), Err(heeler_rawdec::Error::Unsupported("the X-Trans demosaic")));
+        let plan = match heeler_rawdec::plan(&bytes, &opts_of(DevelopOpts { half_size: half_only, ..base })) {
             Ok(p) => p,
             Err(e) => {
                 println!("{name}: declined: {e}");
@@ -199,7 +202,7 @@ fn main() {
             }
         }
         // The output.
-        let cases: &[(bool, i32)] = if quick { &[(false, 0)] } else { &[(true, 0), (true, 2), (false, 0), (false, 2)] };
+        let cases: &[(bool, i32)] = if half_only { &[(true, 0), (true, 2)] } else if quick { &[(false, 0)] } else { &[(true, 0), (true, 2), (false, 0), (false, 2)] };
         let mut full_worst: Option<Diff> = None;
         for &(half, highlight) in cases {
             let o = DevelopOpts { half_size: half, highlight, ..base };

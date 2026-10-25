@@ -171,9 +171,7 @@ pub fn frame(bytes: &[u8]) -> Result<(usize, usize, Vec<u16>), Error> {
 pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let (make, model) = make_model(bytes).ok_or(Error::Unsupported("a RAF without Make and Model"))?;
     let Section { width, height, bits, data, count, coding, black, balance } = section(bytes)?;
-    if xtrans(bytes).is_some() {
-        return Err(Error::Unsupported("an X-Trans sensor"));
-    }
+    let xtrans = xtrans(bytes);
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
     // The camera's level for the depth where its files of two depths share
     // a frame size (the GFX bodies' 14-bit files, 15872).
@@ -184,7 +182,9 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     } as f64;
     // Red, green, blue from green, red, blue.
     let wb = balance.filter(|v| v.len() >= 3 && v[..3].iter().all(|&x| x > 0)).ok_or(Error::Unsupported("no stated white balance"))?;
-    let black = Some(black).filter(|v| v.len() == 4).ok_or(Error::Unsupported("no stated black level"))?;
+    // A level for each site of the CFA's period, from the frame's top left.
+    let n = if xtrans.is_some() { 6 } else { 2 };
+    let black = Some(black).filter(|v| v.len() == n * n).ok_or(Error::Unsupported("no stated black level"))?;
     let orientation = exif(bytes).and_then(|t| t.ifds().into_iter().next().and_then(|i| i.get(274).and_then(|e| t.uint(&e)))).unwrap_or(1);
     if !(1..=8).contains(&orientation) {
         return Err(Error::Unsupported("an orientation tag outside 1 to 8"));
@@ -192,6 +192,20 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let calibration = crate::cameras::find(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
     let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
     let (top, left) = (geometry.top as usize, geometry.left as usize);
+    // The colors and levels from the image area's top left.
+    let shifted = |v: &dyn Fn(usize, usize) -> u32| -> Vec<u32> { (0..n * n).map(|k| v((top + k / n) % n, (left + k % n) % n)).collect() };
+    let cfa: Vec<u8> = match xtrans {
+        Some(x) => {
+            let cfa: Vec<u8> = shifted(&|r, c| x[r][c] as u32).iter().map(|&v| v as u8).collect();
+            // The file's pattern where LibRaw's starts the area.
+            if [cfa[0], cfa[1], cfa[6], cfa[7]] != geometry.colors {
+                return Err(Error::Unsupported("an X-Trans pattern off LibRaw's"));
+            }
+            cfa
+        }
+        None => geometry.colors.to_vec(),
+    };
+    let black: Vec<f64> = shifted(&|r, c| black[r * n + c]).iter().map(|&v| v as f64).collect();
     let (r, g, b) = (wb[1] as f64, wb[0] as f64, wb[2] as f64);
     Ok(Dng {
         format: Format::Raf,
@@ -209,14 +223,12 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         sample_format: 1,
         predictor: 1,
         pieces: Pieces { width, height, spans: vec![(data, count)] },
-        cfa_dim: (2, 2),
-        cfa: geometry.colors.to_vec(),
+        cfa_dim: (n, n),
+        cfa,
         cfa_layout: 1,
         linearization: None,
-        // The pattern's levels from the frame's top left; the image area
-        // starts on a whole pattern.
-        black_dim: (2, 2),
-        black: if top % 2 == 0 && left % 2 == 0 { black.iter().map(|&v| v as f64).collect() } else { return Err(Error::Unsupported("an image area off the black pattern")) },
+        black_dim: (n, n),
+        black,
         black_delta_h: Vec::new(),
         black_delta_v: Vec::new(),
         white: vec![white],

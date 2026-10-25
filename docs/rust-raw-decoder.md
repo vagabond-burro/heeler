@@ -1670,19 +1670,34 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   even samples from the line above where the sensor's pixels never use
   them, and their 6 by 6 pattern is record 0x131 read backwards; both
   found from the data.
+- X-Trans at half size (2026-10-24), each rule found from LibRaw's
+  stages: the 6 by 6 pattern and the 36 black levels move with the image
+  area's top left; the scale takes each site's color's multiplier. Each 2
+  by 2 block becomes one pixel of the last sample of each color it holds
+  in reading order. Every third block across and down holds only greens
+  and takes its red and blue as the mean of its left and right
+  neighbors' (none in the first and last columns). An odd last row or
+  column makes blocks of its own (3997 rows give 1999), and the
+  brightest sample for the white level is taken over every sample, not
+  only the kept ones. The geometry table now holds the X-Trans bodies
+  (82 camera sizes): the generator takes LibRaw's 6 by 6 from a shim
+  accessor, and a file's own pattern (record 0x131) must agree with its
+  first 2 by 2.
 - Declined for now: Fujifilm's lossy compression (46 files: one byte a
   six rows of each block, a step, ahead of the blocks; the recalled rule
-  for it did not reproduce LibRaw's frame), X-Trans sensors in the
-  develop (154; their 6 by 6 pattern needs its own demosaic), and the
-  earlier bodies without the TIFF raw section (35; most with the sensor
-  turned 45 degrees).
+  for it did not reproduce LibRaw's frame), X-Trans sensors at full size
+  (their 6 by 6 pattern needs its own demosaic; until then no X-Trans
+  camera is on the verified list), and the earlier bodies without the
+  TIFF raw section (35; most with the sensor turned 45 degrees).
 
 ### Verification
 
 - `rustdiff --any` over all 304 RAFs of both corpora: the 71 uncompressed
   Bayer files and the 26 losslessly compressed GFX files match LibRaw at
   every stage, full size and half, with LibRaw's black, white and
-  balance, and with its own. 32 cameras join the verified list.
+  balance, and with its own. 32 cameras join the verified list. With
+  X-Trans at half size, all 223 RAFs the develop reads match LibRaw at
+  half size, Clip and Blend (the X-Trans ones half size only).
 - `every_corpus_raf_frame_is_libraws`: every RAF whose samples are read
   (the X-Trans ones too, 76 losslessly compressed among them) decodes to
   LibRaw's whole frame, to the sample. A lossless compressed frame takes
@@ -1708,6 +1723,16 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
 - After the calibration table is next regenerated with a newer
   converter, regenerate this one: a camera the converter has gained
   drops out of it.
+- 2026-10-24, converter 18.7: four cameras gain a converter calibration
+  (the EOS R6 Mark III, the X-T30 III, the RX1R III and the A7 V), and
+  the first three leave this table, which now holds 32. The converter's
+  rows for the Raspberry Pi sensors carry one generic matrix for three
+  different sensors and no illuminants, so they are left out. The
+  existing 771 rows are kept as they were: this converter writes newer
+  profiles for 731 of them (other ForwardMatrix values for 562, other
+  ColorMatrix values for 263, and hue and saturation tables for nearly
+  all), and taking those would move the color of most cameras, which is
+  the owner's call and not part of filling in missing cameras.
 
 ## In progress: IIQ
 

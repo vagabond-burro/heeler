@@ -92,6 +92,7 @@ extern "C" {
     fn libraw_unpack_function_name(d: *mut c_void) -> *const std::ffi::c_char;
     fn heeler_make(d: *mut c_void) -> *const std::ffi::c_char;
     fn heeler_model(d: *mut c_void) -> *const std::ffi::c_char;
+    fn heeler_xtrans(d: *mut c_void, out: *mut std::ffi::c_char);
     fn libraw_dcraw_process(d: *mut c_void) -> c_int;
 }
 
@@ -833,6 +834,22 @@ pub fn libraw_identity(bytes: &[u8]) -> Result<(String, String, String), RawErro
     check(unsafe { crate::open_buffer(handle.0, bytes) })?;
     let text = |p: *const std::ffi::c_char| if p.is_null() { String::new() } else { unsafe { std::ffi::CStr::from_ptr(p) }.to_string_lossy().into_owned() };
     Ok(unsafe { (text(heeler_make(handle.0)), text(heeler_model(handle.0)), text(libraw_unpack_function_name(handle.0))) })
+}
+
+/// LibRaw's X-Trans colors for `bytes` from its image area's top left
+/// (0 red, 1 green, 2 blue), or None for another sensor.
+#[doc(hidden)]
+pub fn libraw_xtrans(bytes: &[u8]) -> Result<Option<[[u8; 6]; 6]>, RawError> {
+    let handle: Handle = configured(DevelopOpts::default())?;
+    check(unsafe { crate::open_buffer(handle.0, bytes) })?;
+    let mut f = std::mem::MaybeUninit::<Facts>::zeroed();
+    unsafe { heeler_linear_facts(handle.0, f.as_mut_ptr(), std::ptr::null_mut(), std::ptr::null_mut()) };
+    if unsafe { f.assume_init() }.filters != 9 {
+        return Ok(None);
+    }
+    let mut out = [0 as std::ffi::c_char; 36];
+    unsafe { heeler_xtrans(handle.0, out.as_mut_ptr()) };
+    Ok(Some(std::array::from_fn(|r| std::array::from_fn(|c| out[r * 6 + c] as u8))))
 }
 
 /// LibRaw's facts for `bytes` once it has unpacked them (a few formats'

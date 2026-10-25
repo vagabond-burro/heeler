@@ -239,7 +239,7 @@ struct LinearCapture {
 thread_local LinearCapture heeler_capture = {};
 void heeler_capture_into(LibRaw *r, unsigned short *to) {
     size_t n = size_t(r->imgdata.sizes.iheight) * r->imgdata.sizes.iwidth;
-    if (!to || n != heeler_capture.pixels || !r->imgdata.image) return;
+    if (!to || n > heeler_capture.pixels || !r->imgdata.image) return;
     for (size_t i = 0; i < n * 4; i++) to[i] = (&r->imgdata.image[0][0])[i];
 }
 void heeler_capture_loaded(void *ctx) {
@@ -447,6 +447,10 @@ int heeler_colors(libraw_data_t *d) { return d ? d->idata.colors : 0; }
 // hold heeler-rawdec to LibRaw on files without a header to name it.
 const char *heeler_make(libraw_data_t *d) { return d ? d->idata.make : ""; }
 const char *heeler_model(libraw_data_t *d) { return d ? d->idata.model : ""; }
+// An X-Trans sensor's 6 by 6 colors from the image area's top left.
+void heeler_xtrans(libraw_data_t *d, char *out) {
+    for (int i = 0; i < 36; i++) out[i] = d ? d->idata.xtrans[i / 6][i % 6] : 0;
+}
 
 // The black level LibRaw will subtract at (row, col) of the active
 // area, as copy_bayer will: the common level, the per-color level of

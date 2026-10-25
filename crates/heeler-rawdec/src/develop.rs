@@ -38,6 +38,9 @@ pub struct Plan {
     pub height: usize,
     /// Colors at the active area's first two rows and columns.
     pub pattern: [[u8; 2]; 2],
+    /// An X-Trans sensor's colors from the active area's top left, for
+    /// its 6 by 6 pattern (`pattern` then holds its first 2 by 2).
+    pub xtrans: Option<[[u8; 6]; 6]>,
     /// Black per (row % rows, col % cols) of the active area.
     pub black: Vec<u32>,
     pub black_rows: usize,
@@ -79,7 +82,8 @@ impl Plan {
             (3, 1, 1) | (3, 8, 3 | 34894 | 34895) if matches!(dng.bits, 16 | 24 | 32) && dng.linearization.is_none() => {}
             _ => return Err(Error::Unsupported("a sample format, depth or compression not read here")),
         }
-        if dng.samples != 1 || dng.cfa_layout != 1 || dng.cfa_dim != (2, 2) {
+        let x_trans = dng.format == Format::Raf && dng.cfa_dim == (6, 6);
+        if dng.samples != 1 || dng.cfa_layout != 1 || !(dng.cfa_dim == (2, 2) || x_trans) {
             return Err(Error::Unsupported("not a one-sample 2 by 2 Bayer mosaic"));
         }
         // An odd top or left edge of a DNG's active area moves in a row or
@@ -101,7 +105,15 @@ impl Plan {
                 count[*v as usize] += 1;
             }
         }
-        if count != [1, 2, 1] || pattern[0][0] == pattern[0][1] || pattern[0][0] == pattern[1][0] {
+        let xtrans: Option<[[u8; 6]; 6]> = x_trans.then(|| std::array::from_fn(|i| std::array::from_fn(|j| dng.color_at(t + i, l + j))));
+        if let Some(x) = &xtrans {
+            // Eight reds, twenty greens and eight blues.
+            let mut n = [0; 3];
+            x.iter().flatten().for_each(|&c| n[c.min(2) as usize] += 1);
+            if x.iter().flatten().any(|&c| c > 2) || n != [8, 20, 8] {
+                return Err(Error::Unsupported("not an X-Trans arrangement"));
+            }
+        } else if count != [1, 2, 1] || pattern[0][0] == pattern[0][1] || pattern[0][0] == pattern[1][0] {
             return Err(Error::Unsupported("not a Bayer arrangement"));
         }
         if dng.default_scale != (1.0, 1.0) {
@@ -139,6 +151,9 @@ impl Plan {
         if !matches!(opts.highlight, 0 | 2) {
             return Err(Error::Unsupported("a highlight rebuild"));
         }
+        if xtrans.is_some() && !opts.half_size {
+            return Err(Error::Unsupported("the X-Trans demosaic"));
+        }
         if !opts.half_size && opts.demosaic != -1 {
             return Err(Error::Unsupported("a demosaic other than the default"));
         }
@@ -154,7 +169,8 @@ impl Plan {
         let (br, bc) = dng.black_dim;
         // The black pattern over its own period and the CFA's, so one
         // lookup serves both.
-        let (rows, cols) = (lcm(br, 2), lcm(bc, 2));
+        let n = if x_trans { 6 } else { 2 };
+        let (rows, cols) = (lcm(br, n), lcm(bc, n));
         if rows * cols > 4096 {
             return Err(Error::Unsupported("a black level pattern this large"));
         }
@@ -164,14 +180,12 @@ impl Plan {
         // LibRaw's develop.
         let gains2 = gain_map::parse_list(&dng.opcodes[1]);
         let stage3 = gain_map::parse_list3(&dng.opcodes[2]);
-        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern, black, black_rows: rows, black_cols: cols, white, cam_mul, rgb_cam, flip: dng.flip(), gains2, stage3, table_period, dng })
+        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern, xtrans, black, black_rows: rows, black_cols: cols, white, cam_mul, rgb_cam, flip: dng.flip(), gains2, stage3, table_period, dng })
     }
 
     /// The output's size (turned when the file says so).
     pub fn output_size(&self, half: bool) -> (usize, usize) {
-        // At half size an odd last row or column has no block of its own
-        // and is left out, as LibRaw leaves it.
-        let (w, h) = if half { (self.width / 2, self.height / 2) } else { (self.width, self.height) };
+        let (w, h) = if half { self.half_size() } else { (self.width, self.height) };
         if self.flip & 4 != 0 { (h, w) } else { (w, h) }
     }
 
@@ -189,7 +203,14 @@ impl Plan {
     /// The image the stage 3 opcodes see: the active area, or at half size
     /// its whole 2 by 2 blocks (the half-size image's own size).
     fn stage3_size(&self, half: bool) -> (usize, usize) {
-        if half { (self.width / 2, self.height / 2) } else { (self.width, self.height) }
+        if half { self.half_size() } else { (self.width, self.height) }
+    }
+
+    /// The half-size image's size, unturned. A Bayer area's odd last row
+    /// or column has no block of its own and is left out, as LibRaw leaves
+    /// it; an X-Trans area's makes blocks of its own, as LibRaw's does.
+    fn half_size(&self) -> (usize, usize) {
+        if self.xtrans.is_some() { (self.width.div_ceil(2), self.height.div_ceil(2)) } else { (self.width / 2, self.height / 2) }
     }
 
     /// OpcodeList3 worked out for the develop's image.
@@ -885,6 +906,15 @@ pub fn scale_mosaic(cfa: &mut [u16], p: &Plan, n: &Numbers) {
     let w = p.width;
     // The green on blue's row takes the fourth multiplier, the second
     // green's (a DNG's is the first green's; a CR2's can differ).
+    if let Some(x) = &p.xtrans {
+        cfa.par_chunks_mut(w).enumerate().for_each(|(r, row)| {
+            let m: [f32; 6] = std::array::from_fn(|j| n.scale_mul[x[r % 6][j] as usize]);
+            for (c, v) in row.iter_mut().enumerate() {
+                *v = scale(*v, m[c % 6]);
+            }
+        });
+        return;
+    }
     let mul = |i: usize, j: usize| {
         let c = p.pattern[i][j] as usize;
         n.scale_mul[if c == 1 && p.pattern[i].contains(&2) { 3 } else { c }]
@@ -997,7 +1027,7 @@ fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, 
     let data_max = subtract_black(&mut cfa, &p);
     // At half size the odd last row and column make no block, and LibRaw
     // leaves them out of the brightest sample too.
-    let data_max = if opts.half_size && (p.width % 2 == 1 || p.height % 2 == 1) { blocks_max(&cfa, p) } else { data_max };
+    let data_max = if opts.half_size && (p.width % 2 == 1 || p.height % 2 == 1) && p.xtrans.is_none() { blocks_max(&cfa, p) } else { data_max };
     let n = numbers(&p, opts, data_max);
     scale_mosaic(&mut cfa, &p, &n);
     stopped(stop)?;
@@ -1035,6 +1065,9 @@ fn finish(px: [u16; 3], row: usize, col: usize, p: &Plan, n: &Numbers, g: &Pixel
 
 /// Half size: each 2 by 2 block one pixel, its two greens averaged.
 fn half(cfa: &[u16], p: &Plan, n: &Numbers) -> Result<Image, Error> {
+    if let Some(x) = &p.xtrans {
+        return half_xtrans(cfa, p, n, x);
+    }
     let (w, h) = (p.width, p.height);
     let (hw, hh) = (w / 2, h / 2);
     let (ow, oh) = p.output_size(true);
@@ -1059,6 +1092,53 @@ fn half(cfa: &[u16], p: &Plan, n: &Numbers) -> Result<Image, Error> {
             let (oy, ox) = to_output(p.flip, hw, hh, y, x);
             // SAFETY: each output pixel is written by its own block only.
             unsafe { std::ptr::copy_nonoverlapping(px.as_ptr(), out.at((oy * ow + ox) * 3), 3) };
+        }
+    });
+    Ok(Image { width: ow, height: oh, rgb, headroom: 1.0 })
+}
+
+/// Half size of an X-Trans mosaic (an odd last row or column making
+/// blocks of its own): each 2 by 2 block one pixel of the
+/// last sample of each color it holds; a block of greens alone (every
+/// third block across and down) takes its red and blue as the mean of its
+/// left and right neighbors' (none at the first and last columns).
+fn half_xtrans(cfa: &[u16], p: &Plan, n: &Numbers, x: &[[u8; 6]; 6]) -> Result<Image, Error> {
+    let (w, h) = (p.width, p.height);
+    let (hw, hh) = p.half_size();
+    let (ow, oh) = p.output_size(true);
+    let mut rgb = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;
+    let out = Out(rgb.as_mut_ptr());
+    let g = p.pixel_gains(true);
+    // A block's three colors; 0 for one it lacks.
+    let block = |y: usize, bx: usize| {
+        let mut v = [0u16; 3];
+        for d in 0..4 {
+            let (r, c) = (2 * y + d / 2, 2 * bx + d % 2);
+            if r >= h || c >= w {
+                continue;
+            }
+            v[x[r % 6][c % 6] as usize] = cfa[r * w + c];
+        }
+        v
+    };
+    (0..hh).into_par_iter().for_each(|y| {
+        let out = out;
+        let mut prev = [0u16; 3];
+        let mut here = block(y, 0);
+        for bx in 0..hw {
+            let next = if bx + 1 < hw { block(y, bx + 1) } else { [0; 3] };
+            let mut px = here;
+            let greens = (0..4).all(|d| x[(2 * y + d / 2) % 6][(2 * bx + d % 2) % 6] == 1);
+            if greens && bx > 0 && bx + 1 < hw {
+                px[0] = ((prev[0] as u32 + next[0] as u32) >> 1) as u16;
+                px[2] = ((prev[2] as u32 + next[2] as u32) >> 1) as u16;
+            }
+            let fin = finish(px, y, bx, p, n, &g);
+            let (oy, ox) = to_output(p.flip, hw, hh, y, bx);
+            // SAFETY: each output pixel is written by its own block only.
+            unsafe { std::ptr::copy_nonoverlapping(fin.as_ptr(), out.at((oy * ow + ox) * 3), 3) };
+            prev = here;
+            here = next;
         }
     });
     Ok(Image { width: ow, height: oh, rgb, headroom: 1.0 })

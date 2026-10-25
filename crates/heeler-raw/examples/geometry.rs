@@ -1,11 +1,12 @@
 //! Builds heeler-rawdec's table of camera geometry (src/geometry_table.rs)
 //! for the raw formats whose files do not state it the way LibRaw reads
-//! them: for every CR2, CR3, ARW, NEF, RW2, ORF, PEF, SRW, MRW, IIQ and CRW
+//! them: for every CR2, CR3, ARW, NEF, RW2, ORF, PEF, SRW, MRW, IIQ, CRW and RAF
 //! (and their variants: NRW, RAW, RWL, ORI), and every headerless file of a
 //! size heeler-rawdec knows, of the corpus at
-//! HEELER_RAW_CORPUS (and of any further folders given after OUT.rs, such
+//! HEELER_RAW_CORPUS (a list of folders, as PATH is, and of any further folders given after OUT.rs, such
 //! as a second corpus), the image area LibRaw develops (its margins and
-//! size within the raw frame), the CFA colors at that area's top left, and
+//! size within the raw frame), the CFA colors at that area's top left (an
+//! X-Trans sensor's first 2 by 2 of its 6 by 6), and
 //! its white level, as LibRaw reads them when it opens the file, keyed by
 //! Make, Model and the raw frame's size. Heeler keeps LibRaw's image size for these
 //! formats so a document's crop and strokes, stored as fractions of the
@@ -52,7 +53,7 @@ fn stated_size(bytes: &[u8]) -> Option<(u32, u32)> {
 
 fn main() {
     let out = std::env::args().nth(1).expect("OUT.rs");
-    let mut roots = vec![std::path::PathBuf::from(std::env::var_os("HEELER_RAW_CORPUS").expect("HEELER_RAW_CORPUS"))];
+    let mut roots: Vec<std::path::PathBuf> = std::env::split_paths(&std::env::var_os("HEELER_RAW_CORPUS").expect("HEELER_RAW_CORPUS")).collect();
     roots.extend(std::env::args().skip(2).map(std::path::PathBuf::from));
     // (make, model, raw width, raw height) -> (top, left, width, height, colors, maximum, sample)
     type Row = (u32, u32, u32, u32, [u8; 4], u32);
@@ -70,10 +71,12 @@ fn main() {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let Some((make, model)) = heeler_rawdec::dng::make_model(&bytes) else { continue };
         let Ok(f) = heeler_raw::linear_dng::libraw_facts(&bytes, heeler_raw::DevelopOpts::default()) else { continue };
-        // Bayer images only (a 2 by 2 pattern repeated down the rows).
-        if f.filters < 1000 || f.colors != 3 {
+        // Bayer images (a 2 by 2 pattern repeated down the rows) and
+        // X-Trans ones (6 by 6).
+        if !(f.filters >= 1000 || f.filters == 9) || f.colors != 3 {
             continue;
         }
+        let xtrans = if f.filters == 9 { heeler_raw::linear_dng::libraw_xtrans(&bytes).ok().flatten() } else { None };
         if heeler_rawdec::nef::is_nef(&bytes) || heeler_rawdec::raf::is_raf(&bytes) {
             if let Some(depth) = heeler_rawdec::nef::depth(&bytes).or_else(|| heeler_rawdec::raf::depth(&bytes)) {
                 let e = nef_white.entry((make.clone(), model.clone(), depth)).or_insert(Some(f.maximum));
@@ -93,7 +96,11 @@ fn main() {
         let color = |r: u32, c: u32| ((f.filters >> ((((r << 1) & 14) | (c & 1)) << 1)) & 3) as u8;
         // LibRaw's fourth color is the second green.
         let g = |v: u8| if v == 3 { 1 } else { v };
-        let colors = [g(color(0, 0)), g(color(0, 1)), g(color(1, 0)), g(color(1, 1))];
+        // An X-Trans area's first 2 by 2 of its 6 by 6.
+        let colors = match xtrans {
+            Some(x) => [x[0][0], x[0][1], x[1][0], x[1][1]],
+            None => [g(color(0, 0)), g(color(0, 1)), g(color(1, 0)), g(color(1, 1))],
+        };
         let row: Row = (f.top_margin, f.left_margin, f.width, f.height, colors, f.maximum);
         if stated_size(&bytes).is_some_and(|(w, h)| f.width > w || f.height > h) {
             padded.insert((make.clone(), model.clone()));
