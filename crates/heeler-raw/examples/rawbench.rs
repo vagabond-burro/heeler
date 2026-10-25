@@ -13,6 +13,8 @@
 //!                           files that path declines
 //!   --runs N                timed runs a file, after one untimed (3)
 //!   --half                  half-size develops instead of full
+//!   --any                   with rust, every file the develop's rules
+//!                           accept, not only the verified cameras
 //!   --only TEXT             only files whose corpus path contains TEXT
 //!                           (repeatable; any match keeps the file)
 //!   --ext ARW,DNG           only these extensions, any case
@@ -54,6 +56,7 @@ fn main() {
             "--decoder" => a.decoder = value(),
             "--runs" => a.runs = value().parse().expect("--runs N"),
             "--half" => a.half = true,
+            "--any" => heeler_rawdec::set_verified_only(false),
             "--only" => a.only.push(value()),
             "--ext" => a.ext.extend(value().split(',').map(|e| e.trim().to_ascii_uppercase())),
             "--per-camera" => a.per_camera = value().parse().expect("--per-camera N"),

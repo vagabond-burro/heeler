@@ -151,9 +151,6 @@ impl Plan {
         if !matches!(opts.highlight, 0 | 2) {
             return Err(Error::Unsupported("a highlight rebuild"));
         }
-        if xtrans.is_some() && !opts.half_size {
-            return Err(Error::Unsupported("the X-Trans demosaic"));
-        }
         if !opts.half_size && opts.demosaic != -1 {
             return Err(Error::Unsupported("a demosaic other than the default"));
         }
@@ -257,7 +254,7 @@ impl Plan {
     /// The demosaic's buffers beyond the mosaic and output: one set a
     /// worker.
     pub fn demosaic_extra(&self) -> usize {
-        rayon::current_num_threads() * ahd::worker_bytes()
+        rayon::current_num_threads() * if self.xtrans.is_some() { crate::xtrans::worker_bytes() } else { ahd::worker_bytes() }
     }
 }
 
@@ -1151,14 +1148,18 @@ fn full(cfa: &[u16], p: &Plan, n: &Numbers, stop: Option<&AtomicBool>) -> Result
     let mut rgb = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;
     let out = Out(rgb.as_mut_ptr());
     let lab = ahd::Lab::new(&p.rgb_cam);
-    let m = Mosaic { data: cfa, width: w, height: h, pattern: p.pattern };
     let flip = p.flip;
     let g = p.pixel_gains(false);
-    ahd::demosaic(&m, &lab, stop, &|r, c, px| {
+    let put = |r: usize, c: usize, px: [u16; 3]| {
         let px = finish(px, r, c, p, n, &g);
         let (oy, ox) = to_output(flip, w, h, r, c);
         // SAFETY: the demosaic hands each pixel over exactly once.
         unsafe { std::ptr::copy_nonoverlapping(px.as_ptr(), out.at((oy * ow + ox) * 3), 3) };
-    })?;
+    };
+    if let Some(x) = p.xtrans {
+        crate::xtrans::demosaic(&crate::xtrans::Mosaic { data: cfa, width: w, height: h, pattern: x }, &lab, stop, &put)?;
+    } else {
+        ahd::demosaic(&Mosaic { data: cfa, width: w, height: h, pattern: p.pattern }, &lab, stop, &put)?;
+    }
     Ok(Image { width: ow, height: oh, rgb, headroom: 1.0 })
 }

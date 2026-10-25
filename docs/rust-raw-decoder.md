@@ -1683,12 +1683,27 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   (82 camera sizes): the generator takes LibRaw's 6 by 6 from a shim
   accessor, and a file's own pattern (record 0x131) must agree with its
   first 2 by 2.
+- X-Trans at full size: `xtrans.rs`, a demosaic of the 6 by 6 written
+  from the method's plain meaning (directional candidates weighed by
+  homogeneity, as AHD is for Bayer) and held to LibRaw's by a tolerance,
+  as the owner decided on 2026-10-22. Each pixel is interpolated along
+  the row and along the column: green from the nearest green either
+  side, the nearer weighing more, corrected by half the site's own
+  color's change along the line; red and blue from the color differences
+  of every sample of the color in the 5 by 5, weighted by the inverse
+  square of the distance. The candidates' Lab roughness along their own
+  direction gives each a homogeneity score over the 3 by 3, and the
+  candidates are blended by their scores to the fourth power. The weights
+  were chosen by how close they bring the output to LibRaw's on eight
+  bodies' files; diagonal candidates, a second refining pass and a
+  harder choice all scored lower. It takes 0.10 of LibRaw's time at full
+  size (0.15 s against 1.61 s on an X-T3).
 - Declined for now: Fujifilm's lossy compression (46 files: one byte a
   six rows of each block, a step, ahead of the blocks; the recalled rule
-  for it did not reproduce LibRaw's frame), X-Trans sensors at full size
-  (their 6 by 6 pattern needs its own demosaic; until then no X-Trans
-  camera is on the verified list), and the earlier bodies without the
-  TIFF raw section (35; most with the sensor turned 45 degrees).
+  for it did not reproduce LibRaw's frame) and the earlier bodies without
+  the TIFF raw section (35; most with the sensor turned 45 degrees). No
+  X-Trans camera is on the verified list yet: the owner decides whether
+  the full-size tolerance below is close enough to ship.
 
 ### Verification
 
@@ -1697,7 +1712,16 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   every stage, full size and half, with LibRaw's black, white and
   balance, and with its own. 32 cameras join the verified list. With
   X-Trans at half size, all 223 RAFs the develop reads match LibRaw at
-  half size, Clip and Blend (the X-Trans ones half size only).
+  half size, Clip and Blend.
+- X-Trans at full size, `rustdiff --any` over the 126 X-Trans files the
+  develop reads (37 bodies): the mosaic and the scaled mosaic match
+  LibRaw's to the bit; the output against LibRaw's (its matrix and
+  balance) has a PSNR of 37.1 to 60.3 dB under Clip, median 50.1, mean
+  49.7; under Blend from 42.1, median 57.0. The lowest are fine detail
+  against clipped highlights (an X100F's branches against white sky, 37 dB; the
+  X-H1, 38 to 40): there thin dark lines come out dotted where LibRaw's
+  stay continuous. In midtones the two look alike, LibRaw's with more
+  color fringing.
 - `every_corpus_raf_frame_is_libraws`: every RAF whose samples are read
   (the X-Trans ones too, 76 losslessly compressed among them) decodes to
   LibRaw's whole frame, to the sample. A lossless compressed frame takes

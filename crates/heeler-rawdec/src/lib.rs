@@ -31,6 +31,7 @@ pub mod sony;
 #[doc(hidden)]
 pub mod synthetic;
 pub mod tiff;
+pub mod xtrans;
 mod verified;
 
 use std::sync::atomic::AtomicBool;
