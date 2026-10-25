@@ -90,6 +90,16 @@ impl Lab {
         Lab { xyz_cam, cbrt }
     }
 
+    /// L alone, as `of` gives it.
+    #[inline(always)]
+    pub(crate) fn lightness(&self, rgb: [u16; 3]) -> i16 {
+        let mut y = 0.5f32;
+        for c in 0..3 {
+            y = crate::fmadd(self.xyz_cam[1][c], rgb[c] as f32, y);
+        }
+        (64.0 * crate::fmadd(116.0, self.cbrt[(y as i32).clamp(0, 65535) as usize], -16.0)) as i16
+    }
+
     #[inline(always)]
     pub(crate) fn of(&self, rgb: [u16; 3]) -> [i16; 3] {
         // Rounded to the nearest table entry; each product and sum one

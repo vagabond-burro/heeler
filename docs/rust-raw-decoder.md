@@ -1690,14 +1690,30 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   the row and along the column: green from the nearest green either
   side, the nearer weighing more, corrected by half the site's own
   color's change along the line; red and blue from the color differences
-  of every sample of the color in the 5 by 5, weighted by the inverse
-  square of the distance. The candidates' Lab roughness along their own
+  of every sample of the color in the 5 by 5, weighted by 1 over the
+  squared offset along the direction plus 8 times the squared offset
+  across it. The candidates' roughness in lightness along their own
   direction gives each a homogeneity score over the 3 by 3, and the
   candidates are blended by their scores to the fourth power. The weights
   were chosen by how close they bring the output to LibRaw's on eight
-  bodies' files; diagonal candidates, a second refining pass and a
-  harder choice all scored lower. It takes 0.10 of LibRaw's time at full
-  size (0.15 s against 1.61 s on an X-T3).
+  bodies' files; diagonal candidates, a second refining pass, a harder
+  choice and a median of the color differences all scored lower. It
+  takes 0.10 of LibRaw's time at full size (0.15 s against 1.61 s on an
+  X-T3).
+- Thin dark lines against bright backgrounds (2026-10-25, the owner's
+  request): the first version dotted them where LibRaw's stay
+  continuous. Two causes, found on an X100F's branches against clipped
+  sky. The roughness took chroma in, and a thin line's color fringes (its
+  red and blue displaced by the lens) made the candidate that follows the
+  line look rough, so the one that crosses it, bright from the sky either
+  side, won half the blend; roughness is now lightness alone. And red and
+  blue took every sample of the 5 by 5 alike, reaching across the line;
+  they now weigh samples along the candidate's direction eight times
+  more than samples across it. On three lines of that file the darkest
+  point along each line now sits 3.4k, 2.4k and 2.1k (of 65535) from
+  LibRaw's on average, from 6.2k, 4.5k and 2.3k, and the brightest gap
+  along the first is 54k against LibRaw's 54k (61k before). The eight
+  bodies' mean PSNR against LibRaw rose from 51.3 to 52.7 dB.
 - Declined for now: Fujifilm's lossy compression (46 files: one byte a
   six rows of each block, a step, ahead of the blocks; the recalled rule
   for it did not reproduce LibRaw's frame) and the earlier bodies without
@@ -1716,12 +1732,13 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
 - X-Trans at full size, `rustdiff --any` over the 126 X-Trans files the
   develop reads (37 bodies): the mosaic and the scaled mosaic match
   LibRaw's to the bit; the output against LibRaw's (its matrix and
-  balance) has a PSNR of 37.1 to 60.3 dB under Clip, median 50.1, mean
-  49.7; under Blend from 42.1, median 57.0. The lowest are fine detail
-  against clipped highlights (an X100F's branches against white sky, 37 dB; the
-  X-H1, 38 to 40): there thin dark lines come out dotted where LibRaw's
-  stay continuous. In midtones the two look alike, LibRaw's with more
-  color fringing.
+  balance) has a PSNR of 38.5 to 61.9 dB under Clip, median 51.9, mean
+  51.2 (37.1 to 60.3, median 50.1, before the thin-line changes); under
+  Blend from 43.6, median 58.2. The lowest are fine detail against
+  clipped highlights (an X100F's branches against white sky, the X-H1's
+  twigs); there the two now look alike at the pixel level, LibRaw's
+  thinnest lines a little more continuous. In midtones the two look
+  alike, LibRaw's with more color fringing.
 - `every_corpus_raf_frame_is_libraws`: every RAF whose samples are read
   (the X-Trans ones too, 76 losslessly compressed among them) decodes to
   LibRaw's whole frame, to the sample. A lossless compressed frame takes

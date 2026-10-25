@@ -3,7 +3,8 @@
 //! as AHD (ahd.rs) is for a Bayer mosaic. It is written from the method's
 //! plain meaning and held to LibRaw's develop by a tolerance, not to the
 //! bit (the owner's decision of 2026-10-22); the weights below were chosen
-//! by how close they bring it to LibRaw's output on the corpus.
+//! by how close they bring it to LibRaw's output on the corpus, and by
+//! how it keeps thin dark lines against bright backgrounds whole.
 //!
 //! Each pixel's colors are interpolated twice, along the row and along
 //! the column. Green at a red or blue site is the nearest green on each
@@ -11,11 +12,15 @@
 //! color's change along the line (its sample less the nearest samples of
 //! its color either side). Red and blue are the direction's green plus
 //! the color differences, sample less that direction's green, of every
-//! sample of the color in the 5 by 5, weighted by the inverse square of
-//! the distance. Both candidates go to CIELab; a candidate's roughness at
-//! a pixel is its Lab change to its two neighbors along its own direction,
-//! and it is homogeneous there when within eight times the smoother
-//! candidate's. Counted over the 3 by 3 around each pixel and summed over
+//! sample of the color in the 5 by 5, weighted by 1 over the square of the
+//! offset along the direction plus 8 times the square of the offset across
+//! it, so that each candidate's color, too, follows its own direction and
+//! does not reach across an edge. Both candidates go to CIELab lightness; a
+//! candidate's roughness at a pixel is its change in lightness to its two
+//! neighbors along its own direction (chroma left out: a thin line's color
+//! fringes would otherwise make the candidate that follows the line look
+//! rough), and it is homogeneous there when within eight times the
+//! smoother candidate's. Counted over the 3 by 3 around each pixel and summed over
 //! the 3 by 3 again, the scores weigh the two candidates, each by its
 //! score plus one to the fourth power.
 //!
@@ -45,10 +50,10 @@ const ND: usize = DIRS.len();
 const REACH: isize = 4;
 
 /// What one worker holds while it works a tile, in bytes: the greens, RGB,
-/// Lab, roughness and homogeneity of both directions over the tile and
+/// lightness, roughness and homogeneity of both directions over the tile and
 /// margin.
 pub const fn worker_bytes() -> usize {
-    SPAN * SPAN * ND * (2 + 6 + 6 + 4 + 1)
+    SPAN * SPAN * ND * (2 + 6 + 2 + 4 + 1)
 }
 
 /// An X-Trans mosaic, its colors 0 red, 1 green, 2 blue repeating every
@@ -128,12 +133,13 @@ fn border_pixel(m: &Mosaic, r: usize, c: usize) -> [u16; 3] {
 /// For each site of the pattern, what its interpolation reads: per
 /// direction, the steps to the nearest green on each side and to the
 /// nearest of the site's own color on each side (0 for none within
-/// REACH), and per color, that color's samples in the 5 by 5 with their
-/// weights (120 over the squared distance).
+/// REACH), and per direction and color, that color's samples in the 5 by
+/// 5 with their weights (120 over the squared offset along the direction
+/// plus 8 times the squared offset across it).
 struct Steps {
     green: [[[(u8, u8); ND]; 6]; 6],
     own: [[[(u8, u8); ND]; 6]; 6],
-    near: [[[Vec<(isize, isize, i64)>; 3]; 6]; 6],
+    near: [[[[Vec<(isize, isize, i64)>; 3]; ND]; 6]; 6],
 }
 
 impl Steps {
@@ -153,12 +159,17 @@ impl Steps {
         }
         let near = std::array::from_fn(|r| {
             std::array::from_fn(|c| {
-                std::array::from_fn(|k| {
-                    (-2isize..=2)
-                        .flat_map(|y| (-2isize..=2).map(move |x| (y, x)))
-                        .filter(|&(y, x)| (y, x) != (0, 0) && color(r as isize + y, c as isize + x) == k)
-                        .map(|(y, x)| (y, x, 120 / (y * y + x * x) as i64))
-                        .collect()
+                std::array::from_fn(|d| {
+                    std::array::from_fn(|k| {
+                        (-2isize..=2)
+                            .flat_map(|y| (-2isize..=2).map(move |x| (y, x)))
+                            .filter(|&(y, x)| (y, x) != (0, 0) && color(r as isize + y, c as isize + x) == k)
+                            .map(|(y, x)| {
+                                let (along, across) = if DIRS[d].0 == 0 { (x, y) } else { (y, x) };
+                                (y, x, 120 / (along * along + 8 * across * across) as i64)
+                            })
+                            .collect()
+                    })
                 })
             })
         });
@@ -169,7 +180,7 @@ impl Steps {
 struct Buffers {
     green: Vec<[u16; ND]>,
     rgb: Vec<[[u16; 3]; ND]>,
-    lab: Vec<[[i16; 3]; ND]>,
+    light: Vec<[i16; ND]>,
     rough: Vec<[u32; ND]>,
     homo: Vec<[u8; ND]>,
 }
@@ -177,7 +188,7 @@ struct Buffers {
 impl Buffers {
     fn new() -> Self {
         let n = SPAN * SPAN;
-        Buffers { green: vec![[0; ND]; n], rgb: vec![[[0; 3]; ND]; n], lab: vec![[[0; 3]; ND]; n], rough: vec![[0; ND]; n], homo: vec![[0; ND]; n] }
+        Buffers { green: vec![[0; ND]; n], rgb: vec![[[0; 3]; ND]; n], light: vec![[0; ND]; n], rough: vec![[0; ND]; n], homo: vec![[0; ND]; n] }
     }
 }
 
@@ -227,7 +238,7 @@ fn tile(m: &Mosaic, lab: &Lab, s: &Steps, b: &mut Buffers, y0: usize, y1: usize,
             }
         }
     }
-    // Red and blue, then Lab: two rings in.
+    // Red and blue, then lightness: two rings in.
     for i in 2..rows - 2 {
         let r = ty + i;
         for j in 2..cols - 2 {
@@ -242,7 +253,7 @@ fn tile(m: &Mosaic, lab: &Lab, s: &Steps, b: &mut Buffers, y0: usize, y1: usize,
                 px[own] = m.at(r, c) as u16;
                 for k in (0..3).filter(|&k| k != own && k != 1) {
                     let (mut diff, mut weight) = (0i64, 0i64);
-                    for &(dy, dx, wt) in &near[k] {
+                    for &(dy, dx, wt) in &near[d][k] {
                         let sample = m.at((r as isize + dy) as usize, (c as isize + dx) as usize) as i64;
                         diff += wt * (sample - b.green[off(p, dy, dx)][d] as i64);
                         weight += wt;
@@ -250,7 +261,7 @@ fn tile(m: &Mosaic, lab: &Lab, s: &Steps, b: &mut Buffers, y0: usize, y1: usize,
                     px[k] = clip(gc + (diff + weight / 2).div_euclid(weight));
                 }
                 b.rgb[p][d] = px;
-                b.lab[p][d] = lab.of(px);
+                b.light[p][d] = lab.lightness(px);
             }
         }
     }
@@ -259,12 +270,11 @@ fn tile(m: &Mosaic, lab: &Lab, s: &Steps, b: &mut Buffers, y0: usize, y1: usize,
         for j in 3..cols - 3 {
             let p = at(i, j);
             for (d, &(dy, dx)) in DIRS.iter().enumerate() {
-                let c = b.lab[p][d];
+                let c = b.light[p][d] as i32;
                 let mut sum = 0u32;
                 for q in [off(p, dy, dx), off(p, -dy, -dx)] {
-                    let n = b.lab[q][d];
-                    let (dl, da, db) = (c[0] as i32 - n[0] as i32, c[1] as i32 - n[1] as i32, c[2] as i32 - n[2] as i32);
-                    sum = sum.saturating_add((dl * dl + da * da + db * db) as u32);
+                    let dl = c - b.light[q][d] as i32;
+                    sum = sum.saturating_add((dl * dl) as u32);
                 }
                 b.rough[p][d] = sum;
             }
