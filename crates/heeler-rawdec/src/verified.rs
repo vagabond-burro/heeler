@@ -913,6 +913,51 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("DNG", "RICOH", "RICOH GX200"),
     ("DNG", "SAMSUNG TECHWIN Co.", "SAMSUNG GX10"),
     ("DNG", "SAMSUNG TECHWIN Co.", "SAMSUNG GX20"),
+    // GoPro's GPRs, their VC-5 tile decoded by vc5.rs, 2026-10-25.
+    ("DNG", "GoPro", "FUSION"),
+    ("DNG", "GoPro", "HERO5 Black"),
+    ("DNG", "GoPro", "HERO6 Black"),
+    ("DNG", "GoPro", "HERO7 Black"),
+    ("DNG", "GoPro", "HERO8 Black"),
+    ("DNG", "GoPro", "HERO9 Black"),
+    ("DNG", "GoPro", "HERO11 Black"),
+    // NEFs whose balance is a ColorBalance record, header-less notes or a
+    // Coolpix record, and the older Coolpix's two fields, 2026-10-25.
+    ("NEF", "NIKON CORPORATION", "NIKON D1"),
+    ("NEF", "NIKON CORPORATION", "NIKON D1H"),
+    ("NEF", "NIKON CORPORATION", "NIKON D1X"),
+    ("NEF", "NIKON CORPORATION", "NIKON D2H"),
+    ("NEF", "NIKON CORPORATION", "NIKON D70"),
+    ("NEF", "NIKON CORPORATION", "NIKON D70s"),
+    ("NEF", "NIKON", "E5400"),
+    ("NEF", "NIKON", "E8400"),
+    ("NEF", "NIKON", "E8800"),
+    // Epson's ERF, Mamiya's MEF, Leaf's MOS (plain.rs, leaf.rs), Samsung's
+    // GX-1L (pef.rs), and Fujifilm's earlier RAF layout, 2026-10-25.
+    ("ERF", "SEIKO EPSON CORP.", "R-D1"),
+    ("ERF", "SEIKO EPSON CORP.", "R-D1s"),
+    ("ERF", "SEIKO EPSON CORP.", "R-D1x"),
+    ("MEF", "Mamiya-OP Co.,Ltd.", "MAMIYA ZD"),
+    ("MOS", "Leaf", "Aptus 22"),
+    ("PEF", "SAMSUNG TECHWIN", "GX-1L"),
+    ("RAF", "FUJIFILM", "FinePix S200EXR"),
+    ("RAF", "FUJIFILM", "FinePix S5500"),
+    // Hasselblad's 3FR and FFF (hasselblad.rs), by Model as each names it.
+    ("3FR", "Hasselblad", "CFV 100C/Electronic Shutter"),
+    ("3FR", "Hasselblad", "CFV-50c/Flash Sync"),
+    ("3FR", "Hasselblad", "Flash Sync"),
+    ("3FR", "Hasselblad", "Hasselblad 500 mech."),
+    ("3FR", "Hasselblad", "Hasselblad CFV-50"),
+    ("3FR", "Hasselblad", "Hasselblad H3D"),
+    ("3FR", "Hasselblad", "Hasselblad H4D-40"),
+    ("3FR", "Hasselblad", "Hasselblad H4D-50"),
+    ("3FR", "Hasselblad", "Hasselblad H5D-40"),
+    ("3FR", "Hasselblad", "Hasselblad H5D-50c"),
+    ("3FR", "Hasselblad", "Hasselblad H6D-100cMS"),
+    ("3FR", "Hasselblad", "Hasselblad X1D"),
+    ("3FR", "Hasselblad", "Hasselblad X2D 100C"),
+    ("3FR", "Hasselblad", "X1D II 50C"),
+    ("3FR", "Hasselblad", "X2D 100C"),
 ];
 
 pub fn camera(format: &str, make: &str, model: &str) -> bool {

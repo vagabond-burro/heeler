@@ -13,10 +13,10 @@
 //! The layouts, as found from the data against LibRaw's frame: 0xF004 0,
 //! 16-bit little-endian words; 0xF004 4 with 0xF006 1, samples of the depth
 //! in 32-bit little-endian words read top bit first; 0xF004 4 with 0xF006 0,
-//! 12-bit samples packed least significant bits first. Samples in fewer
-//! bytes than those (Fujifilm's compression), X-Trans sensors (their 6 by 6
-//! pattern) and the earlier bodies (no TIFF; some with their sensor turned
-//! 45 degrees) are declined and stay LibRaw's. The image area, CFA colors
+//! 12-bit samples packed least significant bits first. The earlier bodies'
+//! raw section is no TIFF but the samples alone (`earlier_section`); those
+//! whose sensor is turned 45 degrees (SuperCCD) have no geometry and stay
+//! LibRaw's. The image area, CFA colors
 //! and white level come from geometry.rs, the calibrations from cameras.rs.
 
 use crate::dng::{Coding, Dng, Format, Pieces};
@@ -96,6 +96,30 @@ struct Section {
     coding: Coding,
     black: Vec<u32>,
     balance: Option<Vec<u32>>,
+    /// An earlier body's black levels by color: green (on red's row), red,
+    /// the other green, blue.
+    black_by_color: Option<[u32; 4]>,
+}
+
+/// A record of 16-bit numbers.
+fn numbers(bytes: &[u8], tag: u16) -> Option<Vec<u32>> {
+    record(bytes, tag).map(|r| r.chunks_exact(2).map(|v| u16::from_be_bytes([v[0], v[1]]) as u32).collect())
+}
+
+/// An earlier body's raw section: no TIFF, the frame's samples alone,
+/// 16-bit little-endian words. Record 0x100 holds its height and width,
+/// 0x2FF0 the balance as shot (green, red, green, blue) and 0x4000 the
+/// black levels by color (green, red, the other green, blue).
+fn earlier_section(bytes: &[u8], at: usize, len: usize) -> Result<Section, Error> {
+    let size = numbers(bytes, 0x100).filter(|v| v.len() == 2).ok_or(Error::Unsupported("an earlier RAF layout not read here"))?;
+    let (height, width) = (size[0] as usize, size[1] as usize);
+    if width == 0 || height == 0 || width % 2 != 0 || len != width * height * 2 {
+        return Err(Error::Unsupported("an earlier RAF layout not read here"));
+    }
+    let balance = numbers(bytes, 0x2ff0).filter(|v| v.len() >= 4).map(|v| vec![v[0], v[1], v[3]]);
+    let black = numbers(bytes, 0x4000).filter(|v| v.len() >= 4).map(|v| [v[0], v[1], v[2], v[3]]).unwrap_or([0; 4]);
+    let coding = Coding::Headerless(crate::headerless::Layout::words_at(at, width, 2));
+    Ok(Section { width, height, bits: 16, data: at, count: len, coding, black: Vec::new(), balance, black_by_color: Some(black) })
 }
 
 /// The X-Trans pattern's colors from the frame's top left: record 0x131
@@ -109,7 +133,7 @@ fn section(bytes: &[u8]) -> Result<Section, Error> {
     let (at, len) = (u32be(bytes, 100).ok_or(Error::Corrupt("the RAF header"))?, u32be(bytes, 104).ok_or(Error::Corrupt("the RAF header"))?);
     let raw = bytes.get(at..at.checked_add(len).ok_or(Error::Corrupt("the RAF header"))?).ok_or(Error::Corrupt("a RAF raw section past the end of the file"))?;
     if !raw.starts_with(b"II*\0") {
-        return Err(Error::Unsupported("an earlier RAF layout not read here"));
+        return earlier_section(bytes, at, len);
     }
     let t = Tiff::with_order(raw, true);
     let (ifd, _) = t.ifd(u32::from_le_bytes(raw[4..8].try_into().unwrap()) as usize).ok_or(Error::Corrupt("the RAF raw directory"))?;
@@ -141,7 +165,7 @@ fn section(bytes: &[u8]) -> Result<Section, Error> {
             coding
         }
     };
-    Ok(Section { width, height, bits, data, count, coding, black: uints(0xf00a).unwrap_or_default(), balance: uints(0xf00e) })
+    Ok(Section { width, height, bits, data, count, coding, black: uints(0xf00a).unwrap_or_default(), balance: uints(0xf00e), black_by_color: None })
 }
 
 /// The whole raw frame of a later body's RAF, Bayer or X-Trans: width,
@@ -170,9 +194,14 @@ pub fn frame(bytes: &[u8]) -> Result<(usize, usize, Vec<u16>), Error> {
 
 pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let (make, model) = make_model(bytes).ok_or(Error::Unsupported("a RAF without Make and Model"))?;
-    let Section { width, height, bits, data, count, coding, black, balance } = section(bytes)?;
+    let Section { width, height, bits, data, count, coding, black, balance, black_by_color } = section(bytes)?;
     let xtrans = xtrans(bytes);
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
+    // A sensor turned 45 degrees (SuperCCD): LibRaw's image is not an area
+    // of the frame.
+    if (geometry.top + geometry.height) as usize > height || (geometry.left + geometry.width) as usize > width {
+        return Err(Error::Unsupported("a RAF sensor turned 45 degrees"));
+    }
     // The camera's level for the depth where its files of two depths share
     // a frame size (the GFX bodies' 14-bit files, 15872).
     let white = match (crate::geometry::nef_white(&make, &model, bits as u32), geometry.white) {
@@ -184,6 +213,23 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let wb = balance.filter(|v| v.len() >= 3 && v[..3].iter().all(|&x| x > 0)).ok_or(Error::Unsupported("no stated white balance"))?;
     // A level for each site of the CFA's period, from the frame's top left.
     let n = if xtrans.is_some() { 6 } else { 2 };
+    // An earlier body's by color, to each site of the frame's top left
+    // (the green on red's row the first green).
+    let black = match black_by_color {
+        Some([g, r, g2, b]) if xtrans.is_none() => (0..4)
+            .map(|k| {
+                let at = |rr: usize, cc: usize| geometry.colors[((rr + geometry.top as usize) % 2) * 2 + (cc + geometry.left as usize) % 2];
+                let (rr, cc) = (k / 2, k % 2);
+                match at(rr, cc) {
+                    0 => r,
+                    2 => b,
+                    _ if at(rr, 0) == 0 || at(rr, 1) == 0 => g,
+                    _ => g2,
+                }
+            })
+            .collect(),
+        _ => black,
+    };
     let black = Some(black).filter(|v| v.len() == n * n).ok_or(Error::Unsupported("no stated black level"))?;
     let orientation = exif(bytes).and_then(|t| t.ifds().into_iter().next().and_then(|i| i.get(274).and_then(|e| t.uint(&e)))).unwrap_or(1);
     if !(1..=8).contains(&orientation) {

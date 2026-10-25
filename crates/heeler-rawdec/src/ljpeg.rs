@@ -337,10 +337,13 @@ fn headers_of(data: &[u8], subsampled: bool) -> Result<(Frame, Vec<Option<Huffma
                     return Err(Error::Unsupported("a scan of fewer components than its frame"));
                 }
                 let mut table = Vec::with_capacity(n);
+                // Leaf's backs number the frame's components from 0 and
+                // the scan's from 1.
+                let shift = (ids.first() == Some(&0) && body[1] == 1) as u8;
                 for c in 0..n {
                     // Components in the scan's order, which is the frame's
                     // for every raw writer; a reordered scan is declined.
-                    if body[1 + 2 * c] != ids[c] {
+                    if body[1 + 2 * c] != ids[c].wrapping_add(shift) {
                         return Err(Error::Unsupported("a scan in another component order"));
                     }
                     let t = (body[2 + 2 * c] >> 4) as usize;

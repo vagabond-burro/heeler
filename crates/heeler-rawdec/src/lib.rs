@@ -20,12 +20,15 @@ pub mod nef;
 pub mod rw2;
 pub mod orf;
 pub mod pef;
+pub mod plain;
 pub mod raf;
 pub mod srw;
 pub mod mrw;
 pub mod iiq;
 pub mod crw;
 pub mod headerless;
+pub mod hasselblad;
+pub mod leaf;
 pub mod huffman;
 pub mod sony;
 pub mod sony_ycc;
@@ -33,6 +36,7 @@ pub mod sraw;
 #[doc(hidden)]
 pub mod synthetic;
 pub mod tiff;
+pub mod vc5;
 pub mod xtrans;
 mod verified;
 

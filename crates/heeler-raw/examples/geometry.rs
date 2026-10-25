@@ -1,6 +1,6 @@
 //! Builds heeler-rawdec's table of camera geometry (src/geometry_table.rs)
 //! for the raw formats whose files do not state it the way LibRaw reads
-//! them: for every CR2, CR3, ARW, NEF, RW2, ORF, PEF, SRW, MRW, IIQ, CRW and RAF
+//! them: for every CR2, CR3, ARW, NEF, RW2, ORF, PEF, SRW, MRW, IIQ, CRW, RAF, 3FR and FFF
 //! (and their variants: NRW, RAW, RWL, ORI), and every headerless file of a
 //! size heeler-rawdec knows, of the corpus at
 //! HEELER_RAW_CORPUS (a list of folders, as PATH is, and of any further folders given after OUT.rs, such
@@ -34,7 +34,7 @@ fn files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
             let ext = name.rsplit('.').next().unwrap_or("").to_ascii_uppercase();
             if p.is_dir() {
                 stack.push(p);
-            } else if ["CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "IIQ", "CRW", "RAF", "DNG"].contains(&ext.as_str()) {
+            } else if ["CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "IIQ", "CRW", "RAF", "DNG", "3FR", "FFF", "ERF", "KDC", "MOS", "MEF", "STI"].contains(&ext.as_str()) {
                 out.push(p);
             }
         }

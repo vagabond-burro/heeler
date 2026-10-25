@@ -115,22 +115,25 @@ fn main() {
                 continue;
             }
         };
+        // LibRaw reads a GPR as heeler-raw rewrites it, its tile decoded.
+        let converted = heeler_raw::gpr_as_dng(&bytes).ok().flatten();
+        let lb: &[u8] = converted.as_deref().unwrap_or(&bytes);
         let mut notes = Vec::new();
         let mut exact = true;
         // The develop's matrix is not what this compares (LibRaw's own
         // tables can round a camera's matrix apart from the file's): the
         // outputs below are developed with LibRaw's.
-        let libraw_matrix = heeler_raw::linear_dng::libraw_facts(&bytes, base).ok().map(|f| f.rgb_cam.map(|r| [r[0], r[1], r[2]]));
+        let libraw_matrix = heeler_raw::linear_dng::libraw_facts(lb, base).ok().map(|f| f.rgb_cam.map(|r| [r[0], r[1], r[2]]));
         // LibRaw's black and white levels too, for formats whose levels the
         // develop reads its own way (a DNG's are the same either way).
         // --own keeps the plan's levels and balance (the shipped develop's),
         // LibRaw's matrix only.
-        let numbered = if own { plan.clone() } else { heeler_raw::with_libraw_numbers(&bytes, &plan).unwrap_or_else(|_| plan.clone()) };
+        let numbered = if own { plan.clone() } else { heeler_raw::with_libraw_numbers(lb, &plan).unwrap_or_else(|_| plan.clone()) };
         // An image of three samples a pixel has no mosaic: its outputs are
         // what is compared.
         if !quick && !plan.three() {
             // The develop matrix, to the bit.
-            if let Ok(f) = heeler_raw::linear_dng::libraw_facts(&bytes, base) {
+            if let Ok(f) = heeler_raw::linear_dng::libraw_facts(lb, base) {
                 let ulps: Vec<i64> = (0..9).map(|k| (plan.rgb_cam[k / 3][k % 3].to_bits() as i64 - f.rgb_cam[k / 3][k % 3].to_bits() as i64).abs()).collect();
                 if ulps.iter().any(|&u| u != 0) {
                     notes.push(format!("rgb_cam ulps {ulps:?}"));
@@ -156,7 +159,7 @@ fn main() {
                 // LibRaw's white once it has unpacked (a few formats' settle
                 // only then), and its balance as ratios to green (formats
                 // state it in different units).
-                let unpacked_white = heeler_raw::linear_dng::libraw_facts_unpacked(&bytes, base).map_or(f.maximum, |u| u.maximum);
+                let unpacked_white = heeler_raw::linear_dng::libraw_facts_unpacked(lb, base).map_or(f.maximum, |u| u.maximum);
                 let ratio = |m: &[f32]| [m[0] / m[1], m[2] / m[1]];
                 let (mine, theirs) = (ratio(&plan.cam_mul), ratio(&f.cam_mul));
                 let balance_differs = f.cam_mul[..3].iter().all(|&v| v > 0.0) && mine.iter().zip(&theirs).any(|(a, b)| (a - b).abs() > 1e-4 * b.abs());
@@ -166,7 +169,7 @@ fn main() {
                 }
             }
             // The unpacked mosaic.
-            match heeler_raw::libraw_mosaic(&bytes) {
+            match heeler_raw::libraw_mosaic(lb) {
                 Ok((w, h, theirs)) => {
                     let mine = match heeler_rawdec::develop::unpack(&bytes, &plan, None) {
                         Ok(m) => m,
@@ -186,10 +189,10 @@ fn main() {
             // After black and white balance, Clip and Blend.
             for highlight in [0, 2] {
                 let o = DevelopOpts { highlight, ..base };
-                let stages = heeler_raw::linear_dng::libraw_stages(&bytes, o).unwrap();
+                let stages = heeler_raw::linear_dng::libraw_stages(lb, o).unwrap();
                 let mut mine = heeler_rawdec::develop::unpack(&bytes, &plan, None).unwrap();
                 heeler_rawdec::develop::fill_zeros(&mut mine, &plan);
-                let numbered = heeler_raw::with_libraw_balance(&bytes, &numbered, o);
+                let numbered = heeler_raw::with_libraw_balance(lb, &numbered, o);
                 let max = heeler_rawdec::develop::subtract_black(&mut mine, &numbered);
                 let n = heeler_rawdec::develop::numbers(&numbered, &opts_of(o), max);
                 heeler_rawdec::develop::scale_mosaic(&mut mine, &plan, &n);
@@ -210,13 +213,13 @@ fn main() {
         let mut full_worst: Option<Diff> = None;
         for &(half, highlight) in cases {
             let o = DevelopOpts { half_size: half, highlight, ..base };
-            let theirs = heeler_raw::decode_sensor_with(&bytes, o).unwrap();
+            let theirs = heeler_raw::decode_sensor_with(lb, o).unwrap();
             let mut with = numbered.clone();
             if let Some(m) = libraw_matrix {
                 with.rgb_cam = m;
             }
             if !own {
-                with = heeler_raw::with_libraw_balance(&bytes, &with, o);
+                with = heeler_raw::with_libraw_balance(lb, &with, o);
             }
             let (mine, _) = match heeler_rawdec::develop::develop_with(&bytes, &with, &opts_of(o), None) {
                 Ok(m) => m,

@@ -1,34 +1,14 @@
 //! GoPro GPR: a DNG whose raw image is one tile compressed with GoPro's
 //! VC-5 codec (DNG compression 9). LibRaw reads that only through the
 //! GPR SDK, which needs Adobe's DNG SDK, so Heeler decodes the tile
-//! itself with the SDK's VC-5 decoder (third_party/gpr-vc5) and hands
-//! LibRaw the same file with the tile uncompressed: the decoded samples
-//! appended, and Compression, TileOffsets and TileByteCounts pointed at
-//! them. Every other tag (CFA pattern, black and white levels, color
-//! matrices, EXIF) is the camera's, untouched, and every other file
-//! never comes here.
-
-use std::ffi::c_void;
-use std::os::raw::c_int;
+//! itself (heeler-rawdec's vc5.rs, a port of the SDK's VC-5 decoder) and
+//! hands the develop the same file with the tile uncompressed: the
+//! decoded samples appended, and Compression, TileOffsets and
+//! TileByteCounts pointed at them. Every other tag (CFA pattern, black and
+//! white levels, color matrices, EXIF) is the camera's, untouched, and
+//! every other file never comes here.
 
 use crate::RawError;
-
-extern "C" {
-    fn heeler_vc5_decode(
-        data: *const c_void,
-        len: usize,
-        rggb: c_int,
-        width: c_int,
-        height: c_int,
-        out: *mut *mut c_void,
-        out_len: *mut usize,
-    ) -> c_int;
-    fn heeler_vc5_free(block: *mut c_void);
-    fn heeler_vc5_init();
-}
-
-/// The decoder's shared log curve, filled once before the first decode.
-static VC5_INIT: std::sync::Once = std::sync::Once::new();
 
 const COMPRESSION: u16 = 259;
 const WIDTH: u16 = 256;
@@ -167,9 +147,9 @@ fn as_dng_with<S: AsRef<[u8]>>(
         return Err(bad("too large to rewrite"));
     }
 
-    // The decoder's wavelets and output peak near 6.6 bytes a pixel
-    // (measured 2026-10-09: 196 MB for a 27 megapixel HERO11 frame with
-    // its 14 MB tile), so eight, plus the file it reads.
+    // The decoder's wavelets and output peak near 4.6 bytes a pixel, and
+    // its samples are then copied as bytes (2 more), so eight, plus the
+    // file it reads.
     let needed = heeler_engine::memory::sum([heeler_engine::memory::bytes(w, h, 1, 8)?, bytes.len()])?;
     let _job = heeler_engine::memory::Job::admit(needed, "GoPro GPR decode")?;
     let decoded = decode(tile, rggb, w, h)?;
@@ -211,40 +191,15 @@ fn as_dng_with<S: AsRef<[u8]>>(
     Ok(Some(out))
 }
 
-/// The decoder's output, freed by the decoder's allocator when dropped.
-struct Decoded {
-    ptr: *mut c_void,
-    len: usize,
-}
-
-impl AsRef<[u8]> for Decoded {
-    fn as_ref(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts(self.ptr as *const u8, self.len) }
-    }
-}
-
-impl Drop for Decoded {
-    fn drop(&mut self) {
-        unsafe { heeler_vc5_free(self.ptr) };
-    }
-}
-
 /// The tile's samples, two bytes each in the machine's byte order. The
 /// width and height are the DNG's; a stream that says otherwise is refused.
-fn decode(tile: &[u8], rggb: bool, width: usize, height: usize) -> Result<Decoded, RawError> {
-    let (Ok(w), Ok(h)) = (c_int::try_from(width), c_int::try_from(height)) else {
-        return Err(bad("too large to decode"));
-    };
-    VC5_INIT.call_once(|| unsafe { heeler_vc5_init() });
-    let mut ptr: *mut c_void = std::ptr::null_mut();
-    let mut len = 0usize;
-    let code = unsafe { heeler_vc5_decode(tile.as_ptr() as *const c_void, tile.len(), rggb as c_int, w, h, &mut ptr, &mut len) };
-    if code != 0 || ptr.is_null() {
-        return Err(bad(&format!("the VC-5 decoder failed ({code})")));
-    }
-    Ok(Decoded { ptr, len })
+fn decode(tile: &[u8], rggb: bool, width: usize, height: usize) -> Result<Vec<u8>, RawError> {
+    let samples = heeler_rawdec::vc5::decode(tile, width, height, rggb).map_err(|e| bad(&format!("the VC-5 tile could not be decoded: {e}")))?;
+    let mut out = Vec::new();
+    out.try_reserve_exact(samples.len() * 2).map_err(|_| bad("not enough memory to decode the tile"))?;
+    out.extend(samples.iter().flat_map(|v| v.to_ne_bytes()));
+    Ok(out)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -400,14 +355,14 @@ mod tests {
         };
         for (w, h) in [(0xFFFF, 2), (4, 0xFFFF), (8, 2), (4, 4)] {
             let Err(e) = decode(&header(w, h), true, 4, 2) else { panic!("{w}x{h} decoded") };
-            assert!(e.to_string().contains(&format!("({})", 6)), "{w}x{h}: {e}, not the image dimensions error");
+            assert!(e.to_string().contains("size other than the file's"), "{w}x{h}: {e}, not the image dimensions error");
         }
-        // A pattern other than 2x2 is refused as such (28), where its error
-        // was once dropped and decoding went on with wrong sizes.
+        // A pattern other than 2x2 is refused as such, where its error was
+        // once dropped and decoding went on with wrong sizes.
         let mut pattern = header(4, 2);
         pattern[22..24].copy_from_slice(&3u16.to_be_bytes());
         let Err(e) = decode(&pattern, true, 4, 2) else { panic!("a 3x2 pattern decoded") };
-        assert!(e.to_string().contains("(28)"), "{e}, not the pattern dimensions error");
+        assert!(e.to_string().contains("pattern other than 2x2"), "{e}, not the pattern dimensions error");
     }
 
     #[test]

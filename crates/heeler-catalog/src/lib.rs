@@ -208,8 +208,8 @@ pub struct Filter {
 /// Extensions the library indexes. The raw entries mirror heeler-io's
 /// RAW_EXTENSIONS, and a test there fails if the two drift: every one of
 /// them developed in the raw.pixls.us corpus. GoPro .gpr is listed since
-/// 2026.5.1, when heeler-raw began decoding its VC-5 tile with GoPro's
-/// decoder. Sigma .x3f stays absent: LibRaw dropped Foveon, so listing
+/// 2026.5.1, when heeler-raw began decoding its VC-5 tile (now with
+/// heeler-rawdec's port of GoPro's decoder). Sigma .x3f stays absent: LibRaw dropped Foveon, so listing
 /// them would only produce broken entries.
 pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     // HEIC only where the OS supplies the codec: macOS ImageIO, and

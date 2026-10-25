@@ -69,18 +69,16 @@ The library has not been altered.
 ## GoPro VC-5 decoder
 
 GoPro GPR files compress their pixels with GoPro's VC-5 codec. Heeler
-decodes them with the VC-5 decoder from **GoPro's GPR SDK**, © 2018
-GoPro, Inc., offered under the **Apache-2.0 or MIT** licenses at your
-option; Heeler takes the MIT option. Only the decoder is included, not
-the rest of the SDK.
+decodes them with its own Rust port of the VC-5 decoder from **GoPro's GPR
+SDK**, © 2018 GoPro, Inc., offered under the **Apache-2.0 or MIT** licenses
+at your option; Heeler takes the MIT option. Only the decoder is ported,
+not the rest of the SDK.
 
-Heeler has changed it so that a damaged GPR is reported as damaged
-instead of closing the app: the decoder checks that it stays inside the
-file it is reading, that the sizes and counts in the file's own header
-are ones it can hold (its image size must match the one the GPR
-declares), and it frees what it allocated when it gives up. What a sound
-file decodes to is unchanged.
-The changes are listed beside the source, in
+The port decodes a sound file to the same pixels as GoPro's decoder, and
+reports a damaged GPR as damaged instead of closing the app: it checks
+that it stays inside the file it is reading and that the sizes and counts
+in the file's own header are ones it can hold (its image size must match
+the one the GPR declares). How it relates to GoPro's code is described in
 `third_party/gpr-vc5/README.md` in Heeler's repository.
 
 The MIT license asks that its text travel with the software:

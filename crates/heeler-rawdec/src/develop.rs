@@ -82,6 +82,8 @@ impl Plan {
             (1, 34713, _) if matches!(&dng.coding, Coding::NikonHuffman(_)) && (12..=14).contains(&dng.bits) => {}
             (1, 34316, _) if matches!(&dng.coding, Coding::Panasonic(_)) && (12..=16).contains(&dng.bits) => {}
             (1, 65535, _) if matches!(&dng.coding, Coding::Pentax(_)) && (12..=14).contains(&dng.bits) => {}
+            // GoPro's VC-5 (vc5.rs): one tile the image's size.
+            (1, 9, _) if dng.coding == Coding::Tiff && dng.bits == 16 && dng.pieces.spans.len() == 1 && (dng.pieces.width, dng.pieces.height) == (dng.width, dng.height) => {}
             (3, 1, 1) | (3, 8, 3 | 34894 | 34895) if matches!(dng.bits, 16 | 24 | 32) && dng.linearization.is_none() => {}
             _ => return Err(Error::Unsupported("a sample format, depth or compression not read here")),
         }
@@ -119,7 +121,9 @@ impl Plan {
         } else if count != [1, 2, 1] || pattern[0][0] == pattern[0][1] || pattern[0][0] == pattern[1][0] {
             return Err(Error::Unsupported("not a Bayer arrangement"));
         }
-        if dng.default_scale != (1.0, 1.0) {
+        // Pixels twice as wide as tall (the D1X's) develop with each row
+        // twice, as LibRaw stretches them; any other shape is declined.
+        if dng.default_scale != (1.0, 1.0) && (dng.is_dng() || dng.default_scale != (1.0, 2.0)) {
             return Err(Error::Unsupported("non-square pixels"));
         }
         if dng.black_delta_h.iter().chain(&dng.black_delta_v).any(|&d| d != 0.0) {
@@ -134,7 +138,7 @@ impl Plan {
             return Err(Error::Unsupported("a camera calibration that mixes colors"));
         }
         let mut table_period = 1;
-        if dng.compression == 7 {
+        if dng.compression == 7 && !matches!(dng.coding, Coding::Hasselblad(_)) {
             // LibRaw reads a tile whose JPEG line, times its components,
             // spans the raw image's width as two tile rows a line, for one
             // writer's layout; such files stay LibRaw's.
@@ -223,7 +227,9 @@ impl Plan {
         let working = self.parallel_bytes()?.max(if half { 0 } else { self.demosaic_extra() });
         // A black measured on the border holds the whole frame a while.
         let frame = if self.dng.border_black { memory::bytes(self.dng.width, self.dng.height, 1, 2)? } else { 0 };
-        memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES, self.pixel_gains(half).bytes(), frame])
+        // Rows twice: the image twice the size, and the one before it.
+        let unstretched = if self.dng.default_scale == (1.0, 2.0) { memory::bytes(ow, oh, 3, 4)? } else { 0 };
+        memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES, self.pixel_gains(half).bytes(), frame, unstretched])
     }
 
     /// The image the stage 3 opcodes see: the active area, or at half size
@@ -455,11 +461,22 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         }
         return Ok(cfa);
     }
-    if d.compression == 1 && matches!(d.coding, Coding::Tiff | Coding::PackedLow | Coding::BigWords | Coding::LittleWords) {
+    if d.compression == 9 {
+        // GoPro's VC-5 tile, decoded whole: 14-bit for an RGGB sensor, 12
+        // for any other, as GoPro's reader asks.
+        let (at, len) = d.pieces.spans[0];
+        let tile = bytes.get(at..at + len).ok_or(Error::Corrupt("a tile past the end of the file"))?;
+        stopped(stop)?;
+        let samples = crate::vc5::decode(tile, d.width, d.height, d.cfa == [0, 1, 1, 2])?;
+        stopped(stop)?;
+        (0..d.height).into_par_iter().for_each(|r| put_run(out, p, r, 0, &samples[r * d.width..(r + 1) * d.width], lin));
+        return Ok(cfa);
+    }
+    if d.compression == 1 && matches!(d.coding, Coding::Tiff | Coding::PackedLow | Coding::BigWords | Coding::LittleWords | Coding::Epson | Coding::TwoFields) {
         // Uncompressed: every row of every piece found by arithmetic, so
         // the rows go side by side even when the file is one strip.
         let bits = d.bits as usize;
-        let row_bytes = (pw * bits).div_ceil(8);
+        let row_bytes = if d.coding == Coding::Epson { crate::plain::epson_row_bytes(pw) } else { (pw * bits).div_ceil(8) };
         let little = (bytes.starts_with(b"II") && d.coding != Coding::BigWords) || d.coding == Coding::LittleWords;
         let rows: Vec<(usize, usize)> = (0..d.pieces.spans.len()).flat_map(|i| (0..ph).map(move |r| (i, r))).collect();
         rows.par_chunks(64).try_for_each(|chunk| -> Result<(), Error> {
@@ -467,7 +484,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
             let mut line = vec![0u16; pw];
             for &(i, tr) in chunk {
                 let (r0, c0) = origin(i);
-                if r0 + tr < p.top || r0 + tr >= p.top + p.height {
+                if d.coding != Coding::TwoFields && (r0 + tr < p.top || r0 + tr >= p.top + p.height) {
                     continue;
                 }
                 let (at, len) = d.pieces.spans[i];
@@ -480,10 +497,19 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
                 };
                 if d.coding == Coding::PackedLow {
                     unpack_row_low(row, bits, &mut line);
+                } else if d.coding == Coding::Epson {
+                    crate::plain::unpack_epson_row(row, &mut line);
                 } else {
                     unpack_row(row, bits, little, &mut line);
                 }
-                put_run(out, p, r0 + tr, c0, &line, lin);
+                // Two fields: the stored row's frame row.
+                let fr = if d.coding == Coding::TwoFields {
+                    let half = d.height.div_ceil(2);
+                    if tr < half { 2 * tr } else { 2 * (tr - half) + 1 }
+                } else {
+                    r0 + tr
+                };
+                put_run(out, p, fr, c0, &line, lin);
             }
             Ok(())
         })?;
@@ -640,6 +666,43 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         crate::rw2::decode(bytes, &d.pieces.spans, d.width, d.height.min(p.top + p.height), coding, |r, c, line| put_run(out, p, r, c, line, lin))?;
         return Ok(cfa);
     }
+    if let Coding::Hasselblad(h) = &d.coding {
+        let (at, len) = d.pieces.spans[0];
+        let data = &bytes[at..at + len];
+        stopped(stop)?;
+        if h.compressed {
+            crate::hasselblad::decode(data, d.width, d.height.min(p.top + p.height), h.offset, |r, line| put_run(out, p, r, 0, line, lin))?;
+        } else {
+            if len < d.width * d.height * 2 {
+                return Err(Error::Corrupt("a Hasselblad strip shorter than its frame"));
+            }
+            (0..d.height.min(p.top + p.height)).into_par_iter().for_each(|r| {
+                let mut line = vec![0u16; d.width];
+                unpack_row(&data[r * d.width * 2..(r + 1) * d.width * 2], 16, h.little, &mut line);
+                put_run(out, p, r, 0, &line, lin);
+            });
+        }
+        return Ok(cfa);
+    }
+    if let Coding::Leaf { both_ends } = d.coding {
+        // One tile, decoded whole (across the cores where the stream
+        // allows), then each JPEG line to its frame row.
+        let (at, len) = d.pieces.spans[0];
+        let data = &bytes[at..at + len];
+        stopped(stop)?;
+        let mut samples = memory::vector(d.width * d.height, 0u16, "RAW lossless JPEG samples")?;
+        if crate::ljpeg::decode_intervals(data, &mut samples)?.is_none() && crate::ljpeg::decode_parallel(data, &mut samples)?.is_none() {
+            let mut k = 0;
+            crate::ljpeg::decode(data, |_, line| {
+                let end = (k + line.len()).min(samples.len());
+                samples[k..end].copy_from_slice(&line[..end - k]);
+                k = end;
+            })?;
+        }
+        stopped(stop)?;
+        (0..d.height).into_par_iter().for_each(|y| put_run(out, p, crate::leaf::row_of(y, d.height, both_ends), 0, &samples[y * d.width..(y + 1) * d.width], lin));
+        return Ok(cfa);
+    }
     if d.coding == Coding::SonyBlocks {
         let (at, len) = d.pieces.spans[0];
         stopped(stop)?;
@@ -728,6 +791,10 @@ const BORDER_MARGIN: usize = 2;
 /// either side of the area that read darkest, within 6 of the darkest
 /// (columns below 16 are dead, not dark), each site's mean rounded down.
 pub fn border_black(frame: &[u16], frame_width: usize, p: &Plan) -> Result<[u32; 4], Error> {
+    // A Hasselblad frame's masked areas, as it states them.
+    if let Coding::Hasselblad(h) = &p.dng.coding {
+        return crate::hasselblad::masked_black(frame, frame_width, &h.masked, p.top, p.left).ok_or(Error::Corrupt("empty masked areas"));
+    }
     let left: Vec<usize> = (BORDER_MARGIN..p.left.saturating_sub(BORDER_MARGIN)).collect();
     // Where the left border is too narrow to measure (a CRW of the Pro1 or
     // S30), the darkest columns of both, as a headerless file's.
@@ -894,9 +961,10 @@ pub fn subtract_black(cfa: &mut [u16], p: &Plan) -> u16 {
 }
 
 /// The camera's neutral under D65 (EXIF light source 21): its D65 color
-/// matrix applied to D65's white (x 0.3127, y 0.3290), green 1.
+/// matrix (else its D75, D55 or D50 one, nearest first) applied to D65's
+/// white (x 0.3127, y 0.3290), green 1.
 fn daylight_neutral(dng: &Dng) -> Option<Vec<f64>> {
-    let k = dng.illuminant.iter().position(|&i| i == 21)?;
+    let k = [21, 22, 20, 23].iter().find_map(|&d| dng.illuminant.iter().position(|&i| i == d))?;
     let m = dng.color_matrix[k].as_ref().filter(|m| m.len() == 9)?;
     let xyz = [0.3127 / 0.3290, 1.0, (1.0 - 0.3127 - 0.3290) / 0.3290];
     let n: Vec<f64> = (0..3).map(|r| (0..3).map(|c| m[r * 3 + c] * xyz[c]).sum()).collect();
@@ -1051,6 +1119,28 @@ pub fn develop_with(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBoo
     develop_plan(bytes, p, opts, stop, std::time::Instant::now())
 }
 
+/// The image with each row twice (pixels twice as wide as tall), or each
+/// column twice where the develop turned it a quarter.
+fn twice(img: Image, turned: bool) -> Result<Image, Error> {
+    let row = img.width * 3;
+    if turned {
+        let mut rgb = memory::vector(row * img.height * 2, 0u16, "RAW stretched image")?;
+        rgb.par_chunks_mut(2 * row).zip(img.rgb.par_chunks(row)).for_each(|(two, one)| {
+            for (d, px) in two.chunks_exact_mut(6).zip(one.chunks_exact(3)) {
+                d[..3].copy_from_slice(px);
+                d[3..].copy_from_slice(px);
+            }
+        });
+        return Ok(Image { width: img.width * 2, rgb, ..img });
+    }
+    let mut rgb = memory::vector(row * img.height * 2, 0u16, "RAW stretched image")?;
+    rgb.par_chunks_mut(2 * row).zip(img.rgb.par_chunks(row)).for_each(|(two, one)| {
+        two[..row].copy_from_slice(one);
+        two[row..].copy_from_slice(one);
+    });
+    Ok(Image { height: img.height * 2, rgb, ..img })
+}
+
 fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, t0: std::time::Instant) -> Result<(Image, Times), Error> {
     let _job = memory::Job::admit(p.bytes(opts.half_size)?, "RAW develop")?;
     let open = t0.elapsed().as_secs_f64();
@@ -1080,6 +1170,7 @@ fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, 
     scale_mosaic(&mut cfa, &p, &n);
     stopped(stop)?;
     let img = if opts.half_size { half(&cfa, &p, &n)? } else { full(&cfa, &p, &n, stop)? };
+    let img = if p.dng.default_scale == (1.0, 2.0) { twice(img, p.flip & 4 != 0)? } else { img };
     let headroom = if opts.highlight >= 2 { headroom(&n) } else { 1.0 };
     let done = t0.elapsed().as_secs_f64();
     Ok((Image { headroom, ..img }, Times { open, unpack: unpacked - open, develop: done - unpacked }))

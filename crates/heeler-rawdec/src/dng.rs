@@ -31,6 +31,10 @@ pub enum Format {
     Crw,
     Headerless,
     Raf,
+    Hasselblad,
+    Erf,
+    Mef,
+    Mos,
 }
 
 /// Make and Model as a raw file of any format this crate reads gives
@@ -58,6 +62,9 @@ pub fn make_model(bytes: &[u8]) -> Option<(String, String)> {
     if crate::headerless::is_headerless(bytes) {
         return crate::headerless::make_model(bytes);
     }
+    if crate::leaf::is_leaf(bytes) {
+        return crate::leaf::make_model(bytes);
+    }
     let t = crate::tiff::Tiff::new(bytes)?;
     let ifd0 = t.ifds().into_iter().next()?;
     let ascii = |tag| ifd0.get(tag).and_then(|e| t.ascii(&e));
@@ -78,6 +85,10 @@ impl Format {
             Format::Srw => "SRW",
             Format::Mrw => "MRW",
             Format::Iiq => "IIQ",
+            Format::Hasselblad => "3FR",
+            Format::Erf => "ERF",
+            Format::Mef => "MEF",
+            Format::Mos => "MOS",
             Format::Crw => "CRW",
             Format::Headerless => "headerless",
             Format::Raf => "RAF",
@@ -100,6 +111,8 @@ pub enum Coding {
     Sraw(Box<crate::sraw::Sraw>),
     /// A Sony M or S size (sony_ycc.rs): YCbCr tiles turned into RGB.
     SonyYcc(Box<crate::sony_ycc::SonyYcc>),
+    /// A Hasselblad 3FR or FFF frame (hasselblad.rs).
+    Hasselblad(Box<crate::hasselblad::Hassel>),
     /// Sony's compressed blocks (sony.rs), one strip, through the
     /// linearization table (its tone curve).
     SonyBlocks,
@@ -110,6 +123,15 @@ pub enum Coding {
     /// 12-bit samples in three bytes, the first in the low byte and the low
     /// half of the next): the older Sony bodies' 12-bit uncompressed data.
     PackedLow,
+    /// Uncompressed rows stored as two fields, the even rows then the odd
+    /// (the older Coolpix NEFs).
+    TwoFields,
+    /// Leaf's lossless JPEG tile (leaf.rs), each JPEG line a frame row:
+    /// in order, or alternately from the top and the bottom.
+    Leaf { both_ends: bool },
+    /// Epson's 12-bit samples (plain.rs): 10 in each 16 bytes of a row,
+    /// most significant bits first.
+    Epson,
     /// Uncompressed 16-bit words big-endian in a little-endian file (some
     /// Coolpix NRWs).
     BigWords,
@@ -320,7 +342,8 @@ impl Dng {
                 Some(&[h, v]) => (h, v),
                 _ => (1.0, 1.0),
             },
-            as_shot_neutral: profile(50728),
+            // A neutral of zeros (some GoPro HERO10 files) states none.
+            as_shot_neutral: profile(50728).filter(|n| n.iter().all(|&v| v > 0.0)),
             as_shot_white_xy: match profile(50729).as_deref() {
                 Some(&[x, y]) => Some((x, y)),
                 _ => None,
@@ -389,6 +412,15 @@ impl Dng {
         }
         if crate::headerless::is_headerless(bytes) {
             return crate::headerless::parse(bytes);
+        }
+        if crate::hasselblad::is_hasselblad(bytes) {
+            return crate::hasselblad::parse(bytes);
+        }
+        if crate::leaf::is_leaf(bytes) {
+            return crate::leaf::parse(bytes);
+        }
+        if crate::plain::is_plain(bytes) {
+            return crate::plain::parse(bytes);
         }
         Dng::parse(bytes).map(Dng::with_libraw_area)
     }

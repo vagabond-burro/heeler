@@ -1,81 +1,31 @@
 # GoPro VC-5 decoder
 
 The part of GoPro's GPR SDK that decodes the VC-5 tile inside a GoPro GPR
-file, vendored so Heeler can read GPR without the rest of the SDK.
+file. Heeler reads it through a Rust port of that decoder,
+`crates/heeler-rawdec/src/vc5.rs`; this folder keeps the license texts the
+port carries.
 
-- **Source:** https://github.com/gopro/gpr, commit `446c736` ("Add support
-  of 65x65 gain maps"), fetched 2026-10-09.
+- **Source ported:** https://github.com/gopro/gpr, commit `446c736` ("Add
+  support of 65x65 gain maps"), fetched 2026-10-09: `source/lib/vc5_decoder`
+  and `source/lib/vc5_common`, the path the SDK's GPR reader takes for a
+  raw tile.
 - **License:** Apache-2.0 or MIT, at the user's option (both texts are
   here, as upstream ships them). Heeler takes the MIT option.
 - **Copyright:** (C) 2018 GoPro Inc.
 
-## What is here
+## How the port relates to the C decoder
 
-Only what decoding needs, copied unchanged except as listed below:
+On every GPR of the corpora (17 files, HERO5 to HERO11 and Fusion) the port
+decodes the same samples as the C decoder Heeler built until 2026-10-25,
+which itself decoded a sound tile to the same bytes as upstream. Only the
+decode is ported: not the encoder, the RGB and reduced-resolution outputs,
+the layer and metadata parts, logging or timing.
 
-- `vc5_decoder/`: every `.c` and `.h` from `source/lib/vc5_decoder`.
-- `vc5_common/`: every `.c`, `.h` and `.inc` from `source/lib/vc5_common`.
-- `common/private/`: `gpr_allocator.c`, `gpr_buffer.c`, `log.c`, `log.h`,
-  `macros.h`, `stdc_includes.h`, `timer.c`, `timer.h` from
-  `source/lib/common/private`.
-- `common/public/`: every header from `source/lib/common/public`.
-
-Not vendored: the SDK's VC-5 encoder, its patched Adobe DNG SDK, the XMP
-toolkit, expat, md5, tiny_jpeg, the C++ GPR reader and writer, and the
-command-line tools. Heeler reads the DNG around the tile itself
-(`crates/heeler-raw/src/gpr.rs`) and calls the decoder through one C
-function (`crates/heeler-raw/src/gpr_shim.c`). The build is in
-`crates/heeler-raw/build.rs` (`build_vc5`), with `GPR_READING=1`,
-`GPR_WRITING=0`, `GPR_TIMING=0` and `NDEBUG`.
-
-## Changes from upstream
-
-The reference decoder trusts its input: it read past the end of a short
-buffer, and many of its checks were `assert`s, which a release build
-compiles out. A damaged GPR (a bad card, a truncated copy) crashed the
-process. Every change is marked with a `Heeler:` comment, and each one
-turns a crash into an error code without changing what a valid file
-decodes to:
-
-- `vc5_common/stream.h`, `stream.c`: memory reads (`GetWord`, `GetByte`,
-  `GetBlockMemory`) are bounds checked. A read past the end returns zeros
-  and sets the new `overrun` flag.
-- `vc5_decoder/vc5_decoder.c`, `vc5_decoder.h`, `parameters.h`,
-  `decoder.h`: the caller can name the image size the container declares
-  (`expected_width`, `expected_height`; zero accepts any), and the
-  bitstream's ImageWidth and ImageHeight must match it wherever they
-  appear, so a damaged header cannot size an allocation (a width of 0xFFFF
-  asked for 838 MB). A decode whose stream overran returns
-  `CODEC_ERROR_FILE_READ` and releases the image it made. The decoder no
-  longer prints to stderr; the caller reports the error code.
-- `vc5_decoder/decoder.c`:
-  - the channel count, channel number and subband number from the header
-    are range checked before they index fixed arrays;
-  - a run that would extend past its band, or a band wider than its
-    pitch, returns `CODEC_ERROR_DECODING_SUBBAND`;
-  - a wavelet the header never sized is skipped when the transforms are
-    reset, and decoding into it returns `CODEC_ERROR_UNEXPECTED`;
-  - a pattern other than 2x2 returns `CODEC_ERROR_PATTERN_DIMENSIONS`,
-    both where the header sets it and where the transforms are allocated,
-    whose error the reference dropped (so decoding went on with wrong
-    sizes);
-  - a codeblock whose channel number, set by the header or advanced by the
-    decoder itself after a channel's last subband, is not one of the
-    channels the header declared returns `CODEC_ERROR_BITSTREAM_SYNTAX`;
-  - out of memory for the output image returns `CODEC_ERROR_OUTOFMEMORY`
-    rather than packing into NULL;
-  - `DecodeImage` releases the wavelets and component arrays when decoding
-    fails (the reference returned and leaked them, about 71 MB a try on a
-    HERO11 frame), and the component arrays are counted from the start so
-    a failure partway releases the ones already made.
-- `vc5_common/wavelet.c`: `DeleteWavelet` skips a wavelet never allocated.
-- `vc5_decoder/decoder.c`: `DecodeImage` no longer fills the global log
-  curve on every decode, which raced with decodes on other threads; the
-  shim fills it once (`heeler_vc5_init`) before the first decode.
-
-These were found by decoding thousands of damaged copies of real HERO7
-and HERO11 tiles under AddressSanitizer, an independent review that
-measured the leaks and the header-sized allocations, and the 26.5.1
-release review, which read the channel advance and the dropped error. Each case that
-crashed, leaked or over-allocated before now returns an error. A sound
-tile decodes to the same bytes as upstream.
+Where the C decoder trusted its input, the port refuses it with an error:
+a stream that runs past the end of its tile, a header whose image size is
+not the one the GPR declares (checked before anything is allocated), a
+channel count other than 4, a pattern other than 2x2, odd image
+dimensions, a wavelet narrower or shorter than 3, and channel and subband
+numbers outside what the header declared. Those were the checks Heeler had
+added to the C sources after decoding thousands of damaged copies of real
+tiles; a damaged GPR is reported as damaged, never a crash.

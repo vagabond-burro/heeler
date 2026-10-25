@@ -61,8 +61,9 @@ Files that already bypass LibRaw, wholly or in part:
   open for the metadata.
 - DNG gain maps: LibRaw supplies the opcode bytes, Rust applies them
   (heeler-rawdec's gain_map) around LibRaw's develop.
-- GoPro GPR: the VC-5 tile is decoded first (gpr.rs, a vendored C library),
-  then LibRaw develops the DNG it becomes.
+- GoPro GPR: the VC-5 tile is decoded first (gpr.rs; a vendored C library
+  until 2026-10-25, since then heeler-rawdec's Rust port, vc5.rs), then
+  LibRaw develops the DNG it becomes.
 - An LGPL-2.1 Rust decoder: an optional `heeler-io` feature for the
   `rawdiff` comparison harness only, never shipped.
 
@@ -1836,6 +1837,103 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   sensor data's size the directory states (0x7038), from the top left,
   or LibRaw's own area for the frame where smaller. All 40 such files of
   the corpora (seven bodies) match LibRaw's develop.
+
+### GoPro GPR
+
+- `vc5.rs` ports GoPro's VC-5 decoder (its MIT option): the bitstream's
+  header, the ten subbands of each of the four channels (GoPro's codebook
+  17, cubic companding, quantization), the three inverse wavelets, and the
+  channels recombined and taken through GoPro's log curve to 14 bits
+  (RGGB sensors) or 12 (GBRG). On all 17 GPRs of the corpora it decodes
+  the same samples as the C decoder it replaces, in about half its time;
+  the C sources and their build are gone, their license texts kept beside
+  the port's notes (third_party/gpr-vc5). heeler-raw's rewrite for
+  LibRaw now calls the port, and the Rust develop reads a GPR's tile
+  itself (compression 9). A neutral of zeros (the HERO10's) states no
+  balance.
+- Fifteen GPRs from seven bodies develop as LibRaw does. The HERO10's two
+  files state no balance, and LibRaw then balances them from the picture
+  with unequal greens, which the comparison does not yet model; they stay
+  LibRaw's.
+
+### Hasselblad 3FR and FFF
+
+- `hasselblad.rs`, every rule found against LibRaw's frame: IFD0 states
+  Make, Model, the orientation and AsShotNeutral; a sub-IFD holds the
+  frame, 16-bit samples uncompressed or in Hasselblad's coding (a
+  lossless JPEG header, predictor field 8, then the code stream read from
+  32-bit little-endian words top bit first without byte stuffing; each
+  row's predictors start at 32768; samples in pairs, both lengths' codes
+  first, a length of 16 always -32768). The H4D-60's frames (9044 by
+  6732) are coded less 256, which LibRaw adds back and takes as its black
+  level. Where the frame states masked areas, the black level is the
+  mean of their samples, rounded down; else the stated one. The stated
+  strip length is the uncompressed size; the stream ends with the file.
+- Verified: all 31 files of the 15 camera names (as their files name
+  them) that have a calibration match LibRaw at every stage, with
+  LibRaw's levels and with the file's own (each site's masked mean). The
+  three FFFs that name their bodies "Hasselblad CFV-50c" and "Hasselblad
+  X1DM2-50c" have no calibration yet.
+
+### Epson ERF, Mamiya MEF, Samsung GX-1
+
+- `plain.rs`: both state their frame in a directory of its own, 12-bit
+  samples most significant bits first. An ERF's rows are blocks of 16
+  bytes, 10 samples in the first 15; its maker notes ("EPSON") state each
+  site's black level (0x0401) and the balance in 0x0E80's 16-bit numbers
+  24 and 25, times 567 and 431 over 65536, red's and blue's multipliers
+  (the ratios of LibRaw's multipliers to the coded numbers, the same on
+  every file of all three bodies). An MEF states no
+  black and no balance (daylight).
+- Samsung's GX-1L and GX-1S are Pentax-made PEFs (pef.rs). Their notes
+  state a black level and a balance, but LibRaw takes neither, so they
+  read as black 0 with no stated balance.
+- Verified: the three Epson bodies (6 files), the ZD (2) and the GX-1L
+  (1); the GX-1S has no calibration yet.
+
+### Leaf MOS
+
+- `leaf.rs`: IFD0 holds the frame as one tile, uncompressed or a lossless
+  JPEG whose scan numbers its two components 1 and 2 where its frame
+  numbers them 0 and 1 (ljpeg.rs takes either), and Leaf's metadata
+  records (0x8606, "PKTS" each). The back type (ShootObj_back_type) names
+  the camera as LibRaw does; CaptProf_mosaic_pattern the CFA (1 red, 2
+  and 3 green, 0 blue); NeutObj_neutrals the balance (the first number
+  over red's, green's and blue's); ImgProf_rotation_angle 90 the
+  orientation. The AFi-II 12 reads its sensor from both ends: JPEG line
+  2k is row k, line 2k + 1 row h - 1 - k.
+- Verified: the Aptus 22 (3 files, both codings). The Aptus 75 and
+  AFi-II 12 decode to LibRaw's frame but have no calibration yet.
+
+### Older Nikons
+
+- Notes without the "Nikon" header (the D1, D1H, D1X: a directory at the
+  notes' start, offsets from the file's) are read. Without WB_RBLevels
+  the balance comes from an unenciphered ColorBalance record (0x0097:
+  version 0100 red, blue, green, green at byte 72; 0102 red, green,
+  green, blue at byte 10; 0103 red, green, blue, green at byte 20), else a
+  Coolpix record of 2560 bytes (0x0014: red and blue times 256 at bytes
+  14 and 16). LibRaw takes the D1 and the E5700 at 1 for each channel.
+  The later ColorBalance versions are enciphered and stay LibRaw's.
+- The older Coolpix NEFs (models E and digits) hold one strip of two
+  fields, the even rows then the odd.
+- The D1X's pixels are twice as wide as tall: LibRaw develops each of its
+  1324 rows twice, at both sizes, and so does the develop. Its compressed
+  NEFs state no linearization table and stay LibRaw's.
+- Verified: the D1, D1H, D1X, D2H, D70, D70s, E5400, E8400 and E8800
+  (18 files). The D50, D2Hs and D2X files state only enciphered balance
+  records, and the E5700 has no geometry row; they stay LibRaw's.
+
+### Fujifilm's earlier RAF layout
+
+- The earlier bodies' raw section is no TIFF but the samples alone,
+  16-bit little-endian words; record 0x100 holds the frame's height and
+  width, 0x2FF0 the balance (green, red, green, blue) and 0x4000 the black
+  levels by color (green, red, the other green, blue). The S5500 and
+  S200EXR (4 files) match LibRaw. The other earlier bodies' sensors are
+  turned 45 degrees (SuperCCD); LibRaw lays their samples out diagonally
+  and turns the developed image back, which is not modeled yet, so they
+  stay LibRaw's.
 
 ### Still to do in this phase
 

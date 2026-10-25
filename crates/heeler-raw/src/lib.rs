@@ -43,6 +43,14 @@ pub mod rust_path;
 pub mod linear_dng;
 pub use gpr::is_gpr;
 
+/// A GoPro GPR as the copy LibRaw reads (its VC-5 tile decoded), or None
+/// for any other file: for the harnesses that hold the Rust develop to
+/// LibRaw's.
+#[doc(hidden)]
+pub fn gpr_as_dng(bytes: &[u8]) -> Result<Option<Vec<u8>>, RawError> {
+    gpr::as_dng(bytes)
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum RawError {
     #[error("{0}")]

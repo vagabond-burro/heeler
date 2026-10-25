@@ -89,13 +89,17 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
     let mut cameras = std::collections::BTreeSet::new();
     let mut failures = Vec::new();
     let mut unreadable = Vec::new();
-    for (path, name) in files(&root, &["DNG", "CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "CRW", "RAF"]) {
+    for (path, name) in files(&root, &["DNG", "CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "CRW", "RAF", "3FR", "FFF", "ERF", "MEF", "MOS", "GPR"]) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let Ok(plan) = heeler_rawdec::plan(&bytes, &opts(DevelopOpts::default())) else { continue };
+        // LibRaw reads a GPR as heeler-raw rewrites it, its tile decoded;
+        // the Rust develop reads the file itself.
+        let converted = heeler_raw::gpr_as_dng(&bytes).ok().flatten();
+        let lb: &[u8] = converted.as_deref().unwrap_or(&bytes);
         // An image of three samples a pixel (a Canon sRAW) has no mosaic:
         // its outputs below are what is held to LibRaw's.
         if !plan.three() {
-            let Ok((_, _, theirs)) = heeler_raw::libraw_mosaic(&bytes) else {
+            let Ok((_, _, theirs)) = heeler_raw::libraw_mosaic(lb) else {
                 unreadable.push(name);
                 continue;
             };
@@ -119,12 +123,12 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
         // the file's, a CR2's black is measured its own way, a file stating
         // no balance is balanced from the picture, and the shipped
         // develop's color is the DNG model, tested on its own).
-        let with = heeler_raw::with_libraw_numbers(&bytes, &plan).unwrap_or_else(|_| plan.clone());
+        let with = heeler_raw::with_libraw_numbers(lb, &plan).unwrap_or_else(|_| plan.clone());
         for half_size in [false, true] {
             for highlight in [0, 2] {
                 let o = DevelopOpts { half_size, highlight, ..DevelopOpts::default() };
-                let theirs = heeler_raw::decode_sensor_with(&bytes, o).unwrap();
-                let with = heeler_raw::with_libraw_balance(&bytes, &with, o);
+                let theirs = heeler_raw::decode_sensor_with(lb, o).unwrap();
+                let with = heeler_raw::with_libraw_balance(lb, &with, o);
                 match heeler_rawdec::develop::develop_with(&bytes, &with, &opts(o), None) {
                     Ok((mine, _)) if (mine.width, mine.height) == (theirs.width, theirs.height) && mine.rgb == theirs.rgb && mine.headroom == theirs.headroom => {}
                     // An X-Trans develop's full size goes through Heeler's own

@@ -12,7 +12,9 @@
 //! The maker notes ("AOC", entries at 6, offsets from the file's start, or
 //! "PENTAX", entries at 10, offsets from the notes' start; each with the
 //! notes' byte order) hold the black level (0x0200) and the white
-//! balance as shot (0x0201), each red, green, the other green, blue. The
+//! balance as shot (0x0201), each red, green, the other green, blue. For
+//! Samsung's Pentax-made bodies (the GX-1L and GX-1S) LibRaw takes
+//! neither, so they read as black 0 with no stated balance. The
 //! image area, CFA colors and white level come from geometry.rs, the
 //! calibrations from cameras.rs.
 
@@ -25,14 +27,14 @@ use crate::Error;
 pub struct PentaxCode(pub Vec<(u32, u32)>);
 
 /// Whether `bytes` are a PEF: TIFF, made by Pentax (Ricoh for its later
-/// Pentax bodies), not a DNG, with Pentax's maker notes. Samsung's
-/// Pentax-made bodies are left out: LibRaw reads neither their balance
-/// nor their black level from the notes.
+/// Pentax bodies, Samsung for the GX-1L and GX-1S), not a DNG, with
+/// Pentax's maker notes.
 pub fn is_pef(bytes: &[u8]) -> bool {
     let Some(t) = Tiff::new(bytes) else { return false };
     let Some(ifd0) = t.ifds().into_iter().next() else { return false };
     let make = ifd0.get(271).and_then(|e| t.ascii(&e)).unwrap_or_default().to_ascii_uppercase();
-    ["PENTAX", "RICOH"].iter().any(|m| make.starts_with(m)) && ifd0.get(50706).is_none() && maker_notes(&t, &t.ifds()).is_some()
+    let model = ifd0.get(272).and_then(|e| t.ascii(&e)).unwrap_or_default();
+    (["PENTAX", "RICOH"].iter().any(|m| make.starts_with(m)) || make.starts_with("SAMSUNG") && model.starts_with("GX-1")) && ifd0.get(50706).is_none() && maker_notes(&t, &t.ifds()).is_some()
 }
 
 /// The maker notes and their directory: "AOC\0" and the notes' byte order,
@@ -104,8 +106,9 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     };
     // Red, green, the other green, blue.
     let four = |v: Option<Vec<u32>>| v.filter(|v| v.len() == 4).map(|v| [v[0], v[1], v[2], v[3]]);
-    let wb = four(in_notes(0x0201)).filter(|w| w.iter().all(|&v| v > 0)).ok_or(Error::Unsupported("no stated white balance"))?;
-    let black = four(in_notes(0x0200)).ok_or(Error::Unsupported("no stated black level"))?;
+    let samsung = make.to_ascii_uppercase().starts_with("SAMSUNG");
+    let wb = if samsung { None } else { Some(four(in_notes(0x0201)).filter(|w| w.iter().all(|&v| v > 0)).ok_or(Error::Unsupported("no stated white balance"))?) };
+    let black = if samsung { [0; 4] } else { four(in_notes(0x0200)).ok_or(Error::Unsupported("no stated black level"))? };
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
     let white = match geometry.white {
         0 => (1u32 << bits.min(16)) - 1,
@@ -118,7 +121,6 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let calibration = crate::cameras::find(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
     let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
     let (top, left) = (geometry.top as usize, geometry.left as usize);
-    let (r, g, g2, b) = (wb[0] as f64, wb[1] as f64, wb[2] as f64, wb[3] as f64);
     Ok(Dng {
         format: Format::Pef,
         make,
@@ -160,7 +162,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         active: (top, left, top + geometry.height as usize, left + geometry.width as usize),
         default_crop: None,
         default_scale: (1.0, 1.0),
-        as_shot_neutral: Some(vec![g / r, 1.0, g / b]),
+        as_shot_neutral: wb.map(|w| vec![w[1] as f64 / w[0] as f64, 1.0, w[1] as f64 / w[3] as f64]),
         as_shot_white_xy: None,
         color_matrix: [m(&calibration.color_matrix[0]), m(&calibration.color_matrix[1]), None],
         camera_calibration: [None, None, None],
@@ -171,7 +173,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         profile_tables: calibration.tables,
         baseline_exposure: 0.0,
         coding,
-        cam_mul: Some([r as f32, g as f32, b as f32, g2 as f32]),
+        cam_mul: wb.map(|w| [w[0] as f32, w[1] as f32, w[3] as f32, w[2] as f32]),
         border_black: false,
     })
 }

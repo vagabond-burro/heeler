@@ -10,9 +10,10 @@
 //! declined and stay LibRaw's.
 //!
 //! The white balance as shot is the maker notes' WB_RBLevels (0x000C: red,
-//! then blue, against green), which LibRaw takes as is, else a Coolpix
-//! NRW's record (0x0014, `nrw_balance`); a file without either stays
-//! LibRaw's. The black level is the maker notes' BlackLevel
+//! then blue, against green), which LibRaw takes as is, else an
+//! unenciphered ColorBalance record (0x0097, `color_balance`), else a
+//! Coolpix's record (0x0014, `nrw_balance`, `coolpix_balance`); a file
+//! with none of them stays LibRaw's. The black level is the maker notes' BlackLevel
 //! (0x003D), stated for 14-bit data and scaled down for 12-bit, else
 //! LibRaw's for the camera (geometry.rs), else 0. A Coolpix NRW of NEF
 //! compression 9 packs 12-bit samples most significant bits first; of 7
@@ -43,17 +44,50 @@ pub fn is_nef(bytes: &[u8]) -> bool {
     ifd0.get(271).and_then(|e| t.ascii(&e)).is_some_and(|m| m.to_ascii_uppercase().starts_with("NIKON")) && ifd0.get(50706).is_none()
 }
 
-/// The maker notes (EXIF 0x927C, "Nikon" and a TIFF of their own) and
-/// their first directory.
+/// The maker notes (EXIF 0x927C) and their first directory: "Nikon" and a
+/// TIFF of their own, or (the D1, D1H and D1X) a directory at the notes'
+/// start, offsets from the file's.
 fn maker_notes<'a>(t: &Tiff<'a>, ifds: &[Ifd]) -> Option<(Tiff<'a>, Ifd)> {
     let e = ifds.iter().find_map(|i| i.get(37500))?;
     let notes = t.bytes(&e)?;
     if !notes.starts_with(b"Nikon\0") {
-        return None;
+        let mt = Tiff::with_order(t.data(), t.little());
+        let (ifd, _) = mt.ifd(e.offset())?;
+        return Some((mt, ifd));
     }
     let mt = Tiff::new(notes.get(10..)?)?;
     let (ifd, _) = mt.ifd(mt.u32(4)? as usize)?;
     Some((mt, ifd))
+}
+
+/// The balance an unencrypted ColorBalance record (0x0097) states, as
+/// LibRaw's camera multipliers (red, green, blue, the other green): its
+/// version, four ASCII digits, then 16-bit numbers in the notes' byte
+/// order. Version 0100 holds red, blue, green, green at byte 72; 0102 red,
+/// green, green, blue at byte 10; 0103 red, green, blue, green at byte 20.
+/// The later versions are enciphered and not read.
+fn color_balance(mt: &Tiff, e: &crate::tiff::Entry) -> Option<[f64; 4]> {
+    let record = mt.bytes(e)?;
+    let at = e.offset();
+    let n = |k: usize| mt.u16(at + k).map(|v| v as f64);
+    let (r, g, b, g2) = match record.get(..4)? {
+        b"0100" => (n(72)?, n(76)?, n(74)?, n(78)?),
+        b"0102" => (n(10)?, n(12)?, n(16)?, n(14)?),
+        b"0103" => (n(20)?, n(22)?, n(24)?, n(26)?),
+        _ => return None,
+    };
+    (r > 0.0 && g > 0.0 && g2 > 0.0 && b > 0.0).then_some([r, g, b, g2])
+}
+
+/// A Coolpix NEF's record of 2560 bytes (0x0014): red's and blue's
+/// multipliers times 256 at bytes 14 and 16, big-endian.
+fn coolpix_balance(record: &[u8]) -> Option<[f64; 4]> {
+    if record.len() != 2560 {
+        return None;
+    }
+    let n = |k: usize| u16::from_be_bytes([record[k], record[k + 1]]) as f64 / 256.0;
+    let (r, b) = (n(14), n(16));
+    (r > 0.0 && b > 0.0).then_some([r, 1.0, b, 1.0])
 }
 
 pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
@@ -96,6 +130,12 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         // 32-bit little-endian words (as some Olympus files hold them).
         Some(1) if bits_tag == 12 && model.starts_with("COOLPIX") && offsets.len() == 1 && count >= width * height * 3 / 2 && (width * 3 / 2) % 4 == 0 => {
             (Coding::Olympus(crate::orf::Olympus::Words), 12, Pieces { width, height, spans: vec![(offsets[0] as usize, width * height * 3 / 2)] })
+        }
+        // The older Coolpix NEFs (models E and digits): 12-bit samples most
+        // significant bits first, one strip of two fields, the even rows
+        // then the odd.
+        Some(1) if bits_tag == 12 && model.starts_with('E') && model[1..].starts_with(|c: char| c.is_ascii_digit()) && offsets.len() == 1 && count >= width * height * 3 / 2 => {
+            (Coding::TwoFields, 12, Pieces { width, height, spans: vec![(offsets[0] as usize, width * height * 3 / 2)] })
         }
         Some(1) if bits_tag == 12 && count >= width * height * 3 / 2 => (Coding::Tiff, 12, strips()),
         // NEF compression 9: 12-bit samples packed most significant bits
@@ -142,9 +182,17 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     }
     // The white balance as shot: WB_RBLevels, red then blue.
     // As LibRaw's camera multipliers: red, green, blue, the other green.
+    // Else the ColorBalance record, else a Coolpix's record. LibRaw takes
+    // the D1 and the E5700 (whose record is another length) at 1 for each
+    // channel.
+    let unity = ["NIKON D1", "E5700"].contains(&model.as_str());
     let cam_mul: [f64; 4] = match note(0x000c).and_then(|(mt, e)| mt.reals(&e)).filter(|w| w.len() >= 2 && w[0] > 0.0 && w[1] > 0.0) {
+        _ if unity => [1.0; 4],
         Some(w) => [w[0], 1.0, w[1], 1.0],
-        None => note(0x0014).and_then(|(mt, e)| nrw_balance(mt.bytes(&e)?)).ok_or(Error::Unsupported("no stated white balance"))?,
+        None => note(0x0097)
+            .and_then(|(mt, e)| color_balance(mt, &e))
+            .or_else(|| note(0x0014).and_then(|(mt, e)| mt.bytes(&e).and_then(|r| nrw_balance(r).or_else(|| coolpix_balance(r)))))
+            .ok_or(Error::Unsupported("no stated white balance"))?,
     };
     // The black level, stated for 14-bit data.
     let black = match note(0x003d).and_then(|(mt, e)| mt.uints(&e)) {
@@ -154,6 +202,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         None => crate::geometry::black(&make, &model).map_or(vec![0.0; 4], |b| b.iter().map(|&v| v as f64).collect()),
     };
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
+    let tall = model == "NIKON D1X";
     // The white level for the samples' depth (geometry.rs), else the
     // depth's top.
     let white = crate::geometry::nef_white(&make, &model, bits_tag as u32).unwrap_or((1 << bits_tag) - 1) as f64;
@@ -204,7 +253,8 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         white: vec![white],
         active: (top, left, top + geometry.height as usize, left + geometry.width as usize),
         default_crop: None,
-        default_scale: (1.0, 1.0),
+        // The D1X's pixels are twice as wide as tall (its 1324 rows).
+        default_scale: if tall { (1.0, 2.0) } else { (1.0, 1.0) },
         as_shot_neutral: Some(vec![cam_mul[1] / cam_mul[0], 1.0, cam_mul[1] / cam_mul[2]]),
         as_shot_white_xy: None,
         color_matrix: [m(&calibration.color_matrix[0]), m(&calibration.color_matrix[1]), None],
