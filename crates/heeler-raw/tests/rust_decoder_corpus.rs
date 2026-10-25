@@ -3,7 +3,9 @@
 //! rules and its verified cameras, heeler-rawdec's plan) develops as LibRaw
 //! does, to the bit, given LibRaw's matrix and levels: the unpacked mosaic,
 //! then full size and half, Clip and Blend, lens shading opcodes
-//! applied as heeler-raw applies them around LibRaw. And every verified
+//! applied as heeler-raw applies them around LibRaw. An X-Trans file's
+//! full size, through Heeler's own demosaic, is held to LibRaw's by a
+//! floor on the PSNR (XTRANS_FLOOR_DB) instead. And every verified
 //! camera still has a file the develop takes, so the list in
 //! heeler-rawdec's verified.rs names nothing untested. A file LibRaw
 //! cannot open (a few RW2s) has nothing to be held to and is counted apart.
@@ -57,6 +59,22 @@ fn files_in(root: &std::path::Path, exts: &[&str]) -> Vec<std::path::PathBuf> {
     out
 }
 
+/// The least PSNR, in dB, an X-Trans file's full-size develop may have
+/// against LibRaw's (the owner's decision of 2026-10-25): just under the
+/// corpora's worst, 38.5 dB, fine twigs and branches against clipped sky.
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
+const XTRANS_FLOOR_DB: f64 = 38.0;
+
+/// The PSNR of `a` against `b`, 16-bit samples.
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
+fn psnr(a: &[u16], b: &[u16]) -> f64 {
+    let se: f64 = a.iter().zip(b).map(|(&x, &y)| (x as f64 - y as f64).powi(2)).sum();
+    if se == 0.0 {
+        return f64::INFINITY;
+    }
+    10.0 * (65535.0f64 * 65535.0 / (se / a.len() as f64)).log10()
+}
+
 #[test]
 #[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
 fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
@@ -104,6 +122,14 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
                 let with = heeler_raw::with_libraw_balance(&bytes, &with, o);
                 match heeler_rawdec::develop::develop_with(&bytes, &with, &opts(o), None) {
                     Ok((mine, _)) if (mine.width, mine.height) == (theirs.width, theirs.height) && mine.rgb == theirs.rgb && mine.headroom == theirs.headroom => {}
+                    // An X-Trans develop's full size goes through Heeler's own
+                    // demosaic, held to LibRaw's by a floor on the PSNR.
+                    Ok((mine, _)) if plan.xtrans.is_some() && !half_size && (mine.width, mine.height) == (theirs.width, theirs.height) && mine.headroom == theirs.headroom => {
+                        let psnr = psnr(&mine.rgb, &theirs.rgb);
+                        if psnr < XTRANS_FLOOR_DB {
+                            failures.push(format!("{name}: X-Trans full size highlight {highlight}: PSNR {psnr:.1} dB, under {XTRANS_FLOOR_DB}"));
+                        }
+                    }
                     Ok((mine, _)) => {
                         let n = mine.rgb.iter().zip(&theirs.rgb).filter(|(a, b)| a != b).count();
                         failures.push(format!("{name}: half {half_size} highlight {highlight}: {n} samples differ"));

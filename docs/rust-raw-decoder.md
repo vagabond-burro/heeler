@@ -1717,9 +1717,12 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
 - Declined for now: Fujifilm's lossy compression (46 files: one byte a
   six rows of each block, a step, ahead of the blocks; the recalled rule
   for it did not reproduce LibRaw's frame) and the earlier bodies without
-  the TIFF raw section (35; most with the sensor turned 45 degrees). No
-  X-Trans camera is on the verified list yet: the owner decides whether
-  the full-size tolerance below is close enough to ship.
+  the TIFF raw section (35; most with the sensor turned 45 degrees).
+- The 37 X-Trans bodies join the verified list (2026-10-25, the owner's
+  decision once thin lines held): exact to LibRaw through the scaled
+  mosaic and at half size, and at full size held by the corpus test to a
+  PSNR of at least 38 dB against LibRaw's develop under Clip and Blend
+  (`XTRANS_FLOOR_DB`, just under the corpora's worst, 38.5).
 
 ### Verification
 
