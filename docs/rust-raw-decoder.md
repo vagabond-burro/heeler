@@ -2115,9 +2115,13 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   65535).
 - Sony's pixel shift ARQs (`arq.rs`): four samples a pixel combined in
   the file, LibRaw's image the samples as stored; the develop takes the
-  black off, lowers the white to the brightest of all four samples, and
-  drops the other green. Both files match LibRaw with highlights
-  clipped; blending (which mixes the fourth sample) is declined.
+  black off and lowers the white to the brightest of all four samples.
+  With highlights clipped it drops the other green; blended, each pixel's
+  four scaled samples go through the four-color mosaics' blend
+  (`four_color.rs`, at the least of the four clip levels), then the
+  matrix's first three columns. Both files match LibRaw at both sizes and
+  both highlight modes, with LibRaw's numbers and with the develop's own,
+  as do crafted copies (clamped, the other green clamped or raised).
 - Sinar's STI (`sinar.rs`): one tile of 16-bit samples, its directory's
   own orientation, the balance the "Neutral" line of IFD0's 0xC517. The
   one file matches LibRaw.
