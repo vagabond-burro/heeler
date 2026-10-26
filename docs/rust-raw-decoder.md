@@ -1935,6 +1935,18 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   and turns the developed image back, which is not modeled yet, so they
   stay LibRaw's.
 
+### Fujifilm's lossy compression
+
+- fuji.rs reads the lossy variant: a quantizer base for each line group
+  of each block, stored before the blocks; each group's gradients,
+  value count, code width and difference step follow from its base, and
+  where the base exceeds 0, 1 or 2, samples with small gradients take
+  small tables of their own (base 0, 1, 2 up to gradient sums 5, 6, 7,
+  weighted 3). The outline was recalled, as for the lossless coding
+  (flagged above); the details were settled by trial against LibRaw's
+  frame. All 46 lossy files (18 bodies, Bayer and X-Trans) and the 76
+  lossless ones match LibRaw's frame in every sample.
+
 ### Still to do in this phase
 
 - Nikon's small raw (D810, D810A, D4S): 12-bit YCbCr 4:2:2 packed least
@@ -1972,14 +1984,34 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   all), and taking those would move the color of most cameras, which is
   the owner's call and not part of filling in missing cameras.
 
-## In progress: IIQ
+## IIQ
 
 - `iiq.rs` reads Phase One's container (a directory of 16-byte entries
-  at byte 8) and decodes coding 3, which matches LibRaw's unpacked frame
-  on all 33 such files of the corpora. The sensor calibration LibRaw
-  applies after it (per-half black and gain, the flat field, defects) is
-  not yet modeled closely enough on backs with more than one sensor half,
-  so no IIQ camera is on the verified list and every IIQ stays LibRaw's.
+  at byte 8) and decodes codings 3, 5 and 8, which match LibRaw's
+  unpacked frame on all 53 such files of the corpora: coding 8 is coding
+  3's stream with 16-bit samples, coding 5 coding 3's through a
+  square-law table (4 c i^2 rounded, i a quarter of the sample, c found
+  between 0.2519525 and 0.2519527 from every value the files hold). The
+  container's 0x0100 of 1 turns the frame (orientation 6). Coding 6 (the
+  later backs' IIQ S, 14 files) and the uncompressed H 25 file are not
+  read yet.
+- `iiq_cal.rs` applies the sensor calibration LibRaw applies after the
+  unpack, every rule found from the files against LibRaw's loaded image
+  (its header lists them): the black level and each half's row and
+  column offsets, each quarter's response curve (0x0431), the right
+  half's and the whole sensor's response, the defect list, and the gain
+  grids in the block's order, with LibRaw's single-precision steps and
+  rounding. LibRaw's white is then 65532 less the black. The P40+ and
+  P65+ calibrate by rules not found exactly and are declined.
+- Verified: the IQ150, IQ3 100MP (and Trichromatic), IQ4 150MP, iXM-100
+  and iXU-RS1000 develop as LibRaw does to the bit (18 files). The Credo
+  40, H 25, IQ140, IQ180, P20+, P25, P25+, P30 and P45+ (26 files) develop
+  within 65 dB of LibRaw or better: their defective columns (LibRaw's rule for
+  them is not found; the mean of the columns two to each side is used),
+  the quarter curves' spline arithmetic and the H 25's float flat field
+  differ slightly. The owner allowed IIQ's calibration to be verified by
+  tolerance; the corpus test holds them to a 60 dB floor (NEAR_FLOOR_DB,
+  verified.rs's NEAR).
 
 ## Color sources, measured
 

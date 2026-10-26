@@ -49,9 +49,15 @@ pub fn find(make: &str, model: &str) -> Option<&'static Calibration> {
     find_calibrated(make, model).or_else(|| find_named(LIBRAW, make, model))
 }
 
-/// A camera's calibration from the calibration table alone.
+/// A camera's calibration from the calibration table alone: by Make and
+/// Model, else by the Model without the Make in front of it (some
+/// Hasselblad files name their bodies so, the table not), else as
+/// SAME_CAMERA names it.
 pub fn find_calibrated(make: &str, model: &str) -> Option<&'static Calibration> {
-    find_named(CALIBRATED, make, model).or_else(|| SAME_CAMERA.iter().find(|(mk, other, _)| *mk == make && *other == model).and_then(|(mk, _, named)| find_named(CALIBRATED, mk, named)))
+    let bare = model.strip_prefix(make).and_then(|m| m.strip_prefix(' ')).filter(|m| !m.is_empty());
+    find_named(CALIBRATED, make, model)
+        .or_else(|| bare.and_then(|m| find_named(CALIBRATED, make, m)))
+        .or_else(|| SAME_CAMERA.iter().find(|(mk, other, _)| *mk == make && *other == model).and_then(|(mk, _, named)| find_named(CALIBRATED, mk, named)))
 }
 
 fn find_named(table: &'static [Calibration], make: &str, model: &str) -> Option<&'static Calibration> {

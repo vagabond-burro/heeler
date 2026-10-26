@@ -226,7 +226,7 @@ impl Plan {
         // The unpack's buffers are gone before the demosaic's arrive.
         let working = self.parallel_bytes()?.max(if half { 0 } else { self.demosaic_extra() });
         // A black measured on the border holds the whole frame a while.
-        let frame = if self.dng.border_black { memory::bytes(self.dng.width, self.dng.height, 1, 2)? } else { 0 };
+        let frame = if self.dng.border_black || matches!(self.dng.coding, Coding::PhaseOne(_)) { memory::bytes(self.dng.width, self.dng.height, 1, 2)? } else { 0 };
         // Rows twice: the image twice the size, and the one before it.
         let unstretched = if self.dng.default_scale == (1.0, 2.0) { memory::bytes(ow, oh, 3, 4)? } else { 0 };
         memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES, self.pixel_gains(half).bytes(), frame, unstretched])
@@ -883,6 +883,24 @@ pub fn unpack_measuring_black(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>)
     Ok((cfa, black))
 }
 
+/// A Phase One frame unpacked whole, corrected by its sensor calibration
+/// (iiq_cal.rs), then its image area.
+pub fn unpack_calibrated(bytes: &[u8], p: &Plan, cal: &crate::iiq_cal::Calibration, stop: Option<&AtomicBool>) -> Result<Vec<u16>, Error> {
+    let (fw, fh) = (p.dng.width, p.dng.height);
+    let whole = Plan { top: 0, left: 0, width: fw, height: fh, ..p.clone() };
+    let mut frame = unpack(bytes, &whole, stop)?;
+    stopped(stop)?;
+    // The CFA's colors at the frame's top left.
+    let colors: [u8; 4] = std::array::from_fn(|k| p.pattern[((k >> 1) + p.top) & 1][((k & 1) + p.left) & 1] as u8);
+    crate::iiq_cal::apply(cal, &mut frame, fw, fh, colors);
+    let mut cfa = memory::vector(p.width * p.height, 0u16, "RAW mosaic")?;
+    cfa.par_chunks_mut(p.width).enumerate().for_each(|(r, row)| {
+        let at = (p.top + r) * fw + p.left;
+        row.copy_from_slice(&frame[at..at + p.width]);
+    });
+    Ok(cfa)
+}
+
 /// One row of uncompressed samples: 8 bits a byte, 16 in the file's byte
 /// order, any other depth packed most significant bit first.
 pub fn unpack_row(row: &[u8], bits: usize, little: bool, line: &mut [u16]) {
@@ -1148,7 +1166,9 @@ fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, 
         return develop_three(bytes, p, opts, stop, t0, open);
     }
     let measured;
-    let (mut cfa, p) = if p.dng.border_black {
+    let (mut cfa, p) = if let Coding::PhaseOne(p1) = &p.dng.coding {
+        (unpack_calibrated(bytes, p, &p1.cal, stop)?, p)
+    } else if p.dng.border_black {
         let (cfa, black) = unpack_measuring_black(bytes, p, stop)?;
         measured = Plan { black: black.to_vec(), black_rows: 2, black_cols: 2, ..p.clone() };
         (cfa, &measured)

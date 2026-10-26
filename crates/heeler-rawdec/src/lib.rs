@@ -25,6 +25,7 @@ pub mod raf;
 pub mod srw;
 pub mod mrw;
 pub mod iiq;
+pub mod iiq_cal;
 pub mod crw;
 pub mod headerless;
 pub mod hasselblad;
@@ -81,6 +82,12 @@ static VERIFIED_ONLY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicB
 #[doc(hidden)]
 pub fn set_verified_only(on: bool) {
     VERIFIED_ONLY.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether a verified camera's develop is held to LibRaw's within a
+/// tolerance rather than to the bit (verified.rs's NEAR).
+pub fn verified_near(format: &str, make: &str, model: &str) -> bool {
+    verified::near(format, make, model)
 }
 
 /// The cameras verified against LibRaw, as format, Make and Model.

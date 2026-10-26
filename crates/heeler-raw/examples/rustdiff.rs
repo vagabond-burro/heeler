@@ -190,7 +190,11 @@ fn main() {
             for highlight in [0, 2] {
                 let o = DevelopOpts { highlight, ..base };
                 let stages = heeler_raw::linear_dng::libraw_stages(lb, o).unwrap();
-                let mut mine = heeler_rawdec::develop::unpack(&bytes, &plan, None).unwrap();
+                // What the develop starts from: an IIQ's frame calibrated.
+                let mut mine = match &plan.dng.coding {
+                    heeler_rawdec::dng::Coding::PhaseOne(p1) => heeler_rawdec::develop::unpack_calibrated(&bytes, &plan, &p1.cal, None).unwrap(),
+                    _ => heeler_rawdec::develop::unpack(&bytes, &plan, None).unwrap(),
+                };
                 heeler_rawdec::develop::fill_zeros(&mut mine, &plan);
                 let numbered = heeler_raw::with_libraw_balance(lb, &numbered, o);
                 let max = heeler_rawdec::develop::subtract_black(&mut mine, &numbered);

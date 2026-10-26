@@ -19,6 +19,14 @@
 //! bits whole; else it adds its bits, less half their range and plus 1, to
 //! the last sample of its parity in the row. The last columns past a
 //! multiple of 8 are width 14. LibRaw keeps each sample four times over.
+//!
+//! Codings 5 and 8 are coding 3's stream: coding 8's samples are 16 bits
+//! and kept as decoded, coding 5's go through a square-law table (see
+//! `parse`). Coding 6 (the IIQ S files of the later backs) and 0 are
+//! declined. The container's 0x0100 of 1 turns the frame (orientation 6).
+//! The frame is then corrected by the sensor calibration (iiq_cal.rs),
+//! which takes the black level off; LibRaw's white level is then 65532
+//! less it.
 
 use rayon::prelude::*;
 
@@ -71,6 +79,11 @@ pub fn make_model(bytes: &[u8]) -> Option<(String, String)> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PhaseOne {
     pub rows: Vec<usize>,
+    /// The bits each decoded sample is shifted up by: 2, or 0 for coding
+    /// 8's 16-bit samples.
+    pub shift: u32,
+    /// The sensor calibration the frame is corrected by (iiq_cal.rs).
+    pub cal: crate::iiq_cal::Calibration,
 }
 
 pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
@@ -84,9 +97,24 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     if width == 0 || height == 0 {
         return Err(Error::Unsupported("an IIQ frame of this size"));
     }
-    if dir.value(0x010e) != Some(3) {
+    let coding = dir.value(0x010e);
+    if !matches!(coding, Some(3 | 5 | 8)) {
         return Err(Error::Unsupported("a Phase One coding not read here"));
     }
+    // Codings 5 and 8 are coding 3's stream. LibRaw takes coding 5's
+    // samples to 1020 (i, a quarter of each, to 255) through 4 c i^2
+    // rounded, c between 0.2519525 and 0.2519527 (871 / 3457 one such),
+    // found from every value of i the corpus's files hold (all but 2,
+    // which any such c takes to 4); samples above 1020 as they are. Coding
+    // 8's samples are 16 bits, kept as decoded.
+    let linearization = match coding {
+        Some(5) => Some(
+            (0..=65535u32)
+                .map(|v| if v > 1020 { v as u16 } else { let i = (v / 4) as u64; (4 * ((i * i * 871 * 2 + 3457) / (2 * 3457))) as u16 })
+                .collect(),
+        ),
+        _ => None,
+    };
     let (_, len, at) = dir.get(0x010f).ok_or(Error::Corrupt("no IIQ samples"))?;
     let (at, len) = (8 + at as usize, len as usize);
     let (_, n, rows_at) = dir.get(0x021c).ok_or(Error::Corrupt("no IIQ row offsets"))?;
@@ -104,11 +132,20 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     if r <= 0.0 || g <= 0.0 || b <= 0.0 {
         return Err(Error::Unsupported("no stated white balance"));
     }
+    // The sensor calibration LibRaw corrects the frame by, its black level
+    // with it; a back whose calibration is not read stays LibRaw's.
+    // The container's 0x0100: 1 a frame turned, as LibRaw's flip 6
+    // (orientation 6), 0 none.
+    let orientation = match dir.value(0x0100) {
+        None | Some(0) => 1,
+        Some(1) => 6,
+        _ => return Err(Error::Unsupported("a Phase One orientation not read here")),
+    };
+    let cal = crate::iiq_cal::read(bytes).ok_or(Error::Unsupported("a Phase One calibration not read here"))?;
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
-    let white = match geometry.white {
-        0 => 65535,
-        w => w,
-    } as f64;
+    // LibRaw's white level once the calibration has taken the black off:
+    // 65532 less it.
+    let white = (65532 - cal.black).max(1) as f64;
     let calibration = crate::cameras::find(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
     let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
     let (top, left) = (geometry.top as usize, geometry.left as usize);
@@ -118,7 +155,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         model: model.clone(),
         unique_model: model,
         version: [0, 0, 0, 0],
-        orientation: 1,
+        orientation,
         width,
         height,
         bits: 16,
@@ -131,7 +168,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         cfa_dim: (2, 2),
         cfa: geometry.colors.to_vec(),
         cfa_layout: 1,
-        linearization: None,
+        linearization,
         black_dim: (2, 2),
         black: vec![0.0; 4],
         black_delta_h: Vec::new(),
@@ -150,7 +187,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         opcodes: [Vec::new(), Vec::new(), Vec::new()],
         profile_tables: calibration.tables,
         baseline_exposure: 0.0,
-        coding: Coding::PhaseOne(Box::new(PhaseOne { rows })),
+        coding: Coding::PhaseOne(Box::new(PhaseOne { rows, shift: if coding == Some(8) { 0 } else { 2 }, cal })),
         cam_mul: Some([r as f32, g as f32, b as f32, g as f32]),
         border_black: false,
     })
@@ -185,7 +222,7 @@ impl Bits<'_> {
 
 /// One row of coding 3 from `data` (the row's bytes on), four times over
 /// as LibRaw keeps it.
-fn row_3(data: &[u8], width: usize, line: &mut [u16]) {
+fn row_3(data: &[u8], width: usize, shift: u32, line: &mut [u16]) {
     let mut bits = Bits { d: data, at: 0, buf: 0, n: 0 };
     let (mut len, mut pred) = ([0u32; 2], [0i32; 2]);
     let whole = width & !7;
@@ -210,7 +247,7 @@ fn row_3(data: &[u8], width: usize, line: &mut [u16]) {
         } else if i > 0 {
             *p += bits.take(i) as i32 + 1 - (1 << (i - 1));
         }
-        *o = ((*p as u32) << 2) as u16;
+        *o = ((*p as u32) << shift) as u16;
     }
 }
 
@@ -220,7 +257,7 @@ pub fn decode(data: &[u8], width: usize, rows: usize, p1: &PhaseOne, put: impl F
     (0..rows).into_par_iter().try_for_each(|r| {
         let at = *p1.rows.get(r).ok_or(Error::Corrupt("an IIQ row past its offsets"))?;
         let mut line = vec![0u16; width];
-        row_3(data.get(at..).ok_or(Error::Corrupt("an IIQ row past its samples"))?, width, &mut line);
+        row_3(data.get(at..).ok_or(Error::Corrupt("an IIQ row past its samples"))?, width, p1.shift, &mut line);
         put(r, &line);
         Ok(())
     })

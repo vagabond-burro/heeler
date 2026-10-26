@@ -958,7 +958,53 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("3FR", "Hasselblad", "Hasselblad X2D 100C"),
     ("3FR", "Hasselblad", "X1D II 50C"),
     ("3FR", "Hasselblad", "X2D 100C"),
+    // With LibRaw's matrix (libraw_matrices.rs), 2026-10-25.
+    ("3FR", "Hasselblad", "Hasselblad CFV-50c"),
+    ("3FR", "Hasselblad", "Hasselblad X1DM2-50c"),
+    ("MOS", "Leaf", "AFi-II 12"),
+    ("MOS", "Leaf", "Aptus 75"),
+    // Phase One's IIQ (iiq.rs, iiq_cal.rs), codings 3, 5 and 8, 2026-10-25.
+    // Exact at every stage:
+    ("IIQ", "Phase One A/S", "IQ150"),
+    ("IIQ", "Phase One A/S", "IQ3 100MP"),
+    ("IIQ", "Phase One A/S", "IQ3 100MP Trichr"),
+    ("IIQ", "Phase One A/S", "iXU-RS1000 NIR"),
+    ("IIQ", "Phase One", "IQ4 150MP"),
+    ("IIQ", "Phase One", "iXM-100"),
+    // Exact to the sensor calibration, which is held to LibRaw's within a
+    // tolerance (NEAR):
+    ("IIQ", "Leaf", "Credo 40"),
+    ("IIQ", "Phase One A/S", "H 25"),
+    ("IIQ", "Phase One A/S", "IQ140"),
+    ("IIQ", "Phase One A/S", "IQ180"),
+    ("IIQ", "Phase One A/S", "P20+"),
+    ("IIQ", "Phase One A/S", "P25"),
+    ("IIQ", "Phase One A/S", "P25+"),
+    ("IIQ", "Phase One A/S", "P30"),
+    ("IIQ", "Phase One A/S", "P45+"),
 ];
+
+/// The verified cameras whose develop is held to LibRaw's within a
+/// tolerance rather than to the bit: Phase One backs whose sensor
+/// calibration LibRaw applies by rules found only closely (iiq_cal.rs:
+/// their defective columns, the quarter curves' spline arithmetic, the H
+/// 25's float flat field). The owner allowed IIQ's calibration to be
+/// verified so (the corpus test's floor on the PSNR).
+const NEAR: &[(&str, &str, &str)] = &[
+    ("IIQ", "Leaf", "Credo 40"),
+    ("IIQ", "Phase One A/S", "H 25"),
+    ("IIQ", "Phase One A/S", "IQ140"),
+    ("IIQ", "Phase One A/S", "IQ180"),
+    ("IIQ", "Phase One A/S", "P20+"),
+    ("IIQ", "Phase One A/S", "P25"),
+    ("IIQ", "Phase One A/S", "P25+"),
+    ("IIQ", "Phase One A/S", "P30"),
+    ("IIQ", "Phase One A/S", "P45+"),
+];
+
+pub fn near(format: &str, make: &str, model: &str) -> bool {
+    NEAR.iter().any(|&(f, m, n)| f == format && m == make && n == model)
+}
 
 pub fn camera(format: &str, make: &str, model: &str) -> bool {
     CAMERAS.iter().any(|&(f, m, n)| f == format && m == make && n == model)

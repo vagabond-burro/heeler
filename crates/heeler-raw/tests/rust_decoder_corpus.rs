@@ -1,11 +1,13 @@
 //! Every DNG, CR2, CR3, ARW, NEF (and NRW), RW2 (and RAW, RWL), ORF (and
-//! ORI), PEF, SRW, MRW, CRW and RAF of the sample corpus the Rust develop takes (its
+//! ORI), PEF, SRW, MRW, CRW, RAF and the rest of the sample corpus the Rust develop takes (its
 //! rules and its verified cameras, heeler-rawdec's plan) develops as LibRaw
 //! does, to the bit, given LibRaw's matrix and levels: the unpacked mosaic,
 //! then full size and half, Clip and Blend, lens shading opcodes
 //! applied as heeler-raw applies them around LibRaw. An X-Trans file's
 //! full size, through Heeler's own demosaic, is held to LibRaw's by a
-//! floor on the PSNR (XTRANS_FLOOR_DB) instead. And every verified
+//! floor on the PSNR (XTRANS_FLOOR_DB) instead, as is the develop of an
+//! IIQ back whose sensor calibration is found only closely (NEAR_FLOOR_DB).
+//! 3FR, FFF, ERF, MEF, MOS, IIQ and GPR files are taken too. And every verified
 //! camera still has a file the develop takes, so the list in
 //! heeler-rawdec's verified.rs names nothing untested. A file LibRaw
 //! cannot open (a few RW2s) has nothing to be held to and is counted apart.
@@ -65,6 +67,13 @@ fn files_in(root: &std::path::Path, exts: &[&str]) -> Vec<std::path::PathBuf> {
 #[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
 const XTRANS_FLOOR_DB: f64 = 38.0;
 
+/// The least PSNR, in dB, a develop of a camera held to LibRaw within a
+/// tolerance (heeler-rawdec's verified_near: IIQ backs whose calibration
+/// is found only closely) may have against LibRaw's: the corpora's worst
+/// is 65 dB.
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
+const NEAR_FLOOR_DB: f64 = 60.0;
+
 /// The PSNR of `a` against `b`, 16-bit samples.
 #[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
 fn psnr(a: &[u16], b: &[u16]) -> f64 {
@@ -89,7 +98,7 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
     let mut cameras = std::collections::BTreeSet::new();
     let mut failures = Vec::new();
     let mut unreadable = Vec::new();
-    for (path, name) in files(&root, &["DNG", "CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "CRW", "RAF", "3FR", "FFF", "ERF", "MEF", "MOS", "GPR"]) {
+    for (path, name) in files(&root, &["DNG", "CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "CRW", "RAF", "3FR", "FFF", "ERF", "MEF", "MOS", "IIQ", "GPR"]) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let Ok(plan) = heeler_rawdec::plan(&bytes, &opts(DevelopOpts::default())) else { continue };
         // LibRaw reads a GPR as heeler-raw rewrites it, its tile decoded;
@@ -110,7 +119,7 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
         }
         taken += 1;
         let (format, make, model) = heeler_rawdec::camera_key(&plan);
-        cameras.insert((format.to_string(), make, model));
+        cameras.insert((format.to_string(), make.clone(), model.clone()));
         // The shipped develop, with its own levels and color, finishes: one
         // that fails goes to LibRaw without a word, which this would hide.
         let shipped = Opts { libraw_color: false, ..opts(DevelopOpts::default()) };
@@ -131,6 +140,15 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
                 let with = heeler_raw::with_libraw_balance(lb, &with, o);
                 match heeler_rawdec::develop::develop_with(&bytes, &with, &opts(o), None) {
                     Ok((mine, _)) if (mine.width, mine.height) == (theirs.width, theirs.height) && mine.rgb == theirs.rgb && mine.headroom == theirs.headroom => {}
+                    // A camera held to LibRaw within a tolerance (an IIQ back
+                    // whose calibration is found only closely): a floor on
+                    // the PSNR, at both sizes.
+                    Ok((mine, _)) if heeler_rawdec::verified_near(format, &make, &model) && (mine.width, mine.height) == (theirs.width, theirs.height) => {
+                        let psnr = psnr(&mine.rgb, &theirs.rgb);
+                        if psnr < NEAR_FLOOR_DB {
+                            failures.push(format!("{name}: half {half_size} highlight {highlight}: PSNR {psnr:.1} dB, under {NEAR_FLOOR_DB}"));
+                        }
+                    }
                     // An X-Trans develop's full size goes through Heeler's own
                     // demosaic, held to LibRaw's by a floor on the PSNR.
                     Ok((mine, _)) if plan.xtrans.is_some() && !half_size && (mine.width, mine.height) == (theirs.width, theirs.height) && mine.headroom == theirs.headroom => {

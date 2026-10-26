@@ -102,10 +102,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     if !(1..=8).contains(&orientation) {
         return Err(Error::Unsupported("an orientation tag outside 1 to 8"));
     }
-    // The converter names some bodies without the maker's prefix.
-    let calibration = crate::cameras::find(&make, &model)
-        .or_else(|| crate::cameras::find(&make, model.strip_prefix("Hasselblad ").unwrap_or(&model)))
-        .ok_or(Error::Unsupported("a camera without calibrations"))?;
+    let calibration = crate::cameras::find(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
     let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
     let (top, left) = (geometry.top as usize, geometry.left as usize);
     let measured = !masked.is_empty();
