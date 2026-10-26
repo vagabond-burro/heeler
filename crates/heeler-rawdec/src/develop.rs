@@ -162,7 +162,12 @@ impl Plan {
             return Err(Error::Unsupported("a camera calibration that mixes colors"));
         }
         let mut table_period = 1;
-        if dng.compression == 7 && !matches!(dng.coding, Coding::Hasselblad(_)) {
+        if dng.format == Format::DngDct {
+            // Tiles of DCT JPEG (dct_dng.rs), each as the files seen show.
+            for &(at, len) in &dng.pieces.spans {
+                crate::dct_dng::check(bytes.get(at..at + len).ok_or(Error::Corrupt("a tile past the end of the file"))?, (dng.pieces.width, dng.pieces.height))?;
+            }
+        } else if dng.compression == 7 && !matches!(dng.coding, Coding::Hasselblad(_)) {
             // LibRaw reads a tile whose JPEG line, times its components,
             // spans the raw image's width as two tile rows a line, for one
             // writer's layout; such files stay LibRaw's.
@@ -649,6 +654,20 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
                     r0 + tr
                 };
                 put_run(out, p, fr, c0, &line, lin);
+            }
+            Ok(())
+        })?;
+        return Ok(cfa);
+    }
+    if d.format == Format::DngDct {
+        // Tiles of DCT JPEG (dct_dng.rs), a tile a worker.
+        d.pieces.spans.par_iter().enumerate().try_for_each(|(i, &(at, len))| -> Result<(), Error> {
+            stopped(stop)?;
+            let tile = crate::dct_dng::decode(bytes.get(at..at + len).ok_or(Error::Corrupt("a tile past the end of the file"))?, (pw, ph))?;
+            let (r0, c0) = origin(i);
+            let cols = pw.min(d.width.saturating_sub(c0));
+            for (tr, row) in tile.chunks_exact(pw).enumerate() {
+                put_run(out, p, r0 + tr, c0, &row[..cols], lin);
             }
             Ok(())
         })?;

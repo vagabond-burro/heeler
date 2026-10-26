@@ -69,8 +69,9 @@ const XTRANS_FLOOR_DB: f64 = 38.0;
 
 /// The least PSNR, in dB, a develop of a camera held to LibRaw within a
 /// tolerance (heeler-rawdec's verified_near: IIQ backs whose calibration
-/// is found only closely) may have against LibRaw's: the corpora's worst
-/// is 65 dB.
+/// is found only closely, Nikon's small raws, Blackmagic's lossy
+/// CinemaDNGs, whose unpacked mosaic is held to it too) may have against
+/// LibRaw's: the corpora's worst is 65 dB.
 #[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
 const NEAR_FLOOR_DB: f64 = 60.0;
 
@@ -107,6 +108,7 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
         let lb: &[u8] = converted.as_deref().unwrap_or(&bytes);
         // An image of three samples a pixel (a Canon sRAW) has no mosaic:
         // its outputs below are what is held to LibRaw's.
+        let (format, make, model) = heeler_rawdec::camera_key(&plan);
         if !plan.three() {
             let Ok((_, _, theirs)) = heeler_raw::libraw_mosaic(lb) else {
                 unreadable.push(name);
@@ -114,11 +116,14 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
             };
             match heeler_rawdec::develop::unpack(&bytes, &plan, None) {
                 Ok(mine) if mine == theirs => {}
+                // A camera held to LibRaw within a tolerance (a lossy
+                // CinemaDNG, its inverse DCT found only closely): the same
+                // floor on the mosaic's PSNR.
+                Ok(mine) if heeler_rawdec::verified_near(format, &make, &model) && mine.len() == theirs.len() && psnr(&mine, &theirs) >= NEAR_FLOOR_DB => {}
                 _ => failures.push(format!("{name}: the unpacked mosaic")),
             }
         }
         taken += 1;
-        let (format, make, model) = heeler_rawdec::camera_key(&plan);
         cameras.insert((format.to_string(), make.clone(), model.clone()));
         // The shipped develop, with its own levels and color, finishes: one
         // that fails goes to LibRaw without a word, which this would hide.

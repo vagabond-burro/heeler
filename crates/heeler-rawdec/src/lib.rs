@@ -35,6 +35,7 @@ pub mod iiq_s;
 pub mod kodak;
 pub mod kodak_codec;
 pub mod dcr;
+pub mod dct_dng;
 pub mod dcs;
 pub mod canon_tif;
 pub mod sinar;

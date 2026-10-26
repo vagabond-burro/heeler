@@ -44,6 +44,9 @@ pub enum Format {
     /// A Nikon small raw (nef_small.rs), kept apart from the full-size
     /// NEFs so its tolerance (verified.rs) is its own.
     NefSmall,
+    /// A DNG whose CFA tiles are DCT JPEG (dct_dng.rs), kept apart from
+    /// the lossless DNGs so its tolerance (verified.rs) is its own.
+    DngDct,
 }
 
 /// Make and Model as a raw file of any format this crate reads gives
@@ -108,6 +111,7 @@ impl Format {
             Format::Sti => "STI",
             Format::Arq => "ARQ",
             Format::NefSmall => "sNEF",
+            Format::DngDct => "DNG DCT",
             Format::Crw => "CRW",
             Format::Headerless => "headerless",
             Format::Raf => "RAF",
@@ -371,8 +375,11 @@ impl Dng {
             (Some(&[x, y]), Some(&[w, h])) => Some([x, y, w, h]),
             _ => None,
         };
+        // A CFA image in tiles of DCT JPEG (dct_dng.rs) is its own format.
+        let compression = uint(&t, raw, 259).unwrap_or(1);
+        let dct = compression == 7 && photometric == 32803 && pieces.spans.first().is_some_and(|&(at, len)| bytes.get(at..at.saturating_add(len)).is_some_and(crate::dct_dng::is_dct));
         Ok(Dng {
-            format: Format::Dng,
+            format: if dct { Format::DngDct } else { Format::Dng },
             make: ascii(ifd0, 271),
             model: ascii(ifd0, 272),
             unique_model: ascii(ifd0, 50708),
@@ -381,7 +388,7 @@ impl Dng {
             width,
             height,
             bits,
-            compression: uint(&t, raw, 259).unwrap_or(1),
+            compression,
             photometric,
             samples,
             sample_format: uint(&t, raw, 339).unwrap_or(1),
@@ -427,7 +434,7 @@ impl Dng {
     }
 
     pub fn is_dng(&self) -> bool {
-        self.format == Format::Dng
+        matches!(self.format, Format::Dng | Format::DngDct)
     }
 
     /// Any raw file this crate reads: a DNG, a CR2, a CR3, an ARW, a NEF, an

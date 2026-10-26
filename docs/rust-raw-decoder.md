@@ -2192,6 +2192,35 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   where the file states none (a Pixel 8 Pro's DNG): LibRaw takes it after
   the gain maps, so the harness now applies them before it looks.
 
+### Lossy CinemaDNGs
+
+- Blackmagic's lossy CinemaDNGs (`dct_dng.rs`): a 12-bit CFA image in
+  tiles of compression 7 whose JPEG is DCT coded (SOF1: 12-bit
+  extended sequential, one component, a quantizer of 16-bit entries, one
+  DC and one AC table) rather than lossless. Each JPEG frame is twice its
+  tile's width and half its height: JPEG row r is tile rows 2r and 2r + 1
+  side by side. Each block's samples are T.81's inverse DCT plus 2048,
+  limited to 0 to 4095, then the LinearizationTable; black and white are
+  the tags', as for any DNG. The corpora hold three such files (two of a
+  Pocket Cinema Camera 4K, one of a Micro Cinema Camera), found by
+  scanning every DNG's raw tiles for a SOF0 or SOF1 marker.
+- LibRaw's inverse DCT is single precision, in an order of operations not
+  found: where the exact value lies within about 0.001 of a half it
+  rounds either way. The develop computes the transform exactly (double
+  precision, rounded half up), so about 0.02% of the samples (1526 and
+  1380 of 8982528 in the 4K files, 435 of 2155008 in the Micro's) are one
+  table step off LibRaw's, the rest equal. Fixed-point transforms with
+  constants of 13 to 24 bits miss 3000 to 180000 samples a file, and
+  the direct transform in single precision about 1700. The owner allowed
+  these files a tolerance on 2026-10-26: their format is "DNG DCT", so
+  the lossless DNGs of the same bodies stay held to the bit, and the
+  corpus test holds their mosaic and develops to the 60 dB floor. Against
+  LibRaw (its numbers or the develop's own, the same for a DNG): mosaic
+  110.0, 111.1 and 100.6 dB; full size 90.9, 91.2 and 78.3 dB with
+  highlights clipped, 97.4, 98.2 and 82.9 blended; half size 105.1,
+  106.2 and 95.6 clipped, 111.9, 113.0 and 99.1 blended (the 4K files,
+  then the Micro's).
+
 ### Smaller fixes, 2026-10-25
 
 - A DNG before version 1.1 whose lossless JPEG gives a difference 16

@@ -1022,6 +1022,10 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("sNEF", "NIKON CORPORATION", "NIKON D4S"),
     ("sNEF", "NIKON CORPORATION", "NIKON D810"),
     ("sNEF", "NIKON CORPORATION", "NIKON D810A"),
+    // Blackmagic's lossy CinemaDNGs (dct_dng.rs), held within the
+    // tolerance (NEAR), 2026-10-26.
+    ("DNG DCT", "", "Blackmagic Micro Cinema Camera"),
+    ("DNG DCT", "", "Blackmagic Pocket Cinema Camera 4K"),
     // Nikon's 16-bit film scans (coolscan.rs) and Sony's pixel shift files
     // with highlights clipped (arq.rs), 2026-10-26.
     ("NEF", "Nikon", "Nikon COOLSCAN IV ED"),
@@ -1091,8 +1095,13 @@ const CAMERAS: &[(&str, &str, &str)] = &[
 /// verified so (the corpus test's floor on the PSNR). And Nikon's small
 /// raws, whose luma and chroma LibRaw sums in a rounding not found (about
 /// one sample in twenty thousand a curve step off; the owner allowed
-/// them a tolerance, 2026-10-26).
+/// them a tolerance, 2026-10-26). And Blackmagic's lossy CinemaDNGs,
+/// whose inverse DCT LibRaw computes in single precision in an order not
+/// found (about one sample in five thousand a table step off; the owner
+/// allowed them a tolerance, 2026-10-26).
 const NEAR: &[(&str, &str, &str)] = &[
+    ("DNG DCT", "", "Blackmagic Micro Cinema Camera"),
+    ("DNG DCT", "", "Blackmagic Pocket Cinema Camera 4K"),
     ("sNEF", "NIKON CORPORATION", "NIKON D4S"),
     ("sNEF", "NIKON CORPORATION", "NIKON D810"),
     ("sNEF", "NIKON CORPORATION", "NIKON D810A"),
