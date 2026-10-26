@@ -62,6 +62,14 @@ impl Coolscan {
     pub fn white(&self) -> u32 {
         if self.bits == 8 { 255 } else { 65535 }
     }
+
+    /// The white level the develop takes: 65535 at either depth. An 8-bit
+    /// scan's samples are held times 257, so they reach 65535, and LibRaw's
+    /// 255 (white) clips every sample above zero, a fault of LibRaw's the
+    /// owner chose not to follow (2026-10-26).
+    pub fn develop_white(&self) -> u32 {
+        65535
+    }
 }
 
 /// Whether `bytes` are a scan LibRaw reads as one: a TIFF whose IFD0
@@ -208,17 +216,14 @@ mod tests {
 }
 
 /// The scan in the DNG terms a develop needs: an image of three samples a
-/// pixel, no black level, LibRaw's white level, no matrix and no stated
-/// balance (the develop takes LibRaw's from the picture, balance). An
-/// 8-bit scan is declined: LibRaw develops it against a white level of
-/// 255 though its samples reach 65535 (every sample above zero white).
+/// pixel, no black level, white 65535 (develop_white), no matrix and no
+/// stated balance (the develop takes LibRaw's from the picture, balance).
+/// An 8-bit scan develops as LibRaw develops the same scan held at 16 bits
+/// (each sample times 257), which is checked against a 16-bit copy.
 pub fn dng(bytes: &[u8]) -> Result<Dng, Error> {
     let s = parse(bytes)?;
-    if s.bits == 8 {
-        return Err(Error::Unsupported("an 8-bit scan"));
-    }
     let (width, height) = (s.width, s.height);
-    let white = s.white() as f64;
+    let white = s.develop_white() as f64;
     Ok(Dng {
         format: Format::Nef,
         make: s.make.clone(),

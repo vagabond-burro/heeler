@@ -2119,9 +2119,12 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   depth's largest sample (never lowered), its balance made from the
   picture in 8 by 8 blocks (a block with a sample past the white less 25
   left out), no matrix. The 16-bit scans (V ED, SUPER COOLSCAN 5000 ED,
-  4 files) match LibRaw; the 8-bit IV ED is declined (LibRaw takes its
-  white as 255 though its samples reach 65535, so its output is all 0 or
-  65535).
+  4 files) match LibRaw. The 8-bit IV ED's white is 65535, not LibRaw's
+  255 (LibRaw's output of it is all 0 or 65535, a fault the owner chose not
+  to follow); its develop equals LibRaw's of a 16-bit copy of the file
+  (each sample times 257) at both sizes and highlight modes, and
+  verified.rs's LIBRAW_FAULTS keeps the corpus test from holding it to
+  LibRaw's own output.
 - Sony's pixel shift ARQs (`arq.rs`): four samples a pixel combined in
   the file, LibRaw's image the samples as stored; the develop takes the
   black off and lowers the white to the brightest of all four samples.

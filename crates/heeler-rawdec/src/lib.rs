@@ -103,6 +103,12 @@ pub fn set_verified_only(on: bool) {
 
 /// Whether a verified camera's develop is held to LibRaw's within a
 /// tolerance rather than to the bit (verified.rs's NEAR).
+/// Why a verified camera's develop departs from LibRaw's (a fault of
+/// LibRaw's), if it does.
+pub fn verified_libraw_fault(format: &str, make: &str, model: &str) -> Option<&'static str> {
+    verified::libraw_fault(format, make, model)
+}
+
 pub fn verified_near(format: &str, make: &str, model: &str) -> bool {
     verified::near(format, make, model)
 }

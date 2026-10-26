@@ -126,6 +126,11 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
         if let Err(e) = heeler_rawdec::develop(&bytes, &shipped, None) {
             failures.push(format!("{name}: the shipped develop: {e}"));
         }
+        // A camera whose develop departs from LibRaw's where LibRaw's is a
+        // fault (verified.rs says how it was checked instead).
+        if heeler_rawdec::verified_libraw_fault(format, &make, &model).is_some() {
+            continue;
+        }
         // The matrix and levels are LibRaw's here: what this holds to
         // LibRaw is the decode and develop, not where those numbers come
         // from (LibRaw's own tables can round a camera's matrix apart from

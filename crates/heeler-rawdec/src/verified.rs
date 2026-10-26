@@ -1019,6 +1019,7 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("sNEF", "NIKON CORPORATION", "NIKON D810A"),
     // Nikon's 16-bit film scans (coolscan.rs) and Sony's pixel shift files
     // with highlights clipped (arq.rs), 2026-10-26.
+    ("NEF", "Nikon", "Nikon COOLSCAN IV ED"),
     ("NEF", "Nikon", "Nikon COOLSCAN V ED"),
     ("NEF", "Nikon", "Nikon SUPER COOLSCAN 5000 ED"),
     ("ARQ", "SONY", "ILCE-7RM3"),
@@ -1104,6 +1105,21 @@ const NEAR: &[(&str, &str, &str)] = &[
     ("IIQ", "Phase One A/S", "P45+"),
     ("IIQ", "Phase One A/S", "iXU180"),
 ];
+
+/// The verified cameras whose develop departs from LibRaw's on purpose,
+/// where LibRaw's is a fault, each with how it was checked instead: the
+/// corpus test does not hold them to LibRaw's output.
+const LIBRAW_FAULTS: &[(&str, &str, &str, &str)] = &[(
+    "NEF",
+    "Nikon",
+    "Nikon COOLSCAN IV ED",
+    "LibRaw develops the 8-bit scan against a white of 255 though its samples reach 65535; checked against LibRaw's develop of a 16-bit copy of the file (each sample times 257), to the bit",
+)];
+
+/// Why a verified camera's develop is not held to LibRaw's, if it is not.
+pub fn libraw_fault(format: &str, make: &str, model: &str) -> Option<&'static str> {
+    LIBRAW_FAULTS.iter().find(|&&(f, m, n, _)| f == format && m == make && n == model).map(|f| f.3)
+}
 
 pub fn near(format: &str, make: &str, model: &str) -> bool {
     NEAR.iter().any(|&(f, m, n)| f == format && m == make && n == model)
