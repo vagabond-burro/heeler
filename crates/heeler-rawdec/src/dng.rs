@@ -295,7 +295,9 @@ impl Dng {
         let ifds = t.ifds();
         let ifd0 = ifds.first().ok_or(Error::Unsupported("no directory"))?;
         let version = ifd0.get(50706).and_then(|e| t.uints(&e)).ok_or(Error::Unsupported("not a DNG"))?;
-        if version.len() != 4 {
+        // Four bytes; a file stating more (a DJI Osmo Action's five, the
+        // fifth 0) is read by its first four, as LibRaw reads it.
+        if version.len() < 4 {
             return Err(Error::Corrupt("DNGVersion"));
         }
         // The raw image: a CFA mosaic, or a linear (demosaiced) one.
@@ -320,7 +322,17 @@ impl Dng {
             let offs = raw.get(273).and_then(|e| t.uints(&e)).ok_or(Error::Corrupt("StripOffsets"))?;
             let counts = raw.get(279).and_then(|e| t.uints(&e)).ok_or(Error::Corrupt("StripByteCounts"))?;
             let rows = uint(&t, raw, 278).map_or(height, |r| (r as usize).min(height));
-            Pieces { width, height: rows, spans: offs.iter().zip(&counts).map(|(&o, &n)| (o as usize, n as usize)).collect() }
+            let mut spans: Vec<(usize, usize)> = offs.iter().zip(&counts).map(|(&o, &n)| (o as usize, n as usize)).collect();
+            // One uncompressed strip whose stated count is short of the
+            // frame while the file holds the whole frame from its offset
+            // (a Hasselblad L2D-20c's): the frame, as LibRaw reads it.
+            let whole = (width * height * samples as usize * bits as usize).div_ceil(8);
+            if let ([(at, n)], Some(1)) = (spans.as_mut_slice(), uint(&t, raw, 259)) {
+                if *n < whole && at.checked_add(whole).is_some_and(|e| e <= bytes.len()) {
+                    *n = whole;
+                }
+            }
+            Pieces { width, height: rows, spans }
         };
         if pieces.width == 0 || pieces.height == 0 || pieces.spans.len() != width.div_ceil(pieces.width) * height.div_ceil(pieces.height) {
             return Err(Error::Corrupt("the tile or strip layout"));

@@ -2087,6 +2087,11 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
 - RW2 RawFormat 7: LibRaw leaves the rows below the sensor's stated
   bottom (0x04 plus 0x06) at 0; the DC-S5's high-resolution file, two
   rows taller, matches LibRaw so.
+- Two DNGs that state a tag past the specification, read as LibRaw reads
+  them: a DNGVersion of five bytes (the DJI Osmo Action's, its first
+  four taken), and one uncompressed strip whose StripByteCounts is short
+  of the frame while the file holds the whole frame from its offset (the
+  Hasselblad L2D-20c's, the frame taken). Both match LibRaw.
 - The DiMAGE G600's balance (headerless.rs): four big-endian SHORTs at
   byte 2030 of the file, inside the EXIF segment but outside any tag
   (found by changing the file's bytes one at a time against LibRaw's
