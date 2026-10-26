@@ -66,7 +66,7 @@ impl Plan {
     /// leaves the file to LibRaw.
     pub fn new(bytes: &[u8], opts: &Opts) -> Result<Plan, Error> {
         let dng = Dng::open(bytes)?;
-        if matches!(dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_)) || matches!(dng.coding, Coding::KodakSmall(k, _) if k.three()) {
+        if matches!(dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_) | Coding::Coolscan(_) | Coding::SonyArq(_)) || matches!(dng.coding, Coding::KodakSmall(k, _) if k.three()) {
             return Plan::three_colors(dng, opts);
         }
         if dng.photometric == 34892 && dng.samples == 1 {
@@ -231,6 +231,11 @@ impl Plan {
         if dng.black.iter().any(|&b| b != 0.0) {
             return Err(Error::Unsupported("a three-color image with a black level"));
         }
+        // A pixel shift file's highlights blended mix its fourth sample,
+        // not derived (arq.rs).
+        if matches!(dng.coding, Coding::SonyArq(_)) && opts.highlight == 2 {
+            return Err(Error::Unsupported("a pixel shift file's highlights blended"));
+        }
         let (t, l, b, r) = dng.active;
         // A DNG stating its white as a chromaticity (AsShotWhiteXY) instead
         // (a scanner's): the neutral its color matrix gives that white.
@@ -280,7 +285,7 @@ impl Plan {
 
     /// Whether the image is three samples a pixel (three_colors).
     pub fn three(&self) -> bool {
-        matches!(self.dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_)) || matches!(self.dng.coding, Coding::KodakSmall(k, _) if k.three()) || (self.dng.photometric == 34892 && self.dng.samples == 3)
+        matches!(self.dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_) | Coding::Coolscan(_) | Coding::SonyArq(_)) || matches!(self.dng.coding, Coding::KodakSmall(k, _) if k.three()) || (self.dng.photometric == 34892 && self.dng.samples == 3)
     }
 
     /// The output's size (turned when the file says so).
@@ -1116,10 +1121,12 @@ pub fn subtract_black(cfa: &mut [u16], p: &Plan) -> u16 {
 }
 
 /// The camera's neutral under D65 (EXIF light source 21): its D65 color
-/// matrix (else its D75, D55 or D50 one, nearest first) applied to D65's
-/// white (x 0.3127, y 0.3290), green 1.
+/// matrix (else its D75, D55 or D50 one, nearest first; else its one
+/// matrix, which serves every light as the DNG specification has it)
+/// applied to D65's white (x 0.3127, y 0.3290), green 1.
 fn daylight_neutral(dng: &Dng) -> Option<Vec<f64>> {
-    let k = [21, 22, 20, 23].iter().find_map(|&d| dng.illuminant.iter().position(|&i| i == d))?;
+    let only = (dng.color_matrix[0].is_some() && dng.color_matrix[1].is_none()).then_some(0);
+    let k = [21, 22, 20, 23].iter().find_map(|&d| dng.illuminant.iter().position(|&i| i == d)).or(only)?;
     let m = dng.color_matrix[k].as_ref().filter(|m| m.len() == 9)?;
     let xyz = [0.3127 / 0.3290, 1.0, (1.0 - 0.3127 - 0.3290) / 0.3290];
     let n: Vec<f64> = (0..3).map(|r| (0..3).map(|c| m[r * 3 + c] * xyz[c]).sum()).collect();
@@ -1389,6 +1396,9 @@ fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, 
 /// whatever the size asked for (LibRaw shrinks a CFA only).
 fn develop_three(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, t0: std::time::Instant, open: f64) -> Result<(Image, Times), Error> {
     stopped(stop)?;
+    // The brightest sample LibRaw lowers a pixel shift file's white to,
+    // its fourth sample's too (arq.rs).
+    let mut arq_max = None;
     // The decode is LibRaw's image already (sraw.rs, sony_ycc.rs), the
     // area within it.
     let (all, image) = match &p.dng.coding {
@@ -1397,6 +1407,12 @@ fn develop_three(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>,
             (crate::sraw::decode(&bytes[at..at + len], s)?, s.image)
         }
         Coding::SonyYcc(s) => (crate::sony_ycc::decode(bytes, s)?, s.image),
+        Coding::Coolscan(s) => (crate::coolscan::decode(bytes, s)?, (s.width, s.height)),
+        Coding::SonyArq(a) => {
+            let (rgb, max) = crate::arq::decode_three(bytes, a)?;
+            arq_max = Some(max);
+            (rgb, (a.width, a.height))
+        }
         Coding::KodakSmall(k, frame) => (crate::headerless::decode_kodak(bytes, *k, *frame, (p.dng.width, p.dng.height))?, (p.dng.width, p.dng.height)),
         Coding::Tiff if p.dng.compression == 34892 => {
             let d = &p.dng;
@@ -1415,7 +1431,18 @@ fn develop_three(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>,
     drop(all);
     let unpacked = t0.elapsed().as_secs_f64();
     stopped(stop)?;
-    let data_max = rgb.par_iter().copied().max().unwrap_or(0);
+    let data_max = arq_max.unwrap_or_else(|| rgb.par_iter().copied().max().unwrap_or(0));
+    // A scan: LibRaw's balance from the picture, its white never lowered
+    // (coolscan.rs).
+    let scan;
+    let (p, data_max) = if let Coding::Coolscan(_) = &p.dng.coding {
+        let mut q = p.clone();
+        q.cam_mul = crate::coolscan::balance(&rgb, p.width, p.height, p.white);
+        scan = q;
+        (&scan, 0)
+    } else {
+        (p, data_max)
+    };
     let n = numbers(p, opts, data_max);
     let (ow, oh) = p.output_size(false);
     let mut out = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;

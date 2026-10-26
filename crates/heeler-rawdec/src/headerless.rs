@@ -65,6 +65,15 @@ struct Entry {
     /// The black level, or None where it is measured on the masked
     /// columns.
     black: Option<u32>,
+    /// The image area LibRaw develops of this size (top, left, width,
+    /// height, the CFA colors at its top left, the white level) where the
+    /// camera's other raw files take another one under the same size
+    /// (geometry.rs keys its rows by camera and size); None takes
+    /// geometry.rs's.
+    area: Option<(u32, u32, u32, u32, [u8; 4], u32)>,
+    /// Another camera LibRaw names for a file of this size whose byte at
+    /// the offset is at least the value (and the image area it develops).
+    or_else: Option<(usize, u8, &'static str, Option<(u32, u32, u32, u32, [u8; 4], u32)>)>,
 }
 
 const fn packed(width: usize, bits: u32, word: usize) -> Layout {
@@ -78,33 +87,38 @@ const fn words(width: usize, word: usize, shift: u32) -> Layout {
 /// Canon's add-on firmware: 16-bit little-endian words, 10 or 12 bits a
 /// sample, samples of 0 bad ones (but the D10's).
 const fn canon(size: usize, model: &'static str, width: usize, height: usize, bits: u32) -> Entry {
-    Entry { size, make: "Canon", model, width, height, layout: Layout { zeros_bad: true, ..packed(width, bits, 2) }, black: None }
+    Entry { size, make: "Canon", model, width, height, layout: Layout { zeros_bad: true, ..packed(width, bits, 2) }, black: None, area: None, or_else: None }
 }
 
 const ENTRIES: &[Entry] = &[
-    Entry { size: 5869568, make: "Minolta", model: "DiMAGE Z2", width: 2288, height: 1710, layout: Layout { fields: true, ..packed(2288, 12, 4) }, black: Some(0) },
-    Entry { size: 6114240, make: "Pentax", model: "Optio S4", width: 2346, height: 1737, layout: Layout { stride: 3520, ..packed(2346, 12, 1) }, black: Some(0) },
+    Entry { size: 5869568, make: "Minolta", model: "DiMAGE Z2", width: 2288, height: 1710, layout: Layout { fields: true, ..packed(2288, 12, 4) }, black: Some(0), area: None, or_else: None },
+    Entry { size: 6114240, make: "Pentax", model: "Optio S4", width: 2346, height: 1737, layout: Layout { stride: 3520, ..packed(2346, 12, 1) }, black: Some(0), area: None, or_else: None },
+    // The A610's and the S2 IS's CRW-named frames are one size; LibRaw names
+    // the camera by the byte at 36684 (16 or more the S2 IS's), found by
+    // changing it against LibRaw's naming.
+    Entry { area: Some((8, 12, 2616, 1960, [0, 1, 1, 2], 1023)), or_else: Some((36684, 16, "Canon PowerShot S2 IS", Some((8, 12, 2616, 1960, [0, 1, 1, 2], 1023)))), ..canon(6573120, "Canon PowerShot A610", 2672, 1968, 10) },
     canon(7710960, "Canon PowerShot S3 IS", 2888, 2136, 10),
     canon(9219600, "Canon PowerShot A620", 3152, 2340, 10),
     canon(10341600, "Canon PowerShot A720 IS", 3336, 2480, 10),
     canon(10383120, "Canon PowerShot A630", 3344, 2484, 10),
-    Entry { size: 12170688, make: "Minolta", model: "DiMAGE G600", width: 2848, height: 2136, layout: Layout { offset: None, ..words(2848, 1, 0) }, black: Some(0) },
+    Entry { size: 12170688, make: "Minolta", model: "DiMAGE G600", width: 2848, height: 2136, layout: Layout { offset: None, ..words(2848, 1, 0) }, black: Some(0), area: None, or_else: None },
     canon(12945240, "Canon PowerShot A640", 3736, 2772, 10),
     canon(15467760, "Canon PowerShot SX110 IS", 3720, 2772, 12),
     canon(15636240, "Canon PowerShot A650 IS", 4104, 3048, 10),
     canon(18653760, "Canon PowerShot SX20 IS", 4080, 3048, 12),
-    Entry { size: 18763488, make: "Canon", model: "Canon PowerShot D10", width: 4104, height: 3048, layout: packed(4104, 12, 2), black: None },
+    Entry { area: Some((12, 104, 4048, 3046, [1, 2, 0, 1], 4095)), ..canon(19493760, "Canon PowerShot S100", 4160, 3124, 12) },
+    Entry { size: 18763488, make: "Canon", model: "Canon PowerShot D10", width: 4104, height: 3048, layout: packed(4104, 12, 2), black: None, area: None, or_else: None },
     canon(19131120, "Canon PowerShot SX220 HS", 4168, 3060, 12),
     canon(19167840, "Canon PowerShot SX40 HS", 4176, 3060, 12),
     canon(21936096, "Canon PowerShot SX30 IS", 4464, 3276, 12),
-    Entry { size: 23887872, make: "GITUP", model: "GIT2 16:9", width: 4608, height: 2592, layout: words(4608, 2, 0), black: Some(3200) },
-    Entry { size: 24000000, make: "Samsung", model: "WB550", width: 4000, height: 3000, layout: words(4000, 2, 6), black: Some(0) },
-    Entry { size: 24192768, make: "GITUP", model: "GIT2P 16:9", width: 4624, height: 2616, layout: words(4624, 2, 0), black: Some(4160) },
+    Entry { size: 23887872, make: "GITUP", model: "GIT2 16:9", width: 4608, height: 2592, layout: words(4608, 2, 0), black: Some(3200), area: None, or_else: None },
+    Entry { size: 24000000, make: "Samsung", model: "WB550", width: 4000, height: 3000, layout: words(4000, 2, 6), black: Some(0), area: None, or_else: None },
+    Entry { size: 24192768, make: "GITUP", model: "GIT2P 16:9", width: 4624, height: 2616, layout: words(4624, 2, 0), black: Some(4160), area: None, or_else: None },
     canon(24724224, "Canon PowerShot A3300 IS", 4704, 3504, 12),
     canon(30858240, "Canon IXUS 160", 5248, 3920, 12),
     canon(31663200, "Canon PowerShot SX710 HS", 5344, 3950, 12),
-    Entry { size: 31850496, make: "GITUP", model: "GIT2 4:3", width: 4608, height: 3456, layout: words(4608, 2, 0), black: Some(3200) },
-    Entry { size: 32257024, make: "GITUP", model: "GIT2P 4:3", width: 4624, height: 3488, layout: words(4624, 2, 0), black: Some(4160) },
+    Entry { size: 31850496, make: "GITUP", model: "GIT2 4:3", width: 4608, height: 3456, layout: words(4608, 2, 0), black: Some(3200), area: None, or_else: None },
+    Entry { size: 32257024, make: "GITUP", model: "GIT2P 4:3", width: 4624, height: 3488, layout: words(4624, 2, 0), black: Some(4160), area: None, or_else: None },
 ];
 
 /// Kodak's C330 and C603 (C643) files, as kodak_codec.rs decodes them:
@@ -156,6 +170,15 @@ fn entry(bytes: &[u8]) -> Option<&'static Entry> {
     ENTRIES.iter().find(|e| e.size == bytes.len())
 }
 
+/// The camera LibRaw names for a file of this entry's size, and the image
+/// area it develops (None for geometry.rs's).
+fn named(e: &Entry, bytes: &[u8]) -> (&'static str, Option<(u32, u32, u32, u32, [u8; 4], u32)>) {
+    match e.or_else {
+        Some((at, min, model, area)) if bytes.get(at).is_some_and(|&b| b >= min) => (model, area),
+        _ => (e.model, e.area),
+    }
+}
+
 fn kodak_entry(bytes: &[u8]) -> Option<&'static KodakEntry> {
     KODAK.iter().find(|e| e.size == bytes.len() && (e.kind == KodakSmall::Cfai) == bytes.starts_with(b"KodakCommonInfo"))
 }
@@ -171,7 +194,7 @@ pub fn make_model(bytes: &[u8]) -> Option<(String, String)> {
     if !is_headerless(bytes) {
         return None;
     }
-    entry(bytes).map(|e| (e.make.to_string(), e.model.to_string())).or_else(|| kodak_entry(bytes).map(|e| ("Kodak".to_string(), e.model.to_string())))
+    entry(bytes).map(|e| (e.make.to_string(), named(e, bytes).0.to_string())).or_else(|| kodak_entry(bytes).map(|e| ("Kodak".to_string(), e.model.to_string())))
 }
 
 /// The C603's CFAI header: the samples' offset and the curve.
@@ -275,19 +298,26 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         _ => None,
     };
     let (width, height) = (e.width, e.height);
-    let geometry = crate::geometry::find(e.make, e.model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
-    let white = match geometry.white {
+    let (model, area) = named(e, bytes);
+    let (top, left, area_w, area_h, colors, white) = match area {
+        Some(a) => a,
+        None => {
+            let g = crate::geometry::find(e.make, model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
+            (g.top, g.left, g.width, g.height, g.colors, g.white)
+        }
+    };
+    let white = match white {
         0 => ((1u32 << e.layout.bits) - 1) >> e.layout.shift,
         w => w,
     } as f64;
-    let calibration = crate::cameras::find(e.make, e.model).ok_or(Error::Unsupported("a camera without calibrations"))?;
+    let calibration = crate::cameras::find(e.make, model).ok_or(Error::Unsupported("a camera without calibrations"))?;
     let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
-    let (top, left) = (geometry.top as usize, geometry.left as usize);
+    let (top, left) = (top as usize, left as usize);
     Ok(Dng {
         format: Format::Headerless,
         make: e.make.to_string(),
-        model: e.model.to_string(),
-        unique_model: e.model.to_string(),
+        model: model.to_string(),
+        unique_model: model.to_string(),
         version: [0, 0, 0, 0],
         orientation: 1,
         width,
@@ -300,7 +330,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         predictor: 1,
         pieces: Pieces { width, height, spans: vec![(0, bytes.len())] },
         cfa_dim: (2, 2),
-        cfa: geometry.colors.to_vec(),
+        cfa: colors.to_vec(),
         cfa_layout: 1,
         linearization: None,
         black_dim: (2, 2),
@@ -308,7 +338,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         black_delta_h: Vec::new(),
         black_delta_v: Vec::new(),
         white: vec![white],
-        active: (top, left, top + geometry.height as usize, left + geometry.width as usize),
+        active: (top, left, top + area_h as usize, left + area_w as usize),
         default_crop: None,
         default_scale: (1.0, 1.0),
         as_shot_neutral: cam_mul.map(|c| vec![c[1] as f64 / c[0] as f64, 1.0, c[1] as f64 / c[2] as f64]),

@@ -2081,6 +2081,24 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   (found by changing the file's bytes one at a time against LibRaw's
   numbers), red, blue and both greens, the greens 256. Both files match
   LibRaw. The HERO10 Black's GPRs (2) match too.
+- The PowerShot A610's and S2 IS's CRW-named headerless frames are one
+  size; LibRaw names the camera by the byte at 36684 (16 or more the S2
+  IS's, found by changing it), and develops another image area than its
+  other files of that size (the headerless table now carries it). The S2
+  IS matches LibRaw; the A610 and the S100's frame match with LibRaw's
+  black level but not with the border's as measured, and stay LibRaw's.
+- Nikon's film scans (`coolscan.rs`): an RGB image, LibRaw's white the
+  depth's largest sample (never lowered), its balance made from the
+  picture in 8 by 8 blocks (a block with a sample past the white less 25
+  left out), no matrix. The 16-bit scans (V ED, SUPER COOLSCAN 5000 ED,
+  4 files) match LibRaw; the 8-bit IV ED is declined (LibRaw takes its
+  white as 255 though its samples reach 65535, so its output is all 0 or
+  65535).
+- Sony's pixel shift ARQs (`arq.rs`): four samples a pixel combined in
+  the file, LibRaw's image the samples as stored; the develop takes the
+  black off, lowers the white to the brightest of all four samples, and
+  drops the other green. Both files match LibRaw with highlights
+  clipped; blending (which mixes the fourth sample) is declined.
 - Sinar's STI (`sinar.rs`): one tile of 16-bit samples, its directory's
   own orientation, the balance the "Neutral" line of IFD0's 0xC517. The
   one file matches LibRaw.

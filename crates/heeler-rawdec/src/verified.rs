@@ -792,6 +792,7 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("headerless", "Canon", "Canon IXUS 160"),
     ("headerless", "Canon", "Canon PowerShot A3300 IS"),
     ("headerless", "Canon", "Canon PowerShot A620"),
+    ("headerless", "Canon", "Canon PowerShot S2 IS"),
     ("headerless", "Canon", "Canon PowerShot A630"),
     ("headerless", "Canon", "Canon PowerShot A640"),
     ("headerless", "Canon", "Canon PowerShot A650 IS"),
@@ -1011,6 +1012,11 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("headerless", "Kodak", "C603"),
     // The Raspberry Pi camera's IMX219 captures (rpi.rs), 2026-10-26.
     ("headerless", "Broadcom", "RPi IMX219"),
+    // Nikon's 16-bit film scans (coolscan.rs) and Sony's pixel shift files
+    // with highlights clipped (arq.rs), 2026-10-26.
+    ("NEF", "Nikon", "Nikon COOLSCAN V ED"),
+    ("NEF", "Nikon", "Nikon SUPER COOLSCAN 5000 ED"),
+    ("ARQ", "SONY", "ILCE-7RM3"),
     ("STI", "Sinar AG", "Sinarback eVolution 75, Sinar p3 / f3"),
     // Monochrome sensors' DNGs (develop.rs's monochrome plan), 2026-10-25.
     ("DNG", "Leica Camera AG", "M Monochrom"),

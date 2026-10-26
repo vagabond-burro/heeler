@@ -40,6 +40,7 @@ pub enum Format {
     Dcs,
     CanonTif,
     Sti,
+    Arq,
 }
 
 /// Make and Model as a raw file of any format this crate reads gives
@@ -102,6 +103,7 @@ impl Format {
             Format::Dcs => "TIF",
             Format::CanonTif => "TIF",
             Format::Sti => "STI",
+            Format::Arq => "ARQ",
             Format::Crw => "CRW",
             Format::Headerless => "headerless",
             Format::Raf => "RAF",
@@ -194,6 +196,10 @@ pub enum Coding {
     Dc120 { jpeg: bool },
     /// 10-bit samples four in five bytes (rpi.rs), rows of `stride` bytes.
     Raw10 { stride: usize },
+    /// A Nikon film scan's RGB image (coolscan.rs).
+    Coolscan(Box<crate::coolscan::Coolscan>),
+    /// A Sony pixel shift file's image (arq.rs).
+    SonyArq(Box<crate::arq::Arq>),
 }
 
 /// A raw file in the terms a develop needs, which are the DNG
@@ -410,8 +416,15 @@ impl Dng {
         if crate::canon::is_cr2(bytes) {
             return crate::canon::parse(bytes);
         }
+        // An ARQ passes is_arw too, a scan is_nef.
+        if crate::arq::is_arq(bytes) {
+            return crate::arq::dng(bytes);
+        }
         if crate::sony::is_arw(bytes) {
             return crate::sony::parse(bytes);
+        }
+        if crate::coolscan::is_coolscan(bytes) {
+            return crate::coolscan::dng(bytes);
         }
         if crate::nef::is_nef(bytes) {
             return crate::nef::parse(bytes);
