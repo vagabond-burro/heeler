@@ -113,7 +113,10 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
         // fault (verified_libraw_fault says how it was checked instead):
         // its shipped develop must still finish, and it counts as taken.
         let fault = heeler_rawdec::verified_libraw_fault(&plan).is_some();
-        if !plan.three() && !fault {
+        // A SuperCCD frame's samples are placed on a diagonal image LibRaw
+        // has no unpacked mosaic of: its develop below holds the placement.
+        let superccd = matches!(plan.dng.coding, heeler_rawdec::dng::Coding::SuperCcd(_));
+        if !plan.three() && !fault && !superccd {
             let Ok((_, _, theirs)) = heeler_raw::libraw_mosaic(lb) else {
                 unreadable.push(name);
                 continue;
@@ -147,8 +150,13 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
         let with = heeler_raw::with_libraw_numbers(lb, &plan).unwrap_or_else(|_| plan.clone());
         for half_size in [false, true] {
             for highlight in [0, 2] {
+                // A SuperCCD frame: full size only, held to LibRaw's AHD
+                // (which Heeler ships for it), not its default PPG.
+                if superccd && half_size {
+                    continue;
+                }
                 let o = DevelopOpts { half_size, highlight, ..DevelopOpts::default() };
-                let theirs = heeler_raw::decode_sensor_with(lb, o).unwrap();
+                let theirs = heeler_raw::decode_sensor_with(lb, if superccd { DevelopOpts { demosaic: 3, ..o } } else { o }).unwrap();
                 let with = heeler_raw::with_libraw_balance(lb, &with, o);
                 match heeler_rawdec::develop::develop_with(&bytes, &with, &opts(o), None) {
                     // A monochrome frame's headroom is 1: LibRaw's, from

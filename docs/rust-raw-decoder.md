@@ -1998,8 +1998,10 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   LibRaw turns it. LibRaw's default demosaic for these files is not its
   AHD but its PPG: against LibRaw asked for AHD the develop is exact on all
   27 files, against its default 35 to 51 dB. A PPG demosaic would be
-  written from recall (the owner's call, as for ORF and Fujifilm's
-  compression), so these bodies stay LibRaw's for now, and half size is
+  written from recall, so the owner chose to ship AHD for these bodies:
+  they are verified against LibRaw asked for AHD (the corpus test and
+  rustdiff ask for it on a SuperCCD frame), exact at full size under
+  Clip and Blend on the 25 such files of both corpora. Half size is
   declined. For the S2Pro, S5000 and S7000 LibRaw's balance is not record
   0x2FF0's, and where it comes from is not found.
 

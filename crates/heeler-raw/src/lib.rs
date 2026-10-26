@@ -451,6 +451,11 @@ pub fn libraw_mosaic(bytes: &[u8]) -> Result<(usize, usize, Vec<u16>), RawError>
     }
     let (pitch, rows) = unsafe { (heeler_raw_pitch(handle.0) as usize / 2, heeler_raw_height(handle.0) as usize) };
     let (top, left, w, h) = unsafe { (heeler_top_margin(handle.0) as usize, heeler_left_margin(handle.0) as usize, heeler_active_width(handle.0) as usize, heeler_active_height(handle.0) as usize) };
+    // A SuperCCD frame's active area is its diagonal image, not a part of
+    // the frame: there is no such mosaic to hand over.
+    if top + h > rows || left + w > pitch {
+        return Err(RawError::Unexpected);
+    }
     let all = unsafe { std::slice::from_raw_parts(raw, rows * pitch) };
     let mut out = Vec::with_capacity(w * h);
     for r in top..top + h {

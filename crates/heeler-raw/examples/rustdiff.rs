@@ -140,7 +140,10 @@ fn main() {
         };
         // An image of three samples a pixel has no mosaic: its outputs are
         // what is compared.
-        if !quick && !plan.three() {
+        // A SuperCCD frame's stages are on a diagonal image LibRaw's stage
+        // dump does not cover; its outputs hold the placement.
+        let superccd = matches!(plan.dng.coding, heeler_rawdec::dng::Coding::SuperCcd(_));
+        if !quick && !plan.three() && !superccd {
             // The develop matrix, to the bit.
             if let Ok(f) = heeler_raw::linear_dng::libraw_facts(lb, base) {
                 let ulps: Vec<i64> = match &plan.four {
@@ -240,11 +243,14 @@ fn main() {
             }
         }
         // The output.
-        let cases: &[(bool, i32)] = if quick { &[(false, 0)] } else { &[(true, 0), (true, 2), (false, 0), (false, 2)] };
+        // The Rust develop has no half size for a SuperCCD frame.
+        let cases: &[(bool, i32)] = if quick { &[(false, 0)] } else if superccd { &[(false, 0), (false, 2)] } else { &[(true, 0), (true, 2), (false, 0), (false, 2)] };
         let mut full_worst: Option<Diff> = None;
         for &(half, highlight) in cases {
             let o = DevelopOpts { half_size: half, highlight, ..base };
-            let theirs = heeler_raw::decode_sensor_with(lb, o).unwrap();
+            // A SuperCCD frame is held to LibRaw's AHD (quality 3), which
+            // Heeler ships, not its default PPG for these files.
+            let theirs = heeler_raw::decode_sensor_with(lb, if superccd { DevelopOpts { demosaic: 3, ..o } } else { o }).unwrap();
             let mut with = numbered.clone();
             if let Some(m) = libraw_matrix {
                 with.rgb_cam = m;

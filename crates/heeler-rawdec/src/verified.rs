@@ -859,6 +859,24 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("RAF", "FUJIFILM", "X10"),
     ("RAF", "FUJIFILM", "XF1"),
     ("RAF", "FUJIFILM", "XF10"),
+    // RAF, SuperCCD (the sensor turned 45 degrees): exact to LibRaw's AHD
+    // (which Heeler ships for these, not LibRaw's default PPG) at full
+    // size under Clip and Blend, from rustdiff over both corpora of
+    // 2026-10-26. There is no half size.
+    ("RAF", "FUJIFILM", "FinePix E550"),
+    ("RAF", "FUJIFILM", "FinePix E900"),
+    ("RAF", "FUJIFILM", "FinePix S100FS"),
+    ("RAF", "FUJIFILM", "FinePix S3Pro"),
+    ("RAF", "FUJIFILM", "FinePix S5000"),
+    ("RAF", "FUJIFILM", "FinePix S5200"),
+    ("RAF", "FUJIFILM", "FinePix S5600"),
+    ("RAF", "FUJIFILM", "FinePix S5Pro"),
+    ("RAF", "FUJIFILM", "FinePix S6000fd"),
+    ("RAF", "FUJIFILM", "FinePix S6500fd"),
+    ("RAF", "FUJIFILM", "FinePix S7000"),
+    ("RAF", "FUJIFILM", "FinePix S9500"),
+    ("RAF", "FUJIFILM", "FinePix S9600"),
+    ("RAF", "FUJIFILM", "FinePixS2Pro"),
     // RAF, X-Trans, uncompressed or losslessly compressed: exact to LibRaw
     // through the scaled mosaic and at half size, and at full size within
     // the corpus test's PSNR floor (the demosaic is Heeler's own), from
