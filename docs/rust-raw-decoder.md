@@ -2171,6 +2171,11 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   other files of that size (the headerless table now carries it). The S2
   IS matches LibRaw; the A610 and the S100's frame match with LibRaw's
   black level but not with the border's as measured, and stay LibRaw's.
+  A time-boxed look found no rule: the S100 frame's left border is 128
+  throughout and its right about 50, against LibRaw's 122 and 123; the
+  A610's borders measure about 32, against LibRaw's 31 at the even
+  columns and 32 at the odd. One file of each gives too little to fix a
+  per-camera level.
 - The Phase One P40+ and P65+ (`iiq_quarters.rs`): each quarter's curve a
   cubic spline through (0, 0), each of 0x041F's 16 levels paired with the
   four quarters' mean at it (rounded half up) and (65535, 65535), the
