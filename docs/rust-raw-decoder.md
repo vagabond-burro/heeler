@@ -2029,6 +2029,18 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   LibRaw takes a balance for it that the file does not state, so it
   stays LibRaw's.
 
+### Kodak's raw TIFFs
+
+- `dcs.rs`: the frame is the widest sub-IFD of one sample a pixel in one
+  strip. The DCS460D and EOS DCS 1 and 3 hold a byte a sample (the
+  directory states no compression, and photometric 1) through IFD0's
+  0x0123 (256 SHORTs), LibRaw's image area 2 columns in, no stated
+  balance. The DCS520C and DCS560C hold a 12-bit lossless JPEG through
+  Kodak's 0x090D, their balance read as a DCR's; their black levels (178
+  and 177) are LibRaw's for the cameras, since no tag or sample of the
+  files moves them. The white level is the curve's last entry. All five
+  bodies (10 files) match LibRaw.
+
 ### Linear DNGs
 
 - A linear DNG of three samples a pixel (photometric 34892), uncompressed

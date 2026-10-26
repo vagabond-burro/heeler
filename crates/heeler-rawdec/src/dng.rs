@@ -37,6 +37,7 @@ pub enum Format {
     Mos,
     Kdc,
     Dcr,
+    Dcs,
 }
 
 /// Make and Model as a raw file of any format this crate reads gives
@@ -93,6 +94,7 @@ impl Format {
             Format::Mos => "MOS",
             Format::Kdc => "KDC",
             Format::Dcr => "DCR",
+            Format::Dcs => "TIF",
             Format::Crw => "CRW",
             Format::Headerless => "headerless",
             Format::Raf => "RAF",
@@ -437,6 +439,9 @@ impl Dng {
         }
         if crate::dcr::is_dcr(bytes) {
             return crate::dcr::parse(bytes);
+        }
+        if crate::dcs::is_dcs(bytes) {
+            return crate::dcs::parse(bytes);
         }
         if crate::plain::is_plain(bytes) {
             return crate::plain::parse(bytes);
