@@ -105,10 +105,19 @@ pub fn set_verified_only(on: bool) {
 
 /// Whether a verified camera's develop is held to LibRaw's within a
 /// tolerance rather than to the bit (verified.rs's NEAR).
-/// Why a verified camera's develop departs from LibRaw's (a fault of
-/// LibRaw's), if it does.
-pub fn verified_libraw_fault(format: &str, make: &str, model: &str) -> Option<&'static str> {
-    verified::libraw_fault(format, make, model)
+/// Why a file's develop departs from LibRaw's (a fault of LibRaw's), if
+/// it does: its camera's (verified.rs), or a frame LibRaw leaves rows of
+/// unwritten (an RW2 taller than its sensor's stated rows: LibRaw's rows
+/// below hold whatever its memory held, 0 in a fresh process, another
+/// file's samples after one; the develop takes them as 0).
+pub fn verified_libraw_fault(p: &Plan) -> Option<&'static str> {
+    let (format, make, model) = camera_key(p);
+    if let crate::dng::Coding::Panasonic(c) = &p.dng.coding {
+        if c.rows > 0 && c.rows < p.dng.height {
+            return Some("LibRaw leaves the rows below the sensor's stated rows unwritten; checked against LibRaw in a fresh process, to the bit");
+        }
+    }
+    verified::libraw_fault(format, &make, &model)
 }
 
 pub fn verified_near(format: &str, make: &str, model: &str) -> bool {

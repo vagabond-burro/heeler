@@ -109,7 +109,11 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
         // An image of three samples a pixel (a Canon sRAW) has no mosaic:
         // its outputs below are what is held to LibRaw's.
         let (format, make, model) = heeler_rawdec::camera_key(&plan);
-        if !plan.three() {
+        // A file whose develop departs from LibRaw's where LibRaw's is a
+        // fault (verified_libraw_fault says how it was checked instead):
+        // its shipped develop must still finish, and it counts as taken.
+        let fault = heeler_rawdec::verified_libraw_fault(&plan).is_some();
+        if !plan.three() && !fault {
             let Ok((_, _, theirs)) = heeler_raw::libraw_mosaic(lb) else {
                 unreadable.push(name);
                 continue;
@@ -131,9 +135,7 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
         if let Err(e) = heeler_rawdec::develop(&bytes, &shipped, None) {
             failures.push(format!("{name}: the shipped develop: {e}"));
         }
-        // A camera whose develop departs from LibRaw's where LibRaw's is a
-        // fault (verified.rs says how it was checked instead).
-        if heeler_rawdec::verified_libraw_fault(format, &make, &model).is_some() {
+        if fault {
             continue;
         }
         // The matrix and levels are LibRaw's here: what this holds to

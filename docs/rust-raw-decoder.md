@@ -866,7 +866,8 @@ on one core, 3.1 s across the cores; CR2 rows as measured after it, in
 - Declined: the A200 to A390's coding (8 files; variable length, not
   ARW2's blocks, and described only by code), "Compressed RAW 2" (4),
   ARW1 (1), files from 5 bodies the calibration table lacks, and the
-  non-Bayer sizes (20).
+  non-Bayer sizes (20). (The A100's and the A200 to A390's coding was
+  later found from the data: see "The oldest ARW coding" below.)
 - Speed over the 168: 0.33 of LibRaw's time at full size (the slowest
   camera 0.40, the A7R III), 0.06 at half size. CSVs in
   `docs/rust-raw-decoder/arw-*.csv`.
@@ -2124,9 +2125,13 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   mode, then rows of 10-bit samples four in five bytes; the balance the
   maker note's "gain_r=" and "gain_b=", the black level LibRaw's for the
   sensor (66). Both files match LibRaw.
-- RW2 RawFormat 7: LibRaw leaves the rows below the sensor's stated
-  bottom (0x04 plus 0x06) at 0; the DC-S5's high-resolution file, two
-  rows taller, matches LibRaw so.
+- RW2 RawFormat 7: LibRaw does not write the rows below the sensor's
+  stated bottom (0x04 plus 0x06): they hold whatever its memory held, 0
+  in a fresh process, another file's samples after one. The develop
+  takes them as 0; the DC-S5's high-resolution file, two rows taller,
+  matches LibRaw in a fresh process, and the corpus test (which runs
+  many files in one process) does not hold such a frame to LibRaw's
+  output (verified_libraw_fault).
 - Two DNGs that state a tag past the specification, read as LibRaw reads
   them: a DNGVersion of five bytes (the DJI Osmo Action's, its first
   four taken), and one uncompressed strip whose StripByteCounts is short
