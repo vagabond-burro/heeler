@@ -107,7 +107,7 @@ impl Plan {
             (3, 1, 1) | (3, 8, 3 | 34894 | 34895) if matches!(dng.bits, 16 | 24 | 32) && dng.linearization.is_none() => {}
             _ => return Err(Error::Unsupported("a sample format, depth or compression not read here")),
         }
-        let x_trans = dng.format == Format::Raf && dng.cfa_dim == (6, 6);
+        let x_trans = matches!(dng.format, Format::Raf | Format::Dng) && dng.cfa_dim == (6, 6);
         if dng.samples != 1 || dng.cfa_layout != 1 || !(dng.cfa_dim == (2, 2) || x_trans) {
             return Err(Error::Unsupported("not a one-sample 2 by 2 Bayer mosaic"));
         }

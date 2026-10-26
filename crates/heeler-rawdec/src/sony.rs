@@ -38,7 +38,11 @@ use crate::Error;
 pub fn is_arw(bytes: &[u8]) -> bool {
     let Some(t) = Tiff::new(bytes) else { return false };
     let Some(ifd0) = t.ifds().into_iter().next() else { return false };
-    ifd0.get(271).and_then(|e| t.ascii(&e)).is_some_and(|m| m.eq_ignore_ascii_case("SONY")) && ifd0.get(50706).is_none()
+    let make = ifd0.get(271).and_then(|e| t.ascii(&e)).unwrap_or_default();
+    // Sony's bodies under Hasselblad's name (the Lunar): a raw directory of
+    // Sony's compression.
+    let sony_frame = || t.ifds().iter().any(|i| i.get(259).and_then(|e| t.uint(&e)) == Some(32767));
+    (make.eq_ignore_ascii_case("SONY") || (make.eq_ignore_ascii_case("Hasselblad") && sony_frame())) && ifd0.get(50706).is_none()
 }
 
 /// The width and height of sensor data a Sony raw file states in its raw

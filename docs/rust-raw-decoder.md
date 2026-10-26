@@ -2092,6 +2092,24 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   four taken), and one uncompressed strip whose StripByteCounts is short
   of the frame while the file holds the whole frame from its offset (the
   Hasselblad L2D-20c's, the frame taken). Both match LibRaw.
+- The PowerShot G9's CR2s have no ColorData: their balance is a record
+  of the maker notes' 0x0029 (records of eight 32-bit words, 32 bytes
+  apart, words 2 to 5 green, red, blue, green), picked by ShotInfo's
+  white balance mode through a table found by changing the mode in copies
+  against LibRaw's numbers (0 to 4 their own, 5 record 6, 14 record 5, 15
+  record 8, 16 record 9, 17 record 7, others record 0). Both files match
+  LibRaw; the own black differs by a level on two sites, as on other
+  PowerShot CR2s.
+- The Hasselblad Lunar's ARW (a Sony body under Hasselblad's name) is read
+  as an ARW: sony.rs takes a Hasselblad file whose raw directory has
+  Sony's compression (32767). It matches LibRaw.
+- An X-Trans mosaic in a DNG (the X100S's converted file) develops as an
+  X-Trans RAF does: its decode exact, its full size held by the X-Trans
+  floor (48 and 54 dB), its half size exact.
+- Left LibRaw's after a short look: the SX30's headerless frame (its
+  measured black is far from LibRaw's, whose half-size black differs
+  again), and the YI DNG 1.0 files (LibRaw reads their 16-bit
+  differences its own way and nothing else gives a reference).
 - The DiMAGE G600's balance (headerless.rs): four big-endian SHORTs at
   byte 2030 of the file, inside the EXIF segment but outside any tag
   (found by changing the file's bytes one at a time against LibRaw's

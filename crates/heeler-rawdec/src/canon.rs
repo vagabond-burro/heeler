@@ -17,7 +17,7 @@
 //! it is decoded.
 
 use crate::dng::{Coding, Dng, Format, Pieces};
-use crate::tiff::Tiff;
+use crate::tiff::{Ifd, Tiff};
 use crate::Error;
 
 /// Whether `bytes` start as a CR2.
@@ -105,14 +105,20 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         .and_then(|e| match e.typ {
             7 => t.bytes(&e).map(|b| (0..b.len() / 2).filter_map(|i| t.u16(e.offset() + 2 * i).map(u32::from)).collect()),
             _ => t.uints(&e),
-        })
-        .ok_or(Error::Unsupported("no ColorData"))?;
-    let at = as_shot_at(color.len());
-    let wb = color.get(at..at + 4).ok_or(Error::Corrupt("ColorData"))?;
-    if wb.iter().any(|&v| v == 0) {
-        return Err(Error::Unsupported("no white balance as shot"));
-    }
-    let cam_mul = [wb[0] as f32, wb[1] as f32, wb[3] as f32, wb[2] as f32];
+        });
+    let cam_mul = match &color {
+        Some(color) => {
+            let at = as_shot_at(color.len());
+            let wb = color.get(at..at + 4).ok_or(Error::Corrupt("ColorData"))?;
+            if wb.iter().any(|&v| v == 0) {
+                return Err(Error::Unsupported("no white balance as shot"));
+            }
+            [wb[0] as f32, wb[1] as f32, wb[3] as f32, wb[2] as f32]
+        }
+        // No ColorData (the PowerShot G9's CR2s): a record of the white
+        // balance table (0x0029) by the white balance mode.
+        None => wb_table(&t, &notes).ok_or(Error::Unsupported("no ColorData"))?,
+    };
     // An sRAW's conversion (sraw.rs) by its ColorData version, and its
     // multipliers: a level set in ColorData (red, green, green, blue) at a
     // place by the version, each level times the set's green over 1024
@@ -127,6 +133,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
                 "Canon EOS 5D Mark II" | "Canon EOS 60D" | "Canon EOS-1D Mark IV" => Ok(crate::sraw::Conversion::Earlier { hue: (lumas - 1) << 1 }),
                 _ => Err(Error::Unsupported("an sRAW of a body whose conversion is not known")),
             };
+            let color = color.as_ref().ok_or(Error::Unsupported("an sRAW without ColorData"))?;
             let (at, conversion) = match color[0] as u16 as i16 {
                 3 => (78, crate::sraw::Conversion::Later { luma_offset: 512 }),
                 6 | 7 | 9 => (78, earlier(&model)?),
@@ -153,9 +160,9 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     // black level per channel (red, green, green, blue), at a place by its
     // version; their border left of the image area is not all masked.
     // Every other body's black is measured on the border.
-    let stated = match (color.len(), color[0] as u16 as i16) {
-        (2560, -3) => color.get(264..268),
-        (2560, -4) => color.get(333..337),
+    let stated = match color.as_ref().map(|c| (c.len(), c[0] as u16 as i16, c)) {
+        Some((2560, -3, c)) => c.get(264..268),
+        Some((2560, -4, c)) => c.get(333..337),
         _ => None,
     };
     // A file whose IFD0 orientation is no orientation at all (some Canon
@@ -210,7 +217,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         default_crop: None,
         default_scale: (1.0, 1.0),
         // The neutral the white balance implies, for the color model.
-        as_shot_neutral: Some(vec![(wb[1] as f64) / wb[0] as f64, 1.0, (wb[1] as f64) / wb[3] as f64]),
+        as_shot_neutral: Some(vec![cam_mul[1] as f64 / cam_mul[0] as f64, 1.0, cam_mul[1] as f64 / cam_mul[2] as f64]),
         as_shot_white_xy: None,
         color_matrix: [m(&calibration.color_matrix[0]), m(&calibration.color_matrix[1]), None],
         camera_calibration: [None, None, None],
@@ -224,4 +231,23 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         cam_mul: Some(cam_mul),
         border_black: stated.is_none() && !rgb,
     })
+}
+
+/// The white balance of a CR2 without ColorData (the PowerShot G9's), as
+/// LibRaw takes it (found by changing the file's bytes against LibRaw's
+/// numbers): the maker notes' 0x0029, records of eight 32-bit words each
+/// 32 bytes apart, the record's words 2 to 5 being green, red, blue and
+/// green; the record picked by the white balance mode, ShotInfo's (0x0004)
+/// word 7: modes 0 to 4 their own record, 5 record 6, 14 record 5, 15
+/// record 8, 16 record 9, 17 record 7, any other record 0. Red, green,
+/// blue, green.
+fn wb_table(t: &Tiff, notes: &Ifd) -> Option<[f32; 4]> {
+    const RECORD: [(u32, usize); 10] = [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 6), (14, 5), (15, 8), (16, 9), (17, 7)];
+    let mode = notes.get(0x0004).and_then(|e| t.uints(&e)).and_then(|v| v.get(7).copied())?;
+    let k = RECORD.iter().find(|r| r.0 == mode).map_or(0, |r| r.1);
+    let table = notes.get(0x0029)?;
+    let at = table.offset() + 32 * k;
+    let word = |i: usize| t.u32(at + 4 * i).map(|v| v as i32);
+    let (g, r, b, g2) = (word(2)?, word(3)?, word(4)?, word(5)?);
+    (g > 0 && r > 0 && b > 0 && g2 > 0 && table.offset() + 32 * (k + 1) <= table.offset() + t.bytes(&table)?.len()).then(|| [r as f32, g as f32, b as f32, g2 as f32])
 }
