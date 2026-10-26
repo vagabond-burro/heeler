@@ -807,6 +807,7 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("headerless", "GITUP", "GIT2 4:3"),
     ("headerless", "GITUP", "GIT2P 16:9"),
     ("headerless", "GITUP", "GIT2P 4:3"),
+    ("headerless", "Minolta", "DiMAGE G600"),
     ("headerless", "Minolta", "DiMAGE Z2"),
     // RAF, Bayer and uncompressed or packed, from rustdiff over both
     // corpora of 2026-10-24.
@@ -920,6 +921,7 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("DNG", "GoPro", "HERO7 Black"),
     ("DNG", "GoPro", "HERO8 Black"),
     ("DNG", "GoPro", "HERO9 Black"),
+    ("DNG", "GoPro", "HERO10 Black"),
     ("DNG", "GoPro", "HERO11 Black"),
     // NEFs whose balance is a ColorBalance record, header-less notes or a
     // Coolpix record, and the older Coolpix's two fields, 2026-10-25.

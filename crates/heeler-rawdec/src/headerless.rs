@@ -255,11 +255,25 @@ fn parse_kodak(bytes: &[u8], e: &KodakEntry) -> Result<Dng, Error> {
     })
 }
 
+/// The DiMAGE G600's white balance: four big-endian SHORTs at byte 2030
+/// of its file (inside the EXIF segment, outside any tag), red's and
+/// blue's multipliers over 256 and then both greens', 256 (found against
+/// LibRaw's numbers on the corpus's files; where the greens' are not 256
+/// LibRaw takes other numbers, and so it is declined).
+fn g600_balance(bytes: &[u8]) -> Option<[f32; 4]> {
+    let w: Vec<u16> = (0..4).map(|k| bytes.get(2030 + 2 * k..2032 + 2 * k).map(|b| u16::from_be_bytes([b[0], b[1]]))).collect::<Option<_>>()?;
+    (w[2] == 256 && w[3] == 256 && w[0] > 0 && w[1] > 0).then(|| [w[0] as f32, 256.0, w[1] as f32, 256.0])
+}
+
 pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     if let Some(e) = kodak_entry(bytes) {
         return parse_kodak(bytes, e);
     }
     let e = entry(bytes).ok_or(Error::Unsupported("a headerless file of an unknown size"))?;
+    let cam_mul = match e.model {
+        "DiMAGE G600" => Some(g600_balance(bytes).ok_or(Error::Unsupported("no stated white balance"))?),
+        _ => None,
+    };
     let (width, height) = (e.width, e.height);
     let geometry = crate::geometry::find(e.make, e.model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
     let white = match geometry.white {
@@ -297,7 +311,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         active: (top, left, top + geometry.height as usize, left + geometry.width as usize),
         default_crop: None,
         default_scale: (1.0, 1.0),
-        as_shot_neutral: None,
+        as_shot_neutral: cam_mul.map(|c| vec![c[1] as f64 / c[0] as f64, 1.0, c[1] as f64 / c[2] as f64]),
         as_shot_white_xy: None,
         color_matrix: [m(&calibration.color_matrix[0]), m(&calibration.color_matrix[1]), None],
         camera_calibration: [None, None, None],
@@ -308,7 +322,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         profile_tables: calibration.tables,
         baseline_exposure: 0.0,
         coding: Coding::Headerless(e.layout),
-        cam_mul: None,
+        cam_mul,
         border_black: e.black.is_none(),
     })
 }

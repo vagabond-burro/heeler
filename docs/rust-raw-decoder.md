@@ -2073,6 +2073,11 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   mode, then rows of 10-bit samples four in five bytes; the balance the
   maker note's "gain_r=" and "gain_b=", the black level LibRaw's for the
   sensor (66). Both files match LibRaw.
+- The DiMAGE G600's balance (headerless.rs): four big-endian SHORTs at
+  byte 2030 of the file, inside the EXIF segment but outside any tag
+  (found by changing the file's bytes one at a time against LibRaw's
+  numbers), red, blue and both greens, the greens 256. Both files match
+  LibRaw. The HERO10 Black's GPRs (2) match too.
 - Sinar's STI (`sinar.rs`): one tile of 16-bit samples, its directory's
   own orientation, the balance the "Neutral" line of IFD0's 0xC517. The
   one file matches LibRaw.
