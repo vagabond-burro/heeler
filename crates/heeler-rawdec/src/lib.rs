@@ -29,6 +29,7 @@ pub mod superccd;
 pub mod mrw;
 pub mod iiq;
 pub mod iiq_cal;
+pub mod iiq_quarters;
 pub mod iiq_s;
 pub mod kodak;
 pub mod kodak_codec;

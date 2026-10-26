@@ -2097,6 +2097,14 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   other files of that size (the headerless table now carries it). The S2
   IS matches LibRaw; the A610 and the S100's frame match with LibRaw's
   black level but not with the border's as measured, and stay LibRaw's.
+- The Phase One P40+ and P65+ (`iiq_quarters.rs`): each quarter's curve a
+  cubic spline through (0, 0), each of 0x041F's 16 levels paired with the
+  four quarters' mean at it (rounded half up) and (65535, 65535), the
+  slope 1 at the top, after a gain of 1 plus 0x041E's float for the
+  quarter. With two fixes to the grids (held to 0 to 65535 before them
+  and after each; each applies short of its stated size by a spacing),
+  which leave no IIQ worse, the 9 files develop at 83 to 98 dB against
+  LibRaw (none to the bit) and join the backs held within the tolerance.
 - Nikon's film scans (`coolscan.rs`): an RGB image, LibRaw's white the
   depth's largest sample (never lowered), its balance made from the
   picture in 8 by 8 blocks (a block with a sample past the white less 25

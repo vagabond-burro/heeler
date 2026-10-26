@@ -46,7 +46,8 @@
 //!    offset to frames of coding 6 (the IIQ S files of the backs with
 //!    them).
 //! 2. Quarters: where 0x0431 is given, the value goes through its quarter's
-//!    curve: the natural cubic spline through (0, 0), each level paired with
+//!    curve (where 0x041F is given, the P40+ and P65+, its quarter's curve
+//!    by iiq_quarters.rs's rules): the natural cubic spline through (0, 0), each level paired with
 //!    the level times its gain (rounded down), and (65535, 65535), rounded
 //!    half up. (LibRaw's arithmetic for the spline is not the double
 //!    precision used here: about one value in 5000 on the curve, there
@@ -77,8 +78,9 @@
 //!    for each column past it (LibRaw steps, it does not multiply, and the
 //!    32-bit sums carry their rounding). A grid applies from its top left
 //!    up to, not including, its last row and column of nodes (and to no
-//!    more than its width and height); where tiles of one tag overlap, a
-//!    pixel is the tile's whose left or top is the later.
+//!    more than its width and height less a spacing); where tiles of one
+//!    tag overlap, a pixel is the tile's whose left or top is the later.
+//!    The value is held to 0 to 65535 before the grids and after each.
 //! 7. The result is held to 0 to 65535.
 //!
 //! The result over LibRaw's area is LibRaw's loaded image with its black
@@ -88,10 +90,9 @@
 //! by 5444 at top 22, left 42; an IQ4 150MP 14204 by 10652 at top 106, left
 //! 102).
 //!
-//! The P40+ and P65+ (tags 0x041E to 0x0428: per quarter, a table of 16
-//! measured levels, of which LibRaw's curve passes through the first's
-//! levels paired with their mean over the quarters, and a pair of gains)
-//! are calibrated by rules not found exactly; `read` declines them.
+//! The P40+ and P65+ (tags 0x041E and 0x041F) take each quarter's curve
+//! by iiq_quarters.rs's rules in step 2's place, found closely but not to
+//! the bit.
 
 use rayon::prelude::*;
 
@@ -232,8 +233,9 @@ fn grid(block: &[u8], at: usize, len: usize, planes: usize, float: bool) -> Opti
         false => (0..n).map(|i| u16le(block, at + 16 + 2 * i).map(|v| v as f32)).collect::<Option<Vec<_>>>()?,
         true => (0..n).map(|i| f32le(block, at + 16 + 4 * i).map(|v| v * 32768.0)).collect::<Option<Vec<_>>>()?,
     };
-    // It applies up to its last node, not to it.
-    let (width, height) = (width.min((nodes_x - 1) * step_x), height.min((nodes_y - 1) * step_y));
+    // It applies up to its last node, not to it, and short of its stated
+    // size by a spacing (the half-size P65+ files' last columns).
+    let (width, height) = (width.min((nodes_x - 1) * step_x).min(width.saturating_sub(step_x)), height.min((nodes_y - 1) * step_y).min(height.saturating_sub(step_y)));
     Some(Grid { left: left as i64, top: top as i64, width, height, step_x, step_y, nodes_x, nodes_y, planes, gains, tag: 0 })
 }
 
@@ -283,7 +285,7 @@ pub fn read(bytes: &[u8]) -> Option<Calibration> {
     let entry = |tag: u32| entries.iter().find(|e| e.0 == tag).map(|e| (e.2, e.1));
     // The quarter curves of the P40+ and P65+ (0x041F to 0x0428, with
     // 0x041E's gains): not found, so not read.
-    if entry(0x041f).is_some() || (entry(0x0429).is_some() && entry(0x0431).is_none()) {
+    if entry(0x0429).is_some() && entry(0x0431).is_none() {
         return None;
     }
     let mut defects = Vec::new();
@@ -336,8 +338,11 @@ pub fn read(bytes: &[u8]) -> Option<Calibration> {
     };
     // The quarters' gain by level (0x0431: levels, then each quarter's
     // gains at them, 10000 being 1).
-    let curves = match entry(0x0431) {
-        Some((at, len)) => {
+    let curves = match (entry(0x0431), entry(0x041f)) {
+        // The P40+ and P65+ quarter curves (iiq_quarters.rs).
+        (None, Some(_)) => Some(crate::iiq_quarters::read(block, &entries, CURVE_FROM, 65536 + 8192)?),
+        (Some(_), Some(_)) => return None,
+        (Some((at, len)), None) => {
             let words: Vec<u32> = (0..len / 4).map(|i| u32le(block, at + 4 * i)).collect::<Option<_>>()?;
             let n = (words.len().saturating_sub(1)) / 5;
             if n < 2 {
@@ -354,7 +359,7 @@ pub fn read(bytes: &[u8]) -> Option<Calibration> {
             };
             Some([curve(0), curve(1), curve(2), curve(3)])
         }
-        None => None,
+        (None, None) => None,
     };
     Some(Calibration { black, split, row_black, right, response, defects, grids, split_row, col_black, curves })
 }
@@ -472,6 +477,8 @@ pub fn apply(cal: &Calibration, frame: &mut [u16], width: usize, height: usize, 
 pub fn gains(cal: &Calibration, y: usize, colors: [u8; 4], v: &mut [i32]) {
     let width = v.len();
     let mut gain = vec![0f32; width];
+    // Held to 0 to 65535 before the grids and after each.
+    v.iter_mut().for_each(|x| *x = (*x).clamp(0, 65535));
     for g in &cal.grids {
         if (y as i64) < g.top || y as i64 >= g.top + g.height as i64 {
             continue;
@@ -490,5 +497,6 @@ pub fn gains(cal: &Calibration, y: usize, colors: [u8; 4], v: &mut [i32]) {
                 }
             }
         }
+        v[x0..x1].iter_mut().for_each(|x| *x = (*x).clamp(0, 65535));
     }
 }

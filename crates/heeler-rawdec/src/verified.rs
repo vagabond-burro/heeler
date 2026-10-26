@@ -1061,6 +1061,8 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("IIQ", "Phase One A/S", "P25+"),
     ("IIQ", "Phase One A/S", "P30"),
     ("IIQ", "Phase One A/S", "P45"),
+    ("IIQ", "Phase One A/S", "P40+"),
+    ("IIQ", "Phase One A/S", "P65+"),
     ("IIQ", "Phase One A/S", "P45+"),
     ("IIQ", "Phase One A/S", "iXU180"),
 ];
@@ -1081,6 +1083,8 @@ const NEAR: &[(&str, &str, &str)] = &[
     ("IIQ", "Phase One A/S", "P25+"),
     ("IIQ", "Phase One A/S", "P30"),
     ("IIQ", "Phase One A/S", "P45"),
+    ("IIQ", "Phase One A/S", "P40+"),
+    ("IIQ", "Phase One A/S", "P65+"),
     ("IIQ", "Phase One A/S", "P45+"),
     ("IIQ", "Phase One A/S", "iXU180"),
 ];
