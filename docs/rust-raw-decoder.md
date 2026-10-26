@@ -2013,6 +2013,22 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   are declined). The Z981, Z990, Z1015 IS, P712 and P880 (10 files) match
   LibRaw. The DC120 and DC50 (their own codings) stay LibRaw's.
 
+### Kodak's DCRs
+
+- `kodak_codec.rs` decodes compression 65000: each row in segments of
+  256 samples (0xFDE8), each segment at its offset in 0xFDE9, a block of
+  4-bit lengths and then the differences (least significant bits first
+  from big-endian words), each sample the difference plus the one two to
+  its left, through Kodak's curve (0x090D of Kodak's directory, 0x8290).
+- `dcr.rs`: the frame is the widest compression 65000 sub-IFD; the white
+  level is the curve's last entry (3700 or 4095). The balance is the
+  RATIONAL triple at 0x0848 plus the mode in 0x03FC, each multiplier
+  green's level squared over its own, the fraction dropped. The DCS760C,
+  DCS Pro 14N, 14nx and SLR/n (8 files) match LibRaw with Heeler's own
+  numbers; the SLR/c matches to the demosaic with LibRaw's numbers, but
+  LibRaw takes a balance for it that the file does not state, so it
+  stays LibRaw's.
+
 ### Linear DNGs
 
 - A linear DNG of three samples a pixel (photometric 34892), uncompressed

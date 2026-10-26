@@ -987,6 +987,11 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("KDC", "EASTMAN KODAK COMPANY", "KODAK EasyShare Z990 Digital Camera"),
     ("KDC", "EASTMAN KODAK COMPANY", "KODAK P712 ZOOM DIGITAL CAMERA"),
     ("KDC", "EASTMAN KODAK COMPANY", "KODAK P880 ZOOM DIGITAL CAMERA"),
+    // Kodak's DCRs (dcr.rs), 2026-10-25.
+    ("DCR", "Kodak", "DCS Pro 14N"),
+    ("DCR", "Kodak", "DCS Pro 14nx"),
+    ("DCR", "Kodak", "DCS Pro SLR/n"),
+    ("DCR", "Kodak", "DCS760C"),
     // Monochrome sensors' DNGs (develop.rs's monochrome plan), 2026-10-25.
     ("DNG", "Leica Camera AG", "M Monochrom"),
     ("DNG", "Leica Camera AG", "LEICA M MONOCHROM (Typ 246)"),

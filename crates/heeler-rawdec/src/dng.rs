@@ -36,6 +36,7 @@ pub enum Format {
     Mef,
     Mos,
     Kdc,
+    Dcr,
 }
 
 /// Make and Model as a raw file of any format this crate reads gives
@@ -91,6 +92,7 @@ impl Format {
             Format::Mef => "MEF",
             Format::Mos => "MOS",
             Format::Kdc => "KDC",
+            Format::Dcr => "DCR",
             Format::Crw => "CRW",
             Format::Headerless => "headerless",
             Format::Raf => "RAF",
@@ -171,6 +173,10 @@ pub enum Coding {
     /// Fujifilm's compression (fuji.rs): blocks of columns, each read on
     /// its own.
     Fuji(Box<crate::fuji::Fuji>),
+    /// Kodak's compression 65000 (dcr.rs, kodak_codec.rs): rows in
+    /// segments, each its lengths and then its differences, through
+    /// Kodak's curve.
+    Kodak65000(Box<crate::dcr::Kodak65000>),
 }
 
 /// A raw file in the terms a develop needs, which are the DNG
@@ -428,6 +434,9 @@ impl Dng {
         }
         if crate::kodak::is_kodak(bytes) {
             return crate::kodak::parse(bytes);
+        }
+        if crate::dcr::is_dcr(bytes) {
+            return crate::dcr::parse(bytes);
         }
         if crate::plain::is_plain(bytes) {
             return crate::plain::parse(bytes);

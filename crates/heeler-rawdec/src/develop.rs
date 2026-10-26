@@ -89,6 +89,7 @@ impl Plan {
             (1, 0, _) if matches!(&dng.coding, Coding::CrxWavelet(_)) && (8..=16).contains(&dng.bits) => {}
             (1, 34713, _) if matches!(&dng.coding, Coding::NikonHuffman(_)) && (12..=14).contains(&dng.bits) => {}
             (1, 34316, _) if matches!(&dng.coding, Coding::Panasonic(_)) && (12..=16).contains(&dng.bits) => {}
+            (1, 65000, _) if matches!(&dng.coding, Coding::Kodak65000(_)) => {}
             (1, 65535, _) if matches!(&dng.coding, Coding::Pentax(_)) && (12..=14).contains(&dng.bits) => {}
             // GoPro's VC-5 (vc5.rs): one tile the image's size.
             (1, 9, _) if dng.coding == Coding::Tiff && dng.bits == 16 && dng.pieces.spans.len() == 1 && (dng.pieces.width, dng.pieces.height) == (dng.width, dng.height) => {}
@@ -780,6 +781,14 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         crate::headerless::decode(bytes, fw, fh, fh, &sc.samples, |r, line| frame.lock().unwrap()[r * fw..(r + 1) * fw].copy_from_slice(&line[..fw]))?;
         let (diag, dw, _) = crate::superccd::place(&frame.into_inner().unwrap(), fw, fh, &sc.layout);
         diag.par_chunks(dw).enumerate().for_each(|(r, row)| put_run(out, p, r, 0, row, lin));
+        return Ok(cfa);
+    }
+    if let Coding::Kodak65000(k) = &d.coding {
+        // Decoded whole (kodak_codec.rs), then each row.
+        stopped(stop)?;
+        let frame = crate::kodak_codec::decode_65000(bytes, k.start, &k.offsets, k.segment, d.width, d.height, Some(&k.curve)).map_err(|_| Error::Corrupt("a Kodak frame that does not decode"))?;
+        stopped(stop)?;
+        frame.par_chunks(d.width).enumerate().for_each(|(r, row)| put_run(out, p, r, 0, row, lin));
         return Ok(cfa);
     }
     if let Coding::Samsung(sc) = &d.coding {

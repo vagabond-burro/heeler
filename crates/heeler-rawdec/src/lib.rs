@@ -30,6 +30,8 @@ pub mod iiq;
 pub mod iiq_cal;
 pub mod iiq_s;
 pub mod kodak;
+pub mod kodak_codec;
+pub mod dcr;
 pub mod crw;
 pub mod headerless;
 pub mod hasselblad;
