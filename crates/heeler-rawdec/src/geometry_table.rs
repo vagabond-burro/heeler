@@ -908,6 +908,7 @@ pub(crate) const GEOMETRY: &[Geometry] = &[
     Geometry { make: "SEIKO EPSON CORP.", model: "R-D1x", raw: (3040, 2024), top: 0, left: 0, width: 3040, height: 2024, colors: [0, 1, 1, 2], white: 4095 },
     Geometry { make: "SONY", model: "DSC-HX95", raw: (4928, 3708), top: 0, left: 0, width: 4928, height: 3708, colors: [0, 1, 1, 2], white: 16380 },
     Geometry { make: "SONY", model: "DSC-HX99", raw: (4928, 3708), top: 0, left: 0, width: 4928, height: 3708, colors: [0, 1, 1, 2], white: 16380 },
+    Geometry { make: "SONY", model: "DSC-R1", raw: (3984, 2608), top: 0, left: 0, width: 3925, height: 2608, colors: [1, 0, 2, 1], white: 16383 },
     Geometry { make: "SONY", model: "DSC-RX0", raw: (4832, 3224), top: 0, left: 0, width: 4832, height: 3224, colors: [0, 1, 1, 2], white: 16383 },
     Geometry { make: "SONY", model: "DSC-RX0M2", raw: (4832, 3224), top: 0, left: 0, width: 4832, height: 3224, colors: [0, 1, 1, 2], white: 16380 },
     Geometry { make: "SONY", model: "DSC-RX1", raw: (6048, 4024), top: 0, left: 0, width: 6018, height: 4024, colors: [0, 1, 1, 2], white: 16383 },

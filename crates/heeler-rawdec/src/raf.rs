@@ -256,6 +256,9 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     if !(1..=8).contains(&orientation) {
         return Err(Error::Unsupported("an orientation tag outside 1 to 8"));
     }
+    // LibRaw turns every S2Pro frame a quarter clockwise, whatever its
+    // EXIF orientation says.
+    let orientation = if model == "FinePixS2Pro" { 6 } else { orientation };
     let calibration = crate::cameras::find(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
     let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
     let (top, left) = (geometry.top as usize, geometry.left as usize);

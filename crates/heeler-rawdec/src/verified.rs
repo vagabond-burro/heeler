@@ -992,6 +992,23 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("DNG", "Leica Camera AG", "LEICA M MONOCHROM (Typ 246)"),
     ("DNG", "RICOH IMAGING COMPANY, LTD.", "PENTAX K-3 Mark III Monochrome"),
     ("PEF", "RICOH IMAGING COMPANY, LTD.", "PENTAX K-3 Mark III Monochrome"),
+    // Linear DNGs, three samples a pixel (develop.rs's linear_image), 2026-10-25.
+    ("DNG", "Apple", "iPhone 12 Pro"),
+    ("DNG", "Apple", "iPhone 16 Pro Max"),
+    ("DNG", "Canon", "Canon EOS-1D X"),
+    ("DNG", "Light", "L16"),
+    ("DNG", "samsung", "SM-G998B"),
+    ("DNG", "samsung", "SM-S908U1"),
+    ("DNG", "samsung", "SM-S901U"),
+    ("DNG", "samsung", "Galaxy S23"),
+    ("DNG", "samsung", "Galaxy S23 Ultra"),
+    ("DNG", "samsung", "Galaxy S23+"),
+    ("DNG", "SIGMA", "sd Quattro"),
+    ("DNG", "Google", "Pixel 8 Pro"),
+    ("ARW", "SONY", "DSC-R1"),
+    ("DNG", "Plustek", "OpticFilm 8100"),
+    ("DNG", "Plustek", "OpticFilm 8200i"),
+    ("headerless", "Samsung", "WB550"),
     // Phase One's IIQ (iiq.rs, iiq_s.rs, iiq_cal.rs), 2026-10-25.
     // Exact at every stage:
     ("IIQ", "Phase One A/S", "IQ150"),

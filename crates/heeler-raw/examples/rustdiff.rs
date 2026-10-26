@@ -196,6 +196,11 @@ fn main() {
                     _ => heeler_rawdec::develop::unpack(&bytes, &plan, None).unwrap(),
                 };
                 heeler_rawdec::develop::fill_zeros(&mut mine, &plan);
+                // The gain maps, as the develop applies them.
+                if !plan.gains2.is_empty() {
+                    let mut img = heeler_rawdec::gain_map::Cfa { data: &mut mine, pitch: plan.width, top: 0, left: 0, height: plan.height as u32, width: plan.width as u32 };
+                    heeler_rawdec::gain_map::apply_cfa(&plan.gains2, &mut img, |r, c| numbered.black[(r as usize % numbered.black_rows) * numbered.black_cols + c as usize % numbered.black_cols]);
+                }
                 let numbered = heeler_raw::with_libraw_balance(lb, &numbered, o);
                 let max = heeler_rawdec::develop::subtract_black(&mut mine, &numbered);
                 let n = heeler_rawdec::develop::numbers(&numbered, &opts_of(o), max);

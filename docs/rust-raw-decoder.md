@@ -1941,9 +1941,15 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   second frame unused), and the turn upright after the demosaic and
   before the color conversion (bilinear, single precision, the source
   position a step of the square root of one half). The develop places,
-  demosaics and turns; its demosaic of the diagonal mosaic does not yet
-  match LibRaw's (about 43 to 50 dB), so these bodies stay LibRaw's, and
-  half size is declined.
+  demosaics, blends the highlights on the diagonal image, turns and
+  converts; the S2Pro is turned a quarter whatever its EXIF says, as
+  LibRaw turns it. LibRaw's default demosaic for these files is not its
+  AHD but its PPG: against LibRaw asked for AHD the develop is exact on all
+  27 files, against its default 35 to 51 dB. A PPG demosaic would be
+  written from recall (the owner's call, as for ORF and Fujifilm's
+  compression), so these bodies stay LibRaw's for now, and half size is
+  declined. For the S2Pro, S5000 and S7000 LibRaw's balance is not record
+  0x2FF0's, and where it comes from is not found.
 
 ### Fujifilm's lossy compression
 
@@ -2006,6 +2012,34 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   first, fourth and sixth presets (the only modes the files hold; others
   are declined). The Z981, Z990, Z1015 IS, P712 and P880 (10 files) match
   LibRaw. The DC120 and DC50 (their own codings) stay LibRaw's.
+
+### Linear DNGs
+
+- A linear DNG of three samples a pixel (photometric 34892), uncompressed
+  or in lossless JPEG (its lines running on across a piece's rows),
+  through its linearization table, develops by the three-color plan
+  (as a Canon sRAW does), its balance AsShotNeutral's reciprocals in
+  single precision. All 15 such files of the corpora with a black level
+  of 0 and a stated neutral (Samsung's Galaxy phones, iPhone ProRAW and
+  a third-party camera app's, the Light L16, the sd Quattro, converter
+  and denoiser output) match LibRaw at both sizes. JPEG XL DNGs are
+  heeler-io's (never LibRaw's); the converter's lossy DNGs (baseline
+  JPEG) and a scanner DNG with no neutral stay LibRaw's.
+- The comparison harness takes LibRaw's balance from the picture only
+  where the file states none (a Pixel 8 Pro's DNG): LibRaw takes it after
+  the gain maps, so the harness now applies them before it looks.
+
+### Smaller fixes, 2026-10-25
+
+- A DNG before version 1.1 whose lossless JPEG gives a difference 16
+  bits: LibRaw reads the difference's 16 bits after the code, where T.81
+  gives it none (found on a YI 4K file, exact once read so). The decoder
+  does not yet take the option, so such files (two of the corpora) are
+  declined and stay LibRaw's.
+- The DSC-R1's SR2 block keeps its black level under 0x7300 and its
+  balance under 0x7303 (green, red, blue, green), and its 16-bit words are
+  big-endian in its little-endian file; the geometry generator now takes
+  SR2, SRF and ARQ files. Both R1 files match LibRaw.
 
 ### Still to do in this phase
 

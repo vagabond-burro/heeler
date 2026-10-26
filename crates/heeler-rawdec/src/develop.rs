@@ -72,6 +72,11 @@ impl Plan {
         if dng.photometric == 34892 && dng.samples == 1 {
             return Plan::monochrome(dng, opts);
         }
+        // A linear DNG of three samples a pixel, uncompressed or in lossless
+        // JPEG.
+        if dng.is_dng() && dng.photometric == 34892 && dng.samples == 3 && matches!(dng.compression, 1 | 7) && dng.coding == Coding::Tiff && dng.sample_format == 1 {
+            return Plan::three_colors(dng, opts);
+        }
         if dng.photometric != 32803 {
             return Err(Error::Unsupported("not a CFA image"));
         }
@@ -154,6 +159,16 @@ impl Plan {
                 return Err(Error::Unsupported("a tile's JPEG frame is not the tile's size"));
             }
             table_period = crate::ljpeg::table_period(&f);
+            // A DNG before 1.1 whose codes give a difference 16 bits: LibRaw
+            // reads its 16 bits (found against a file of one), not read so
+            // here.
+            if dng.is_dng() && dng.version < [1, 1, 0, 0] {
+                for &(at, len) in &dng.pieces.spans {
+                    if crate::ljpeg::has_sixteen(&bytes[at..at + len]).unwrap_or(true) {
+                        return Err(Error::Unsupported("a DNG 1.0 lossless JPEG with 16-bit differences"));
+                    }
+                }
+            }
             if dng.coding == Coding::Tiff && f.components > 1 && f.components * f.components * f.width == dng.width {
                 return Err(Error::Unsupported("a tile layout LibRaw reads its own way"));
             }
@@ -213,7 +228,9 @@ impl Plan {
         }
         let (t, l, b, r) = dng.active;
         let neutral = dng.as_shot_neutral.clone().filter(|n| n.len() == 3 && n.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no AsShotNeutral"))?;
-        let cam_mul = dng.cam_mul.ok_or(Error::Unsupported("no stated white balance"))?;
+        // A DNG's: the reciprocal in single precision, as LibRaw takes it.
+        let inv = |v: f64| 1.0f32 / v as f32;
+        let cam_mul = dng.cam_mul.or_else(|| dng.is_dng().then(|| [inv(neutral[0]), inv(neutral[1]), inv(neutral[2]), inv(neutral[1])])).ok_or(Error::Unsupported("no stated white balance"))?;
         let rgb_cam = develop_matrix(&dng, [neutral[0], neutral[1], neutral[2]], opts.libraw_color)?.map(|row| row.map(|v| v as f32));
         let white = dng.white.first().copied().unwrap_or(65535.0).clamp(1.0, 65535.0) as u32;
         Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 1], [1, 2]], xtrans: None, black: vec![0], black_rows: 1, black_cols: 1, white, cam_mul, rgb_cam, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, dng })
@@ -254,7 +271,7 @@ impl Plan {
 
     /// Whether the image is three samples a pixel (three_colors).
     pub fn three(&self) -> bool {
-        matches!(self.dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_))
+        matches!(self.dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_)) || (self.dng.photometric == 34892 && self.dng.samples == 3)
     }
 
     /// The output's size (turned when the file says so).
@@ -1284,6 +1301,7 @@ fn develop_three(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>,
             (crate::sraw::decode(&bytes[at..at + len], s)?, s.image)
         }
         Coding::SonyYcc(s) => (crate::sony_ycc::decode(bytes, s)?, s.image),
+        Coding::Tiff => (linear_image(bytes, &p.dng)?, (p.dng.width, p.dng.height)),
         _ => return Err(Error::Unsupported("a three-color coding not read here")),
     };
     let fw = image.0;
@@ -1343,6 +1361,57 @@ fn develop_mono(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, 
     Ok((Image { width: ow, height: oh, rgb: out, headroom: 1.0 }, Times { open, unpack: unpacked - open, develop: done - unpacked }))
 }
 
+/// A linear DNG's frame, three samples a pixel, from its pieces
+/// (uncompressed, or lossless JPEG whose lines run on across a piece's
+/// rows), through its linearization table.
+fn linear_image(bytes: &[u8], d: &Dng) -> Result<Vec<u16>, Error> {
+    let (w, h) = (d.width, d.height);
+    let (pw, ph) = (d.pieces.width, d.pieces.height);
+    let across = w.div_ceil(pw);
+    let mut out = memory::vector(w * h * 3, 0u16, "RAW samples")?;
+    let lin = d.linearization.as_deref().filter(|t| !t.is_empty());
+    let o = Out(out.as_mut_ptr());
+    d.pieces.spans.par_iter().enumerate().try_for_each(|(i, &(at, len))| -> Result<(), Error> {
+        let o = o;
+        let (r0, c0) = ((i / across) * ph, (i % across) * pw);
+        let data = bytes.get(at..at + len).ok_or(Error::Corrupt("a piece past the end of the file"))?;
+        let row_len = pw * 3;
+        let put = |r: usize, row: &[u16]| {
+            if r0 + r >= h {
+                return;
+            }
+            let n = row.len().min(w.saturating_sub(c0) * 3);
+            for (k, &v) in row[..n].iter().enumerate() {
+                let v = lin.map_or(v, |t| t[(v as usize).min(t.len() - 1)]);
+                // SAFETY: each piece writes its own rows and columns.
+                unsafe { *o.at(((r0 + r) * w + c0) * 3 + k) = v };
+            }
+        };
+        if d.compression == 1 {
+            let bits = d.bits as usize;
+            let rb = (row_len * bits).div_ceil(8);
+            let little = bytes.starts_with(b"II");
+            let mut line = vec![0u16; row_len];
+            for r in 0..ph {
+                let Some(row) = data.get(r * rb..(r + 1) * rb) else { break };
+                unpack_row(row, bits, little, &mut line);
+                put(r, &line);
+            }
+        } else {
+            // The samples run on across the piece's rows.
+            let mut stream: Vec<u16> = Vec::with_capacity(row_len * ph);
+            crate::ljpeg::decode(data, |_, l| stream.extend_from_slice(l))?;
+            for (r, row) in stream.chunks(row_len).enumerate().take(ph) {
+                if row.len() == row_len {
+                    put(r, row);
+                }
+            }
+        }
+        Ok(())
+    })?;
+    Ok(out)
+}
+
 /// A SuperCCD file's demosaiced diagonal image before the turn (camera
 /// colors, black off, balanced and scaled, three channels), and its
 /// width and height: for the harness that holds it to LibRaw's.
@@ -1374,11 +1443,16 @@ fn full_turned(cfa: &[u16], p: &Plan, n: &Numbers, layout: &crate::superccd::Lay
     let lab = ahd::Lab::new(&p.rgb_cam);
     ahd::demosaic(&Mosaic { data: cfa, width: w, height: h, pattern: p.pattern }, &lab, stop, &|r: usize, c: usize, px: [u16; 3]| {
         let d = d;
+        // LibRaw blends the highlights on the diagonal image, before the
+        // turn.
+        let px = if n.highlight == 2 { blend(px, n.clip) } else { px };
         // SAFETY: the demosaic hands each pixel over exactly once.
         unsafe { std::ptr::copy_nonoverlapping(px.as_ptr(), d.at((r * w + c) * 3), 3) };
     })?;
     stopped(stop)?;
     let (up, uw, uh) = crate::superccd::turn(&diag, w, h, layout);
+    // The blend is done: the rest of the finish without it.
+    let n = &Numbers { highlight: 0, ..*n };
     drop(diag);
     let (ow, oh) = p.output_size(false);
     let mut rgb = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;

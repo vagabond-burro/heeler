@@ -936,6 +936,9 @@ pub fn libraw_stages(bytes: &[u8], opts: DevelopOpts) -> Result<Stages, RawError
     let n = width * height;
     let mut s = Stages { width, height, loaded: vec![0; n * 4], scaled: vec![0; n * 4], before_rgb: vec![0; n * 4], maxima: [0; 3], pre_mul: [0.0; 4], rgb_cam: [[0.0; 4]; 3] };
     check(unsafe { libraw_unpack(handle.0) })?;
+    // The gain maps as the develop applies them (heeler-raw's develop), so
+    // a balance LibRaw takes from the picture is the develop's.
+    unsafe { crate::apply_dng_gain_maps(handle.0) };
     unsafe { heeler_linear_capture(handle.0, s.loaded.as_mut_ptr(), s.scaled.as_mut_ptr(), s.before_rgb.as_mut_ptr(), n, s.maxima.as_mut_ptr(), s.pre_mul.as_mut_ptr(), s.rgb_cam.as_mut_ptr() as *mut f32) };
     check(unsafe { libraw_dcraw_process(handle.0) })?;
     Ok(s)

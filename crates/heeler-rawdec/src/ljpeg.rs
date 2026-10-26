@@ -382,6 +382,14 @@ fn headers_of(data: &[u8], subsampled: bool) -> Result<(Frame, Vec<Option<Huffma
 }
 
 /// The frame header alone.
+/// Whether a lossless JPEG's Huffman tables give any difference 16 bits,
+/// which LibRaw reads from a DNG before version 1.1 with its 16 bits
+/// following the code (T.81 gives it none, and so does this decoder).
+pub fn has_sixteen(data: &[u8]) -> Result<bool, Error> {
+    let (_, tables) = headers(data)?;
+    Ok(tables.iter().flatten().any(|t| t.symbols.contains(&16)))
+}
+
 pub fn frame(data: &[u8]) -> Result<Frame, Error> {
     headers(data).map(|(f, _)| f)
 }

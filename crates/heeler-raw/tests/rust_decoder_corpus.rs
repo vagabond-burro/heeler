@@ -98,7 +98,7 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
     let mut cameras = std::collections::BTreeSet::new();
     let mut failures = Vec::new();
     let mut unreadable = Vec::new();
-    for (path, name) in files(&root, &["DNG", "CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "CRW", "RAF", "3FR", "FFF", "ERF", "MEF", "MOS", "IIQ", "GPR"]) {
+    for (path, name) in files(&root, &["DNG", "CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "CRW", "RAF", "3FR", "FFF", "ERF", "MEF", "MOS", "IIQ", "GPR", "SR2", "KDC"]) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let Ok(plan) = heeler_rawdec::plan(&bytes, &opts(DevelopOpts::default())) else { continue };
         // LibRaw reads a GPR as heeler-raw rewrites it, its tile decoded;

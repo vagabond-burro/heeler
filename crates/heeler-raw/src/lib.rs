@@ -477,7 +477,7 @@ pub fn libraw_frame(bytes: &[u8]) -> Result<(usize, usize, Vec<u16>), RawError> 
 ///
 /// # Safety
 /// `d` is an open LibRaw handle after unpack and before processing.
-unsafe fn apply_dng_gain_maps(d: *mut c_void) -> usize {
+pub(crate) unsafe fn apply_dng_gain_maps(d: *mut c_void) -> usize {
     let mut len = 0usize;
     let list = heeler_opcode_list2(d, &mut len);
     let raw = heeler_cfa_image(d);

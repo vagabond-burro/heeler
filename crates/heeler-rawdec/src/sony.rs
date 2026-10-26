@@ -243,6 +243,9 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
             let curve = uints(raw, 0x7010).filter(|c| c.len() == 4).ok_or(Error::Unsupported("no tone curve"))?;
             (Coding::SonyBlocks, 16, 32767, Some(tone_curve(&curve)))
         }
+        // The DSC-R1's 16-bit words are big-endian in its little-endian
+        // file, as LibRaw reads them.
+        Some(1) if !tiled && count >= width * height * 2 && model == "DSC-R1" => (Coding::BigWords, 16, 1, None),
         Some(1) if !tiled && count >= width * height * 2 => (Coding::Tiff, 16, 1, None),
         // Lossless: tiles of ITU-T T.81 lossless JPEG, each JPEG pixel four
         // components, one 2 by 2 block of the frame, in reading order.
@@ -264,10 +267,17 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         dir.get(tag).and_then(|e| t.reals(&e))
     };
     let four = |v: Option<Vec<f64>>| v.filter(|v| v.len() == 4);
+    // The DSC-R1's SR2 block keeps them under 0x7300 (red, green, blue, the
+    // other green) and 0x7303 (green, red, blue, green).
     let black = four(reals(0x7310))
         .or_else(|| four(sr2_reals(0x7310)).map(|b| if coding == Coding::PackedLow { b.iter().map(|v| v / 4.0).collect() } else { b }))
+        .or_else(|| four(sr2_reals(0x7300)).map(|b| vec![b[0], b[1], b[3], b[2]]))
         .ok_or(Error::Unsupported("no stated black level"))?;
-    let wb = four(reals(0x7313)).or_else(|| four(sr2_reals(0x7313))).filter(|w| w.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no stated white balance"))?;
+    let wb = four(reals(0x7313))
+        .or_else(|| four(sr2_reals(0x7313)))
+        .or_else(|| four(sr2_reals(0x7303)).map(|w| vec![w[1], w[0], w[3], w[2]]))
+        .filter(|w| w.iter().all(|&v| v > 0.0))
+        .ok_or(Error::Unsupported("no stated white balance"))?;
     // An M or S size's image: the sensor data's size the directory states
     // (0x7038), from the frame's top left, as LibRaw takes it, or LibRaw's
     // own area for the frame where that is smaller.
