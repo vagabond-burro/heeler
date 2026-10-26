@@ -2106,6 +2106,15 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   and after each; each applies short of its stated size by a spacing),
   which leave no IIQ worse, the 9 files develop at 83 to 98 dB against
   LibRaw (none to the bit) and join the backs held within the tolerance.
+- Nikon's small raws (`nef_small.rs`, the D4S's, D810's and D810A's S
+  size): luma and chroma, each two pixels 48 bits, through a curve of
+  3073 points measured from LibRaw's image (it is not in the file),
+  developed with no balance, no matrix and the white never lowered. LibRaw
+  sums the conversion in a rounding not found, so about one sample in
+  twenty thousand is a curve step off: the owner allowed a tolerance, and
+  the 5 files develop at 117 to 119 dB (format "sNEF", so the full-size
+  NEFs of the same bodies stay held to the bit). The harness keeps the
+  plan's unit multipliers for them, as for Sony's M and S sizes.
 - Nikon's film scans (`coolscan.rs`): an RGB image, LibRaw's white the
   depth's largest sample (never lowered), its balance made from the
   picture in 8 by 8 blocks (a block with a sample past the white less 25

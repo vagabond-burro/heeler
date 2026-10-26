@@ -41,6 +41,7 @@ pub mod sinar;
 pub mod lossy_dng;
 pub mod rpi;
 pub mod coolscan;
+pub mod nef_small;
 pub mod arq;
 pub mod crw;
 pub mod headerless;

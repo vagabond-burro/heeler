@@ -74,7 +74,7 @@ impl Plan {
         if dng.four_colors() {
             return Plan::four_colors(dng, opts);
         }
-        if matches!(dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_) | Coding::Coolscan(_) | Coding::SonyArq(_)) || matches!(dng.coding, Coding::KodakSmall(k, _) if k.three()) {
+        if matches!(dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_) | Coding::Coolscan(_) | Coding::SonyArq(_) | Coding::NefSmall(_)) || matches!(dng.coding, Coding::KodakSmall(k, _) if k.three()) {
             return Plan::three_colors(dng, opts);
         }
         if dng.photometric == 34892 && dng.samples == 1 {
@@ -336,7 +336,7 @@ impl Plan {
 
     /// Whether the image is three samples a pixel (three_colors).
     pub fn three(&self) -> bool {
-        matches!(self.dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_) | Coding::Coolscan(_) | Coding::SonyArq(_)) || matches!(self.dng.coding, Coding::KodakSmall(k, _) if k.three()) || (self.dng.photometric == 34892 && self.dng.samples == 3)
+        matches!(self.dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_) | Coding::Coolscan(_) | Coding::SonyArq(_) | Coding::NefSmall(_)) || matches!(self.dng.coding, Coding::KodakSmall(k, _) if k.three()) || (self.dng.photometric == 34892 && self.dng.samples == 3)
     }
 
     /// The output's size (turned when the file says so).
@@ -1515,6 +1515,7 @@ fn develop_three(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>,
         }
         Coding::SonyYcc(s) => (crate::sony_ycc::decode(bytes, s)?, s.image),
         Coding::Coolscan(s) => (crate::coolscan::decode(bytes, s)?, (s.width, s.height)),
+        Coding::NefSmall(s) => (crate::nef_small::decode(bytes, s)?, (s.width, s.height)),
         Coding::SonyArq(a) => {
             let (rgb, max) = crate::arq::decode_three(bytes, a)?;
             arq_max = Some(max);
@@ -1547,6 +1548,9 @@ fn develop_three(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>,
         q.cam_mul = crate::coolscan::balance(&rgb, p.width, p.height, p.white);
         scan = q;
         (&scan, 0)
+    } else if let Coding::NefSmall(_) = &p.dng.coding {
+        // A Nikon small raw's white is never lowered (nef_small.rs).
+        (p, 0)
     } else {
         (p, data_max)
     };

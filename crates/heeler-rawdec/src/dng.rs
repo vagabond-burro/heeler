@@ -41,6 +41,9 @@ pub enum Format {
     CanonTif,
     Sti,
     Arq,
+    /// A Nikon small raw (nef_small.rs), kept apart from the full-size
+    /// NEFs so its tolerance (verified.rs) is its own.
+    NefSmall,
 }
 
 /// Make and Model as a raw file of any format this crate reads gives
@@ -104,6 +107,7 @@ impl Format {
             Format::CanonTif => "TIF",
             Format::Sti => "STI",
             Format::Arq => "ARQ",
+            Format::NefSmall => "sNEF",
             Format::Crw => "CRW",
             Format::Headerless => "headerless",
             Format::Raf => "RAF",
@@ -200,6 +204,8 @@ pub enum Coding {
     Dc120 { jpeg: bool },
     /// 10-bit samples four in five bytes (rpi.rs), rows of `stride` bytes.
     Raw10 { stride: usize },
+    /// A Nikon small raw's image of luma and chroma (nef_small.rs).
+    NefSmall(crate::nef_small::NefSmall),
     /// A Nikon film scan's RGB image (coolscan.rs).
     Coolscan(Box<crate::coolscan::Coolscan>),
     /// A Sony pixel shift file's image (arq.rs).

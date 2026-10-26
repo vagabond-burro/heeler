@@ -1012,6 +1012,11 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("headerless", "Kodak", "C603"),
     // The Raspberry Pi camera's IMX219 captures (rpi.rs), 2026-10-26.
     ("headerless", "Broadcom", "RPi IMX219"),
+    // Nikon's small raws (nef_small.rs), held within the tolerance (NEAR),
+    // 2026-10-26.
+    ("sNEF", "NIKON CORPORATION", "NIKON D4S"),
+    ("sNEF", "NIKON CORPORATION", "NIKON D810"),
+    ("sNEF", "NIKON CORPORATION", "NIKON D810A"),
     // Nikon's 16-bit film scans (coolscan.rs) and Sony's pixel shift files
     // with highlights clipped (arq.rs), 2026-10-26.
     ("NEF", "Nikon", "Nikon COOLSCAN V ED"),
@@ -1077,8 +1082,14 @@ const CAMERAS: &[(&str, &str, &str)] = &[
 /// calibration LibRaw applies by rules found only closely (iiq_cal.rs:
 /// their defective columns, the quarter curves' spline arithmetic, the H
 /// 25's float flat field). The owner allowed IIQ's calibration to be
-/// verified so (the corpus test's floor on the PSNR).
+/// verified so (the corpus test's floor on the PSNR). And Nikon's small
+/// raws, whose luma and chroma LibRaw sums in a rounding not found (about
+/// one sample in twenty thousand a curve step off; the owner allowed
+/// them a tolerance, 2026-10-26).
 const NEAR: &[(&str, &str, &str)] = &[
+    ("sNEF", "NIKON CORPORATION", "NIKON D4S"),
+    ("sNEF", "NIKON CORPORATION", "NIKON D810"),
+    ("sNEF", "NIKON CORPORATION", "NIKON D810A"),
     ("IIQ", "Leaf", "Credo 40"),
     ("IIQ", "Phase One A/S", "H 25"),
     ("IIQ", "Phase One A/S", "IQ140"),

@@ -108,6 +108,11 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         .ok_or(Error::Unsupported("no CFA raw frame"))?;
     let ascii = |tag| ifd0.get(tag).and_then(|e| t.ascii(&e)).unwrap_or_default();
     let (make, model) = (ascii(271), ascii(272));
+    // A small raw: luma and chroma, not a mosaic (nef_small.rs).
+    if let Some(s) = crate::nef_small::frame(bytes) {
+        let orientation = uint(ifd0, 274).filter(|o| (1..=8).contains(o)).unwrap_or(1) as u16;
+        return crate::nef_small::dng(s, make, model, orientation);
+    }
     let width = uint(raw, 256).ok_or(Error::Corrupt("ImageWidth"))? as usize;
     let height = uint(raw, 257).ok_or(Error::Corrupt("ImageLength"))? as usize;
     let bits_tag = uints(raw, 258).and_then(|b| b.first().copied()).unwrap_or(0) as usize;
