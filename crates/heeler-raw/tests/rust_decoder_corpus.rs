@@ -139,7 +139,9 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
                 let theirs = heeler_raw::decode_sensor_with(lb, o).unwrap();
                 let with = heeler_raw::with_libraw_balance(lb, &with, o);
                 match heeler_rawdec::develop::develop_with(&bytes, &with, &opts(o), None) {
-                    Ok((mine, _)) if (mine.width, mine.height) == (theirs.width, theirs.height) && mine.rgb == theirs.rgb && mine.headroom == theirs.headroom => {}
+                    // A monochrome frame's headroom is 1: LibRaw's, from
+                    // multipliers it never applies, means nothing.
+                    Ok((mine, _)) if (mine.width, mine.height) == (theirs.width, theirs.height) && mine.rgb == theirs.rgb && (mine.headroom == theirs.headroom || plan.mono()) => {}
                     // A camera held to LibRaw within a tolerance (an IIQ back
                     // whose calibration is found only closely): a floor on
                     // the PSNR, at both sizes.

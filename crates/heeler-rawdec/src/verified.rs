@@ -963,7 +963,36 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("3FR", "Hasselblad", "Hasselblad X1DM2-50c"),
     ("MOS", "Leaf", "AFi-II 12"),
     ("MOS", "Leaf", "Aptus 75"),
-    // Phase One's IIQ (iiq.rs, iiq_cal.rs), codings 3, 5 and 8, 2026-10-25.
+    // Developed in the camera's own colors, as LibRaw develops a camera it
+    // has no matrix for (cameras.rs), 2026-10-25.
+    ("CR3", "Canon", "Canon EOS C50"),
+    ("NEF", "NIKON CORPORATION", "NIKON ZR"),
+    ("PEF", "SAMSUNG TECHWIN", "GX-1S"),
+    ("RW2", "Panasonic", "DC-L10"),
+    ("headerless", "Pentax", "Optio S4"),
+    // Samsung's compressed SRWs (srw_codec.rs), 2026-10-25.
+    ("SRW", "SAMSUNG", "EK-GN120"),
+    ("SRW", "SAMSUNG", "NX mini"),
+    ("SRW", "SAMSUNG", "NX1"),
+    ("SRW", "SAMSUNG", "NX2000"),
+    ("SRW", "SAMSUNG", "NX30"),
+    ("SRW", "SAMSUNG", "NX300"),
+    ("SRW", "SAMSUNG", "NX3000"),
+    ("SRW", "SAMSUNG", "NX300M"),
+    ("SRW", "SAMSUNG", "NX3300"),
+    ("SRW", "SAMSUNG", "NX500"),
+    // Kodak's later KDCs (kodak.rs), 2026-10-25.
+    ("KDC", "EASTMAN KODAK COMPANY", "KODAK EASYSHARE Z1015 IS DIGITAL CAMERA"),
+    ("KDC", "EASTMAN KODAK COMPANY", "KODAK EasyShare Z981 Digital Camera"),
+    ("KDC", "EASTMAN KODAK COMPANY", "KODAK EasyShare Z990 Digital Camera"),
+    ("KDC", "EASTMAN KODAK COMPANY", "KODAK P712 ZOOM DIGITAL CAMERA"),
+    ("KDC", "EASTMAN KODAK COMPANY", "KODAK P880 ZOOM DIGITAL CAMERA"),
+    // Monochrome sensors' DNGs (develop.rs's monochrome plan), 2026-10-25.
+    ("DNG", "Leica Camera AG", "M Monochrom"),
+    ("DNG", "Leica Camera AG", "LEICA M MONOCHROM (Typ 246)"),
+    ("DNG", "RICOH IMAGING COMPANY, LTD.", "PENTAX K-3 Mark III Monochrome"),
+    ("PEF", "RICOH IMAGING COMPANY, LTD.", "PENTAX K-3 Mark III Monochrome"),
+    // Phase One's IIQ (iiq.rs, iiq_s.rs, iiq_cal.rs), 2026-10-25.
     // Exact at every stage:
     ("IIQ", "Phase One A/S", "IQ150"),
     ("IIQ", "Phase One A/S", "IQ3 100MP"),
@@ -971,6 +1000,7 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("IIQ", "Phase One A/S", "iXU-RS1000 NIR"),
     ("IIQ", "Phase One", "IQ4 150MP"),
     ("IIQ", "Phase One", "iXM-100"),
+    ("IIQ", "Phase One", "iXM-RS150F"),
     // Exact to the sensor calibration, which is held to LibRaw's within a
     // tolerance (NEAR):
     ("IIQ", "Leaf", "Credo 40"),
@@ -982,6 +1012,7 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("IIQ", "Phase One A/S", "P25+"),
     ("IIQ", "Phase One A/S", "P30"),
     ("IIQ", "Phase One A/S", "P45+"),
+    ("IIQ", "Phase One A/S", "iXU180"),
 ];
 
 /// The verified cameras whose develop is held to LibRaw's within a
@@ -1000,6 +1031,7 @@ const NEAR: &[(&str, &str, &str)] = &[
     ("IIQ", "Phase One A/S", "P25+"),
     ("IIQ", "Phase One A/S", "P30"),
     ("IIQ", "Phase One A/S", "P45+"),
+    ("IIQ", "Phase One A/S", "iXU180"),
 ];
 
 pub fn near(format: &str, make: &str, model: &str) -> bool {

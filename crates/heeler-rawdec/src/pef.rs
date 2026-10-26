@@ -107,7 +107,10 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     // Red, green, the other green, blue.
     let four = |v: Option<Vec<u32>>| v.filter(|v| v.len() == 4).map(|v| [v[0], v[1], v[2], v[3]]);
     let samsung = make.to_ascii_uppercase().starts_with("SAMSUNG");
-    let wb = if samsung { None } else { Some(four(in_notes(0x0201)).filter(|w| w.iter().all(|&v| v > 0)).ok_or(Error::Unsupported("no stated white balance"))?) };
+    // A monochrome sensor (photometric 34892, the K-3 Mark III Monochrome):
+    // no balance, no CFA.
+    let mono = uint(262) == Some(34892);
+    let wb = if samsung || mono { None } else { Some(four(in_notes(0x0201)).filter(|w| w.iter().all(|&v| v > 0)).ok_or(Error::Unsupported("no stated white balance"))?) };
     let black = if samsung { [0; 4] } else { four(in_notes(0x0200)).ok_or(Error::Unsupported("no stated black level"))? };
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
     let white = match geometry.white {
@@ -118,7 +121,9 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     if !(1..=8).contains(&orientation) {
         return Err(Error::Unsupported("an orientation tag outside 1 to 8"));
     }
-    let calibration = crate::cameras::find(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
+    // A monochrome frame takes no calibration.
+    static NONE: crate::cameras::Calibration = crate::cameras::Calibration { make: "", model: "", illuminants: [0, 0], color_matrix: [None, None], forward_matrix: [None, None], tables: false };
+    let calibration = if mono { &NONE } else { crate::cameras::find(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))? };
     let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
     let (top, left) = (geometry.top as usize, geometry.left as usize);
     Ok(Dng {
@@ -132,7 +137,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         height,
         bits,
         compression,
-        photometric: 32803,
+        photometric: if mono { 34892 } else { 32803 },
         samples: 1,
         sample_format: 1,
         predictor: 1,

@@ -81,6 +81,23 @@ fn main() {
         // Bayer images (a 2 by 2 pattern repeated down the rows), X-Trans
         // ones (6 by 6), and images of three samples a pixel (a Canon sRAW,
         // a Sony M or S size), whose areas are a table of their own.
+        // And a monochrome sensor's frame (no CFA, one color), in the main
+        // table, its colors 0.
+        let mono = f.filters == 0 && f.colors == 1 && !path.extension().is_some_and(|e| e.eq_ignore_ascii_case("dng"));
+        if mono {
+            let row: Row = (f.top_margin, f.left_margin, f.width, f.height, [0; 4], f.maximum);
+            let key = (make.clone(), model.clone(), f.raw_width, f.raw_height);
+            match rows.get(&key) {
+                Some((r, _)) if *r != row => {
+                    disagree.insert(key);
+                }
+                Some(_) => {}
+                None => {
+                    rows.insert(key, (row, path.display().to_string()));
+                }
+            }
+            continue;
+        }
         if !(f.filters >= 1000 || f.filters == 9 || f.filters == 0) || f.colors != 3 {
             continue;
         }
@@ -155,6 +172,9 @@ fn main() {
                 // area, mark the level as the file's (0).
                 if (r.0, r.1, r.2, r.3, r.4) == (row.0, row.1, row.2, row.3, row.4) {
                     rows.get_mut(&key).unwrap().0 .5 = 0;
+                } else if (r.0, r.1, r.2, r.3, r.5) == (row.0, row.1, row.2, row.3, row.5) && heeler_rawdec::rw2::stated_cfa(&bytes).is_some() {
+                    // An RW2 states its CFA, which rw2.rs takes: files that
+                    // differ only there keep the row.
                 } else {
                     disagree.insert(key.clone());
                 }

@@ -13,6 +13,7 @@
 //!   NX1100).
 //!
 //! Samsung's compressed codings (32770 in fewer bytes, 32772, 32773) are
+//! srw_codec.rs's; formerly they were
 //! declined and stay LibRaw's.
 //!
 //! The maker notes (an IFD at the notes' start, offsets from there) hold
@@ -78,6 +79,15 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
             (Coding::LittleWords, 16)
         }
         Some(32770) if bits_tag == 12 && count >= samples * 3 / 2 && width % 2 == 0 => (if spp == 3 { Coding::PackedLow } else { Coding::Tiff }, 12),
+        // Samsung's compressed codings (srw_codec.rs).
+        Some(32770) => {
+            let (ta, tn) = (uint(raw, 0xa010).ok_or(Error::Corrupt("no SRW row offsets"))? as usize, uint(raw, 0xa011).ok_or(Error::Corrupt("no SRW row offsets"))? as usize);
+            if ta.checked_add(tn).is_none_or(|e| e > bytes.len()) {
+                return Err(Error::Corrupt("SRW row offsets past the end of the file"));
+            }
+            (Coding::Samsung(crate::srw_codec::Samsung { compression: 32770, rows: (ta, tn), bits: bits_tag }), bits_tag)
+        }
+        Some(c @ (32772 | 32773)) => (Coding::Samsung(crate::srw_codec::Samsung { compression: c, rows: (0, 0), bits: bits_tag }), bits_tag),
         _ => return Err(Error::Unsupported("a Samsung coding not read here")),
     };
     let (mt, notes) = maker_notes(&t, &ifds).ok_or(Error::Unsupported("no Samsung maker notes"))?;

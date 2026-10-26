@@ -69,6 +69,9 @@ impl Plan {
         if matches!(dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_)) {
             return Plan::three_colors(dng, opts);
         }
+        if dng.photometric == 34892 && dng.samples == 1 {
+            return Plan::monochrome(dng, opts);
+        }
         if dng.photometric != 32803 {
             return Err(Error::Unsupported("not a CFA image"));
         }
@@ -123,6 +126,9 @@ impl Plan {
         }
         // Pixels twice as wide as tall (the D1X's) develop with each row
         // twice, as LibRaw stretches them; any other shape is declined.
+        if matches!(dng.coding, Coding::SuperCcd(_)) && opts.half_size {
+            return Err(Error::Unsupported("a SuperCCD half-size develop"));
+        }
         if dng.default_scale != (1.0, 1.0) && (dng.is_dng() || dng.default_scale != (1.0, 2.0)) {
             return Err(Error::Unsupported("non-square pixels"));
         }
@@ -163,7 +169,12 @@ impl Plan {
         }
         // A file that states no balance develops in daylight, as LibRaw
         // falls back to it: the neutral of the camera's D65 calibration.
-        let daylight = if dng.as_shot_neutral.is_none() && dng.cam_mul.is_none() { daylight_neutral(&dng) } else { None };
+        // Or, for a camera without a matrix, 1 for each channel.
+        let daylight = if dng.as_shot_neutral.is_none() && dng.cam_mul.is_none() {
+            daylight_neutral(&dng).or_else(|| (!dng.is_dng() && dng.color_matrix.iter().all(|m| m.is_none())).then(|| vec![1.0; 3]))
+        } else {
+            None
+        };
         let neutral = dng.as_shot_neutral.as_deref().or(daylight.as_deref()).filter(|n| n.len() == 3 && n.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no AsShotNeutral"))?;
         // A DNG's: the reciprocal in single precision, as LibRaw takes it;
         // another format's as the file states it.
@@ -208,6 +219,39 @@ impl Plan {
         Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 1], [1, 2]], xtrans: None, black: vec![0], black_rows: 1, black_cols: 1, white, cam_mul, rgb_cam, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, dng })
     }
 
+    /// A monochrome sensor's plan (LinearRaw, one sample a pixel): its
+    /// black level and white level, no white balance and no matrix, as
+    /// LibRaw develops it (each sample's value in all three channels).
+    fn monochrome(dng: Dng, opts: &Opts) -> Result<Plan, Error> {
+        if !(opts.camera_wb && opts.camera_matrix) {
+            return Err(Error::Unsupported("a develop without the camera's white balance and matrix"));
+        }
+        if !matches!(opts.highlight, 0 | 2) {
+            return Err(Error::Unsupported("a highlight rebuild"));
+        }
+        if !matches!(dng.compression, 1 | 7) && !matches!(dng.coding, Coding::Pentax(_)) {
+            return Err(Error::Unsupported("a monochrome frame's compression not read here"));
+        }
+        if dng.black_delta_h.iter().chain(&dng.black_delta_v).any(|&d| d != 0.0) || dng.linearization.is_some() {
+            return Err(Error::Unsupported("black level deltas"));
+        }
+        let (t, l, b, r) = dng.active;
+        let (br, bc) = dng.black_dim;
+        if br == 0 || bc == 0 || dng.black.len() != br * bc {
+            return Err(Error::Unsupported("a black level pattern not read here"));
+        }
+        // The pattern from the image area's top left.
+        let black: Vec<u32> = (0..br * bc).map(|k| dng.black[((k / bc + t) % br) * bc + (k % bc + l) % bc].round() as u32).collect();
+        let white = dng.white.first().copied().unwrap_or(65535.0).clamp(1.0, 65535.0) as u32;
+        let identity = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 0], [0, 0]], xtrans: None, black, black_rows: br, black_cols: bc, white, cam_mul: [1.0; 4], rgb_cam: identity, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, dng })
+    }
+
+    /// Whether the image is one sample a pixel (monochrome).
+    pub fn mono(&self) -> bool {
+        self.dng.photometric == 34892 && self.dng.samples == 1
+    }
+
     /// Whether the image is three samples a pixel (three_colors).
     pub fn three(&self) -> bool {
         matches!(self.dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_))
@@ -215,7 +259,7 @@ impl Plan {
 
     /// The output's size (turned when the file says so).
     pub fn output_size(&self, half: bool) -> (usize, usize) {
-        let (w, h) = if half { self.half_size() } else { (self.width, self.height) };
+        let (w, h) = if let Coding::SuperCcd(sc) = &self.dng.coding { crate::superccd::turned_size(&sc.layout) } else if half { self.half_size() } else { (self.width, self.height) };
         if self.flip & 4 != 0 { (h, w) } else { (w, h) }
     }
 
@@ -227,9 +271,12 @@ impl Plan {
         let working = self.parallel_bytes()?.max(if half { 0 } else { self.demosaic_extra() });
         // A black measured on the border holds the whole frame a while.
         let frame = if self.dng.border_black || matches!(self.dng.coding, Coding::PhaseOne(_)) { memory::bytes(self.dng.width, self.dng.height, 1, 2)? } else { 0 };
+        // A SuperCCD frame: its frame while it is placed, then the
+        // demosaiced diagonal image while it is turned.
+        let unturned = if let Coding::SuperCcd(sc) = &self.dng.coding { memory::bytes(self.width, self.height, 3, 2)? + memory::bytes(sc.frame.0, sc.frame.1, 1, 2)? } else { 0 };
         // Rows twice: the image twice the size, and the one before it.
         let unstretched = if self.dng.default_scale == (1.0, 2.0) { memory::bytes(ow, oh, 3, 4)? } else { 0 };
-        memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES, self.pixel_gains(half).bytes(), frame, unstretched])
+        memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES, self.pixel_gains(half).bytes(), frame, unstretched, unturned])
     }
 
     /// The image the stage 3 opcodes see: the active area, or at half size
@@ -242,7 +289,7 @@ impl Plan {
     /// or column has no block of its own and is left out, as LibRaw leaves
     /// it; an X-Trans area's makes blocks of its own, as LibRaw's does.
     fn half_size(&self) -> (usize, usize) {
-        if self.three() {
+        if self.three() || self.mono() {
             return (self.width, self.height);
         }
         if self.xtrans.is_some() { (self.width.div_ceil(2), self.height.div_ceil(2)) } else { (self.width / 2, self.height / 2) }
@@ -328,6 +375,11 @@ fn dng_color(dng: &Dng, neutral: [f64; 3]) -> Result<[[f64; 3]; 3], Error> {
 /// has more than one, its values in single precision, as LibRaw then
 /// holds them, which the corpus bears out on every file but one).
 pub fn develop_matrix(dng: &Dng, neutral: [f64; 3], libraw_color: bool) -> Result<[[f64; 3]; 3], Error> {
+    // A camera LibRaw develops without a matrix (cameras.rs's rows without
+    // one): its own colors, as they are.
+    if !dng.is_dng() && dng.color_matrix.iter().all(|m| m.is_none()) {
+        return Ok([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]);
+    }
     if libraw_color {
         let single = dng.color_matrix.iter().filter(|m| m.is_some()).count() > 1;
         let cm = dng.color_matrix().ok_or(Error::Unsupported("no color matrix"))?.map(|r| r.map(|v| if single { v as f32 as f64 } else { v }));
@@ -701,6 +753,25 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         }
         stopped(stop)?;
         (0..d.height).into_par_iter().for_each(|y| put_run(out, p, crate::leaf::row_of(y, d.height, both_ends), 0, &samples[y * d.width..(y + 1) * d.width], lin));
+        return Ok(cfa);
+    }
+    if let Coding::SuperCcd(sc) = &d.coding {
+        // The frame, then its samples placed on the diagonal mosaic.
+        let (fw, fh) = sc.frame;
+        stopped(stop)?;
+        let frame = std::sync::Mutex::new(memory::vector(fw * fh, 0u16, "RAW frame")?);
+        crate::headerless::decode(bytes, fw, fh, fh, &sc.samples, |r, line| frame.lock().unwrap()[r * fw..(r + 1) * fw].copy_from_slice(&line[..fw]))?;
+        let (diag, dw, _) = crate::superccd::place(&frame.into_inner().unwrap(), fw, fh, &sc.layout);
+        diag.par_chunks(dw).enumerate().for_each(|(r, row)| put_run(out, p, r, 0, row, lin));
+        return Ok(cfa);
+    }
+    if let Coding::Samsung(sc) = &d.coding {
+        // Decoded whole (srw_codec.rs), then each row.
+        let (at, len) = d.pieces.spans[0];
+        stopped(stop)?;
+        let frame = crate::srw_codec::decode(bytes, &bytes[at..at + len], sc, d.width, d.height).map_err(|_| Error::Corrupt("a Samsung frame that does not decode"))?;
+        stopped(stop)?;
+        frame.par_chunks(d.width).enumerate().for_each(|(r, row)| put_run(out, p, r, 0, row, lin));
         return Ok(cfa);
     }
     if d.coding == Coding::SonyBlocks {
@@ -1165,6 +1236,9 @@ fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, 
     if p.three() {
         return develop_three(bytes, p, opts, stop, t0, open);
     }
+    if p.mono() {
+        return develop_mono(bytes, p, opts, stop, t0, open);
+    }
     let measured;
     let (mut cfa, p) = if let Coding::PhaseOne(p1) = &p.dng.coding {
         (unpack_calibrated(bytes, p, &p1.cal, stop)?, p)
@@ -1241,6 +1315,85 @@ fn develop_three(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>,
     let headroom = if opts.highlight >= 2 { headroom(&n) } else { 1.0 };
     let done = t0.elapsed().as_secs_f64();
     Ok((Image { width: ow, height: oh, rgb: out, headroom }, Times { open, unpack: unpacked - open, develop: done - unpacked }))
+}
+
+/// A monochrome frame's develop: the black off, each sample scaled to the
+/// white level (LibRaw keeps a monochrome frame whole at either size) and
+/// written to all three channels.
+fn develop_mono(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, t0: std::time::Instant, open: f64) -> Result<(Image, Times), Error> {
+    let mut v = unpack(bytes, p, stop)?;
+    let unpacked = t0.elapsed().as_secs_f64();
+    stopped(stop)?;
+    let data_max = subtract_black(&mut v, p);
+    let n = numbers(p, opts, data_max);
+    let (w, h) = (p.width, p.height);
+    let (ow, oh) = if p.flip & 4 != 0 { (h, w) } else { (w, h) };
+    let mut out = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;
+    let o = Out(out.as_mut_ptr());
+    v.par_chunks(w).enumerate().for_each(|(r, row)| {
+        let o = o;
+        for (c, &x) in row.iter().enumerate() {
+            let y = scale(x, n.scale_mul[0]);
+            let (oy, ox) = to_output(p.flip, w, h, r, c);
+            // SAFETY: each output pixel is written by its own source pixel.
+            unsafe { std::ptr::copy_nonoverlapping([y; 3].as_ptr(), o.at((oy * ow + ox) * 3), 3) };
+        }
+    });
+    let done = t0.elapsed().as_secs_f64();
+    Ok((Image { width: ow, height: oh, rgb: out, headroom: 1.0 }, Times { open, unpack: unpacked - open, develop: done - unpacked }))
+}
+
+/// A SuperCCD file's demosaiced diagonal image before the turn (camera
+/// colors, black off, balanced and scaled, three channels), and its
+/// width and height: for the harness that holds it to LibRaw's.
+#[doc(hidden)]
+pub fn superccd_diagonal(bytes: &[u8], p: &Plan, opts: &Opts) -> Result<(Vec<u16>, usize, usize), Error> {
+    let mut cfa = unpack(bytes, p, None)?;
+    fill_zeros(&mut cfa, p);
+    let data_max = subtract_black(&mut cfa, p);
+    let n = numbers(p, opts, data_max);
+    scale_mosaic(&mut cfa, p, &n);
+    let (w, h) = (p.width, p.height);
+    let mut diag = vec![0u16; w * h * 3];
+    let d = Out(diag.as_mut_ptr());
+    let lab = ahd::Lab::new(&p.rgb_cam);
+    ahd::demosaic(&Mosaic { data: &cfa, width: w, height: h, pattern: p.pattern }, &lab, None, &|r: usize, c: usize, px: [u16; 3]| {
+        let d = d;
+        // SAFETY: the demosaic hands each pixel over exactly once.
+        unsafe { std::ptr::copy_nonoverlapping(px.as_ptr(), d.at((r * w + c) * 3), 3) };
+    })?;
+    Ok((diag, w, h))
+}
+
+/// A SuperCCD frame's full-size develop: the diagonal mosaic demosaiced
+/// whole, turned upright (superccd.rs), then each pixel finished.
+fn full_turned(cfa: &[u16], p: &Plan, n: &Numbers, layout: &crate::superccd::Layout, stop: Option<&AtomicBool>) -> Result<Image, Error> {
+    let (w, h) = (p.width, p.height);
+    let mut diag = memory::vector(w * h * 3, 0u16, "RAW samples")?;
+    let d = Out(diag.as_mut_ptr());
+    let lab = ahd::Lab::new(&p.rgb_cam);
+    ahd::demosaic(&Mosaic { data: cfa, width: w, height: h, pattern: p.pattern }, &lab, stop, &|r: usize, c: usize, px: [u16; 3]| {
+        let d = d;
+        // SAFETY: the demosaic hands each pixel over exactly once.
+        unsafe { std::ptr::copy_nonoverlapping(px.as_ptr(), d.at((r * w + c) * 3), 3) };
+    })?;
+    stopped(stop)?;
+    let (up, uw, uh) = crate::superccd::turn(&diag, w, h, layout);
+    drop(diag);
+    let (ow, oh) = p.output_size(false);
+    let mut rgb = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;
+    let out = Out(rgb.as_mut_ptr());
+    let g = p.pixel_gains(false);
+    up.par_chunks(uw * 3).enumerate().for_each(|(r, row)| {
+        let out = out;
+        for c in 0..uw {
+            let px = finish([row[c * 3], row[c * 3 + 1], row[c * 3 + 2]], r, c, p, n, &g);
+            let (oy, ox) = to_output(p.flip, uw, uh, r, c);
+            // SAFETY: each output pixel is written by its own upright pixel.
+            unsafe { std::ptr::copy_nonoverlapping(px.as_ptr(), out.at((oy * ow + ox) * 3), 3) };
+        }
+    });
+    Ok(Image { width: ow, height: oh, rgb, headroom: 1.0 })
 }
 
 /// The white balance's headroom: the largest multiplier over the smallest.
@@ -1352,6 +1505,9 @@ fn half_xtrans(cfa: &[u16], p: &Plan, n: &Numbers, x: &[[u8; 6]; 6]) -> Result<I
 
 /// Full size: the demosaic, each pixel finished and written as it comes.
 fn full(cfa: &[u16], p: &Plan, n: &Numbers, stop: Option<&AtomicBool>) -> Result<Image, Error> {
+    if let Coding::SuperCcd(sc) = &p.dng.coding {
+        return full_turned(cfa, p, n, &sc.layout, stop);
+    }
     let (w, h) = (p.width, p.height);
     let (ow, oh) = p.output_size(false);
     let mut rgb = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;

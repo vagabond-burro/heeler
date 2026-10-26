@@ -40,8 +40,9 @@
 //!
 //! The black level of RawFormats 3 and 4 is the stated one and 15 (where
 //! 0 is stated, LibRaw's for the camera from geometry.rs if it has one), of
-//! the others as stated. The image area and CFA colors come from geometry.rs
-//! (LibRaw's), the white level from its table (else LibRaw's for the
+//! the others as stated. The CFA colors are those 0x0009 states, where it
+//! does; the image area (and otherwise the CFA colors) come from
+//! geometry.rs (LibRaw's), the white level from its table (else LibRaw's for the
 //! depth), the calibrations from cameras.rs. A sample of 0 is filled from
 //! its neighbors before the develop, as LibRaw fills it
 //! (develop::fill_zeros).
@@ -118,6 +119,21 @@ pub fn make_model(bytes: &[u8]) -> Option<(String, String)> {
     let ifd0 = t.ifds().into_iter().next()?;
     let ascii = |tag| ifd0.get(tag).and_then(|e| t.ascii(&e));
     Some((ascii(271)?, ascii(272)?))
+}
+
+/// The CFA colors at the frame's top left as the file states them
+/// (0x0009: 1 red, green, green, blue in reading order; 2 green, red,
+/// blue, green; 3 green, blue, red, green; 4 blue, green, green, red).
+pub fn stated_cfa(bytes: &[u8]) -> Option<[u8; 4]> {
+    let t = Tiff::with_magic(bytes, 0x55)?;
+    let ifd0 = t.ifds().into_iter().next()?;
+    match ifd0.get(0x09).and_then(|e| t.uint(&e))? {
+        1 => Some([0, 1, 1, 2]),
+        2 => Some([1, 0, 2, 1]),
+        3 => Some([1, 2, 0, 1]),
+        4 => Some([2, 1, 1, 0]),
+        _ => None,
+    }
 }
 
 pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
@@ -197,6 +213,10 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let calibration = crate::cameras::find(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
     let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
     let (top, left) = (geometry.top as usize, geometry.left as usize);
+    // The CFA as the file states it (it agrees with LibRaw's wherever both
+    // are known, and one camera's files state different ones), from the
+    // image area's top left; else the geometry row's.
+    let colors: [u8; 4] = stated_cfa(bytes).map_or(geometry.colors, |st| std::array::from_fn(|k| st[(((k >> 1) + top) & 1) * 2 + (((k & 1) + left) & 1)]));
     Ok(Dng {
         format: Format::Rw2,
         make,
@@ -214,12 +234,11 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         predictor: 1,
         pieces: Pieces { width, height, spans },
         cfa_dim: (2, 2),
-        cfa: geometry.colors.to_vec(),
+        cfa: colors.to_vec(),
         cfa_layout: 1,
         linearization: None,
         black_dim: (2, 2),
-        black: geometry
-            .colors
+        black: colors
             .iter()
             .map(|c| match c {
                 0 => black_r,

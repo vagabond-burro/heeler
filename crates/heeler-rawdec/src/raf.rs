@@ -107,7 +107,8 @@ fn numbers(bytes: &[u8], tag: u16) -> Option<Vec<u32>> {
 }
 
 /// An earlier body's raw section: no TIFF, the frame's samples alone,
-/// 16-bit little-endian words. Record 0x100 holds its height and width,
+/// 16-bit little-endian words (big-endian on the S2Pro, as LibRaw reads
+/// them; the F700 and the GX680 back declined). Record 0x100 holds its height and width,
 /// 0x2FF0 the balance as shot (green, red, green, blue) and 0x4000 the
 /// black levels by color (green, red, the other green, blue).
 fn earlier_section(bytes: &[u8], at: usize, len: usize) -> Result<Section, Error> {
@@ -118,7 +119,15 @@ fn earlier_section(bytes: &[u8], at: usize, len: usize) -> Result<Section, Error
     }
     let balance = numbers(bytes, 0x2ff0).filter(|v| v.len() >= 4).map(|v| vec![v[0], v[1], v[3]]);
     let black = numbers(bytes, 0x4000).filter(|v| v.len() >= 4).map(|v| [v[0], v[1], v[2], v[3]]).unwrap_or([0; 4]);
-    let coding = Coding::Headerless(crate::headerless::Layout::words_at(at, width, 2));
+    // The S2Pro's words are big-endian; the F700's and the GX680 back's
+    // samples LibRaw lays out its own way, not read here.
+    let model = make_model(bytes).map(|m| m.1).unwrap_or_default();
+    let layout = match model.as_str() {
+        "FinePixS2Pro" => crate::headerless::Layout::packed_at(at, width, 16, 1),
+        "FinePix F700" | "DBP for GX680" => return Err(Error::Unsupported("an earlier RAF layout not read here")),
+        _ => crate::headerless::Layout::words_at(at, width, 2),
+    };
+    let coding = Coding::Headerless(layout);
     Ok(Section { width, height, bits: 16, data: at, count: len, coding, black: Vec::new(), balance, black_by_color: Some(black) })
 }
 
@@ -197,11 +206,23 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let Section { width, height, bits, data, count, coding, black, balance, black_by_color } = section(bytes)?;
     let xtrans = xtrans(bytes);
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
-    // A sensor turned 45 degrees (SuperCCD): LibRaw's image is not an area
-    // of the frame.
-    if (geometry.top + geometry.height) as usize > height || (geometry.left + geometry.width) as usize > width {
-        return Err(Error::Unsupported("a RAF sensor turned 45 degrees"));
-    }
+    // A sensor turned 45 degrees (SuperCCD): LibRaw's image is the
+    // diagonal mosaic its samples are placed on (superccd.rs), from the
+    // frame's margins LibRaw states (the geometry row's top and left) and
+    // the diagonal image's width (the row's width).
+    let turned = (geometry.top + geometry.height) as usize > height || (geometry.left + geometry.width) as usize > width;
+    let superccd = if turned {
+        let left = geometry.left as usize;
+        let fw = if height > width { width.checked_sub(2 * left) } else { width.checked_sub(2 * left).map(|v| v / 2) };
+        let layout = fw.and_then(|fw| crate::superccd::Layout::from_libraw(width, height, geometry.top as usize, left, fw)).ok_or(Error::Unsupported("a RAF sensor turned 45 degrees"))?;
+        let Coding::Headerless(samples) = coding.clone() else { return Err(Error::Unsupported("a RAF sensor turned 45 degrees")) };
+        if layout.diagonal_size() != (geometry.width as usize, geometry.height as usize) || xtrans.is_some() {
+            return Err(Error::Unsupported("a RAF sensor turned 45 degrees"));
+        }
+        Some(crate::superccd::SuperCcd { layout, frame: (width, height), samples })
+    } else {
+        None
+    };
     // The camera's level for the depth where its files of two depths share
     // a frame size (the GFX bodies' 14-bit files, 15872).
     let white = match (crate::geometry::nef_white(&make, &model, bits as u32), geometry.white) {
@@ -253,6 +274,16 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     };
     let black: Vec<f64> = shifted(&|r, c| black[r * n + c]).iter().map(|&v| v as f64).collect();
     let (r, g, b) = (wb[1] as f64, wb[0] as f64, wb[2] as f64);
+    // A SuperCCD's image is the whole diagonal mosaic, its sites (from the
+    // top left) the second green, blue, red and green.
+    let (width, height, active, black, coding) = match superccd {
+        Some(sc) => {
+            let (dw, dh) = sc.layout.diagonal_size();
+            let [g0, r0, g2, b0] = black_by_color.unwrap_or([0; 4]);
+            (dw, dh, (0, 0, dh, dw), [g2, b0, r0, g0].map(|v| v as f64).to_vec(), Coding::SuperCcd(Box::new(sc)))
+        }
+        None => (width, height, (top, left, top + geometry.height as usize, left + geometry.width as usize), black, coding),
+    };
     Ok(Dng {
         format: Format::Raf,
         make,
@@ -278,7 +309,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         black_delta_h: Vec::new(),
         black_delta_v: Vec::new(),
         white: vec![white],
-        active: (top, left, top + geometry.height as usize, left + geometry.width as usize),
+        active,
         default_crop: None,
         default_scale: (1.0, 1.0),
         as_shot_neutral: Some(vec![g / r, 1.0, g / b]),

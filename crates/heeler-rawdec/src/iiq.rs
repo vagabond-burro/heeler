@@ -22,8 +22,8 @@
 //!
 //! Codings 5 and 8 are coding 3's stream: coding 8's samples are 16 bits
 //! and kept as decoded, coding 5's go through a square-law table (see
-//! `parse`). Coding 6 (the IIQ S files of the later backs) and 0 are
-//! declined. The container's 0x0100 of 1 turns the frame (orientation 6).
+//! `parse`). Coding 6 (the IIQ S files of the later backs) and 0
+//! (uncompressed) are iiq_s.rs's. The container's 0x0100 of 1 turns the frame (orientation 6).
 //! The frame is then corrected by the sensor calibration (iiq_cal.rs),
 //! which takes the black level off; LibRaw's white level is then 65532
 //! less it.
@@ -84,6 +84,9 @@ pub struct PhaseOne {
     pub shift: u32,
     /// The sensor calibration the frame is corrected by (iiq_cal.rs).
     pub cal: crate::iiq_cal::Calibration,
+    /// The container's coding: 3, 5 and 8 coding 3's stream, 6 the IIQ S
+    /// stream, 0 uncompressed (iiq_s.rs).
+    pub coding: u32,
 }
 
 pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
@@ -98,7 +101,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         return Err(Error::Unsupported("an IIQ frame of this size"));
     }
     let coding = dir.value(0x010e);
-    if !matches!(coding, Some(3 | 5 | 8)) {
+    if !matches!(coding, Some(0 | 3 | 5 | 6 | 8)) {
         return Err(Error::Unsupported("a Phase One coding not read here"));
     }
     // Codings 5 and 8 are coding 3's stream. LibRaw takes coding 5's
@@ -117,14 +120,26 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     };
     let (_, len, at) = dir.get(0x010f).ok_or(Error::Corrupt("no IIQ samples"))?;
     let (at, len) = (8 + at as usize, len as usize);
-    let (_, n, rows_at) = dir.get(0x021c).ok_or(Error::Corrupt("no IIQ row offsets"))?;
-    if (n as usize) < height * 4 || at.checked_add(len).is_none_or(|e| e > bytes.len()) {
+    if at.checked_add(len).is_none_or(|e| e > bytes.len()) {
         return Err(Error::Corrupt("IIQ samples past the end of the file"));
     }
-    let rows: Vec<usize> = (0..height).map(|r| u32::from_le_bytes(bytes[8 + rows_at as usize + 4 * r..][..4].try_into().unwrap()) as usize).collect();
-    if rows.iter().any(|&o| o >= len) {
-        return Err(Error::Corrupt("an IIQ row past its samples"));
-    }
+    // Each row's offset into the samples (coding 0's rows lie end to end).
+    let rows: Vec<usize> = if coding == Some(0) {
+        if len < width * height * 2 {
+            return Err(Error::Corrupt("IIQ samples shorter than the frame"));
+        }
+        Vec::new()
+    } else {
+        let (_, n, rows_at) = dir.get(0x021c).ok_or(Error::Corrupt("no IIQ row offsets"))?;
+        if (n as usize) < height * 4 || bytes.len() < 8 + rows_at as usize + 4 * height {
+            return Err(Error::Corrupt("IIQ row offsets past the end of the file"));
+        }
+        let rows: Vec<usize> = (0..height).map(|r| u32::from_le_bytes(bytes[8 + rows_at as usize + 4 * r..][..4].try_into().unwrap()) as usize).collect();
+        if rows.iter().any(|&o| o >= len) {
+            return Err(Error::Corrupt("an IIQ row past its samples"));
+        }
+        rows
+    };
     let (_, _, wb_at) = dir.get(0x0107).ok_or(Error::Unsupported("no stated white balance"))?;
     let f = |k: usize| bytes.get(8 + wb_at as usize + 4 * k..12 + wb_at as usize + 4 * k).map(|b| f32::from_le_bytes(b.try_into().unwrap()) as f64);
     let wb = [f(0), f(1), f(2)];
@@ -187,7 +202,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         opcodes: [Vec::new(), Vec::new(), Vec::new()],
         profile_tables: calibration.tables,
         baseline_exposure: 0.0,
-        coding: Coding::PhaseOne(Box::new(PhaseOne { rows, shift: if coding == Some(8) { 0 } else { 2 }, cal })),
+        coding: Coding::PhaseOne(Box::new(PhaseOne { rows, shift: if coding == Some(8) { 0 } else { 2 }, cal, coding: coding.unwrap_or(3) })),
         cam_mul: Some([r as f32, g as f32, b as f32, g as f32]),
         border_black: false,
     })
@@ -254,10 +269,20 @@ fn row_3(data: &[u8], width: usize, shift: u32, line: &mut [u16]) {
 /// Decodes the first `rows` rows of `width` samples, handing each row to
 /// `put`, across the cores.
 pub fn decode(data: &[u8], width: usize, rows: usize, p1: &PhaseOne, put: impl Fn(usize, &[u16]) + Sync) -> Result<(), Error> {
+    if p1.coding == 0 {
+        let frame = crate::iiq_s::decode_0(data, width, rows).ok_or(Error::Corrupt("IIQ samples shorter than the frame"))?;
+        frame.par_chunks(width).enumerate().for_each(|(r, line)| put(r, line));
+        return Ok(());
+    }
     (0..rows).into_par_iter().try_for_each(|r| {
         let at = *p1.rows.get(r).ok_or(Error::Corrupt("an IIQ row past its offsets"))?;
         let mut line = vec![0u16; width];
-        row_3(data.get(at..).ok_or(Error::Corrupt("an IIQ row past its samples"))?, width, p1.shift, &mut line);
+        let row = data.get(at..).ok_or(Error::Corrupt("an IIQ row past its samples"))?;
+        if p1.coding == 6 {
+            crate::iiq_s::decode_row_6(row, &mut line);
+        } else {
+            row_3(row, width, p1.shift, &mut line);
+        }
         put(r, &line);
         Ok(())
     })

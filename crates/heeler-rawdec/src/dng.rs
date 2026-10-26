@@ -35,6 +35,7 @@ pub enum Format {
     Erf,
     Mef,
     Mos,
+    Kdc,
 }
 
 /// Make and Model as a raw file of any format this crate reads gives
@@ -89,6 +90,7 @@ impl Format {
             Format::Erf => "ERF",
             Format::Mef => "MEF",
             Format::Mos => "MOS",
+            Format::Kdc => "KDC",
             Format::Crw => "CRW",
             Format::Headerless => "headerless",
             Format::Raf => "RAF",
@@ -123,6 +125,11 @@ pub enum Coding {
     /// 12-bit samples in three bytes, the first in the low byte and the low
     /// half of the next): the older Sony bodies' 12-bit uncompressed data.
     PackedLow,
+    /// A SuperCCD RAF (superccd.rs): its frame's samples placed on the
+    /// diagonal mosaic the develop demosaics, then turned upright.
+    SuperCcd(Box<crate::superccd::SuperCcd>),
+    /// Samsung's compressed codings (srw_codec.rs), decoded whole.
+    Samsung(crate::srw_codec::Samsung),
     /// Uncompressed rows stored as two fields, the even rows then the odd
     /// (the older Coolpix NEFs).
     TwoFields,
@@ -418,6 +425,9 @@ impl Dng {
         }
         if crate::leaf::is_leaf(bytes) {
             return crate::leaf::parse(bytes);
+        }
+        if crate::kodak::is_kodak(bytes) {
+            return crate::kodak::parse(bytes);
         }
         if crate::plain::is_plain(bytes) {
             return crate::plain::parse(bytes);

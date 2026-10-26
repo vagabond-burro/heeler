@@ -91,6 +91,7 @@ extern "C" {
     fn heeler_raw_width(d: *mut c_void) -> u32;
     fn heeler_raw_height(d: *mut c_void) -> u32;
     fn heeler_set_half_size(d: *mut c_void, value: c_int);
+    fn heeler_set_fuji_rotate(d: *mut c_void, value: c_int);
     fn heeler_set_fixed_white(d: *mut c_void, value: c_int);
     fn heeler_set_use_camera_wb(d: *mut c_void, value: c_int);
     fn heeler_set_use_camera_matrix(d: *mut c_void, value: c_int);
@@ -256,6 +257,15 @@ pub fn dimensions(bytes: &[u8]) -> Result<(usize, usize), RawError> {
 /// the default) or LibRaw's own ahd_interpolate, the reference the
 /// parallel one is held to the bit against.
 static PARALLEL_AHD: AtomicBool = AtomicBool::new(true);
+
+/// Whether LibRaw turns a SuperCCD frame's develop back upright (on by
+/// default): off for the harness that studies the develop before the turn.
+#[doc(hidden)]
+pub fn set_fuji_rotate(on: bool) {
+    FUJI_ROTATE.store(on, Ordering::Relaxed);
+}
+
+static FUJI_ROTATE: AtomicBool = AtomicBool::new(true);
 
 /// Turns the parallel AHD off (LibRaw's own path) or on. Process-wide.
 pub fn set_parallel_ahd(on: bool) {
@@ -607,6 +617,7 @@ fn configured(opts: DevelopOpts) -> Result<Handle, RawError> {
         libraw_set_gamma(handle.0, 0, 1.0); // linear transfer
         libraw_set_gamma(handle.0, 1, 1.0);
         heeler_set_half_size(handle.0, opts.half_size as c_int);
+        heeler_set_fuji_rotate(handle.0, FUJI_ROTATE.load(Ordering::Relaxed) as c_int);
         heeler_set_fixed_white(handle.0, opts.fixed_white as c_int);
         // Without camera WB every develop renders green/cold, since
         // LibRaw's default multipliers ignore the camera's metering; both

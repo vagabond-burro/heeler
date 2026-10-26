@@ -9,7 +9,9 @@
 //! its own files write in their maker notes. A camera no converter reads
 //! (the add-on firmware of Canon's compacts, action cameras) takes the
 //! matrix LibRaw develops it with instead, as one D65 calibration
-//! (libraw_matrices.rs, from heeler-raw's examples/libraw_matrices.rs).
+//! (libraw_matrices.rs, from heeler-raw's examples/libraw_matrices.rs), or
+//! for a camera LibRaw has no matrix for, none: it develops in its own
+//! colors, as LibRaw's does.
 
 use crate::color::Profile;
 

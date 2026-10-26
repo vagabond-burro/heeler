@@ -352,6 +352,12 @@ void heeler_set_half_size(libraw_data_t *d, int value) {
     if (d) d->params.half_size = value;
 }
 
+// Whether a SuperCCD frame's develop is turned back upright (LibRaw's
+// default), for the harness that studies the develop before the turn.
+void heeler_set_fuji_rotate(libraw_data_t *d, int value) {
+    if (d) d->params.use_fuji_rotate = value;
+}
+
 // As-shot white balance from the camera. LibRaw's default multipliers
 // ignore what the camera metered, which shifts every develop green/cold.
 void heeler_set_use_camera_wb(libraw_data_t *d, int value) {

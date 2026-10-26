@@ -1927,13 +1927,23 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
 ### Fujifilm's earlier RAF layout
 
 - The earlier bodies' raw section is no TIFF but the samples alone,
-  16-bit little-endian words; record 0x100 holds the frame's height and
-  width, 0x2FF0 the balance (green, red, green, blue) and 0x4000 the black
-  levels by color (green, red, the other green, blue). The S5500 and
-  S200EXR (4 files) match LibRaw. The other earlier bodies' sensors are
-  turned 45 degrees (SuperCCD); LibRaw lays their samples out diagonally
-  and turns the developed image back, which is not modeled yet, so they
-  stay LibRaw's.
+  16-bit little-endian words (big-endian on the S2Pro, as LibRaw reads
+  it); record 0x100 holds the frame's height and width, 0x2FF0 the
+  balance (green, red, green, blue) and 0x4000 the black levels by color
+  (green, red, the other green, blue). The F700's and the GX680 back's
+  samples LibRaw lays out its own way; they stay LibRaw's. The S5500 and
+  S200EXR (4 files) match LibRaw; every other earlier frame decodes to
+  LibRaw's frame.
+- The other earlier bodies' sensors are turned 45 degrees (SuperCCD).
+  `superccd.rs` holds the rules, found from LibRaw's output alone and
+  exact on all 27 such files: each sample's place on the diagonal mosaic
+  LibRaw demosaics (two layouts, by the frame's shape; the SR bodies'
+  second frame unused), and the turn upright after the demosaic and
+  before the color conversion (bilinear, single precision, the source
+  position a step of the square root of one half). The develop places,
+  demosaics and turns; its demosaic of the diagonal mosaic does not yet
+  match LibRaw's (about 43 to 50 dB), so these bodies stay LibRaw's, and
+  half size is declined.
 
 ### Fujifilm's lossy compression
 
@@ -1946,6 +1956,56 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   (flagged above); the details were settled by trial against LibRaw's
   frame. All 46 lossy files (18 bodies, Bayer and X-Trans) and the 76
   lossless ones match LibRaw's frame in every sample.
+
+### Cameras LibRaw has no matrix for
+
+- LibRaw develops a camera it has no matrix for in the camera's own
+  colors. The matrix generator now records such cameras of the corpora
+  (libraw_matrices.rs, rows without a matrix), and the develop takes
+  the identity for them, and where a file states no balance, 1 for each
+  channel. The Nikon ZR, Panasonic DC-L10, Canon EOS C50, Samsung GX-1S
+  and Pentax Optio S4 (16 files) match LibRaw. The C50 states its black
+  level (2048), which LibRaw, not knowing the body, develops at about 0;
+  the develop keeps the stated level. The DiMAGE G600's files are a JPEG
+  with the samples after it; LibRaw finds a balance in the JPEG's EXIF
+  segment outside any tag, which two files cannot make a rule of, so they
+  stay LibRaw's.
+
+### Monochrome sensors
+
+- A LinearRaw frame of one sample a pixel develops as LibRaw develops
+  it: the black level off, each sample times 65535 over the white level
+  less the black in single precision, truncated, the value in all three
+  channels, at full size whichever size is asked for. The Leica M
+  Monochrom and M Monochrom (Typ 246) and the Pentax K-3 Mark III
+  Monochrome's DNG and PEF (pef.rs reads photometric 34892 as monochrome)
+  match LibRaw.
+  LibRaw's white balance headroom for such a frame comes from multipliers
+  it never applies; the develop's is 1.
+
+### Samsung's compressed SRWs
+
+- `srw_codec.rs`, every rule found from the files against LibRaw's frame:
+  32770 in fewer bytes than 1.5 a sample (rows from a row offset table,
+  0xA010; blocks of 16 columns, a mode bit and four groups' length codes,
+  each group's samples differences in two's complement, predicted from
+  the row above or two above or from the block before; the coded frame's
+  2 by 2 cells transposed), 32772 (one stream of prefix coded length
+  classes, each sample predicted two to the left, the first two of a row
+  from two rows up) and 32773 (rows on 16-byte boundaries, blocks like
+  32770's with eight predictors and, in the lossy variant, a quantizer
+  each 64 columns). All 51 SRWs of the corpora match LibRaw; ten more
+  bodies verified.
+
+### Kodak's later KDCs
+
+- `kodak.rs`: Kodak's directory (0xFE00) states the frame's width and
+  height (LibRaw's height that rounded up to even), a white balance mode
+  and six presets; IFD0's sub-IFD, offsets from byte 64, lists the strips.
+  12-bit samples most significant bits first. Modes 0, 3 and 6 take the
+  first, fourth and sixth presets (the only modes the files hold; others
+  are declined). The Z981, Z990, Z1015 IS, P712 and P880 (10 files) match
+  LibRaw. The DC120 and DC50 (their own codings) stay LibRaw's.
 
 ### Still to do in this phase
 
@@ -1987,14 +2047,15 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
 ## IIQ
 
 - `iiq.rs` reads Phase One's container (a directory of 16-byte entries
-  at byte 8) and decodes codings 3, 5 and 8, which match LibRaw's
-  unpacked frame on all 53 such files of the corpora: coding 8 is coding
-  3's stream with 16-bit samples, coding 5 coding 3's through a
-  square-law table (4 c i^2 rounded, i a quarter of the sample, c found
-  between 0.2519525 and 0.2519527 from every value the files hold). The
-  container's 0x0100 of 1 turns the frame (orientation 6). Coding 6 (the
-  later backs' IIQ S, 14 files) and the uncompressed H 25 file are not
-  read yet.
+  at byte 8) and decodes codings 3, 5 and 8: coding 8 is coding 3's
+  stream with 16-bit samples, coding 5 coding 3's through a square-law
+  table (4 c i^2 rounded, i a quarter of the sample, c found between
+  0.2519525 and 0.2519527 from every value the files hold). `iiq_s.rs`
+  decodes coding 6 (the later backs' IIQ S: groups of 8 samples, each
+  parity's range and the group's width coded before it, differences
+  scaled by the range, so lossy) and coding 0 (uncompressed), found
+  against LibRaw's frame. All 68 IIQs of the corpora decode to LibRaw's
+  frame. The container's 0x0100 of 1 turns the frame (orientation 6).
 - `iiq_cal.rs` applies the sensor calibration LibRaw applies after the
   unpack, every rule found from the files against LibRaw's loaded image
   (its header lists them): the black level and each half's row and
@@ -2003,11 +2064,12 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   grids in the block's order, with LibRaw's single-precision steps and
   rounding. LibRaw's white is then 65532 less the black. The P40+ and
   P65+ calibrate by rules not found exactly and are declined.
-- Verified: the IQ150, IQ3 100MP (and Trichromatic), IQ4 150MP, iXM-100
-  and iXU-RS1000 develop as LibRaw does to the bit (18 files). The Credo
-  40, H 25, IQ140, IQ180, P20+, P25, P25+, P30 and P45+ (26 files) develop
-  within 65 dB of LibRaw or better: their defective columns (LibRaw's rule for
-  them is not found; the mean of the columns two to each side is used),
+- Verified: the IQ150, IQ3 100MP (and Trichromatic), IQ4 150MP, iXM-100,
+  iXM-RS150F and iXU-RS1000 develop as LibRaw does to the bit (24 files).
+  The Credo 40, H 25, IQ140, IQ180, iXU180, P20+, P25, P25+, P30 and P45+
+  (35 files) develop within 65 dB of LibRaw or better: their defective
+  columns (LibRaw's rule for them is not found; the mean of the columns
+  two to each side is used),
   the quarter curves' spline arithmetic and the H 25's float flat field
   differ slightly. The owner allowed IIQ's calibration to be verified by
   tolerance; the corpus test holds them to a 60 dB floor (NEAR_FLOOR_DB,
