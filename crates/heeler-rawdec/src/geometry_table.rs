@@ -4,6 +4,7 @@
 // width and height, the CFA colors at its top left (row by row, 0
 // red, 1 green, 2 blue) and the white level (0: the file's own).
 pub(crate) const GEOMETRY: &[Geometry] = &[
+    Geometry { make: "Broadcom", model: "RPi IMX219", raw: (3280, 2464), top: 0, left: 0, width: 3280, height: 2464, colors: [2, 1, 1, 0], white: 1023 },
     Geometry { make: "Canon", model: "Canon EOS 1000D", raw: (3948, 2622), top: 18, left: 42, width: 3906, height: 2602, colors: [0, 1, 1, 2], white: 3651 },
     Geometry { make: "Canon", model: "Canon EOS 100D", raw: (5280, 3528), top: 52, left: 72, width: 5208, height: 3476, colors: [0, 1, 1, 2], white: 13583 },
     Geometry { make: "Canon", model: "Canon EOS 10D", raw: (3152, 2068), top: 12, left: 64, width: 3088, height: 2056, colors: [0, 1, 1, 2], white: 4000 },
@@ -874,6 +875,7 @@ pub(crate) const GEOMETRY: &[Geometry] = &[
     Geometry { make: "Phase One A/S", model: "P30", raw: (6588, 4954), top: 22, left: 42, width: 6525, height: 4904, colors: [1, 0, 2, 1], white: 65535 },
     Geometry { make: "Phase One A/S", model: "P40+", raw: (3712, 2792), top: 6, left: 36, width: 3658, height: 2740, colors: [0, 1, 1, 2], white: 65535 },
     Geometry { make: "Phase One A/S", model: "P40+", raw: (7372, 5536), top: 6, left: 36, width: 7320, height: 5484, colors: [0, 1, 1, 2], white: 65535 },
+    Geometry { make: "Phase One A/S", model: "P45", raw: (7308, 5494), top: 22, left: 42, width: 7245, height: 5444, colors: [1, 0, 2, 1], white: 65535 },
     Geometry { make: "Phase One A/S", model: "P45+", raw: (7308, 5494), top: 22, left: 42, width: 7245, height: 5444, colors: [1, 0, 2, 1], white: 65535 },
     Geometry { make: "Phase One A/S", model: "P65+", raw: (4544, 3416), top: 6, left: 36, width: 4490, height: 3364, colors: [0, 1, 1, 2], white: 65535 },
     Geometry { make: "Phase One A/S", model: "P65+", raw: (9036, 6784), top: 6, left: 36, width: 8984, height: 6732, colors: [0, 1, 1, 2], white: 65535 },

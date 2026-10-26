@@ -36,6 +36,7 @@ pub mod dcs;
 pub mod canon_tif;
 pub mod sinar;
 pub mod lossy_dng;
+pub mod rpi;
 pub mod crw;
 pub mod headerless;
 pub mod hasselblad;

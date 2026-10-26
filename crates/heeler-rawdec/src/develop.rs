@@ -232,7 +232,9 @@ impl Plan {
             return Err(Error::Unsupported("a three-color image with a black level"));
         }
         let (t, l, b, r) = dng.active;
-        let neutral = dng.as_shot_neutral.clone().filter(|n| n.len() == 3 && n.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no AsShotNeutral"))?;
+        // A DNG stating its white as a chromaticity (AsShotWhiteXY) instead
+        // (a scanner's): the neutral its color matrix gives that white.
+        let neutral = dng.as_shot_neutral.clone().or_else(|| xy_neutral(&dng)).filter(|n| n.len() == 3 && n.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no AsShotNeutral"))?;
         // A DNG's: the reciprocal in single precision, as LibRaw takes it.
         let inv = |v: f64| 1.0f32 / v as f32;
         let cam_mul = dng.cam_mul.or_else(|| dng.is_dng().then(|| [inv(neutral[0]), inv(neutral[1]), inv(neutral[2]), inv(neutral[1])])).ok_or(Error::Unsupported("no stated white balance"))?;
@@ -789,6 +791,20 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         diag.par_chunks(dw).enumerate().for_each(|(r, row)| put_run(out, p, r, 0, row, lin));
         return Ok(cfa);
     }
+    if let Coding::Raw10 { stride } = d.coding {
+        let (at, len) = d.pieces.spans[0];
+        let data = &bytes[at..at + len];
+        if data.len() < stride * d.height {
+            return Err(Error::Corrupt("a raw frame past the end of the file"));
+        }
+        stopped(stop)?;
+        (0..d.height).into_par_iter().for_each(|r| {
+            let mut line = vec![0u16; d.width];
+            crate::rpi::unpack_row(&data[r * stride..(r + 1) * stride], &mut line);
+            put_run(out, p, r, 0, &line, lin);
+        });
+        return Ok(cfa);
+    }
     if let Coding::Dc120 { jpeg } = d.coding {
         let (at, len) = d.pieces.spans[0];
         stopped(stop)?;
@@ -1105,6 +1121,20 @@ fn daylight_neutral(dng: &Dng) -> Option<Vec<f64>> {
     let k = [21, 22, 20, 23].iter().find_map(|&d| dng.illuminant.iter().position(|&i| i == d))?;
     let m = dng.color_matrix[k].as_ref().filter(|m| m.len() == 9)?;
     let xyz = [0.3127 / 0.3290, 1.0, (1.0 - 0.3127 - 0.3290) / 0.3290];
+    let n: Vec<f64> = (0..3).map(|r| (0..3).map(|c| m[r * 3 + c] * xyz[c]).sum()).collect();
+    (n[1] > 0.0).then(|| n.iter().map(|v| v / n[1]).collect())
+}
+
+/// The camera's neutral for a DNG's AsShotWhiteXY: its one color matrix
+/// (a file with two is left to state AsShotNeutral) applied to that white,
+/// green 1.
+fn xy_neutral(dng: &Dng) -> Option<Vec<f64>> {
+    let (x, y) = dng.as_shot_white_xy.filter(|&(_, y)| y > 0.0)?;
+    if dng.color_matrix[1].is_some() {
+        return None;
+    }
+    let m = dng.color_matrix[0].as_ref().filter(|m| m.len() == 9)?;
+    let xyz = [x / y, 1.0, (1.0 - x - y) / y];
     let n: Vec<f64> = (0..3).map(|r| (0..3).map(|c| m[r * 3 + c] * xyz[c]).sum()).collect();
     (n[1] > 0.0).then(|| n.iter().map(|v| v / n[1]).collect())
 }

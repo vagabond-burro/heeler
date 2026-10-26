@@ -1007,6 +1007,8 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("KDC", "Eastman Kodak Company", "Kodak DC120 ZOOM Digital Camera"),
     ("headerless", "Kodak", "C330"),
     ("headerless", "Kodak", "C603"),
+    // The Raspberry Pi camera's IMX219 captures (rpi.rs), 2026-10-26.
+    ("headerless", "Broadcom", "RPi IMX219"),
     ("STI", "Sinar AG", "Sinarback eVolution 75, Sinar p3 / f3"),
     // Monochrome sensors' DNGs (develop.rs's monochrome plan), 2026-10-25.
     ("DNG", "Leica Camera AG", "M Monochrom"),
@@ -1014,6 +1016,7 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("DNG", "RICOH IMAGING COMPANY, LTD.", "PENTAX K-3 Mark III Monochrome"),
     ("PEF", "RICOH IMAGING COMPANY, LTD.", "PENTAX K-3 Mark III Monochrome"),
     // Linear DNGs, three samples a pixel (develop.rs's linear_image), 2026-10-25.
+    ("DNG", "Nikon", "LS-5000"),
     ("DNG", "Apple", "iPhone 12 Pro"),
     ("DNG", "Apple", "iPhone 16 Pro Max"),
     ("DNG", "Canon", "Canon EOS-1D X"),
@@ -1049,6 +1052,7 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("IIQ", "Phase One A/S", "P25"),
     ("IIQ", "Phase One A/S", "P25+"),
     ("IIQ", "Phase One A/S", "P30"),
+    ("IIQ", "Phase One A/S", "P45"),
     ("IIQ", "Phase One A/S", "P45+"),
     ("IIQ", "Phase One A/S", "iXU180"),
 ];
@@ -1068,6 +1072,7 @@ const NEAR: &[(&str, &str, &str)] = &[
     ("IIQ", "Phase One A/S", "P25"),
     ("IIQ", "Phase One A/S", "P25+"),
     ("IIQ", "Phase One A/S", "P30"),
+    ("IIQ", "Phase One A/S", "P45"),
     ("IIQ", "Phase One A/S", "P45+"),
     ("IIQ", "Phase One A/S", "iXU180"),
 ];

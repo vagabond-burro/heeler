@@ -4,6 +4,7 @@
 // XYZ-to-camera matrix for D65; none for a camera LibRaw develops in its
 // own colors.
 pub(crate) const LIBRAW_MATRICES: &[Calibration] = &[
+    Calibration { make: "Broadcom", model: "RPi IMX219", illuminants: [21, 0], color_matrix: [Some([3.099667, -0.906027, -0.349231, -0.374752, 1.818047, 0.208609, -0.285493, 0.646224, 1.168708]), None], forward_matrix: [None, None], tables: false },
     Calibration { make: "Canon", model: "Canon EOS R5 C", illuminants: [21, 0], color_matrix: [Some([0.976600, -0.295300, -0.125400, -0.427600, 1.211600, 0.243300, -0.043700, 0.133600, 0.513100]), None], forward_matrix: [None, None], tables: false },
     Calibration { make: "Canon", model: "Canon IXUS 160", illuminants: [21, 0], color_matrix: [Some([1.165700, -0.378100, -0.113600, -0.354400, 1.126200, 0.228300, -0.016000, 0.121900, 0.470000]), None], forward_matrix: [None, None], tables: false },
     Calibration { make: "Canon", model: "Canon PowerShot A3300 IS", illuminants: [21, 0], color_matrix: [Some([1.082600, -0.365400, -0.102300, -0.321500, 1.131000, 0.190600, 0.000000, 0.099900, 0.496000]), None], forward_matrix: [None, None], tables: false },

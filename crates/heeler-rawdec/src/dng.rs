@@ -70,6 +70,9 @@ pub fn make_model(bytes: &[u8]) -> Option<(String, String)> {
     if crate::leaf::is_leaf(bytes) {
         return crate::leaf::make_model(bytes);
     }
+    if crate::rpi::is_rpi(bytes) {
+        return crate::rpi::make_model(bytes);
+    }
     let t = crate::tiff::Tiff::new(bytes)?;
     let ifd0 = t.ifds().into_iter().next()?;
     let ascii = |tag| ifd0.get(tag).and_then(|e| t.ascii(&e));
@@ -189,6 +192,8 @@ pub enum Coding {
     /// The DC120's frame (kodak.rs, kodak_codec.rs): uncompressed, each
     /// row rotated, or a baseline JPEG.
     Dc120 { jpeg: bool },
+    /// 10-bit samples four in five bytes (rpi.rs), rows of `stride` bytes.
+    Raw10 { stride: usize },
 }
 
 /// A raw file in the terms a develop needs, which are the DNG
@@ -437,6 +442,9 @@ impl Dng {
         }
         if crate::headerless::is_headerless(bytes) {
             return crate::headerless::parse(bytes);
+        }
+        if crate::rpi::is_rpi(bytes) {
+            return crate::rpi::parse(bytes);
         }
         if crate::hasselblad::is_hasselblad(bytes) {
             return crate::hasselblad::parse(bytes);

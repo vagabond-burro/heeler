@@ -2068,6 +2068,11 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   own (CFAI), and both cameras' YRGB images, three colors a pixel through
   the same curve, developed as three-color images in LibRaw's own colors.
   11 files match LibRaw.
+- The Raspberry Pi camera's IMX219 captures (`rpi.rs`): a JPEG with a
+  "BRCM" block at its end, a 32768-byte header naming the sensor and
+  mode, then rows of 10-bit samples four in five bytes; the balance the
+  maker note's "gain_r=" and "gain_b=", the black level LibRaw's for the
+  sensor (66). Both files match LibRaw.
 - Sinar's STI (`sinar.rs`): one tile of 16-bit samples, its directory's
   own orientation, the balance the "Neutral" line of IFD0's 0xC517. The
   one file matches LibRaw.
@@ -2086,8 +2091,12 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   of 0 and a stated neutral (Samsung's Galaxy phones, iPhone ProRAW and
   a third-party camera app's, the Light L16, the sd Quattro, converter
   and denoiser output) match LibRaw at both sizes. JPEG XL DNGs are
-  heeler-io's (never LibRaw's); a scanner DNG with no neutral stays
-  LibRaw's.
+  heeler-io's (never LibRaw's). A scanner's DNG stating its white as
+  AsShotWhiteXY (the LS-5000's) takes the neutral its one color matrix
+  gives that white; it matches LibRaw.
+- The Phase One P45's raw TIFFs (named P45, not P45+) take the P45+'s
+  image area and develop within the IIQ calibration's tolerance (65
+  dB).
 - Lossy DNGs (`lossy_dng.rs`): LinearRaw tiles of baseline JPEG
   (compression 34892), each YCbCr turned to RGB in 16-bit fixed point,
   each color through a 256-entry curve from its plane's MapPolynomial
