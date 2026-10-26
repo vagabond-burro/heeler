@@ -283,15 +283,15 @@ fn idct_block(coef: &[i32; 64], out: &mut [u8; 64]) {
 
 /// A baseline JPEG's components, each at its own sampling: width, height
 /// (whole blocks), samples.
-struct Planes {
-    width: usize,
-    height: usize,
-    comps: Vec<(usize, usize, usize, usize, Vec<u8>)>, // h, v, plane width, plane height, samples
+pub(crate) struct Planes {
+    pub(crate) width: usize,
+    pub(crate) height: usize,
+    pub(crate) comps: Vec<(usize, usize, usize, usize, Vec<u8>)>, // h, v, plane width, plane height, samples
 }
 
 /// Decodes a baseline (sequential, Huffman coded, 8-bit) JPEG into its
 /// components' planes, without upsampling or color conversion.
-fn jpeg_planes(s: &[u8]) -> Result<Planes, String> {
+pub(crate) fn jpeg_planes(s: &[u8]) -> Result<Planes, String> {
     let be = |i: usize| -> Result<usize, String> { Ok(u16::from_be_bytes([*s.get(i).ok_or("a JPEG cut short")?, *s.get(i + 1).ok_or("a JPEG cut short")?]) as usize) };
     if s.get(..2) != Some(&[0xff, 0xd8]) {
         return Err("not a JPEG".into());

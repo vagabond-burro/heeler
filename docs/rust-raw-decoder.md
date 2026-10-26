@@ -2086,8 +2086,15 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   of 0 and a stated neutral (Samsung's Galaxy phones, iPhone ProRAW and
   a third-party camera app's, the Light L16, the sd Quattro, converter
   and denoiser output) match LibRaw at both sizes. JPEG XL DNGs are
-  heeler-io's (never LibRaw's); the converter's lossy DNGs (baseline
-  JPEG) and a scanner DNG with no neutral stay LibRaw's.
+  heeler-io's (never LibRaw's); a scanner DNG with no neutral stays
+  LibRaw's.
+- Lossy DNGs (`lossy_dng.rs`): LinearRaw tiles of baseline JPEG
+  (compression 34892), each YCbCr turned to RGB in 16-bit fixed point,
+  each color through a 256-entry curve from its plane's MapPolynomial
+  (OpcodeList2), floor(65535 p(v / 255)) in double precision; LibRaw's
+  white level is then 65535. The corpus's two (a full-size and a
+  downscaled conversion) match LibRaw at both sizes. A lossy CFA image,
+  other sampling or transforms, and other opcodes are declined.
 - The comparison harness takes LibRaw's balance from the picture only
   where the file states none (a Pixel 8 Pro's DNG): LibRaw takes it after
   the gain maps, so the harness now applies them before it looks.

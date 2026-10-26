@@ -74,7 +74,10 @@ impl Plan {
         }
         // A linear DNG of three samples a pixel, uncompressed or in lossless
         // JPEG.
-        if dng.is_dng() && dng.photometric == 34892 && dng.samples == 3 && matches!(dng.compression, 1 | 7) && dng.coding == Coding::Tiff && dng.sample_format == 1 {
+        // Or in tiles of baseline JPEG (lossy_dng.rs), with no
+        // linearization table.
+        let lossy = dng.compression == 34892 && dng.linearization.is_none();
+        if dng.is_dng() && dng.photometric == 34892 && dng.samples == 3 && (matches!(dng.compression, 1 | 7) || lossy) && dng.coding == Coding::Tiff && dng.sample_format == 1 {
             return Plan::three_colors(dng, opts);
         }
         if dng.photometric != 32803 {
@@ -234,7 +237,9 @@ impl Plan {
         let inv = |v: f64| 1.0f32 / v as f32;
         let cam_mul = dng.cam_mul.or_else(|| dng.is_dng().then(|| [inv(neutral[0]), inv(neutral[1]), inv(neutral[2]), inv(neutral[1])])).ok_or(Error::Unsupported("no stated white balance"))?;
         let rgb_cam = develop_matrix(&dng, [neutral[0], neutral[1], neutral[2]], opts.libraw_color)?.map(|row| row.map(|v| v as f32));
-        let white = dng.white.first().copied().unwrap_or(65535.0).clamp(1.0, 65535.0) as u32;
+        // A lossy DNG's samples come through its curves to 16 bits, whatever
+        // its WhiteLevel (LibRaw's maximum is 65535).
+        let white = if dng.compression == 34892 { 65535 } else { dng.white.first().copied().unwrap_or(65535.0).clamp(1.0, 65535.0) as u32 };
         Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 1], [1, 2]], xtrans: None, black: vec![0], black_rows: 1, black_cols: 1, white, cam_mul, rgb_cam, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, dng })
     }
 
@@ -1362,6 +1367,11 @@ fn develop_three(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>,
         }
         Coding::SonyYcc(s) => (crate::sony_ycc::decode(bytes, s)?, s.image),
         Coding::KodakSmall(k, frame) => (crate::headerless::decode_kodak(bytes, *k, *frame, (p.dng.width, p.dng.height))?, (p.dng.width, p.dng.height)),
+        Coding::Tiff if p.dng.compression == 34892 => {
+            let d = &p.dng;
+            let curves = crate::lossy_dng::curves(&d.opcodes[1], d.width, d.height, d.samples as usize)?;
+            (crate::lossy_dng::decode(bytes, &d.pieces.spans, (d.pieces.width, d.pieces.height), (d.width, d.height), 3, &curves)?, (d.width, d.height))
+        }
         Coding::Tiff => (linear_image(bytes, &p.dng)?, (p.dng.width, p.dng.height)),
         _ => return Err(Error::Unsupported("a three-color coding not read here")),
     };
