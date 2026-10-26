@@ -14,7 +14,9 @@
 //! camera whose files disagree is left out and reported, and so is one
 //! whose area LibRaw takes larger than the sensor data a Sony file states
 //! (tag 0x7038), a guard: heeler-raw's open keeps LibRaw's area to that
-//! size (open_buffer), so no row should take in a frame's padding.
+//! size (open_buffer), so no row should take in a frame's padding. A
+//! camera of four colors has rows of its own (FOUR_GEOMETRY): its area,
+//! LibRaw's 8 by 2 pattern, and its white and black levels.
 //!
 //!   cargo run --release -p heeler-raw --example geometry -- OUT.rs [folders]
 use std::collections::BTreeMap;
@@ -74,6 +76,11 @@ fn main() {
     // An image of three samples a pixel: (make, model, raw width, raw
     // height) -> LibRaw's area and white level, None where files disagree.
     let mut rgb_rows: BTreeMap<(String, String, u32, u32), Option<Row>> = BTreeMap::new();
+    // A mosaic of four colors: (make, model, raw width, raw height) ->
+    // LibRaw's area, pattern, white and black levels, None where files
+    // disagree.
+    type FourRow = (u32, u32, u32, u32, [u8; 16], u32, [u32; 4]);
+    let mut four_rows: BTreeMap<(String, String, u32, u32), Option<FourRow>> = BTreeMap::new();
     for (root, path) in roots.iter().flat_map(|r| files(r).into_iter().map(move |p| (r, p))) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let Some((make, model)) = heeler_rawdec::dng::make_model(&bytes) else { continue };
@@ -95,6 +102,19 @@ fn main() {
                 None => {
                     rows.insert(key, (row, path.display().to_string()));
                 }
+            }
+            continue;
+        }
+        // A mosaic of four colors (a CMYG or RGBE sensor): its area, its
+        // colors over the 8 rows and 2 columns LibRaw's pattern spans, its
+        // white level and its black level for each color, as LibRaw opens it.
+        if f.colors == 4 && f.filters >= 1000 && !path.extension().is_some_and(|e| e.eq_ignore_ascii_case("dng")) {
+            let pattern: [u8; 16] = std::array::from_fn(|k| ((f.filters >> (((((k / 2) << 1) & 14) | (k % 2)) << 1)) & 3) as u8);
+            let black: [u32; 4] = std::array::from_fn(|c| f.black + f.cblack[c]);
+            let row = (f.top_margin, f.left_margin, f.width, f.height, pattern, f.maximum, black);
+            let e = four_rows.entry((make.clone(), model.clone(), f.raw_width, f.raw_height)).or_insert(Some(row));
+            if *e != Some(row) {
+                *e = None;
             }
             continue;
         }
@@ -250,6 +270,20 @@ fn main() {
         match black {
             Some(b) => src += &format!("    ({make:?}, {model:?}, {b:?}),\n"),
             None => eprintln!("left out, its files' black levels disagree: {make} {model}"),
+        }
+    }
+    src += "];\n";
+    src += "// A mosaic of four colors (a CMYG or RGBE sensor): the area LibRaw develops\n\
+            // of its frame, its colors (LibRaw's indices 0 to 3) by row (modulo 8) and\n\
+            // column (modulo 2) from the area's top left, and its white level and the\n\
+            // black level of each color as LibRaw opens the file.\n\
+            pub(crate) const FOUR_GEOMETRY: &[FourGeometry] = &[\n";
+    for ((make, model, rw, rh), row) in &four_rows {
+        match row {
+            Some((top, left, w, h, pattern, max, black)) => src += &format!(
+                "    FourGeometry {{ make: {make:?}, model: {model:?}, raw: ({rw}, {rh}), top: {top}, left: {left}, width: {w}, height: {h}, pattern: {pattern:?}, white: {max}, black: {black:?} }},\n"
+            ),
+            None => eprintln!("left out, its four-color files disagree: {make} {model}"),
         }
     }
     src += "];\n";

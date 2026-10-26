@@ -54,3 +54,11 @@ pub(crate) const LIBRAW_MATRICES: &[Calibration] = &[
     Calibration { make: "SAMSUNG TECHWIN", model: "GX-1S", illuminants: [0, 0], color_matrix: [None, None], forward_matrix: [None, None], tables: false },
     Calibration { make: "Samsung", model: "WB550", illuminants: [0, 0], color_matrix: [None, None], forward_matrix: [None, None], tables: false },
 ];
+// A four-color camera's XYZ-to-camera matrix for D65, four rows of three
+// (its colors in LibRaw's order), from the 3 by 4 matrix LibRaw opens its
+// files with.
+pub(crate) const LIBRAW_MATRICES_4: &[(&str, &str, [f64; 12])] = &[
+    ("Canon", "Canon PowerShot G1", [-0.568600, 1.030000, 0.222300, 0.472500, -0.115700, 0.438300, -0.612800, 1.078300, 0.616300, -0.268800, 1.209300, 0.060400]),
+    ("Canon", "Canon PowerShot Pro70", [-0.510600, 1.069500, 0.157600, 0.382000, 0.005300, 0.456600, -0.649700, 1.073600, 0.670100, -0.333600, 1.188700, 0.139400]),
+    ("NIKON", "E5700", [-0.647500, 1.249600, 0.242800, 0.540900, -0.001600, 0.318000, -0.596500, 1.091200, 0.586600, -0.017700, 0.991800, 0.024800]),
+];

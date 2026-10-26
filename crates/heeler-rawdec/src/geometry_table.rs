@@ -1580,3 +1580,13 @@ pub(crate) const BLACK: &[(&str, &str, [u32; 4])] = &[
     ("Panasonic", "DMC-ZS40", [143, 143, 143, 143]),
     ("Panasonic", "DMC-ZS60", [146, 145, 145, 146]),
 ];
+// A mosaic of four colors (a CMYG or RGBE sensor): the area LibRaw develops
+// of its frame, its colors (LibRaw's indices 0 to 3) by row (modulo 8) and
+// column (modulo 2) from the area's top left, and its white level and the
+// black level of each color as LibRaw opens the file.
+pub(crate) const FOUR_GEOMETRY: &[FourGeometry] = &[
+    FourGeometry { make: "Canon", model: "Canon PowerShot G1", raw: (2144, 1560), top: 8, left: 4, width: 2088, height: 1550, pattern: [0, 1, 3, 2, 0, 1, 3, 2, 0, 1, 3, 2, 0, 1, 3, 2], white: 4095, black: [0, 0, 0, 0] },
+    FourGeometry { make: "Canon", model: "Canon PowerShot Pro70", raw: (1552, 1024), top: 0, left: 0, width: 1552, height: 1024, pattern: [3, 2, 1, 0, 2, 3, 0, 1, 3, 2, 0, 1, 2, 3, 1, 0], white: 1023, black: [34, 34, 34, 34] },
+    FourGeometry { make: "NIKON", model: "E5700", raw: (2576, 1924), top: 0, left: 0, width: 2576, height: 1924, pattern: [0, 1, 3, 2, 0, 1, 3, 2, 0, 1, 3, 2, 0, 1, 3, 2], white: 4095, black: [0, 0, 0, 0] },
+    FourGeometry { make: "SONY", model: "DSC-F828", raw: (3360, 2460), top: 0, left: 6, width: 3287, height: 2460, pattern: [3, 0, 2, 1, 3, 0, 2, 1, 3, 0, 2, 1, 3, 0, 2, 1], white: 16383, black: [0, 0, 0, 0] },
+];

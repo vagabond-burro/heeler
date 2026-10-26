@@ -60,6 +60,43 @@ pub fn srgb_from_camera(cam_xyz: &[[f64; 3]; 3]) -> Option<([[f64; 3]; 3], [f64;
     Some((invert3(&cam_rgb)?, implied))
 }
 
+/// srgb_from_camera for a camera of four colors (a 4 by 3 XYZ-to-camera
+/// matrix): the camera's response to each sRGB primary, each row scaled so
+/// sRGB white reads as camera white, then its pseudoinverse (the 3 by 3
+/// inverse of its transpose times itself, times its transpose), and the
+/// balance the rows' sums imply. Found against LibRaw's matrices for four
+/// cameras, to the bit in single precision, with the camera matrix's
+/// values given in single precision (as LibRaw holds its table's).
+pub fn srgb_from_camera4(cam_xyz: &[[f64; 3]; 4]) -> Option<([[f64; 4]; 3], [f64; 4])> {
+    let mut cam_rgb = [[0.0; 3]; 4];
+    let mut implied = [0.0; 4];
+    for i in 0..4 {
+        for j in 0..3 {
+            cam_rgb[i][j] = (0..3).map(|k| cam_xyz[i][k] * XYZ_FROM_SRGB[k][j]).sum();
+        }
+        let sum: f64 = cam_rgb[i].iter().sum();
+        if sum.abs() < 1e-12 {
+            return None;
+        }
+        cam_rgb[i].iter_mut().for_each(|v| *v /= sum);
+        implied[i] = 1.0 / sum;
+    }
+    let mut ata = [[0.0; 3]; 3];
+    for i in 0..3 {
+        for j in 0..3 {
+            ata[i][j] = (0..4).map(|k| cam_rgb[k][i] * cam_rgb[k][j]).sum();
+        }
+    }
+    let inv = invert3(&ata)?;
+    let mut out = [[0.0; 4]; 3];
+    for i in 0..3 {
+        for j in 0..4 {
+            out[i][j] = (0..3).map(|k| inv[i][k] * cam_rgb[j][k]).sum();
+        }
+    }
+    Some((out, implied))
+}
+
 /// The ICC D50 white, Y = 1: the white the DNG color model maps to.
 pub const D50: [f64; 3] = [0.96422, 1.0, 0.82521];
 

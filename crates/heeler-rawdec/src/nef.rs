@@ -22,7 +22,10 @@
 //! 32-bit little-endian words. The
 //! image area and CFA colors come from geometry.rs (LibRaw's), the white
 //! level from its table by the samples' depth (else the depth's top), the
-//! calibrations from cameras.rs.
+//! calibrations from cameras.rs. The E5700's sensor is of four colors
+//! (CMYG): its area, pattern and levels are geometry.rs's four-color rows,
+//! its matrix cameras.rs's four rows of three, and four_color.rs develops
+//! it.
 
 use crate::dng::{Coding, Dng, Format, Pieces};
 use crate::tiff::{Ifd, Tiff};
@@ -96,9 +99,12 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let ifd0 = ifds.first().ok_or(Error::Unsupported("no directory"))?;
     let uint = |ifd: &Ifd, tag| ifd.get(tag).and_then(|e| t.uint(&e));
     let uints = |ifd: &Ifd, tag| ifd.get(tag).and_then(|e| t.uints(&e));
+    // The largest CFA frame: the E5700 also keeps a small one (656 by 484)
+    // marked as the full image.
     let raw = ifds[1..]
         .iter()
-        .find(|i| uint(i, 262) == Some(32803) && uint(i, 254).unwrap_or(0) == 0)
+        .filter(|i| uint(i, 262) == Some(32803) && uint(i, 254).unwrap_or(0) == 0)
+        .max_by_key(|i| uint(i, 256).unwrap_or(0) as u64 * uint(i, 257).unwrap_or(0) as u64)
         .ok_or(Error::Unsupported("no CFA raw frame"))?;
     let ascii = |tag| ifd0.get(tag).and_then(|e| t.ascii(&e)).unwrap_or_default();
     let (make, model) = (ascii(271), ascii(272));
@@ -201,12 +207,64 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         // None stated: LibRaw's for the camera (geometry.rs), else 0.
         None => crate::geometry::black(&make, &model).map_or(vec![0.0; 4], |b| b.iter().map(|&v| v as f64).collect()),
     };
+    let orientation = uint(ifd0, 274).unwrap_or(1);
+    // A four-color camera (the E5700's CMYG): LibRaw's area, pattern,
+    // levels (geometry.rs's four-color rows) and matrix (cameras.rs, four
+    // rows of three); its balance in LibRaw's color order.
+    if let Some(g) = crate::geometry::find_four(&make, &model, (width as u32, height as u32)) {
+        let matrix = crate::cameras::find_four(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
+        if !(1..=8).contains(&orientation) {
+            return Err(Error::Unsupported("an orientation tag outside 1 to 8"));
+        }
+        let (top, left) = (g.top as usize, g.left as usize);
+        return Ok(Dng {
+            format: Format::Nef,
+            make,
+            model: model.clone(),
+            unique_model: model,
+            version: [0, 0, 0, 0],
+            orientation: orientation as u16,
+            width,
+            height,
+            bits,
+            compression: 1,
+            photometric: 32803,
+            samples: 1,
+            sample_format: 1,
+            predictor: 1,
+            pieces,
+            cfa_dim: (8, 2),
+            cfa: g.pattern.to_vec(),
+            cfa_layout: 1,
+            linearization,
+            black_dim: (8, 2),
+            black: g.pattern.iter().map(|&c| g.black[c as usize] as f64).collect(),
+            black_delta_h: Vec::new(),
+            black_delta_v: Vec::new(),
+            white: vec![g.white as f64],
+            active: (top, left, top + g.height as usize, left + g.width as usize),
+            default_crop: None,
+            default_scale: (1.0, 1.0),
+            as_shot_neutral: None,
+            as_shot_white_xy: None,
+            color_matrix: [Some(matrix.to_vec()), None, None],
+            camera_calibration: [None, None, None],
+            illuminant: [21, 0, 0],
+            analog_balance: None,
+            forward_matrix: [None, None, None],
+            opcodes: [Vec::new(), Vec::new(), Vec::new()],
+            profile_tables: false,
+            baseline_exposure: 0.0,
+            coding,
+            cam_mul: Some(cam_mul.map(|v| v as f32)),
+            border_black: false,
+        });
+    }
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
     let tall = model == "NIKON D1X";
     // The white level for the samples' depth (geometry.rs), else the
     // depth's top.
     let white = crate::geometry::nef_white(&make, &model, bits_tag as u32).unwrap_or((1 << bits_tag) - 1) as f64;
-    let orientation = uint(ifd0, 274).unwrap_or(1);
     if !(1..=8).contains(&orientation) {
         return Err(Error::Unsupported("an orientation tag outside 1 to 8"));
     }

@@ -70,6 +70,13 @@ fn find_named(table: &'static [Calibration], make: &str, model: &str) -> Option<
     })
 }
 
+/// A four-color camera's XYZ-to-camera matrix for D65 (four rows of
+/// three, LibRaw's color order): LibRaw's, as libraw_matrices.rs records
+/// it.
+pub fn find_four(make: &str, model: &str) -> Option<&'static [f64; 12]> {
+    LIBRAW_MATRICES_4.iter().find(|(mk, md, _)| *mk == make && *md == model).map(|(_, _, m)| m)
+}
+
 /// Every calibration in the table.
 pub fn all() -> &'static [Calibration] {
     CALIBRATIONS

@@ -1932,7 +1932,8 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   NEFs state no linearization table and stay LibRaw's.
 - Verified: the D1, D1H, D1X, D2H, D70, D70s, E5400, E8400 and E8800
   (18 files). The D50, D2Hs and D2X files state only enciphered balance
-  records, and the E5700 has no geometry row; they stay LibRaw's.
+  records; they stay LibRaw's. The E5700's mosaic is of four colors (see
+  Four-color mosaics).
 
 ### Fujifilm's earlier RAF layout
 
@@ -2163,6 +2164,66 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   balance under 0x7303 (green, red, blue, green), and its 16-bit words are
   big-endian in its little-endian file; the geometry generator now takes
   SR2, SRF and ARQ files. Both R1 files match LibRaw.
+
+### Four-color mosaics
+
+- Four cameras of the corpora have sensors of four colors: the PowerShot
+  G1 (CMYG, CRW), the PowerShot Pro70 (CRW, a pattern of 8 rows), the
+  E5700 (CMYG, NEF) and the DSC-F828 (RGBE, SRF). `four_color.rs` holds
+  LibRaw's develop of them, every rule found against its stages and
+  output, to the bit: the black of each color off and the white level
+  lowered as for three colors, four multipliers, the clip level the
+  smallest of the four; at full size the variable number of gradients
+  (eight gradients of same-colored pairs from two tables turned to each
+  direction, the threshold the smallest plus half the largest, each
+  direction's estimates the 4, 2, 1 weighted means of the 3 by 3 around
+  its neighbor, the own color's the mean of the site and the sample two
+  steps on where that is of its color), the edge band two pixels wide
+  interpolated apart (3 by 3 means, weighted on the inner ring); at half
+  size each 2 by 2 block one pixel; the highlights blended through the
+  four sign patterns [1, 1, 1, 1], [1, -1, 1, -1], [1, 1, -1, -1],
+  [1, -1, -1, 1] (that order fixes the rounding); the 3 by 4 matrix's rows
+  summed first two, then third and fourth.
+- A four-color file reads as a Dng of an 8 by 2 pattern of LibRaw's color
+  indices (`Dng::four_colors`), and its plan carries the pattern and the
+  3 by 4 matrix (`Plan::four`). The geometry generator records LibRaw's
+  area, pattern, white and black levels for such cameras
+  (`FOUR_GEOMETRY`), the matrix generator their XYZ to camera matrix,
+  four rows of three (`LIBRAW_MATRICES_4`): LibRaw's 3 by 4 inverted (its
+  pseudoinverse), each row divided back by LibRaw's daylight multiplier,
+  sRGB's primaries in XYZ, rounded to LibRaw's four places. The develop
+  turns it back as LibRaw does (`color::srgb_from_camera4`): sRGB's
+  primaries in, rows scaled to sum to 1 (their reciprocal sums the
+  daylight balance), the pseudoinverse; exact in single precision for all
+  four cameras once the matrix's values are taken in single precision.
+- The G1's CRW is Canon's coding (table 1, no low bits) and its balance
+  the 0x102C words 60 to 63 (LibRaw's colors 2, 3, 0, 1). Its left border
+  is 4 columns; its black (LibRaw's 31 at every site after unpacking) is
+  the mean, rounded down, of the run of live masked columns right of the
+  area up to the first dead one (under three quarters of the column two
+  in), two in from either end (found on its one file). The NEF reader now
+  takes the largest CFA frame of a file: the E5700 also keeps a 656 by
+  484 one marked as the full image. The Pro70's CRW states no
+  sensor size: its frame is the geometry row's whose 10-bit samples fill
+  the samples' record (1552 by 1024), the samples packed most significant
+  bit first through 16-bit little-endian words (`Coding::SwappedWords`),
+  its black 34 and white 1023 LibRaw's, and it states no balance, so it
+  develops in daylight. The E5700's NEF is the older Coolpix's two
+  fields, balance 1 for each color as LibRaw takes it.
+- Verified: the G1, Pro70 and E5700 (5 files, two of them copies), exact
+  at full and half size, highlights clipped and blended, with LibRaw's
+  numbers and with the develop's own (the Pro70's balance then daylight,
+  LibRaw's taken from the picture).
+- Open: the DSC-F828. Its frame is the file's last 3360 by 2460 16-bit
+  big-endian samples (IFD0 states their byte count and no offset),
+  enciphered as 32-bit big-endian words with the SR2 keystream (sony.rs)
+  from a key per file; `four_color::unpack_srf` reads it given the key,
+  exact against LibRaw's frame with the key recovered from the keystream
+  itself. Where the file keeps the key is not derived, so the camera
+  stays LibRaw's. LibRaw also takes other black levels for it at half
+  size than at full (colors 2 and 3), not explained.
+- The Sony ILCE-7RM3's pixel shift ARQ reports four colors too; it has no
+  mosaic and is the three-color path's (arq.rs).
 
 ### Still to do in this phase
 

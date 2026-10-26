@@ -25,6 +25,25 @@ pub struct Geometry {
     pub white: u32,
 }
 
+/// A four-color camera's area for one raw frame size (a CMYG or RGBE
+/// sensor), as LibRaw opens its files.
+#[derive(Clone, Copy, Debug)]
+pub struct FourGeometry {
+    pub make: &'static str,
+    pub model: &'static str,
+    pub raw: (u32, u32),
+    pub top: u32,
+    pub left: u32,
+    pub width: u32,
+    pub height: u32,
+    /// LibRaw's color index (0 to 3) at row (modulo 8) and column (modulo
+    /// 2) of the area, row by row.
+    pub pattern: [u8; 16],
+    pub white: u32,
+    /// The black level of each color.
+    pub black: [u32; 4],
+}
+
 include!("geometry_table.rs");
 
 /// The area for a camera's raw frame of `raw` size.
@@ -55,4 +74,15 @@ pub fn nef_white(make: &str, model: &str, depth: u32) -> Option<u32> {
 /// file states none: red, the green on red's row, the other green, blue.
 pub fn black(make: &str, model: &str) -> Option<[u32; 4]> {
     BLACK.iter().find(|b| b.0 == make && b.1 == model).map(|b| b.2)
+}
+
+/// A four-color camera's area for its raw frame of `raw` size.
+pub fn find_four(make: &str, model: &str, raw: (u32, u32)) -> Option<&'static FourGeometry> {
+    FOUR_GEOMETRY.iter().find(|g| g.make == make && g.model == model && g.raw == raw)
+}
+
+/// A four-color camera's rows, whatever their frame size (for a file
+/// that does not state its frame's size).
+pub fn four_rows<'a>(make: &'a str, model: &'a str) -> impl Iterator<Item = &'static FourGeometry> + 'a {
+    FOUR_GEOMETRY.iter().filter(move |g| g.make == make && g.model == model)
 }

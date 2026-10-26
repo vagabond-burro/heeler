@@ -13,6 +13,7 @@ pub mod crx_more;
 pub mod deflate;
 pub mod develop;
 pub mod dng;
+pub mod four_color;
 pub mod fuji;
 pub mod gain_map;
 pub mod geometry;

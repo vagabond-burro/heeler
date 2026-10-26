@@ -124,17 +124,29 @@ fn main() {
         // tables can round a camera's matrix apart from the file's): the
         // outputs below are developed with LibRaw's.
         let libraw_matrix = heeler_raw::linear_dng::libraw_facts(lb, base).ok().map(|f| f.rgb_cam.map(|r| [r[0], r[1], r[2]]));
+        // A four-color camera's whole 3 by 4.
+        let libraw_matrix4 = heeler_raw::linear_dng::libraw_facts(lb, base).ok().map(|f| f.rgb_cam);
         // LibRaw's black and white levels too, for formats whose levels the
         // develop reads its own way (a DNG's are the same either way).
         // --own keeps the plan's levels and balance (the shipped develop's),
         // LibRaw's matrix only.
         let numbered = if own { plan.clone() } else { heeler_raw::with_libraw_numbers(lb, &plan).unwrap_or_else(|_| plan.clone()) };
+        // The plan's own black measured on the border, as the develop
+        // measures it, for the stage comparison below.
+        let measured = if own && plan.dng.border_black { heeler_rawdec::develop::unpack_measuring_black(&bytes, &plan, None).ok() } else { None };
+        let numbered = match measured {
+            Some((_, b)) => heeler_rawdec::Plan { black: b.to_vec(), black_rows: 2, black_cols: 2, dng: heeler_rawdec::dng::Dng { border_black: false, ..plan.dng.clone() }, ..numbered },
+            None => numbered,
+        };
         // An image of three samples a pixel has no mosaic: its outputs are
         // what is compared.
         if !quick && !plan.three() {
             // The develop matrix, to the bit.
             if let Ok(f) = heeler_raw::linear_dng::libraw_facts(lb, base) {
-                let ulps: Vec<i64> = (0..9).map(|k| (plan.rgb_cam[k / 3][k % 3].to_bits() as i64 - f.rgb_cam[k / 3][k % 3].to_bits() as i64).abs()).collect();
+                let ulps: Vec<i64> = match &plan.four {
+                    Some(four) => (0..12).map(|k| (four.rgb_cam[k / 4][k % 4].to_bits() as i64 - f.rgb_cam[k / 4][k % 4].to_bits() as i64).abs()).collect(),
+                    None => (0..9).map(|k| (plan.rgb_cam[k / 3][k % 3].to_bits() as i64 - f.rgb_cam[k / 3][k % 3].to_bits() as i64).abs()).collect(),
+                };
                 if ulps.iter().any(|&u| u != 0) {
                     notes.push(format!("rgb_cam ulps {ulps:?}"));
                 }
@@ -203,8 +215,18 @@ fn main() {
                 }
                 let numbered = heeler_raw::with_libraw_balance(lb, &numbered, o);
                 let max = heeler_rawdec::develop::subtract_black(&mut mine, &numbered);
-                let n = heeler_rawdec::develop::numbers(&numbered, &opts_of(o), max);
-                heeler_rawdec::develop::scale_mosaic(&mut mine, &plan, &n);
+                let n = match &plan.four {
+                    Some(four) => {
+                        let n = heeler_rawdec::four_color::numbers(&numbered, &opts_of(o), max);
+                        heeler_rawdec::four_color::scale(&mut mine, plan.width, four, &n);
+                        n
+                    }
+                    None => {
+                        let n = heeler_rawdec::develop::numbers(&numbered, &opts_of(o), max);
+                        heeler_rawdec::develop::scale_mosaic(&mut mine, &plan, &n);
+                        n
+                    }
+                };
                 let theirs: Vec<u16> = stages.scaled.chunks_exact(4).map(|p| *p.iter().max().unwrap()).collect();
                 let bad = mine.iter().zip(&theirs).filter(|(a, b)| a != b).count();
                 if bad > 0 || stages.maxima[2] != n.maximum || stages.maxima[1] != max as u32 {
@@ -226,6 +248,10 @@ fn main() {
             let mut with = numbered.clone();
             if let Some(m) = libraw_matrix {
                 with.rgb_cam = m;
+            }
+            if let (Some(four), Some(m)) = (with.four.as_mut(), libraw_matrix4) {
+                // A four-color camera's whole 3 by 4, under --own too.
+                four.rgb_cam = m;
             }
             if !own {
                 with = heeler_raw::with_libraw_balance(lb, &with, o);

@@ -33,6 +33,11 @@
 //! LibRaw's frame; each set is a whole JPEG code table (12 first-difference
 //! symbols, 162 run symbols, codes in canonical order), and sets 0 and 1
 //! are the tables the PowerShots' JPEG headers state.
+//!
+//! Two bodies have sensors of four colors (four_color.rs, `four_color`
+//! below): the PowerShot G1 (Canon's coding, 2144 by 1560) and the Pro70,
+//! whose CRW states no sensor size and holds its 10-bit samples packed
+//! through 16-bit little-endian words (Coding::SwappedWords).
 
 use crate::dng::{Coding, Dng, Format, Pieces};
 use crate::Error;
@@ -119,9 +124,22 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let rec = |tag| rs.iter().find(|r| r.tag == tag).copied();
     let (make, model) = make_model(bytes).ok_or(Error::Unsupported("a CRW without Make and Model"))?;
     let raw = rec(0x2005).ok_or(Error::Unsupported("a CRW without samples"))?;
-    let sensor = rec(0x1031).ok_or(Error::Unsupported("a CRW without its sensor's size"))?;
-    let width = u16le(bytes, sensor.at + 2).unwrap_or(0) as usize;
-    let height = u16le(bytes, sensor.at + 4).unwrap_or(0) as usize;
+    // The sensor's size, or for a four-color camera whose CRW states none
+    // (the Pro70), the frame of its row (geometry.rs) whose 10-bit samples
+    // fill the samples' record.
+    let (width, height) = match rec(0x1031) {
+        Some(sensor) => (u16le(bytes, sensor.at + 2).unwrap_or(0) as usize, u16le(bytes, sensor.at + 4).unwrap_or(0) as usize),
+        None => crate::geometry::four_rows(&make, &model)
+            .map(|g| (g.raw.0 as usize, g.raw.1 as usize))
+            .find(|&(w, h)| (w * 10).div_ceil(8) * h == raw.len)
+            .ok_or(Error::Unsupported("a CRW without its sensor's size"))?,
+    };
+    if rec(0x1031).is_none() {
+        if raw.at.checked_add(raw.len).is_none_or(|e| e > bytes.len()) {
+            return Err(Error::Corrupt("CRW samples past the end of the file"));
+        }
+        return four_color(bytes, &rec, make, model, (width, height), Coding::SwappedWords, 10, raw, false);
+    }
     let table = rec(0x1835).and_then(|r| u32le(bytes, r.at)).unwrap_or(u32::MAX) as usize;
     if width == 0 || height == 0 || table > 2 || (width * height) % 64 != 0 {
         return Err(Error::Unsupported("a CRW frame or table set not read here"));
@@ -134,6 +152,10 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     // Low bits first where the 514 bytes after their block are zero or a
     // JPEG header.
     let low_bits = data.len() > low + 514 && (data[low..low + 514].iter().all(|&b| b == 0) || data[low..low + 2] == [0xff, 0xd8]);
+    if crate::geometry::find_four(&make, &model, (width as u32, height as u32)).is_some() {
+        let c = CanonCrw { table, low_bits, height, lift: false };
+        return four_color(bytes, &rec, make, model, (width, height), Coding::CanonCrw(c), if low_bits { 12 } else { 10 }, raw, true);
+    }
     let wb = balance(bytes, &rec);
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
     // Without low bits the samples are 10-bit, and LibRaw's white level
@@ -194,6 +216,72 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         coding: Coding::CanonCrw(CanonCrw { table, low_bits, height, lift: width == 2672 }),
         cam_mul: wb.map(|[r, g, g2, b]| [r as f32, g as f32, b as f32, g2 as f32]),
         border_black: true,
+    })
+}
+
+/// A four-color camera's CRW (the PowerShot G1's CMYG, the Pro70's): its
+/// area, pattern, white and black levels as LibRaw opens it
+/// (geometry.rs's four-color rows), LibRaw's matrix (cameras.rs, four rows
+/// of three) and the balance as for any CRW, in LibRaw's color order (the
+/// G1's words 60 to 63 hold its colors 2, 3, 0 and 1). The samples are
+/// 10-bit without low bits, and the white level 1023; `measured` takes
+/// the black from the masked border (the G1's: LibRaw's level after
+/// unpacking), else the row's (the Pro70's 34).
+#[allow(clippy::too_many_arguments)]
+fn four_color(bytes: &[u8], rec: &impl Fn(u16) -> Option<Record>, make: String, model: String, (width, height): (usize, usize), coding: Coding, bits: u32, raw: Record, measured: bool) -> Result<Dng, Error> {
+    let g = crate::geometry::find_four(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
+    let matrix = crate::cameras::find_four(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
+    let wb = balance(bytes, rec);
+    let white = if bits == 10 { 1023 } else { g.white } as f64;
+    let orientation = match rec(0x1810).and_then(|r| u32le(bytes, r.at + 12)) {
+        Some(90) => 6,
+        Some(180) => 3,
+        Some(270) => 8,
+        _ => 1,
+    };
+    let (top, left) = (g.top as usize, g.left as usize);
+    Ok(Dng {
+        format: Format::Crw,
+        make,
+        model: model.clone(),
+        unique_model: model,
+        version: [0, 0, 0, 0],
+        orientation,
+        width,
+        height,
+        bits,
+        compression: 1,
+        photometric: 32803,
+        samples: 1,
+        sample_format: 1,
+        predictor: 1,
+        pieces: Pieces { width, height, spans: vec![(raw.at, raw.len)] },
+        cfa_dim: (8, 2),
+        cfa: g.pattern.to_vec(),
+        cfa_layout: 1,
+        linearization: None,
+        black_dim: (8, 2),
+        black: g.pattern.iter().map(|&c| g.black[c as usize] as f64).collect(),
+        black_delta_h: Vec::new(),
+        black_delta_v: Vec::new(),
+        white: vec![white],
+        active: (top, left, top + g.height as usize, left + g.width as usize),
+        default_crop: None,
+        default_scale: (1.0, 1.0),
+        as_shot_neutral: None,
+        as_shot_white_xy: None,
+        color_matrix: [Some(matrix.to_vec()), None, None],
+        camera_calibration: [None, None, None],
+        illuminant: [21, 0, 0],
+        analog_balance: None,
+        forward_matrix: [None, None, None],
+        opcodes: [Vec::new(), Vec::new(), Vec::new()],
+        profile_tables: false,
+        baseline_exposure: 0.0,
+        coding,
+        // Red, green, the other green, blue are the G1's colors 0, 1, 3, 2.
+        cam_mul: wb.map(|[r, g, g2, b]| [r as f32, g as f32, b as f32, g2 as f32]),
+        border_black: measured,
     })
 }
 

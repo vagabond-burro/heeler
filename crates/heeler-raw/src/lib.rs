@@ -383,6 +383,10 @@ pub fn with_libraw_numbers(bytes: &[u8], plan: &heeler_rawdec::Plan) -> Result<h
     let black = libraw_black_unpacked_8x8(bytes)?;
     let mut p = plan.clone();
     p.rgb_cam = f.rgb_cam.map(|r| [r[0], r[1], r[2]]);
+    // A four-color camera's whole 3 by 4.
+    if let Some(four) = p.four.as_mut() {
+        four.rgb_cam = f.rgb_cam;
+    }
     // LibRaw's white balance too: it reads some files' stated balance as
     // none (unity), where the shipped develop takes the file's.
     // A Sony M or S size LibRaw develops without a white balance (its

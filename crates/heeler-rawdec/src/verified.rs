@@ -1065,6 +1065,11 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("IIQ", "Phase One A/S", "P65+"),
     ("IIQ", "Phase One A/S", "P45+"),
     ("IIQ", "Phase One A/S", "iXU180"),
+    // Four-color mosaics (four_color.rs): the PowerShot G1's and the
+    // E5700's CMYG, the Pro70's of 8 rows, 2026-10-26.
+    ("CRW", "Canon", "Canon PowerShot G1"),
+    ("CRW", "Canon", "Canon PowerShot Pro70"),
+    ("NEF", "NIKON", "E5700"),
 ];
 
 /// The verified cameras whose develop is held to LibRaw's within a

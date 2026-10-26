@@ -59,6 +59,11 @@ pub struct Plan {
     /// How many readings the parallel lossless JPEG decode makes of each
     /// piece of its stream (ljpeg::table_period): 1 for one Huffman table.
     pub table_period: usize,
+    /// A mosaic of four colors (four_color.rs): its 8 by 2 pattern and 3
+    /// by 4 matrix; `pattern` then holds its first 2 by 2, `rgb_cam` the
+    /// matrix's first three columns, `cam_mul` the balance in LibRaw's
+    /// color order.
+    pub four: Option<Box<crate::four_color::Four>>,
 }
 
 impl Plan {
@@ -66,6 +71,9 @@ impl Plan {
     /// leaves the file to LibRaw.
     pub fn new(bytes: &[u8], opts: &Opts) -> Result<Plan, Error> {
         let dng = Dng::open(bytes)?;
+        if dng.four_colors() {
+            return Plan::four_colors(dng, opts);
+        }
         if matches!(dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_) | Coding::Coolscan(_) | Coding::SonyArq(_)) || matches!(dng.coding, Coding::KodakSmall(k, _) if k.three()) {
             return Plan::three_colors(dng, opts);
         }
@@ -215,7 +223,7 @@ impl Plan {
         // LibRaw's develop.
         let gains2 = gain_map::parse_list(&dng.opcodes[1]);
         let stage3 = gain_map::parse_list3(&dng.opcodes[2]);
-        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern, xtrans, black, black_rows: rows, black_cols: cols, white, cam_mul, rgb_cam, flip: dng.flip(), gains2, stage3, table_period, dng })
+        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern, xtrans, black, black_rows: rows, black_cols: cols, white, cam_mul, rgb_cam, flip: dng.flip(), gains2, stage3, table_period, four: None, dng })
     }
 
     /// The plan for an image of three samples a pixel (a Canon sRAW): no
@@ -247,7 +255,50 @@ impl Plan {
         // A lossy DNG's samples come through its curves to 16 bits, whatever
         // its WhiteLevel (LibRaw's maximum is 65535).
         let white = if dng.compression == 34892 { 65535 } else { dng.white.first().copied().unwrap_or(65535.0).clamp(1.0, 65535.0) as u32 };
-        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 1], [1, 2]], xtrans: None, black: vec![0], black_rows: 1, black_cols: 1, white, cam_mul, rgb_cam, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, dng })
+        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 1], [1, 2]], xtrans: None, black: vec![0], black_rows: 1, black_cols: 1, white, cam_mul, rgb_cam, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, four: None, dng })
+    }
+
+    /// A mosaic of four colors (Dng::four_colors): LibRaw's pattern, its
+    /// black table and white level as for a Bayer mosaic, the balance as
+    /// the file states it in LibRaw's color order, else daylight (the
+    /// balance the matrix implies), and the 3 by 4 matrix from the camera's
+    /// four rows of three (color::srgb_from_camera4, the values in single
+    /// precision, as LibRaw holds its table's). LibRaw's color whatever
+    /// `libraw_color` says: no DNG profile describes these cameras.
+    fn four_colors(dng: Dng, opts: &Opts) -> Result<Plan, Error> {
+        if !(opts.camera_wb && opts.camera_matrix) {
+            return Err(Error::Unsupported("a develop without the camera's white balance and matrix"));
+        }
+        if !matches!(opts.highlight, 0 | 2) {
+            return Err(Error::Unsupported("a highlight rebuild"));
+        }
+        if !opts.half_size && opts.demosaic != -1 {
+            return Err(Error::Unsupported("a demosaic other than the default"));
+        }
+        if dng.cfa.len() != 16 || dng.cfa.iter().any(|&c| c > 3) || (0..4).any(|c| !dng.cfa.contains(&c)) {
+            return Err(Error::Unsupported("not a pattern of four colors"));
+        }
+        let (t, l, b, r) = dng.active;
+        if t >= b || l >= r {
+            return Err(Error::Corrupt("ActiveArea"));
+        }
+        let pattern8: [[u8; 2]; 8] = std::array::from_fn(|i| std::array::from_fn(|j| dng.color_at(t + i, l + j)));
+        let m = dng.color_matrix[0].as_deref().filter(|m| m.len() == 12).ok_or(Error::Unsupported("no color matrix"))?;
+        let cam_xyz: [[f64; 3]; 4] = std::array::from_fn(|i| std::array::from_fn(|j| m[i * 3 + j] as f32 as f64));
+        let (rgb_cam4, implied) = crate::color::srgb_from_camera4(&cam_xyz).ok_or(Error::Unsupported("a singular color matrix"))?;
+        let rgb_cam4 = rgb_cam4.map(|row| row.map(|v| v as f32));
+        let cam_mul = dng.cam_mul.unwrap_or(implied.map(|v| v as f32));
+        let (br, bc) = dng.black_dim;
+        let (rows, cols) = (lcm(br, 8), lcm(bc, 2));
+        if rows * cols > 4096 {
+            return Err(Error::Unsupported("a black level pattern this large"));
+        }
+        let black = (0..rows).flat_map(|i| (0..cols).map(move |j| (i, j))).map(|(i, j)| dng.black_at(i, j)).collect();
+        let white = dng.white.first().copied().unwrap_or(65535.0).clamp(1.0, 65535.0) as u32;
+        let pattern = [[pattern8[0][0], pattern8[0][1]], [pattern8[1][0], pattern8[1][1]]];
+        let rgb_cam = rgb_cam4.map(|row| [row[0], row[1], row[2]]);
+        let four = Some(Box::new(crate::four_color::Four { pattern: pattern8, rgb_cam: rgb_cam4 }));
+        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern, xtrans: None, black, black_rows: rows, black_cols: cols, white, cam_mul, rgb_cam, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, four, dng })
     }
 
     /// A monochrome sensor's plan (LinearRaw, one sample a pixel): its
@@ -275,7 +326,7 @@ impl Plan {
         let black: Vec<u32> = (0..br * bc).map(|k| dng.black[((k / bc + t) % br) * bc + (k % bc + l) % bc].round() as u32).collect();
         let white = dng.white.first().copied().unwrap_or(65535.0).clamp(1.0, 65535.0) as u32;
         let identity = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
-        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 0], [0, 0]], xtrans: None, black, black_rows: br, black_cols: bc, white, cam_mul: [1.0; 4], rgb_cam: identity, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, dng })
+        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 0], [0, 0]], xtrans: None, black, black_rows: br, black_cols: bc, white, cam_mul: [1.0; 4], rgb_cam: identity, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, four: None, dng })
     }
 
     /// Whether the image is one sample a pixel (monochrome).
@@ -299,7 +350,8 @@ impl Plan {
     pub fn bytes(&self, half: bool) -> Result<usize, memory::MemoryError> {
         let (ow, oh) = self.output_size(half);
         // The unpack's buffers are gone before the demosaic's arrive.
-        let working = self.parallel_bytes()?.max(if half { 0 } else { self.demosaic_extra() });
+        // The four-color demosaic holds nothing beyond the mosaic and output.
+        let working = self.parallel_bytes()?.max(if half || self.four.is_some() { 0 } else { self.demosaic_extra() });
         // A black measured on the border holds the whole frame a while.
         let frame = if self.dng.border_black || matches!(self.dng.coding, Coding::PhaseOne(_)) { memory::bytes(self.dng.width, self.dng.height, 1, 2)? } else { 0 };
         // A SuperCCD frame: its frame while it is placed, then the
@@ -555,7 +607,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         (0..d.height).into_par_iter().for_each(|r| put_run(out, p, r, 0, &samples[r * d.width..(r + 1) * d.width], lin));
         return Ok(cfa);
     }
-    if d.compression == 1 && matches!(d.coding, Coding::Tiff | Coding::PackedLow | Coding::BigWords | Coding::LittleWords | Coding::Epson | Coding::TwoFields) {
+    if d.compression == 1 && matches!(d.coding, Coding::Tiff | Coding::PackedLow | Coding::BigWords | Coding::LittleWords | Coding::Epson | Coding::TwoFields | Coding::SwappedWords) {
         // Uncompressed: every row of every piece found by arithmetic, so
         // the rows go side by side even when the file is one strip.
         let bits = d.bits as usize;
@@ -565,6 +617,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         rows.par_chunks(64).try_for_each(|chunk| -> Result<(), Error> {
             stopped(stop)?;
             let mut line = vec![0u16; pw];
+            let mut swapped = Vec::new();
             for &(i, tr) in chunk {
                 let (r0, c0) = origin(i);
                 if d.coding != Coding::TwoFields && (r0 + tr < p.top || r0 + tr >= p.top + p.height) {
@@ -582,6 +635,11 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
                     unpack_row_low(row, bits, &mut line);
                 } else if d.coding == Coding::Epson {
                     crate::plain::unpack_epson_row(row, &mut line);
+                } else if d.coding == Coding::SwappedWords {
+                    // Each pair of bytes swapped, then one stream.
+                    swapped.clear();
+                    swapped.extend(row.chunks(2).flat_map(|p| p.iter().rev().copied()));
+                    unpack_row(&swapped, bits, false, &mut line);
                 } else {
                     unpack_row(row, bits, little, &mut line);
                 }
@@ -963,7 +1021,17 @@ pub fn border_black(frame: &[u16], frame_width: usize, p: &Plan) -> Result<[u32;
     let left: Vec<usize> = (BORDER_MARGIN..p.left.saturating_sub(BORDER_MARGIN)).collect();
     // Where the left border is too narrow to measure (a CRW of the Pro1 or
     // S30), the darkest columns of both, as a headerless file's.
-    let cols = if p.dng.format == Format::Headerless || left.len() < 4 { darkest_columns(frame, frame_width, p) } else { left };
+    // A four-color CRW (the G1's, left border 4 columns): the first run of
+    // live columns right of the area, up to the first dead one,
+    // two in from either end (found on its one file: LibRaw's 31 at every
+    // site).
+    let cols = if p.four.is_some() && left.len() < 4 {
+        right_band(frame, frame_width, p)
+    } else if p.dng.format == Format::Headerless || left.len() < 4 {
+        darkest_columns(frame, frame_width, p)
+    } else {
+        left
+    };
     if cols.len() < 4 {
         return Err(Error::Unsupported("no masked border to measure black on"));
     }
@@ -986,6 +1054,17 @@ pub fn border_black(frame: &[u16], frame_width: usize, p: &Plan) -> Result<[u32;
     // file's rounded down).
     let half = if matches!(p.dng.format, Format::Crw | Format::Headerless) { 0 } else { 1 };
     Ok([0, 1, 2, 3].map(|i| ((sum[i] + half * n[i] / 2) / n[i].max(1)) as u32))
+}
+
+/// The live masked columns right of the image area up to the first dead
+/// one (reading under three quarters of the column two in, over the
+/// area's rows), two in from either end (border_black).
+fn right_band(frame: &[u16], frame_width: usize, p: &Plan) -> Vec<usize> {
+    let start = p.left + p.width;
+    let mean = |c: usize| (p.top..p.top + p.height).map(|r| frame[r * frame_width + c] as u64).sum::<u64>() as f64 / p.height.max(1) as f64;
+    let live = mean(start + BORDER_MARGIN) * 0.75;
+    let end = (start..frame_width).find(|&c| mean(c) < live).unwrap_or(frame_width);
+    (start + BORDER_MARGIN..end.saturating_sub(BORDER_MARGIN)).collect()
 }
 
 /// The masked columns left and right of the image area that read darkest
@@ -1297,7 +1376,7 @@ pub fn convert(px: [u16; 3], m: &[[f32; 3]; 3]) -> [u16; 3] {
 
 /// Where pixel (row, col) of a `w` by `h` image lands in the output.
 #[inline(always)]
-fn to_output(flip: u8, w: usize, h: usize, row: usize, col: usize) -> (usize, usize) {
+pub(crate) fn to_output(flip: u8, w: usize, h: usize, row: usize, col: usize) -> (usize, usize) {
     let r = if flip & 2 != 0 { h - 1 - row } else { row };
     let c = if flip & 1 != 0 { w - 1 - col } else { col };
     if flip & 4 != 0 { (c, r) } else { (r, c) }
@@ -1389,6 +1468,11 @@ fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, 
     fill_zeros(&mut cfa, p);
     let unpacked = t0.elapsed().as_secs_f64();
     stopped(stop)?;
+    if let Some(four) = &p.four {
+        let img = crate::four_color::develop(cfa, p, four, opts, stop)?;
+        let done = t0.elapsed().as_secs_f64();
+        return Ok((img, Times { open, unpack: unpacked - open, develop: done - unpacked }));
+    }
     if !p.gains2.is_empty() {
         let mut img = gain_map::Cfa { data: &mut cfa, pitch: p.width, top: 0, left: 0, height: p.height as u32, width: p.width as u32 };
         gain_map::apply_cfa(&p.gains2, &mut img, |r, c| p.black[(r as usize % p.black_rows) * p.black_cols + c as usize % p.black_cols]);
@@ -1623,7 +1707,7 @@ fn full_turned(cfa: &[u16], p: &Plan, n: &Numbers, layout: &crate::superccd::Lay
 }
 
 /// The white balance's headroom: the largest multiplier over the smallest.
-fn headroom(n: &Numbers) -> f32 {
+pub(crate) fn headroom(n: &Numbers) -> f32 {
     let (mut mn, mut mx) = (0.0f32, 0.0f32);
     for &v in &n.pre_mul {
         if v <= 0.0 {

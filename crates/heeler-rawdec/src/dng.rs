@@ -158,6 +158,10 @@ pub enum Coding {
     /// Uncompressed 16-bit words little-endian in a big-endian file (some
     /// SRWs).
     LittleWords,
+    /// Samples packed most significant bit first through 16-bit
+    /// little-endian words (each pair of bytes swapped, then read as one
+    /// stream), each row on a byte: the PowerShot Pro70's CRW.
+    SwappedWords,
     /// Canon's lossless CRX planes (cr3.rs, crx.rs), each one site of the
     /// 2 by 2 pattern in a tile of the frame.
     Crx(Vec<crate::cr3::CrxPlane>),
@@ -228,7 +232,9 @@ pub struct Dng {
     pub pieces: Pieces,
     /// CFARepeatPatternDim and CFAPattern, mapped through CFAPlaneColor
     /// to 0 red, 1 green, 2 blue (another color is kept as 3 and up);
-    /// none for a linear image.
+    /// none for a linear image. A four-color mosaic another format reads
+    /// (four_colors) is 8 rows by 2 columns of LibRaw's color indices, 0
+    /// to 3.
     pub cfa_dim: (usize, usize),
     pub cfa: Vec<u8>,
     pub cfa_layout: u32,
@@ -552,6 +558,14 @@ impl Dng {
             forward_matrix: [m(&self.forward_matrix[0]), m(&self.forward_matrix[1])],
             analog_balance: self.analog_balance.as_deref().filter(|a| a.len() >= 3).map(|a| [a[0], a[1], a[2]]),
         }
+    }
+
+    /// Whether the mosaic is of four colors (a CMYG or RGBE sensor), its
+    /// pattern LibRaw's: a format other than DNG stating 8 rows by 2
+    /// columns. Its color matrix is then four rows of three, its cam_mul
+    /// in LibRaw's color order.
+    pub fn four_colors(&self) -> bool {
+        !self.is_dng() && self.cfa_dim == (8, 2)
     }
 
     /// LibRaw's flip for the TIFF orientation: bit 0 mirrors columns,
