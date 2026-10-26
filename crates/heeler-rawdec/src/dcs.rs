@@ -11,14 +11,18 @@
 //!   1), a byte a sample, through IFD0's 0x0123, 256 SHORTs.
 //!   LibRaw's image area is from geometry.rs (2 columns in, 4 narrower).
 //!   No white balance is stated (the develop takes daylight).
-//! - The DCS520C and DCS560C (Make "Kodak", big-endian): photometric
+//! - The DCS520C and DCS560C (Make "Kodak", big-endian), and the EOS
+//!   D2000C (Make "Canon", Kodak's body): photometric
 //!   32803, a lossless JPEG
 //!   of 12-bit samples, each JPEG line a frame row, through the curve of
 //!   Kodak's directory (IFD0's 0x8290) 0x090D. The white balance is read
 //!   as in a DCR (dcr.rs): the RATIONAL triple at 0x0848 plus the mode in
 //!   0x03FC, each multiplier green's level squared over its own, the
-//!   fraction dropped. The black level is LibRaw's for the camera
-//!   (BLACK): no tag or sample of the file moves it.
+//!   fraction dropped. The DCS520C's and DCS560C's black level is
+//!   LibRaw's for the camera (BLACK): no tag or sample of the file moves
+//!   it. The D2000C's is the mean of Kodak's 0x03EF and 0x03F0, the
+//!   fraction dropped (0x03F0 alone where 0x03EF is 0), as LibRaw's moves
+//!   with them.
 //!
 //! The white level is the curve's last entry; the orientation is IFD0's,
 //! one outside 1 to 8 taken as 1; the calibrations come from cameras.rs.
@@ -35,7 +39,8 @@ fn directories<'a>(bytes: &'a [u8]) -> Option<(Tiff<'a>, Ifd, Ifd)> {
     let t = Tiff::new(bytes)?;
     let ifd0 = t.ifds().into_iter().next()?;
     let make = ifd0.get(271).and_then(|e| t.ascii(&e))?;
-    if !matches!(make.trim_end(), "KODAK" | "Kodak") || ifd0.get(50706).is_some() || ifd0.get(0x8290).is_none() && ifd0.get(0x123).is_none() {
+    let canon = make == "Canon" && ifd0.get(272).and_then(|e| t.ascii(&e)).as_deref() == Some("EOS D2000C");
+    if !(matches!(make.trim_end(), "KODAK" | "Kodak") || canon) || ifd0.get(50706).is_some() || ifd0.get(0x8290).is_none() && ifd0.get(0x123).is_none() {
         return None;
     }
     let raw = ifd0
@@ -75,7 +80,12 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let (curve, black, cam_mul) = if jpeg {
         let (kodak, _) = t.ifd(ifd0.get(0x8290).and_then(|e| t.uint(&e)).ok_or(Error::Unsupported("no Kodak directory"))? as usize).ok_or(Error::Corrupt("Kodak's directory"))?;
         let curve = shorts(&kodak, 0x090d).filter(|c| c.len() == 4096).ok_or(Error::Unsupported("no Kodak curve"))?;
-        let black = BLACK.iter().find(|(m, _)| *m == model).map(|&(_, b)| b).ok_or(Error::Unsupported("a Kodak camera without a known black level"))?;
+        let k = |tag| kodak.get(tag).and_then(|e| t.uint(&e));
+        let black = match (make.as_str(), k(0x03ef), k(0x03f0)) {
+            ("Canon", Some(0), Some(b)) => b as f64,
+            ("Canon", Some(a), Some(b)) => ((a + b) / 2) as f64,
+            _ => BLACK.iter().find(|(m, _)| *m == model).map(|&(_, b)| b).ok_or(Error::Unsupported("a Kodak camera without a known black level"))?,
+        };
         let mode = kodak.get(0x03fc).and_then(|e| t.uint(&e)).filter(|&m| m <= 5).ok_or(Error::Unsupported("a Kodak white balance mode not read here"))?;
         let levels = kodak.get(0x0848 + mode as u16).and_then(|e| t.reals(&e)).filter(|v| v.len() == 3 && v.iter().all(|&x| x > 0.0)).ok_or(Error::Unsupported("no stated white balance"))?;
         let g = levels[1];

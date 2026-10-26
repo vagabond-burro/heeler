@@ -33,6 +33,7 @@ pub mod kodak;
 pub mod kodak_codec;
 pub mod dcr;
 pub mod dcs;
+pub mod canon_tif;
 pub mod crw;
 pub mod headerless;
 pub mod hasselblad;

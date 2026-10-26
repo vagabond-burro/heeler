@@ -107,22 +107,158 @@ const ENTRIES: &[Entry] = &[
     Entry { size: 32257024, make: "GITUP", model: "GIT2P 4:3", width: 4624, height: 3488, layout: words(4624, 2, 0), black: Some(4160) },
 ];
 
+/// Kodak's C330 and C603 (C643) files, as kodak_codec.rs decodes them:
+/// a frame of 8-bit samples through a curve (the C603's CCDI, headerless,
+/// through kodak_exp_curve; its CFAI, behind a header that states the
+/// samples' offset (32 bits at 0x54) and the curve (256 SHORTs at
+/// 0xA8), little-endian), or an image of three colors a pixel from luma
+/// and shared chroma (YRGB).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum KodakSmall {
+    Ccdi,
+    Cfai,
+    /// The C330's, its rows end to end or in bands.
+    Yrgb422 { banded: bool },
+    /// The C603's.
+    Yrgb420,
+}
+
+impl KodakSmall {
+    /// Whether the image is three colors a pixel.
+    pub fn three(self) -> bool {
+        matches!(self, KodakSmall::Yrgb422 { .. } | KodakSmall::Yrgb420)
+    }
+}
+
+/// One size's Kodak file: the camera as LibRaw names it, the coding, the
+/// frame's size and the image LibRaw makes of it (from its top left).
+struct KodakEntry {
+    size: usize,
+    model: &'static str,
+    kind: KodakSmall,
+    frame: (usize, usize),
+    image: (usize, usize),
+}
+
+const KODAK: &[KodakEntry] = &[
+    KodakEntry { size: 2247168, model: "C330", kind: KodakSmall::Yrgb422 { banded: false }, frame: (1232, 912), image: (1216, 912) },
+    KodakEntry { size: 3370752, model: "C330", kind: KodakSmall::Yrgb422 { banded: true }, frame: (1232, 912), image: (1216, 912) },
+    KodakEntry { size: 6163328, model: "C603", kind: KodakSmall::Ccdi, frame: (2864, 2152), image: (2864, 2152) },
+    KodakEntry { size: 6166488, model: "C603", kind: KodakSmall::Cfai, frame: (2864, 2152), image: (2864, 2152) },
+    KodakEntry { size: 9116448, model: "C603", kind: KodakSmall::Yrgb420, frame: (2848, 2134), image: (2848, 2134) },
+];
+
+/// The CFA colors of the C603's mosaics, in reading order from the top
+/// left (LibRaw's).
+const KODAK_CFA: [u8; 4] = [0, 1, 1, 2];
+
 fn entry(bytes: &[u8]) -> Option<&'static Entry> {
     ENTRIES.iter().find(|e| e.size == bytes.len())
+}
+
+fn kodak_entry(bytes: &[u8]) -> Option<&'static KodakEntry> {
+    KODAK.iter().find(|e| e.size == bytes.len() && (e.kind == KodakSmall::Cfai) == bytes.starts_with(b"KodakCommonInfo"))
 }
 
 /// Whether `bytes` are a headerless raw file of a size this module knows.
 /// Called after every format with a header has had its turn.
 pub fn is_headerless(bytes: &[u8]) -> bool {
-    !bytes.starts_with(b"II*\0") && !bytes.starts_with(b"MM\0*") && entry(bytes).is_some()
+    !bytes.starts_with(b"II*\0") && !bytes.starts_with(b"MM\0*") && (entry(bytes).is_some() || kodak_entry(bytes).is_some())
 }
 
 /// Make and Model as LibRaw names the camera.
 pub fn make_model(bytes: &[u8]) -> Option<(String, String)> {
-    is_headerless(bytes).then(|| entry(bytes)).flatten().map(|e| (e.make.to_string(), e.model.to_string()))
+    if !is_headerless(bytes) {
+        return None;
+    }
+    entry(bytes).map(|e| (e.make.to_string(), e.model.to_string())).or_else(|| kodak_entry(bytes).map(|e| ("Kodak".to_string(), e.model.to_string())))
+}
+
+/// The C603's CFAI header: the samples' offset and the curve.
+fn cfai_header(bytes: &[u8]) -> Option<(usize, [u16; 256])> {
+    let at = u32::from_le_bytes(bytes.get(0x54..0x58)?.try_into().ok()?) as usize;
+    let table = bytes.get(0xa8..0xa8 + 512)?;
+    Some((at, std::array::from_fn(|i| u16::from_le_bytes([table[2 * i], table[2 * i + 1]]))))
+}
+
+/// A Kodak file's frame (a mosaic) or image (three colors a pixel, LibRaw's
+/// image), and its width.
+pub fn decode_kodak(bytes: &[u8], kind: KodakSmall, frame: (usize, usize), image: (usize, usize)) -> Result<Vec<u16>, Error> {
+    let bad = |_| Error::Corrupt("a Kodak frame that does not decode");
+    let (w, h) = frame;
+    let rgb = match kind {
+        KodakSmall::Ccdi => return crate::kodak_codec::decode_eight_bit(bytes, w, h, &crate::kodak_codec::kodak_exp_curve()).map_err(bad),
+        KodakSmall::Cfai => {
+            let (at, curve) = cfai_header(bytes).ok_or(Error::Corrupt("a Kodak header"))?;
+            return crate::kodak_codec::decode_eight_bit(bytes.get(at..).ok_or(Error::Corrupt("a Kodak header"))?, w, h, &curve).map_err(bad);
+        }
+        KodakSmall::Yrgb422 { banded } => crate::kodak_codec::decode_yrgb_422(bytes, w, h, banded).map_err(bad)?,
+        KodakSmall::Yrgb420 => crate::kodak_codec::decode_yrgb_420(bytes, w, h).map_err(bad)?,
+    };
+    let (iw, ih) = image;
+    Ok(rgb.chunks(w).take(ih).flat_map(|row| row[..iw].iter().flatten().copied()).collect())
+}
+
+fn parse_kodak(bytes: &[u8], e: &KodakEntry) -> Result<Dng, Error> {
+    let (make, model) = ("Kodak".to_string(), e.model.to_string());
+    let (width, height) = e.image;
+    // The levels LibRaw holds: the curve's top.
+    let white = match e.kind {
+        KodakSmall::Cfai => *cfai_header(bytes).ok_or(Error::Corrupt("a Kodak header"))?.1.last().unwrap(),
+        _ => *crate::kodak_codec::kodak_exp_curve().last().unwrap(),
+    } as f64;
+    let calibration = crate::cameras::find(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
+    let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
+    let three = e.kind.three();
+    Ok(Dng {
+        format: Format::Headerless,
+        make,
+        model: model.clone(),
+        unique_model: model,
+        version: [0, 0, 0, 0],
+        orientation: 1,
+        width,
+        height,
+        bits: 16,
+        compression: 1,
+        photometric: 32803,
+        samples: if three { 3 } else { 1 },
+        sample_format: 1,
+        predictor: 1,
+        pieces: Pieces { width, height, spans: vec![(0, bytes.len())] },
+        cfa_dim: (2, 2),
+        cfa: KODAK_CFA.to_vec(),
+        cfa_layout: 1,
+        linearization: None,
+        black_dim: (1, 1),
+        black: vec![0.0],
+        black_delta_h: Vec::new(),
+        black_delta_v: Vec::new(),
+        white: vec![white],
+        active: (0, 0, height, width),
+        default_crop: None,
+        default_scale: (1.0, 1.0),
+        // The image comes balanced (LibRaw's multipliers for it are all 1).
+        as_shot_neutral: three.then(|| vec![1.0; 3]),
+        as_shot_white_xy: None,
+        color_matrix: [m(&calibration.color_matrix[0]), m(&calibration.color_matrix[1]), None],
+        camera_calibration: [None, None, None],
+        illuminant: [calibration.illuminants[0], calibration.illuminants[1], 0],
+        analog_balance: None,
+        forward_matrix: [m(&calibration.forward_matrix[0]), m(&calibration.forward_matrix[1]), None],
+        opcodes: [Vec::new(), Vec::new(), Vec::new()],
+        profile_tables: calibration.tables,
+        baseline_exposure: 0.0,
+        coding: Coding::KodakSmall(e.kind, e.frame),
+        cam_mul: three.then_some([1.0; 4]),
+        border_black: false,
+    })
 }
 
 pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
+    if let Some(e) = kodak_entry(bytes) {
+        return parse_kodak(bytes, e);
+    }
     let e = entry(bytes).ok_or(Error::Unsupported("a headerless file of an unknown size"))?;
     let (width, height) = (e.width, e.height);
     let geometry = crate::geometry::find(e.make, e.model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
@@ -182,6 +318,9 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
 /// hold the decode to LibRaw's.
 #[doc(hidden)]
 pub fn frame(bytes: &[u8]) -> Result<(usize, usize, Vec<u16>), Error> {
+    if let Some(k) = kodak_entry(bytes).filter(|k| !k.kind.three()) {
+        return Ok((k.frame.0, k.frame.1, decode_kodak(bytes, k.kind, k.frame, k.image)?));
+    }
     let e = entry(bytes).filter(|_| is_headerless(bytes)).ok_or(Error::Unsupported("a headerless file of an unknown size"))?;
     let out = std::sync::Mutex::new(vec![0u16; e.width * e.height]);
     decode(bytes, e.width, e.height, e.height, &e.layout, |r, line| out.lock().unwrap()[r * e.width..(r + 1) * e.width].copy_from_slice(line))?;

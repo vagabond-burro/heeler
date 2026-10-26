@@ -30,7 +30,7 @@ fn files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
             let ext = name.rsplit('.').next().unwrap_or("").to_ascii_uppercase();
             if p.is_dir() {
                 stack.push(p);
-            } else if ["CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "IIQ", "CRW", "3FR", "FFF", "ERF", "MEF", "MOS"].contains(&ext.as_str()) {
+            } else if ["CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "IIQ", "CRW", "3FR", "FFF", "ERF", "MEF", "MOS", "KDC", "DCR", "TIF", "TIFF"].contains(&ext.as_str()) {
                 out.push(p);
             }
         }

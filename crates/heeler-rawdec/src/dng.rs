@@ -38,6 +38,7 @@ pub enum Format {
     Kdc,
     Dcr,
     Dcs,
+    CanonTif,
 }
 
 /// Make and Model as a raw file of any format this crate reads gives
@@ -95,6 +96,7 @@ impl Format {
             Format::Kdc => "KDC",
             Format::Dcr => "DCR",
             Format::Dcs => "TIF",
+            Format::CanonTif => "TIF",
             Format::Crw => "CRW",
             Format::Headerless => "headerless",
             Format::Raf => "RAF",
@@ -179,6 +181,12 @@ pub enum Coding {
     /// segments, each its lengths and then its differences, through
     /// Kodak's curve.
     Kodak65000(Box<crate::dcr::Kodak65000>),
+    /// Kodak's C330 and C603 files (headerless.rs, kodak_codec.rs): the
+    /// coding and the frame's size.
+    KodakSmall(crate::headerless::KodakSmall, (usize, usize)),
+    /// The DC120's frame (kodak.rs, kodak_codec.rs): uncompressed, each
+    /// row rotated, or a baseline JPEG.
+    Dc120 { jpeg: bool },
 }
 
 /// A raw file in the terms a develop needs, which are the DNG
@@ -437,8 +445,14 @@ impl Dng {
         if crate::kodak::is_kodak(bytes) {
             return crate::kodak::parse(bytes);
         }
+        if crate::kodak::is_dc120(bytes) {
+            return crate::kodak::parse_dc120(bytes);
+        }
         if crate::dcr::is_dcr(bytes) {
             return crate::dcr::parse(bytes);
+        }
+        if crate::canon_tif::is_canon_tif(bytes) {
+            return crate::canon_tif::parse(bytes);
         }
         if crate::dcs::is_dcs(bytes) {
             return crate::dcs::parse(bytes);

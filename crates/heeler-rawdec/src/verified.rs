@@ -998,6 +998,10 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("TIF", "KODAK", "EOSDCS3C        FILE VERSION 3"),
     ("TIF", "Kodak", "DCS520C"),
     ("TIF", "Kodak", "DCS560C"),
+    ("TIF", "Canon", "EOS D2000C"),
+    // Canon's raw TIFFs (canon_tif.rs), 2026-10-25.
+    ("TIF", "Canon", "Canon EOS-1D"),
+    ("TIF", "Canon", "Canon EOS-1DS"),
     // Monochrome sensors' DNGs (develop.rs's monochrome plan), 2026-10-25.
     ("DNG", "Leica Camera AG", "M Monochrom"),
     ("DNG", "Leica Camera AG", "LEICA M MONOCHROM (Typ 246)"),

@@ -66,7 +66,7 @@ impl Plan {
     /// leaves the file to LibRaw.
     pub fn new(bytes: &[u8], opts: &Opts) -> Result<Plan, Error> {
         let dng = Dng::open(bytes)?;
-        if matches!(dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_)) {
+        if matches!(dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_)) || matches!(dng.coding, Coding::KodakSmall(k, _) if k.three()) {
             return Plan::three_colors(dng, opts);
         }
         if dng.photometric == 34892 && dng.samples == 1 {
@@ -272,7 +272,7 @@ impl Plan {
 
     /// Whether the image is three samples a pixel (three_colors).
     pub fn three(&self) -> bool {
-        matches!(self.dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_)) || (self.dng.photometric == 34892 && self.dng.samples == 3)
+        matches!(self.dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_)) || matches!(self.dng.coding, Coding::KodakSmall(k, _) if k.three()) || (self.dng.photometric == 34892 && self.dng.samples == 3)
     }
 
     /// The output's size (turned when the file says so).
@@ -781,6 +781,23 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         crate::headerless::decode(bytes, fw, fh, fh, &sc.samples, |r, line| frame.lock().unwrap()[r * fw..(r + 1) * fw].copy_from_slice(&line[..fw]))?;
         let (diag, dw, _) = crate::superccd::place(&frame.into_inner().unwrap(), fw, fh, &sc.layout);
         diag.par_chunks(dw).enumerate().for_each(|(r, row)| put_run(out, p, r, 0, row, lin));
+        return Ok(cfa);
+    }
+    if let Coding::Dc120 { jpeg } = d.coding {
+        let (at, len) = d.pieces.spans[0];
+        stopped(stop)?;
+        let strip = &bytes[at..at + len];
+        let all = if jpeg { crate::kodak_codec::decode_dc120_jpeg(strip) } else { crate::kodak_codec::decode_dc120(strip) }.map_err(|_| Error::Corrupt("a DC120 frame that does not decode"))?;
+        stopped(stop)?;
+        all.par_chunks(d.width).enumerate().for_each(|(r, row)| put_run(out, p, r, 0, row, lin));
+        return Ok(cfa);
+    }
+    if let Coding::KodakSmall(k, frame) = d.coding {
+        // Decoded whole (kodak_codec.rs), then each row.
+        stopped(stop)?;
+        let all = crate::headerless::decode_kodak(bytes, k, frame, (d.width, d.height))?;
+        stopped(stop)?;
+        all.par_chunks(frame.0).enumerate().for_each(|(r, row)| put_run(out, p, r, 0, row, lin));
         return Ok(cfa);
     }
     if let Coding::Kodak65000(k) = &d.coding {
@@ -1310,6 +1327,7 @@ fn develop_three(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>,
             (crate::sraw::decode(&bytes[at..at + len], s)?, s.image)
         }
         Coding::SonyYcc(s) => (crate::sony_ycc::decode(bytes, s)?, s.image),
+        Coding::KodakSmall(k, frame) => (crate::headerless::decode_kodak(bytes, *k, *frame, (p.dng.width, p.dng.height))?, (p.dng.width, p.dng.height)),
         Coding::Tiff => (linear_image(bytes, &p.dng)?, (p.dng.width, p.dng.height)),
         _ => return Err(Error::Unsupported("a three-color coding not read here")),
     };

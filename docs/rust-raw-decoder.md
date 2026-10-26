@@ -2040,6 +2040,20 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   and 177) are LibRaw's for the cameras, since no tag or sample of the
   files moves them. The white level is the curve's last entry. All five
   bodies (10 files) match LibRaw.
+- The EOS D2000C (Kodak's body under Canon's name) is read the same way
+  as the DCS520C; its black level is the mean of Kodak's 0x03EF and
+  0x03F0, the fraction dropped, as LibRaw's moves with those tags (2
+  files match LibRaw).
+
+### Canon's raw TIFFs
+
+- `canon_tif.rs`: the EOS-1D's and EOS-1DS's directories hold only
+  thumbnails; the frame is a 12-bit lossless JPEG at the Canon maker
+  notes' 0x0081, two components a line, each line two frame rows. The
+  balance is the first three SHORTs of the maker notes' 0x00A4, the black
+  level 0, the white level LibRaw's (3616, geometry.rs). Both bodies (4
+  files) match LibRaw. Phase One's raw TIFFs are IIQs inside and read as
+  such.
 
 ### Linear DNGs
 
