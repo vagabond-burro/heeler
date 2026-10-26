@@ -30,7 +30,7 @@ fn files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
             let ext = name.rsplit('.').next().unwrap_or("").to_ascii_uppercase();
             if p.is_dir() {
                 stack.push(p);
-            } else if ["CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "IIQ", "CRW", "3FR", "FFF", "ERF", "MEF", "MOS", "KDC", "DCR", "TIF", "TIFF"].contains(&ext.as_str()) {
+            } else if ["CR2", "CR3", "ARW", "NEF", "NRW", "RW2", "RAW", "RWL", "ORF", "ORI", "PEF", "SRW", "MRW", "IIQ", "CRW", "3FR", "FFF", "ERF", "MEF", "MOS", "KDC", "DCR", "TIF", "TIFF", "STI"].contains(&ext.as_str()) {
                 out.push(p);
             }
         }
@@ -53,7 +53,12 @@ fn main() {
             continue;
         }
         let Ok(f) = heeler_raw::linear_dng::libraw_facts(&bytes, heeler_raw::DevelopOpts::default()) else { continue };
-        if f.filters < 1000 || f.colors != 3 {
+        if f.colors != 3 {
+            continue;
+        }
+        // An image of three colors a pixel (filters 0) is recorded only
+        // when LibRaw develops it in its own colors.
+        if f.filters < 1000 && f.raw_color == 0 {
             continue;
         }
         if f.raw_color != 0 {

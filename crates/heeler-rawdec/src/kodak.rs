@@ -20,7 +20,9 @@
 //! frame, 848 by 976 whatever IFD0's sub-IFD says, is that sub-IFD's one
 //! strip, uncompressed (compression 1, LibRaw's white level 255) or a
 //! baseline JPEG (compression 7, 510), as kodak_codec.rs decodes them. No
-//! white balance is stated (the develop takes daylight).
+//! white balance is stated (the develop takes daylight). Its pixels are
+//! narrower than tall; the develop widens the image as LibRaw does
+//! (DC120_WIDEN).
 
 use crate::dng::{Coding, Dng, Format, Pieces};
 use crate::tiff::{Ifd, Tiff};
@@ -44,6 +46,13 @@ fn directories<'a>(bytes: &'a [u8]) -> Option<(Tiff<'a>, Ifd, Ifd)> {
 pub fn is_kodak(bytes: &[u8]) -> bool {
     directories(bytes).is_some()
 }
+
+/// The DC120's pixels, narrower than tall: LibRaw's image is the frame's
+/// width times 244 over 159 (found against its output, which pins the
+/// ratio exactly), as DNG terms say it (DefaultScale) and as the develop
+/// widens it.
+pub const DC120_WIDEN: (usize, usize) = (244, 159);
+pub const DC120_SCALE: (f64, f64) = (244.0 / 159.0, 1.0);
 
 /// The DC120's IFD0 and its frame's strip and coding (whether a JPEG).
 fn dc120<'a>(bytes: &'a [u8]) -> Option<(Tiff<'a>, Ifd, (usize, usize), bool)> {
@@ -110,7 +119,7 @@ pub fn parse_dc120(bytes: &[u8]) -> Result<Dng, Error> {
         white: vec![if jpeg { 510.0 } else { 255.0 }],
         active: (top, left, top + geometry.height as usize, left + geometry.width as usize),
         default_crop: None,
-        default_scale: (1.0, 1.0),
+        default_scale: DC120_SCALE,
         as_shot_neutral: None,
         as_shot_white_xy: None,
         color_matrix: [m(&calibration.color_matrix[0]), m(&calibration.color_matrix[1]), None],

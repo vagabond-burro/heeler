@@ -39,6 +39,7 @@ pub enum Format {
     Dcr,
     Dcs,
     CanonTif,
+    Sti,
 }
 
 /// Make and Model as a raw file of any format this crate reads gives
@@ -97,6 +98,7 @@ impl Format {
             Format::Dcr => "DCR",
             Format::Dcs => "TIF",
             Format::CanonTif => "TIF",
+            Format::Sti => "STI",
             Format::Crw => "CRW",
             Format::Headerless => "headerless",
             Format::Raf => "RAF",
@@ -450,6 +452,9 @@ impl Dng {
         }
         if crate::dcr::is_dcr(bytes) {
             return crate::dcr::parse(bytes);
+        }
+        if crate::sinar::is_sinar(bytes) {
+            return crate::sinar::parse(bytes);
         }
         if crate::canon_tif::is_canon_tif(bytes) {
             return crate::canon_tif::parse(bytes);

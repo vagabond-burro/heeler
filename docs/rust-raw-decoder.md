@@ -2055,6 +2055,27 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   files) match LibRaw. Phase One's raw TIFFs are IIQs inside and read as
   such.
 
+### The DC120, C330, C603 and Sinar's STI
+
+- The DC120's KDCs (`kodak.rs`): an 848 by 976 frame, uncompressed with
+  each row rotated or a byte-swapped baseline JPEG (`kodak_codec.rs`),
+  white levels 255 and 510. Its pixels are narrow: LibRaw's image is 244
+  over 159 times as wide, each column a source column picked by a running
+  sum of 159 over 244 in double precision, no blending (the develop's
+  `widen`). 5 files match LibRaw at both sizes.
+- The C330's and C603's headerless files (`headerless.rs`, by size): the
+  C603's 8-bit mosaics through Kodak's exponential curve or the header's
+  own (CFAI), and both cameras' YRGB images, three colors a pixel through
+  the same curve, developed as three-color images in LibRaw's own colors.
+  11 files match LibRaw.
+- Sinar's STI (`sinar.rs`): one tile of 16-bit samples, its directory's
+  own orientation, the balance the "Neutral" line of IFD0's 0xC517. The
+  one file matches LibRaw.
+- LibRaw's matrices for the DC120, DC50, Sinarback and (none) C330 and
+  C603 are generated with the rest (`examples/libraw_matrices.rs` now
+  also reads KDC, DCR, TIF and STI files, and records a three-color
+  camera LibRaw develops in its own colors).
+
 ### Linear DNGs
 
 - A linear DNG of three samples a pixel (photometric 34892), uncompressed

@@ -1002,6 +1002,12 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     // Canon's raw TIFFs (canon_tif.rs), 2026-10-25.
     ("TIF", "Canon", "Canon EOS-1D"),
     ("TIF", "Canon", "Canon EOS-1DS"),
+    // The DC120 (kodak.rs), the C330 and C603 (headerless.rs), Sinar's STI
+    // (sinar.rs), 2026-10-25.
+    ("KDC", "Eastman Kodak Company", "Kodak DC120 ZOOM Digital Camera"),
+    ("headerless", "Kodak", "C330"),
+    ("headerless", "Kodak", "C603"),
+    ("STI", "Sinar AG", "Sinarback eVolution 75, Sinar p3 / f3"),
     // Monochrome sensors' DNGs (develop.rs's monochrome plan), 2026-10-25.
     ("DNG", "Leica Camera AG", "M Monochrom"),
     ("DNG", "Leica Camera AG", "LEICA M MONOCHROM (Typ 246)"),

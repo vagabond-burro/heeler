@@ -131,11 +131,12 @@ impl Plan {
             return Err(Error::Unsupported("not a Bayer arrangement"));
         }
         // Pixels twice as wide as tall (the D1X's) develop with each row
-        // twice, as LibRaw stretches them; any other shape is declined.
+        // twice, as LibRaw stretches them, and the DC120's narrow ones with
+        // columns repeated (widen); any other shape is declined.
         if matches!(dng.coding, Coding::SuperCcd(_)) && opts.half_size {
             return Err(Error::Unsupported("a SuperCCD half-size develop"));
         }
-        if dng.default_scale != (1.0, 1.0) && (dng.is_dng() || dng.default_scale != (1.0, 2.0)) {
+        if dng.default_scale != (1.0, 1.0) && (dng.is_dng() || (dng.default_scale != (1.0, 2.0) && dng.default_scale != crate::kodak::DC120_SCALE)) {
             return Err(Error::Unsupported("non-square pixels"));
         }
         if dng.black_delta_h.iter().chain(&dng.black_delta_v).any(|&d| d != 0.0) {
@@ -293,7 +294,7 @@ impl Plan {
         // demosaiced diagonal image while it is turned.
         let unturned = if let Coding::SuperCcd(sc) = &self.dng.coding { memory::bytes(self.width, self.height, 3, 2)? + memory::bytes(sc.frame.0, sc.frame.1, 1, 2)? } else { 0 };
         // Rows twice: the image twice the size, and the one before it.
-        let unstretched = if self.dng.default_scale == (1.0, 2.0) { memory::bytes(ow, oh, 3, 4)? } else { 0 };
+        let unstretched = if self.dng.default_scale == (1.0, 2.0) || self.dng.default_scale == crate::kodak::DC120_SCALE { memory::bytes(ow, oh, 3, 4)? } else { 0 };
         memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES, self.pixel_gains(half).bytes(), frame, unstretched, unturned])
     }
 
@@ -1273,6 +1274,33 @@ fn twice(img: Image, turned: bool) -> Result<Image, Error> {
     Ok(Image { height: img.height * 2, rgb, ..img })
 }
 
+/// An image of pixels narrower than tall, `num` to `den`, made square as
+/// LibRaw makes the DC120's (found against its output): the width times
+/// num over den, to the nearest whole number, each column a source
+/// column, no blending: den over num (in double precision) summed once a
+/// column from 0, the sum's whole part (the running sum's rounding, not
+/// the product's, decides the columns where the ratio lands on a whole
+/// number).
+fn widen(img: Image, (num, den): (usize, usize)) -> Result<Image, Error> {
+    let width = (img.width * num + den / 2) / den;
+    let mut rgb = memory::vector(width * img.height * 3, 0u16, "RAW stretched image")?;
+    let step = den as f64 / num as f64;
+    let mut sum = 0.0f64;
+    let columns: Vec<usize> = (0..width)
+        .map(|_| {
+            let s = (sum as usize).min(img.width - 1);
+            sum += step;
+            s
+        })
+        .collect();
+    rgb.par_chunks_mut(width * 3).zip(img.rgb.par_chunks(img.width * 3)).for_each(|(out, row)| {
+        for (px, &s) in out.chunks_exact_mut(3).zip(&columns) {
+            px.copy_from_slice(&row[s * 3..s * 3 + 3]);
+        }
+    });
+    Ok(Image { width, rgb, ..img })
+}
+
 fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, t0: std::time::Instant) -> Result<(Image, Times), Error> {
     let _job = memory::Job::admit(p.bytes(opts.half_size)?, "RAW develop")?;
     let open = t0.elapsed().as_secs_f64();
@@ -1307,7 +1335,13 @@ fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, 
     scale_mosaic(&mut cfa, &p, &n);
     stopped(stop)?;
     let img = if opts.half_size { half(&cfa, &p, &n)? } else { full(&cfa, &p, &n, stop)? };
-    let img = if p.dng.default_scale == (1.0, 2.0) { twice(img, p.flip & 4 != 0)? } else { img };
+    let img = if p.dng.default_scale == (1.0, 2.0) {
+        twice(img, p.flip & 4 != 0)?
+    } else if p.dng.default_scale == crate::kodak::DC120_SCALE {
+        widen(img, crate::kodak::DC120_WIDEN)?
+    } else {
+        img
+    };
     let headroom = if opts.highlight >= 2 { headroom(&n) } else { 1.0 };
     let done = t0.elapsed().as_secs_f64();
     Ok((Image { headroom, ..img }, Times { open, unpack: unpacked - open, develop: done - unpacked }))
