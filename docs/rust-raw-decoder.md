@@ -1059,18 +1059,34 @@ the issue samples above are kept beside it. Its CR2, ARW and DNG files
     S that scaling before its division by 64, the records' field takes
     S / 64 at 4 (HL2, LH2), S / 32 at 8 (HH2, HL1, LH1) and twice that
     at 16 (HH1), each rounded down;
-  - the map's header is 31 bits: 24 holding 1, then h in 5 and s in 2,
-    the base quantizer being 4h + s - 2 (20 for most files at moderate
-    ISO, up to 50 for the 1D X Mark III at ISO 819200). The entries,
-    each the quantizer less the base, follow line by line with the
-    lossless coding's tools: no runs, K from 0, carried from line to
-    line, each entry held at 0 or above; the first line predicted by the
-    entry to its left, its first four entries 0 (the first not coded,
-    the next three read only for K), the rest by median edge detection
-    (`crx::decode_quant_map`). The map must end in its stated size's
-    last byte, or the frame stays LibRaw's.
-  Tests code maps the other way round, and pin the steps the files use.
-  Roll-burst files are declined and stay LibRaw's.
+  - the map's header is 24 bits holding 1, then the base quantizer
+    plus 2 in 7 bits, then a bit that must be 0 (LibRaw reads otherwise
+    where it is 1, found by changing it in copies). The entries, each
+    the quantizer less the base, follow line by line with the lossless
+    coding's tools: no runs, K from 2, carried from line to line, held
+    at no bound (LibRaw uses a negative entry as it is); the first line's
+    first entry 0 and not coded, the rest of it predicted by the entry
+    to its left, the later lines by median edge detection
+    (`crx_more::decode_quant_map`, which replaces a first reading fitted
+    to a constant prefix and wrong on the R6 at ISO 204800).
+  - one step rule for every band: max(1, (S(q) / 32 times the record's
+    field (its third word's low 19 bits), over 8, each rounded down)
+    plus its offset (the fourth word, signed)); field 0 with offset 1
+    is not quantized, and the fields 4, 8 and 16 give the steps above.
+    Level 3 and LL3 take the mean of four level-1 rows' entries.
+  - Roll-burst files (encoding 3: the R7's, R8's and R10's bursts, one
+    tile, the first of their frames) code four planes Y, Cb, D = G1 - G2
+    and Cr, LL3 quantized where the plane's record's bit 27 is clear (the
+    D plane), none clamped before the inverse of BT.2020's conversion in
+    1/1024 steps (R = Y + (1510 Cr' + 512) / 1024, B = Y + (1927 Cb' +
+    512) / 1024, G = Y + (-168 Cb' - 585 Cr' + 512) / 1024, each shift
+    rounding down, Cb' and Cr' less half the range), G1 = G + (D + 1) / 2
+    and G2 = G1 - D, each clamped to the depth (`crx_more.rs`).
+  - The lossless coding's first line takes d past its end as 0, as the
+    other lines do (a fault before, which the R8 burst's Cr plane shows).
+  Tests code samples the other way round, and pin the steps the files use.
+  All 1,648 CR3s were compared again after these changes: the 4 newly
+  read files and every one read before match LibRaw.
 - `rustdiff` reports the develop's own black, white level and balance
   against LibRaw's (they are not in the outputs, which take LibRaw's).
 
@@ -1112,12 +1128,6 @@ tile decodes on four cores at most.
 
 ### Not yet done
 
-- One file's map: an R6 at ISO 204800, whose first line's three entries
-  read for K are not the usual ones (1, 6 and 11 where every other file
-  has 1, 2 and 1); its map then does not end where its size states, so
-  it stays LibRaw's. Reading those three as entries held at 0 fits it
-  and no other file.
-- Roll-burst files.
 - Calibrations for the R5 C, R6 Mark III and C50.
 
 ## Phase 6: NEF

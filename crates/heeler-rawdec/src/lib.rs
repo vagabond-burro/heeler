@@ -9,6 +9,7 @@ pub mod cameras;
 pub mod color;
 pub mod cr3;
 pub mod crx;
+pub mod crx_more;
 pub mod deflate;
 pub mod develop;
 pub mod dng;

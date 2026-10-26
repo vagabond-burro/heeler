@@ -14,8 +14,11 @@
 //!
 //! Lossless frames and C-RAW frames (three wavelet levels, one row of
 //! tiles; in the second version, records 0xFF11 to 0xFF13, one tile with
-//! a map of quantizers ahead of its planes) are read (crx.rs); other
-//! encodings are declined. The image area, the CFA
+//! a map of quantizers ahead of its planes) are read (crx.rs, crx_more.rs),
+//! and the second version's encoding 3 (the raw burst frames: planes of
+//! luma, color differences and the greens' difference, crx_more.rs); other
+//! encodings are declined. A burst file's frames are its raw track's
+//! samples; the first is read, as LibRaw reads it. The image area, the CFA
 //! colors and the white level come from geometry.rs (LibRaw's, so
 //! documents keep their geometry), the calibrations from cameras.rs. The
 //! white balance as shot and the black level per channel are ColorData's,
@@ -58,6 +61,9 @@ pub struct CrxBand {
     pub at: usize,
     pub len: usize,
     pub q: u32,
+    /// The second version's offset to the step (the record's fourth word,
+    /// signed; crx_more::BandQuant); 0 in the first.
+    pub offset: i32,
 }
 
 /// A C-RAW frame's planes (each one site of the 2 by 2 pattern, `width` by
@@ -70,9 +76,15 @@ pub struct CrxWavelet {
     pub tile: usize,
     pub sites: Vec<Vec<Vec<CrxBand>>>,
     /// The second version's map of quantizers (its one tile's); none in
-    /// the first. With a map each band's q is its record's field
-    /// (crx::map_steps), 0 where it is not quantized.
+    /// the first. With a map each band's q is its record's field and its
+    /// offset the record's (crx_more::map_steps).
     pub map: Option<crate::crx::QuantMap>,
+    /// The image header's encoding: 0, or 3 for planes of luma, color
+    /// differences and the greens' difference (crx_more::ycc_sites).
+    pub encoding: u8,
+    /// Per plane, whether its lowest band is a lossless plane's coding
+    /// (crx_more::low_band_lossless).
+    pub low_lossless: [bool; 4],
 }
 
 /// The boxes from `at` to `end`: type, content start, end.
@@ -244,7 +256,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     if levels != 0 && levels as usize != crate::crx::LEVELS {
         return Err(Error::Unsupported("a C-RAW frame of this many wavelet levels"));
     }
-    if encoding != 0 || planes != 4 || cfa != 0 || bits == 0 || bits > 16 {
+    if !(encoding == 0 || (encoding == 3 && levels != 0)) || planes != 4 || cfa != 0 || bits == 0 || bits > 16 {
         return Err(Error::Unsupported("a CRX encoding, plane count or CFA layout not read here"));
     }
     if width == 0 || height == 0 || tile_w == 0 || tile_h == 0 || tile_w % 2 != 0 || tile_h % 2 != 0 {
@@ -260,7 +272,9 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let across = width.div_ceil(tile_w);
     let down = height.div_ceil(tile_h);
     let (mut at, mut data, mut tile, mut plane) = (start, start + header, None::<usize>, None::<usize>);
-    let mut records: Vec<(usize, usize, usize, usize, usize, u32)> = Vec::new();
+    let mut records: Vec<(usize, usize, usize, usize, usize, u32, i32)> = Vec::new();
+    // Each plane record's second word, in order.
+    let mut plane_words = Vec::new();
     // The second version's records (0xFF11 to 0xFF13), and each tile's
     // quantizer map: where it is and how long.
     let (mut second, mut maps) = (false, Vec::new());
@@ -286,7 +300,10 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
                     data += len.next_multiple_of(8);
                 }
             }
-            0xff02 | 0xff12 => plane = Some(plane.map_or(0, |p| p + 1)),
+            0xff02 | 0xff12 => {
+                plane = Some(plane.map_or(0, |p| p + 1));
+                plane_words.push(be32(bytes, at + 8).ok_or(Error::Corrupt("a CRX plane record"))? as u32);
+            }
             0xff03 | 0xff13 => {
                 let (t, p) = match (tile, plane) {
                     (Some(t), Some(p)) if t < across * down && p < 4 => (t, p),
@@ -298,16 +315,15 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
                 let band = records.iter().filter(|r| (r.0, r.1) == (t, p)).count();
                 // The subband's quantizer: bits 19 to 26 of the word after
                 // its size; in the second version that word's low bits are
-                // the subband's field (crx::map_steps), and the next word 1
-                // where it is not quantized (0 here).
+                // the subband's field and the next word its offset
+                // (crx_more::step).
                 let word = be32(bytes, at + 8).ok_or(Error::Corrupt("a CRX subband record"))? as u32;
-                let q = match (second, be32(bytes, at + 12)) {
-                    (false, _) => word >> 19 & 0xff,
-                    (true, Some(1)) => 0,
-                    (true, Some(_)) => word & 0x7ffff,
+                let (q, offset) = match (second, be32(bytes, at + 12)) {
+                    (false, _) => (word >> 19 & 0xff, 0),
+                    (true, Some(o)) => (word & 0x7ffff, o as u32 as i32),
                     (true, None) => return Err(Error::Corrupt("a CRX subband record")),
                 };
-                records.push((t, p, band, data, n, q));
+                records.push((t, p, band, data, n, q, offset));
                 data += n;
             }
             _ => return Err(Error::Unsupported("a CRX header record not read here")),
@@ -322,7 +338,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         Coding::Crx(
             records
                 .iter()
-                .map(|&(t, p, _, at, len, _)| {
+                .map(|&(t, p, _, at, len, _, _)| {
                     let (x0, y0) = ((t % across) * tile_w, (t / across) * tile_h);
                     CrxPlane { at, len, x0, y0, width: tile_w.min(width - x0) / 2, height: tile_h.min(height - y0) / 2, site: (p >> 1, p & 1) }
                 })
@@ -336,12 +352,15 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         if !second && records.iter().any(|r| r.2 > 0 && crate::crx::quant_step(r.5).is_none()) {
             return Err(Error::Unsupported("a C-RAW quantizer not read here"));
         }
-        if second && (across != 1 || records.iter().any(|r| ![0, 4, 8, 16].contains(&r.5))) {
-            return Err(Error::Unsupported("a second-version C-RAW frame of more than one tile or of other steps"));
+        if second && across != 1 {
+            return Err(Error::Unsupported("a second-version C-RAW frame of more than one tile"));
+        }
+        if encoding == 3 && !second {
+            return Err(Error::Unsupported("a first-version C-RAW frame of encoding 3"));
         }
         let mut sites = vec![vec![Vec::new(); across]; 4];
-        for &(t, p, _, at, len, q) in &records {
-            sites[p][t].push(CrxBand { at, len, q });
+        for &(t, p, _, at, len, q, offset) in &records {
+            sites[p][t].push(CrxBand { at, len, q, offset });
         }
         // The map read now, so a frame whose map does not read stays
         // LibRaw's: as wide as the plane's level 3, a line for each row of
@@ -352,11 +371,12 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
                 for _ in 0..crate::crx::LEVELS {
                     w = w.div_ceil(2);
                 }
-                Some(crate::crx::decode_quant_map(&bytes[at..at + len], w, (height / 2).div_ceil(2)).map_err(|_| Error::Unsupported("a C-RAW quantizer map not read here"))?)
+                Some(crate::crx_more::decode_quant_map(&bytes[at..at + len], w, (height / 2).div_ceil(2)).map_err(|_| Error::Unsupported("a C-RAW quantizer map not read here"))?)
             }
             None => None,
         };
-        Coding::CrxWavelet(Box::new(CrxWavelet { width: width / 2, height: height / 2, tile: tile_w / 2, sites, map }))
+        let low_lossless = std::array::from_fn(|p| plane_words.get(p).is_none_or(|&w| crate::crx_more::low_band_lossless(w)));
+        Coding::CrxWavelet(Box::new(CrxWavelet { width: width / 2, height: height / 2, tile: tile_w / 2, sites, map, encoding, low_lossless }))
     };
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
     if geometry.white == 0 {

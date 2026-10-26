@@ -651,24 +651,47 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         return Ok(cfa);
     }
     if let Coding::CrxWavelet(w) = &d.coding {
-        // The four planes side by side, each rebuilt whole, then its rows
-        // to every second column of every second row.
-        (0..4).into_par_iter().try_for_each(|site| -> Result<(), Error> {
-            stopped(stop)?;
-            let tiles: Vec<[crate::crx::Band; 10]> = w.sites[site]
+        let bands_of = |site: usize| -> Result<Vec<[crate::crx::Band; 10]>, Error> {
+            w.sites[site]
                 .iter()
                 .map(|bands| -> Result<[crate::crx::Band; 10], Error> {
                     let v: Vec<_> = bands.iter().map(|b| crate::crx::Band { data: &bytes[b.at..b.at + b.len], q: b.q }).collect();
                     v.try_into().map_err(|_| Error::Corrupt("a C-RAW tile's plane without ten subbands"))
                 })
+                .collect()
+        };
+        let quants = |site: usize| -> [crate::crx_more::BandQuant; 10] { std::array::from_fn(|i| crate::crx_more::BandQuant { field: w.sites[site][0][i].q, offset: w.sites[site][0][i].offset }) };
+        if w.encoding == 3 {
+            // Luma, color differences and the greens' difference, each
+            // plane rebuilt whole, then turned to the four sites.
+            let map = w.map.as_ref().ok_or(Error::Corrupt("an encoding-3 C-RAW frame without its map"))?;
+            let planes: Vec<Vec<i32>> = (0..4)
+                .into_par_iter()
+                .map(|plane| -> Result<Vec<i32>, Error> {
+                    stopped(stop)?;
+                    let tiles = bands_of(plane)?;
+                    let bands = tiles.first().ok_or(Error::Corrupt("an encoding-3 C-RAW frame without a tile"))?;
+                    crate::crx_more::rebuild_plane(bands, w.width, w.height, d.bits, w.low_lossless[plane], &crate::crx_more::map_steps(map, quants(plane)))
+                })
                 .collect::<Result<_, _>>()?;
+            let sites = crate::crx_more::ycc_sites([&planes[0], &planes[1], &planes[2], &planes[3]], d.bits);
+            for (site, plane) in sites.iter().enumerate() {
+                let (dy, dx) = (site >> 1, site & 1);
+                for y in 0..w.height {
+                    put_sites(out, p, 2 * y + dy, dx, &plane[y * w.width..(y + 1) * w.width]);
+                }
+            }
+            return Ok(cfa);
+        }
+        // The four planes side by side, each rebuilt whole, then its rows
+        // to every second column of every second row.
+        (0..4).into_par_iter().try_for_each(|site| -> Result<(), Error> {
+            stopped(stop)?;
+            let tiles = bands_of(site)?;
             let plane = match &w.map {
                 // The second version: each coefficient's step from the
-                // tile's map of quantizers.
-                Some(map) => {
-                    let fields: [u32; 10] = std::array::from_fn(|i| w.sites[site][0][i].q);
-                    crate::crx::reconstruct_plane_with(&tiles, w.width, w.height, w.tile, d.bits, &crate::crx::map_steps(map, fields))?
-                }
+                // tile's map of quantizers and its band's record.
+                Some(map) => crate::crx::reconstruct_plane_with(&tiles, w.width, w.height, w.tile, d.bits, &crate::crx_more::map_steps(map, quants(site)))?,
                 None => crate::crx::reconstruct_plane(&tiles, w.width, w.height, w.tile, d.bits)?,
             };
             let (dy, dx) = (site >> 1, site & 1);

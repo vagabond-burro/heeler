@@ -32,7 +32,7 @@
 //! notes, each scaled by its quantizer's step, then rebuilt level by
 //! level (`reconstruct_plane`). The second version (records 0xFF11 to
 //! 0xFF13) codes the subbands the same way but quantizes levels 1 and 2
-//! by a map that leads each tile's data (`decode_quant_map`, `map_steps`).
+//! by a map that leads each tile's data (crx_more.rs).
 //! Every C-RAW file of the corpus the Rust path takes decodes the same as
 //! LibRaw's reading.
 
@@ -43,19 +43,19 @@ const J: [u32; 32] = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5
 
 /// The zeros before a symbol's one from which the symbol follows in
 /// full, and its width then.
-const ESCAPE_ZEROS: u32 = 41;
-const ESCAPE_BITS: u32 = 21;
+pub(crate) const ESCAPE_ZEROS: u32 = 41;
+pub(crate) const ESCAPE_BITS: u32 = 21;
 
 /// Bits most significant first, zeros past the data's end.
-struct Bits<'a> {
+pub(crate) struct Bits<'a> {
     data: &'a [u8],
-    at: usize,
+    pub(crate) at: usize,
     cache: u64,
-    have: u32,
+    pub(crate) have: u32,
 }
 
 impl<'a> Bits<'a> {
-    fn new(data: &'a [u8]) -> Self {
+    pub(crate) fn new(data: &'a [u8]) -> Self {
         Bits { data, at: 0, cache: 0, have: 0 }
     }
 
@@ -68,7 +68,7 @@ impl<'a> Bits<'a> {
         }
     }
 
-    fn bits(&mut self, n: u32) -> u32 {
+    pub(crate) fn bits(&mut self, n: u32) -> u32 {
         if n == 0 {
             return 0;
         }
@@ -79,13 +79,13 @@ impl<'a> Bits<'a> {
         v
     }
 
-    fn bit(&mut self) -> bool {
+    pub(crate) fn bit(&mut self) -> bool {
         self.bits(1) == 1
     }
 
     /// The zeros before the next one, the one consumed; an error past the
     /// data's end.
-    fn zeros(&mut self) -> Result<u32, Error> {
+    pub(crate) fn zeros(&mut self) -> Result<u32, Error> {
         let mut q = 0;
         loop {
             self.fill();
@@ -116,7 +116,7 @@ fn symbol(e: i32) -> u32 {
 }
 
 /// The error of a symbol.
-fn error(s: u32) -> i32 {
+pub(crate) fn error(s: u32) -> i32 {
     if s & 1 == 0 {
         (s >> 1) as i32
     } else {
@@ -124,7 +124,7 @@ fn error(s: u32) -> i32 {
     }
 }
 
-fn next_k(k: u32, n: u32) -> u32 {
+pub(crate) fn next_k(k: u32, n: u32) -> u32 {
     let q = n >> k;
     if q >= 6 {
         k + 2
@@ -223,7 +223,7 @@ fn decode_lines(data: &[u8], width: usize, height: usize, mode: Mode, mut line: 
         let mut x = 0;
         while x < width {
             let (a, b, c, d) = if first {
-                (if x > 0 { cur[x] } else { edge }, edge, edge, edge)
+                (if x > 0 { cur[x] } else { edge }, edge, edge, if x + 1 < width { edge } else { 0 })
             } else {
                 let b = prev[x + 1];
                 (if x > 0 { cur[x] } else { b }, b, if x > 0 { prev[x] } else { b }, if x + 1 < width { prev[x + 2] } else { 0 })
@@ -374,7 +374,7 @@ pub fn tile_columns(width: usize, tile: usize, t: usize, level: usize) -> (usize
 /// Rows of `v` (each `n` long), low and high coefficients interleaved as
 /// `is_low` marks them, rebuilt by the inverse of the reversible 5/3
 /// lifting (ITU-T T.800), the ends mirrored.
-fn inverse_lines(v: &mut [i32], n: usize, is_low: &[bool]) {
+pub(crate) fn inverse_lines(v: &mut [i32], n: usize, is_low: &[bool]) {
     if n < 2 {
         return;
     }
@@ -425,95 +425,6 @@ pub struct QuantMap {
     pub entries: Vec<i32>,
     /// The bits the map took.
     pub bits: usize,
-}
-
-/// A tile's map of quantizers for a level 1 of `rows` rows, a line for
-/// each, as found from the data against LibRaw's frame. A header: 24 bits
-/// holding 1, then h in 5 bits and s in 2, the base quantizer being
-/// 4h + s - 2. The entries then follow line by line with the lossless
-/// coding's tools: no runs, K starting at 0 and carried from line to line,
-/// each entry held at 0 or above; the first line predicted by the entry to
-/// its left, its first 4 entries 0 (the first not coded, the next three
-/// read for K only), the others by median edge detection. The map must
-/// end in its stated size's last byte.
-pub fn decode_quant_map(data: &[u8], width: usize, rows: usize) -> Result<QuantMap, Error> {
-    if width == 0 || rows < 2 {
-        return Err(Error::Unsupported("a C-RAW quantizer map of no size"));
-    }
-    let mut br = Bits::new(data);
-    if br.bits(24) != 1 {
-        return Err(Error::Unsupported("a C-RAW quantizer map's header not read here"));
-    }
-    let h = br.bits(5) as i32;
-    let s = br.bits(2) as i32;
-    let base = 4 * h + s - 2;
-    let (mut k, lines) = (0, rows);
-    let mut entries = Vec::with_capacity(width * lines);
-    let mut prev = vec![0i32; width];
-    for y in 0..lines {
-        let first = y == 0;
-        let mut cur = Vec::with_capacity(width);
-        for x in 0..width {
-            if first && x == 0 {
-                cur.push(0);
-                continue;
-            }
-            let (b, c) = (prev[x], if x > 0 { prev[x - 1] } else { prev[0] });
-            let a = if x > 0 { cur[x - 1] } else { b };
-            let p = if first {
-                a
-            } else if c >= a.max(b) {
-                a.min(b)
-            } else if c <= a.min(b) {
-                a.max(b)
-            } else {
-                a + b - c
-            };
-            let q = br.zeros()?;
-            let s = if q >= ESCAPE_ZEROS { br.bits(ESCAPE_BITS) } else { (q << k) | br.bits(k) };
-            cur.push(if first && x < 4 { 0 } else { (p + error(s)).max(0) });
-            let n = if first || x + 1 >= width { s } else { (s + 2 * (prev[x + 1] - prev[x]).unsigned_abs()) >> 1 };
-            k = next_k(k, n);
-            if k > 31 {
-                return Err(Error::Corrupt("a C-RAW quantizer map's Rice parameter out of range"));
-            }
-        }
-        entries.extend_from_slice(&cur);
-        prev = cur;
-    }
-    let bits = br.at * 8 - br.have as usize;
-    if bits > data.len() * 8 || bits + 8 <= data.len() * 8 {
-        return Err(Error::Unsupported("a C-RAW quantizer map not ending where its size states"));
-    }
-    Ok(QuantMap { base, width, lines, entries, bits })
-}
-
-/// A second-version C-RAW plane's steps (`reconstruct_plane_with`'s) from
-/// its tile's map: a level-1 coefficient takes the entry of its row's line
-/// and of its column over 4, a level-2 one the mean of its two level-1
-/// rows' entries, rounded down, at its column over 2; level 3 is
-/// not quantized. With S the scaling of `quant_step` before its division
-/// by 64, a band whose field (`fields`, from its record) is 4 takes S / 64,
-/// 8 takes S / 32 and 16 twice that, each rounded down; 0 is not quantized.
-pub fn map_steps(map: &QuantMap, fields: [u32; 10]) -> impl Fn(usize, usize, usize, usize) -> i32 + Sync + '_ {
-    const SCALE: [i64; 6] = [40, 45, 51, 57, 64, 72];
-    let (w, last) = (map.width, map.lines - 1);
-    let entry = move |r: usize, c: usize| map.entries[r.min(last) * w + c.min(w - 1)];
-    move |_t, i, r, c| {
-        let entry = match i {
-            7..=9 => entry(r, c / 4),
-            4..=6 => (entry(2 * r, c / 2) + entry(2 * r + 1, c / 2)) >> 1,
-            _ => return 1,
-        };
-        let q = (map.base + entry).clamp(0, 6 * 24) as usize;
-        let scaled = SCALE[q % 6] << (q / 6);
-        (match fields[i] {
-            4 => scaled >> 6,
-            8 => scaled >> 5,
-            16 => (scaled >> 5) * 2,
-            _ => 1,
-        }) as i32
-    }
 }
 
 /// One plane of a C-RAW frame, `width` by `height` samples of `bits` bits,
@@ -915,90 +826,6 @@ mod tests {
                 }
             }
         }
-    }
-
-    /// A map of quantizers coded as `decode_quant_map`'s notes state it
-    /// (its first line's first 4 entries 0, the three read for K coded 0).
-    fn encode_quant_map(base: i32, map: &[Vec<i32>]) -> Vec<u8> {
-        let width = map[0].len();
-        let mut out: Vec<bool> = Vec::new();
-        let put = |out: &mut Vec<bool>, v: u32, n: u32| (0..n).rev().for_each(|i| out.push(v >> i & 1 == 1));
-        put(&mut out, 1, 24);
-        put(&mut out, (base + 2) as u32, 7);
-        let mut k = 0;
-        let mut prev = vec![0i32; width];
-        for (y, row) in map.iter().enumerate() {
-            let first = y == 0;
-            for x in 0..width {
-                if first && x == 0 {
-                    continue;
-                }
-                let (b, c) = (prev[x], if x > 0 { prev[x - 1] } else { prev[0] });
-                let a = if x > 0 { row[x - 1] } else { b };
-                let p = if first {
-                    a
-                } else if c >= a.max(b) {
-                    a.min(b)
-                } else if c <= a.min(b) {
-                    a.max(b)
-                } else {
-                    a + b - c
-                };
-                let s = if first && x < 4 { 0 } else { symbol(row[x] - p) };
-                if s >> k >= ESCAPE_ZEROS {
-                    out.extend((0..ESCAPE_ZEROS).map(|_| false));
-                    out.push(true);
-                    put(&mut out, s, ESCAPE_BITS);
-                } else {
-                    out.extend((0..s >> k).map(|_| false));
-                    out.push(true);
-                    put(&mut out, s & ((1 << k) - 1), k);
-                }
-                let n = if first || x + 1 >= width { s } else { (s + 2 * (prev[x + 1] - prev[x]).unsigned_abs()) >> 1 };
-                k = next_k(k, n);
-            }
-            prev = row.clone();
-        }
-        out.chunks(8).map(|c| c.iter().enumerate().fold(0u8, |v, (i, &b)| v | (b as u8) << (7 - i))).collect()
-    }
-
-    #[test]
-    fn quantizer_maps_decode_as_they_were_coded() {
-        let mut seed = 4242u32;
-        let map: Vec<Vec<i32>> = (0..40)
-            .map(|y| (0..37).map(|x| if (y == 0 && x < 4) || y == 3 { 0 } else { [0, 4, 7, 4, 0, 30][noise(&mut seed) as usize % 6] }).collect())
-            .collect();
-        for base in [20, 31, 38] {
-            let got = decode_quant_map(&encode_quant_map(base, &map), 37, 40).unwrap();
-            assert_eq!((got.base, got.width, got.lines), (base, 37, 40));
-            assert!(got.entries == map.concat(), "base {base}");
-        }
-        // A header that does not open with 1 in 24 bits is not read, nor
-        // a map that does not end where its size states.
-        assert!(decode_quant_map(&[0, 0, 2, 0, 0], 1, 2).is_err());
-        let mut long = encode_quant_map(20, &map);
-        long.extend([0xff; 2]);
-        assert!(decode_quant_map(&long, 37, 40).is_err());
-    }
-
-    #[test]
-    fn map_steps_are_the_files_steps() {
-        // Steps measured in the files: an entry of 0 over a base of 20 (an
-        // R5 at ISO 100) and of 31 (an R50, electronic shutter), with the
-        // records' fields: HL2 4, HH2 8, HL1 8, HH1 16.
-        let fields = [0, 0, 0, 0, 4, 4, 8, 8, 8, 16];
-        for (base, want) in [(20, [6, 12, 12, 24]), (31, [22, 45, 45, 90]), (30, [20, 40, 40, 80])] {
-            let map = QuantMap { base, width: 4, lines: 3, entries: vec![0; 12], bits: 0 };
-            let steps = map_steps(&map, fields);
-            assert_eq!([4, 6, 7, 9].map(|i| steps(0, i, 1, 1)), want, "base {base}");
-            assert_eq!(steps(0, 1, 0, 0), 1, "level 3");
-        }
-        // Level 1 reads its row's line; level 2 the mean of its two
-        // level-1 rows' entries, rounded down.
-        let map = QuantMap { base: 20, width: 2, lines: 3, entries: vec![0, 0, 4, 4, 7, 7], bits: 0 };
-        let steps = map_steps(&map, fields);
-        assert_eq!([0, 1, 2, 3].map(|r| steps(0, 7, r, 0)), [12, 20, 28, 28]);
-        assert_eq!([0, 1].map(|r| steps(0, 4, r, 0)), [8, 14]);
     }
 
     #[test]
