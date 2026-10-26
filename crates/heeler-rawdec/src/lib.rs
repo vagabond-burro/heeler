@@ -4,6 +4,7 @@
 //! LibRaw's develop of the same files by heeler-raw's tests.
 
 pub mod ahd;
+pub mod arw1;
 pub mod canon;
 pub mod cameras;
 pub mod color;

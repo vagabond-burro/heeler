@@ -95,7 +95,7 @@ impl Plan {
         // uncompressed or Deflated with the floating-point predictor.
         match (dng.sample_format, dng.compression, dng.predictor) {
             (1, 1 | 7, _) if (8..=16).contains(&dng.bits) => {}
-            (1, 32767, _) if dng.coding == Coding::SonyBlocks => {}
+            (1, 32767, _) if matches!(dng.coding, Coding::SonyBlocks | Coding::Arw1) => {}
             (1, 0, _) if matches!(&dng.coding, Coding::Crx(_)) && (8..=16).contains(&dng.bits) => {}
             (1, 0, _) if matches!(&dng.coding, Coding::CrxWavelet(_)) && (8..=16).contains(&dng.bits) => {}
             (1, 34713, _) if matches!(&dng.coding, Coding::NikonHuffman(_)) && (12..=14).contains(&dng.bits) => {}
@@ -922,6 +922,16 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         let (at, len) = d.pieces.spans[0];
         stopped(stop)?;
         let frame = crate::srw_codec::decode(bytes, &bytes[at..at + len], sc, d.width, d.height).map_err(|_| Error::Corrupt("a Samsung frame that does not decode"))?;
+        stopped(stop)?;
+        frame.par_chunks(d.width).enumerate().for_each(|(r, row)| put_run(out, p, r, 0, row, lin));
+        return Ok(cfa);
+    }
+    if d.coding == Coding::Arw1 {
+        // Decoded whole (arw1.rs), then each row; rows below the image
+        // area are left 0, as in LibRaw's frame.
+        let (at, len) = d.pieces.spans[0];
+        stopped(stop)?;
+        let frame = crate::arw1::decode(&bytes[at..at + len], d.width, d.height, d.active.2).map_err(|_| Error::Corrupt("an ARW frame that does not decode"))?;
         stopped(stop)?;
         frame.par_chunks(d.width).enumerate().for_each(|(r, row)| put_run(out, p, r, 0, row, lin));
         return Ok(cfa);

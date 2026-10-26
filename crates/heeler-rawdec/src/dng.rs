@@ -131,6 +131,9 @@ pub enum Coding {
     /// Sony's compressed blocks (sony.rs), one strip, through the
     /// linearization table (its tone curve).
     SonyBlocks,
+    /// The oldest Sony ARWs' coding (arw1.rs, sony.rs): one stream of
+    /// coded differences, column by column from the right.
+    Arw1,
     /// Sony's lossless tiles (sony.rs): each a lossless JPEG of four
     /// components, a JPEG pixel one 2 by 2 block of the tile.
     SonyTiles,
