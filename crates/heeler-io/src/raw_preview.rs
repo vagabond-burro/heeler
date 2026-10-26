@@ -2,9 +2,8 @@
 //! third-party decoder involved: TIFF-based RAWs (NEF, ARW, CR2, DNG)
 //! advertise their embedded JPEG in IFD tags; anything else (CR3's
 //! ISO-BMFF container) falls back to a bounded scan for the largest JPEG
-//! stream. This gives preview-quality decode of RAW shoots today; true
-//! sensor-level develop arrives with the LibRaw (CDDL) milestone behind
-//! the same seam.
+//! stream. The sensor-level develop is heeler-raw's; this is the
+//! fallback where a file has no develop.
 
 const TAG_STRIP_OFFSET: u16 = 0x0111;
 const TAG_STRIP_LEN: u16 = 0x0117;

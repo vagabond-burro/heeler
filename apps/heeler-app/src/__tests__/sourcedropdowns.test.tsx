@@ -34,11 +34,10 @@ afterEach(() => cleanup());
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
 
-/** Every label in the four Source menus, written out here rather than
+/** Every label in the three Source menus, written out here rather than
  * read from the component, so a menu that loses a choice fails. */
 const ALL_SOURCE_LABELS = [
   ...(PARAM_OPTIONS["heeler.image_source"].highlights ?? []),
-  ...(PARAM_OPTIONS["heeler.image_source"].demosaic ?? []),
   ...(PARAM_OPTIONS["heeler.image_source"].sharpening ?? []),
 ].map((o) => o.label).concat(["Linear", "Standard", "Film"]);
 const LONGEST = ALL_SOURCE_LABELS.reduce((a, b) => (b.length > a.length ? b : a));
@@ -52,12 +51,14 @@ function openSource() {
 }
 
 describe("Develop's Source section", () => {
-  it("draws its four choices as dropdowns of one width that fits the longest label in all four", () => {
+  it("draws its three choices as dropdowns of one width that fits the longest label in all three", () => {
     render(<App />);
     openSource();
-    const fields = ["source-highlights", "source-demosaic", "source-sharpening", "tone-profile"].map((id) =>
+    const fields = ["source-highlights", "source-sharpening", "tone-profile"].map((id) =>
       screen.getByTestId(id),
     );
+    // The Demosaic row left with LibRaw's other demosaics.
+    expect(screen.queryByTestId("source-demosaic")).toBeNull();
     // No segmented buttons left behind.
     expect(screen.queryByTestId("source-sharpening-standard")).toBeNull();
     expect(screen.queryByTestId("tone-profile-standard")).toBeNull();
@@ -82,9 +83,10 @@ describe("Develop's Source section", () => {
     expect(field).toHaveAttribute("data-value", "blend");
     expect(field.getAttribute("data-hint")).toBe("Fill a blown channel from the two that survived: blown areas stay neutral and keep their detail (the default)");
     fireEvent.click(field);
-    expect(screen.getByTestId("source-highlights-option-rebuild").getAttribute("data-hint")).toBe(
-      "Experimental: reconstruct blown areas further; it can tint a blown sky",
+    expect(screen.getByTestId("source-highlights-option-clip").getAttribute("data-hint")).toBe(
+      "Cut blown channels at sensor white: blown areas stay flat white",
     );
+    expect(screen.queryByTestId("source-highlights-option-rebuild")).toBeNull();
   });
 });
 
@@ -96,7 +98,7 @@ describe("the Source node in the graph inspector", () => {
 
   it("uses the same dropdowns, fitted to the same labels as Develop's", () => {
     render(<NodeParams node={node("heeler.image_source")} dispatch={() => {}} />);
-    for (const id of ["highlights", "demosaic", "sharpening"]) {
+    for (const id of ["highlights", "sharpening"]) {
       const f = screen.getByTestId(`inspector-source-${id}`);
       expect(fitOf(f)).toContain(LONGEST);
       expect(fitOf(f)).toEqual(expect.arrayContaining(ALL_SOURCE_LABELS));
@@ -106,17 +108,17 @@ describe("the Source node in the graph inspector", () => {
   it("is keyboard reachable: the arrows open the list and move, Enter chooses, one command", () => {
     const got: Command[] = [];
     render(<NodeParams node={node("heeler.image_source")} dispatch={(c) => got.push(c)} />);
-    const field = screen.getByTestId("inspector-source-demosaic");
+    const field = screen.getByTestId("inspector-source-sharpening");
     field.focus();
     fireEvent.keyDown(field, { key: "ArrowDown" });
-    const standard = screen.getByTestId("inspector-source-demosaic-option-standard");
+    const standard = screen.getByTestId("inspector-source-sharpening-option-standard");
     expect(document.activeElement).toBe(standard);
     fireEvent.keyDown(standard, { key: "ArrowDown" });
-    const fine = screen.getByTestId("inspector-source-demosaic-option-fine");
-    expect(document.activeElement).toBe(fine);
-    fireEvent.click(fine); // what Enter does on a focused button
-    expect(got).toEqual([{ type: "set_text_param", id: "n1", param: "demosaic", value: "fine" }]);
-    expect(screen.queryByTestId("inspector-source-demosaic-menu")).toBeNull();
+    const high = screen.getByTestId("inspector-source-sharpening-option-high");
+    expect(document.activeElement).toBe(high);
+    fireEvent.click(high); // what Enter does on a focused button
+    expect(got).toEqual([{ type: "set_text_param", id: "n1", param: "sharpening", value: "high" }]);
+    expect(screen.queryByTestId("inspector-source-sharpening-menu")).toBeNull();
     expect(document.activeElement).toBe(field);
   });
 

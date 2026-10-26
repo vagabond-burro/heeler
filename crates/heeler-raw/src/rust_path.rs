@@ -1,12 +1,15 @@
 //! The pure Rust develop (heeler-rawdec) for the files it has been
-//! verified on, LibRaw for everything else. Built with the rust-decoder
+//! verified on, LibRaw for everything else (with the libraw feature; the
+//! develop without it is rust_only.rs). Built with the rust-decoder
 //! feature only; each entry answers None where LibRaw should answer, so
 //! a file the Rust path declines, or finds damaged, goes to LibRaw
 //! exactly as it did before.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::{DevelopOpts, RawError, SensorImage, StageTimes};
+use crate::DevelopOpts;
+#[cfg(feature = "libraw")]
+use crate::{RawError, SensorImage, StageTimes};
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
@@ -54,15 +57,17 @@ pub(crate) fn plan(bytes: &[u8], o: DevelopOpts) -> Option<heeler_rawdec::Plan> 
 }
 
 /// The develop, or None when LibRaw should develop the file. Cancellation
-/// and a memory refusal are answers, not reasons to try LibRaw.
+/// and a memory refusal are answers, not reasons to try LibRaw. (Without
+/// LibRaw, rust_only.rs develops every file.)
+#[cfg(feature = "libraw")]
 pub(crate) fn develop(bytes: &[u8], o: DevelopOpts, stop: Option<&AtomicBool>, times: Option<&mut StageTimes>) -> Option<Result<SensorImage, RawError>> {
-    plan(bytes, o)?;
+    let p = plan(bytes, o)?;
     match heeler_rawdec::develop(bytes, &opts(o), stop) {
         Ok((img, t)) => {
             if let Some(times) = times {
                 *times = StageTimes { open: t.open, unpack: t.unpack, develop: t.develop };
             }
-            Some(Ok(SensorImage { width: img.width, height: img.height, rgb: img.rgb, headroom: img.headroom, sensor_data: true }))
+            Some(Ok(SensorImage { width: img.width, height: img.height, rgb: img.rgb, headroom: img.headroom, sensor_data: !p.three() }))
         }
         Err(heeler_rawdec::Error::Canceled) => Some(Err(RawError::Cancelled)),
         Err(heeler_rawdec::Error::Memory(e)) => Some(Err(RawError::Memory(e))),

@@ -2,9 +2,10 @@
 name = "heeler-raw"
 version.workspace = true
 edition.workspace = true
-# LibRaw is consumed under its CDDL-1.0 dual-license option; the license
-# text ships beside the source it covers, in the vendored tree under
-# third_party/. No GPL-family code. The version lives in build.rs as
+# LibRaw (the libraw feature, never in the shipped app) is consumed under
+# its CDDL-1.0 dual-license option; the license text sits beside the
+# source it covers, in the vendored tree under third_party/. No
+# GPL-family code. The version lives in build.rs as
 # LIBRAW_VERSION and nowhere else: this note used to name 0.21.3 for a
 # month after the build moved to 0.22.2.
 license = "MPL-2.0 AND CDDL-1.0"
@@ -15,16 +16,23 @@ heeler-engine = { path = "../heeler-engine" }
 # has been verified on when the rust-decoder feature is on; its DNG
 # opcode code (gain_map) serves LibRaw's develop either way.
 heeler-rawdec = { path = "../heeler-rawdec" }
-libz-sys = { version = "1.1.29", default-features = false, features = ["static"] }
-mozjpeg-sys = "2.2.3"
+# LibRaw's deflate and lossy DNG decoders (the libraw feature only).
+libz-sys = { version = "1.1.29", default-features = false, features = ["static"], optional = true }
+mozjpeg-sys = { version = "2.2.3", optional = true }
 # The linear DNG decoder's tiles side by side (src/linear_dng.rs); the
 # workspace links it through heeler-engine already.
 rayon = "1"
 thiserror.workspace = true
 
 [features]
-# Off by default: the shipped app develops every raw with LibRaw until the
-# owner turns this on.
+# LibRaw, compiled from the vendored tree: on by default for the tests and
+# harnesses that hold the Rust develop to it. The shipped app builds
+# without it (heeler-io takes this crate with default features off), so
+# every file goes to heeler-rawdec and a file it declines is not opened.
+default = ["libraw"]
+libraw = ["dep:libz-sys", "dep:mozjpeg-sys"]
+# The pure Rust develop: in front of LibRaw for the files verified against
+# it when both are on, alone when LibRaw is off.
 rust-decoder = []
 
 [dev-dependencies]

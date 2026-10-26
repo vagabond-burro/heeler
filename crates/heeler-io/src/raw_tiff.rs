@@ -82,12 +82,12 @@ fn is_raw_tiff(bytes: &[u8]) -> bool {
     screened(bytes) && libraw_knows(bytes)
 }
 
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 fn libraw_knows(bytes: &[u8]) -> bool {
     heeler_raw::picture_dimensions(bytes).is_ok()
 }
 
-#[cfg(not(feature = "libraw"))]
+#[cfg(not(feature = "raw"))]
 fn libraw_knows(_: &[u8]) -> bool {
     false
 }

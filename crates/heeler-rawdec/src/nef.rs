@@ -135,7 +135,14 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     // NRW's layouts under Nikon's compression.
     let nef_compression = note(0x0093).and_then(|(mt, e)| mt.uint(&e));
     let stride = if count % height == 0 { count / height } else { 0 };
+    // Stored whole under Nikon's compression in Epson's blocks (the D100's
+    // uncompressed frames, found against LibRaw's frame): 10 12-bit samples
+    // most significant bits first in the first 15 bytes of each 16, the row
+    // its blocks' samples wide (3040 for an ImageWidth of 3034).
+    let blocks = uint(raw, 259) == Some(34713) && offsets.len() == 1 && bits_tag == 12 && note(0x0096).is_none() && stride % 16 == 0 && (width..width + 10).contains(&(stride / 16 * 10));
+    let width = if blocks { stride / 16 * 10 } else { width };
     let (coding, bits, pieces) = match uint(raw, 259) {
+        Some(34713) if blocks => (Coding::Epson, 12, Pieces { width, height, spans: vec![(offsets[0] as usize, count)] }),
         Some(1) if count >= width * height * 2 => (Coding::Tiff, 16, strips()),
         // A Coolpix NRW's 12-bit samples most significant bits first in
         // 32-bit little-endian words (as some Olympus files hold them).
@@ -173,6 +180,11 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
             (Coding::PackedLow, bits_tag as u32, pieces)
         }
         Some(34713) if offsets.len() == 1 => {
+            // A High Efficiency (or High Efficiency star) frame: its strip a
+            // JPEG XS codestream (SOC then CAP), not read here.
+            if bytes.get(offsets[0] as usize..).is_some_and(|b| b.starts_with(&[0xff, 0x10, 0xff, 0x50])) {
+                return Err(Error::Unsupported("a Nikon High Efficiency NEF"));
+            }
             let (mt, e) = note(0x0096).ok_or(Error::Unsupported("no NEFLinearizationTable"))?;
             let (code, curve) = huffman_code(mt, e, bits_tag)?;
             // The row a lossy frame's second code starts at, after a curve

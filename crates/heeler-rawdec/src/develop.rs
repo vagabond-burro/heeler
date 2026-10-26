@@ -241,9 +241,18 @@ impl Plan {
         if !matches!(opts.highlight, 0 | 2) {
             return Err(Error::Unsupported("a highlight rebuild"));
         }
-        if dng.black.iter().any(|&b| b != 0.0) {
-            return Err(Error::Unsupported("a three-color image with a black level"));
-        }
+        // A linear DNG's black level, one for every sample or one each
+        // (BlackLevel over a 1 by 1 repeat): subtracted from each channel
+        // before the scale, as from a mosaic's sites. Any other black is
+        // declined.
+        let linear = matches!(dng.coding, Coding::Tiff) && dng.photometric == 34892 && dng.samples == 3;
+        let black: Vec<u32> = match dng.black.len() {
+            _ if dng.black.iter().chain(&dng.black_delta_h).chain(&dng.black_delta_v).all(|&b| b == 0.0) => vec![0; 3],
+            1 | 3 if linear && dng.black_dim == (1, 1) && dng.black_delta_h.iter().chain(&dng.black_delta_v).all(|&d| d == 0.0) => {
+                (0..3).map(|k| dng.black[k % dng.black.len()].clamp(0.0, 65535.0) as u32).collect()
+            }
+            _ => return Err(Error::Unsupported("a three-color image with a black level")),
+        };
         let (t, l, b, r) = dng.active;
         // A DNG stating its white as a chromaticity (AsShotWhiteXY) instead
         // (a scanner's): the neutral its color matrix gives that white.
@@ -255,7 +264,8 @@ impl Plan {
         // A lossy DNG's samples come through its curves to 16 bits, whatever
         // its WhiteLevel (LibRaw's maximum is 65535).
         let white = if dng.compression == 34892 { 65535 } else { dng.white.first().copied().unwrap_or(65535.0).clamp(1.0, 65535.0) as u32 };
-        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 1], [1, 2]], xtrans: None, black: vec![0], black_rows: 1, black_cols: 1, white, cam_mul, rgb_cam, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, four: None, dng })
+        // The black, one a channel, in `black` (black_cols 3).
+        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 1], [1, 2]], xtrans: None, black, black_rows: 1, black_cols: 3, white, cam_mul, rgb_cam, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, four: None, dng })
     }
 
     /// A mosaic of four colors (Dng::four_colors): LibRaw's pattern, its
@@ -1567,6 +1577,14 @@ fn develop_three(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>,
     let mut rgb = memory::vector(p.width * p.height * 3, 0u16, "RAW samples")?;
     rgb.par_chunks_mut(p.width * 3).enumerate().for_each(|(r, row)| row.copy_from_slice(&all[((p.top + r) * fw + p.left) * 3..][..p.width * 3]));
     drop(all);
+    // A linear DNG's black, one a channel (Plan::three_colors).
+    if p.black.iter().any(|&b| b != 0) {
+        rgb.par_chunks_mut(3).for_each(|px| {
+            for (v, &b) in px.iter_mut().zip(&p.black) {
+                *v = (*v as u32).saturating_sub(b) as u16;
+            }
+        });
+    }
     let unpacked = t0.elapsed().as_secs_f64();
     stopped(stop)?;
     let data_max = arq_max.unwrap_or_else(|| rgb.par_iter().copied().max().unwrap_or(0));

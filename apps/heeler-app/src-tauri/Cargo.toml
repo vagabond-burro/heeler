@@ -25,12 +25,14 @@ heeler-vision = { path = "../../../crates/heeler-vision" }
 heeler-stitch = { path = "../../../crates/heeler-stitch" }
 heeler-gpu = { path = "../../../crates/heeler-gpu" }
 # No "rawler" here on purpose. It is LGPL-2.1 with no dual option, and
-# static linking it into a shipped binary carries a relinking obligation
-# that LibRaw's CDDL option exists precisely to avoid. It stays an
+# static linking it into a shipped binary carries a relinking obligation.
+# Nor "libraw": RAW files develop in Rust (heeler-rawdec), and LibRaw is
+# built only for the tests and harnesses that compare against it. Rawler
+# stays an
 # optional dependency of heeler-io so `--features rawler` still builds
 # the rawdiff comparison harness on a developer's machine; it just does
 # not travel to users. See the ledger entry for 2026-08-25.
-heeler-io = { path = "../../../crates/heeler-io", features = ["libraw"] }
+heeler-io = { path = "../../../crates/heeler-io", features = ["raw"] }
 heeler-catalog = { path = "../../../crates/heeler-catalog" }
 # The process's allocator (src/main.rs).
 # Microsoft's mimalloc, MIT, built from C by libmimalloc-sys (MIT). The

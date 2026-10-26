@@ -13,7 +13,7 @@ fn diagnose_real_rw2() {
     let bytes = std::fs::read(&path).unwrap();
     println!("file: {} ({} bytes)", path.display(), bytes.len());
 
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     {
         let t = std::time::Instant::now();
         match heeler_raw::decode_sensor(&bytes) {

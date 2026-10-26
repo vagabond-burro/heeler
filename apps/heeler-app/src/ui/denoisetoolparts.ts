@@ -54,7 +54,7 @@ export function denoiseMark(s: State): string {
   const src = s.nodes.find((n) => n.type === "heeler.image_source");
   const p = src?.params ?? {};
   const text = src?.textParams ?? {};
-  return `${s.activeImage}|wb${p.camera_wb ?? 1}m${p.camera_matrix ?? 1}h${text.highlights ?? "blend"}d${text.demosaic ?? "normal"}s${text.sharpening ?? "standard"}|${previewEdgeFor(s)}|${s.prefs.modelStoreDir ?? ""}|models${modelsEpoch()}`;
+  return `${s.activeImage}|wb${p.camera_wb ?? 1}m${p.camera_matrix ?? 1}h${text.highlights ?? "blend"}s${text.sharpening ?? "standard"}|${previewEdgeFor(s)}|${s.prefs.modelStoreDir ?? ""}|models${modelsEpoch()}`;
 }
 
 export function denoiseWanted(s: State): boolean {

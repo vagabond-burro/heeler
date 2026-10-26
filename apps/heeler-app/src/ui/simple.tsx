@@ -5314,8 +5314,8 @@ node graph."*/}
                             <div className="dot" />
                           </div>
                         </div>
-                        {/* The decoder's three choices (LibRaw highlight reconstruction,
-demosaic quality and capture sharpening), as dropdowns one width
+                        {/* The decoder's choices (highlight reconstruction and
+capture sharpening), as dropdowns one width
 (2026-09-29: "It just looks sloppy, make these a dropdown option
 menu"). The graph inspector's Source node draws the same rows.*/}
                         {SOURCE_MENU_ROWS.map(([label, param, dflt, choices, name]) => (

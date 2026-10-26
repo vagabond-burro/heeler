@@ -123,9 +123,10 @@ describe("the guide as shipped", () => {
     expect(adjust.children.map((n) => n.file)).toContain("adjustments/black-and-white.md");
   });
 
-  // LibRaw ships under CDDL-1.0, which obliges Heeler to carry the
-  // notice and say where the source is. The About box tells people the
-  // menu path to it in prose, and prose does not fail to compile.
+  // The components' licenses ask that their notices travel with Heeler,
+  // and the notice says where the LibRaw source of earlier versions stays
+  // published. The About box tells people the menu path to it in prose,
+  // and prose does not fail to compile.
   //
   // It has already broken once: the guide became a tree, only the tree
   // is bundled, and the notice was left behind in the old flat folder,
@@ -151,16 +152,11 @@ describe("the guide as shipped", () => {
       expect(legal, "the legal folder is linked from the guide root").toBeDefined();
       const files = legal!.children.map((n) => n.file);
       expect(files).toContain(OPEN_SOURCE_FILE);
-      // The license text travels with the notice that cites it. The
-      // obligation is to carry it, not to link to a download.
-      expect(files).toContain("legal/cddl.md");
     });
 
-    it("names the license and where the source is published", () => {
-      // The Rust side asserts this against the version actually built
-      // (heeler-raw, the_licence_page_names_the_libraw_that_is_actually_built).
-      // Here it is only that the move did not lose the two facts the
-      // obligation turns on.
+    it("says where the LibRaw source of earlier versions stays published", () => {
+      // This version ships no LibRaw (2026-10-26); the ones before it
+      // did, under CDDL-1.0, and their source stays where they said.
       const text = readFileSync(`${ROOT}/${OPEN_SOURCE_FILE}`, "utf8");
       expect(text).toContain("CDDL");
       expect(text).toContain("https://www.heeler.app/source/libraw/");

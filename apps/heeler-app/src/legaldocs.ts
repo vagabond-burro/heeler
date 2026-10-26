@@ -13,8 +13,9 @@ export const LEGAL_MENU_LABEL = "Legal Documents";
  * stranded once already: the user guide became a tree, only the tree is
  * bundled, and this page was left behind in the old flat folder, so for
  * several commits the About box confidently directed people to a page
- * that no longer shipped. LibRaw's CDDL-1.0 obliges us to carry that
- * notice, so a broken signpost is not cosmetic.
+ * that no longer shipped. The licenses of what Heeler is built on ask
+ * that their notices travel with it, so a broken signpost is not
+ * cosmetic.
  *
  * `userguide.test.ts` walks the path below against the guide as it
  * actually ships, and fails if any segment stops being true. */

@@ -153,17 +153,10 @@ class Notes(unittest.TestCase):
 
 
 class LibrawSource(unittest.TestCase):
-    """The published LibRaw source: CDDL-1.0 asks that the source of the
-    tree a binary is built from be available to whoever has the binary, so
-    the license page has to name the archive this tree builds."""
-
-    def test_the_license_page_names_the_archive_this_tree_builds(self):
-        with tempfile.TemporaryDirectory() as d:
-            archive, digest = libraw_source.build(Path(d))
-        page = (libraw_source.ROOT / "docs" / "user-guide" / "legal" / "open-source.md").read_text(encoding="utf-8")
-        words = " ".join(page.split())
-        self.assertIn(archive.name, words, "the license page does not name the archive this tree builds; publish it and name it")
-        self.assertIn(digest, words, "the license page does not give this archive's SHA-256")
+    """The LibRaw source archive: the app no longer ships LibRaw (it is
+    built only for the tests that hold the Rust develop to it), but the
+    versions through 2026.6 did, under CDDL-1.0, and the archive of their
+    tree stays published. The script that makes it stays sound."""
 
     def test_the_archive_is_read_from_git_in_one_order_on_every_platform(self):
         # Windows sorts paths without regard to case and may check files

@@ -39,20 +39,19 @@ describe("inspector parity with Develop", () => {
     expect(screen.getByTestId("subsection-range")).toBeTruthy();
   });
 
-  it("the source node offers Develop's Highlights and Demosaic seats", () => {
+  it("the source node offers Develop's Highlights and Sharpening seats", () => {
     const got: Command[] = [];
     render(<NodeParams node={node("heeler.image_source")} dispatch={(c) => got.push(c)} />);
     fireEvent.click(screen.getByTestId("inspector-source-highlights"));
-    fireEvent.click(screen.getByTestId("inspector-source-highlights-option-rebuild"));
-    fireEvent.click(screen.getByTestId("inspector-source-demosaic"));
-    fireEvent.click(screen.getByTestId("inspector-source-demosaic-option-fine"));
+    fireEvent.click(screen.getByTestId("inspector-source-highlights-option-clip"));
+    // The Demosaic seat left with LibRaw's other demosaics.
+    expect(screen.queryByTestId("inspector-source-demosaic")).toBeNull();
     // Capture sharpening's seat (2026-09-29), Standard until chosen.
     expect(screen.getByTestId("inspector-source-sharpening")).toHaveAttribute("data-value", "standard");
     fireEvent.click(screen.getByTestId("inspector-source-sharpening"));
     fireEvent.click(screen.getByTestId("inspector-source-sharpening-option-high"));
     expect(got).toEqual([
-      { type: "set_text_param", id: "n1", param: "highlights", value: "rebuild" },
-      { type: "set_text_param", id: "n1", param: "demosaic", value: "fine" },
+      { type: "set_text_param", id: "n1", param: "highlights", value: "clip" },
       { type: "set_text_param", id: "n1", param: "sharpening", value: "high" },
     ]);
   });

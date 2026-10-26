@@ -2699,15 +2699,13 @@ const MOCK_DOCS: Record<string, string> = {
     "- [Heeler name and logo](trademark.md)",
     "- [Privacy Policy](privacy-policy.md)",
     "- [Open source notices](open-source.md)",
-    "- [CDDL 1.0](cddl.md)",
   ].join("\n"),
   "legal/license.md": "Mozilla Public License Version 2.0\n==================================\n",
   "legal/trademark.md": "# Heeler name and logo\n\nThe license grants no rights to the Heeler name or logo.\n",
   "legal/privacy-policy.md": "# Heeler Privacy Policy\n\nWhat stays on your computer.\n",
   // Named by the About box in prose, so the mock guide carries them
   // too: a UI test that walks that path needs somewhere for it to land.
-  "legal/open-source.md": "# Open source notices\n\nLibRaw under CDDL-1.0, and where its source is published.\n",
-  "legal/cddl.md": "# CDDL 1.0\n\nThe license text, carried rather than linked.\n",
+  "legal/open-source.md": "# Open source notices\n\nWhose work Heeler is built on, and under what terms.\n",
 };
 
 export async function listDocs(): Promise<DocEntry[]> {

@@ -964,6 +964,8 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     // NEFs whose balance is a ColorBalance record, header-less notes or a
     // Coolpix record, and the older Coolpix's two fields, 2026-10-25.
     ("NEF", "NIKON CORPORATION", "NIKON D1"),
+    // Its uncompressed frames in Epson's 16-byte blocks (nef.rs), 2026-10-26.
+    ("NEF", "NIKON CORPORATION", "NIKON D100"),
     ("NEF", "NIKON CORPORATION", "NIKON D1H"),
     ("NEF", "NIKON CORPORATION", "NIKON D1X"),
     ("NEF", "NIKON CORPORATION", "NIKON D2H"),

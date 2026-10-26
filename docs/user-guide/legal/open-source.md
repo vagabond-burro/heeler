@@ -7,55 +7,32 @@ materials on this page retain their own licenses.*
 Heeler is built on other people's work. This page says whose, under what
 terms, and where to get the parts you are entitled to.
 
-## LibRaw
+## RAW files
 
-Heeler reads RAW files with **LibRaw 0.22.2**, used under the
-**Common Development and Distribution License, version 1.0 (CDDL-1.0)**.
-LibRaw is offered under either the LGPL or the CDDL; Heeler takes the
-CDDL option, and contains no GPL-family code.
+Heeler develops RAW files with its own decoder, written in Rust for
+Heeler and under Heeler's own license. (GoPro's VC-5 codec, below, is the
+one part ported from another project.)
 
-Copyright © 2008-2024 LibRaw LLC (info@libraw.org).
-
-The CDDL asks that the source for the covered code be available to
-anyone who receives a binary built from it. The exact source Heeler
-compiles is published at:
+Earlier versions of Heeler, through 2026.6, read RAW files with
+**LibRaw**, © 2008-2024 LibRaw LLC, under the **Common Development and
+Distribution License, version 1.0 (CDDL-1.0)**. This version contains no
+LibRaw code. The source those earlier versions were built from stays
+published, with its license, at:
 
 > **https://www.heeler.app/source/libraw/**
 
-That archive is the tree this build was made from, not a pointer at
-whatever upstream happens to be today. It is the upstream 0.22.2 release
-with two fixes by Heeler, both for Fujifilm X-Trans files: how a
-half-size preview fills in color, and the full-size demosaic, which now
-gives the same picture however its work is split between threads.
-`HEELER-CHANGES.md` in the archive lists them, and the changed code is
-marked with a `Heeler:` comment. The archive for this build is
-`libraw-0.22.2-as-shipped-in-heeler-07e9c6682eb6.tar.gz`, SHA-256
-`bae596a7cbe016e8976220e37e139b20c672153759c7d4326ee1a03d4f290253`, published
-beside it so you can check the two match. Archives for other Heeler builds
-stay on the same page.
+## libjpeg
 
-The full license text is in this app, on the [CDDL 1.0](cddl.md) page
-beside this one, and it ships with the source as `LICENSE.CDDL` in the
-root of that archive. Both are the same text: the page is generated from the
-tree Heeler is built from, and a test compares them.
-
-## zlib and libjpeg
-
-Deflate-compressed and lossy DNG files need these two, and both are
-linked in. mozjpeg also encodes the frames the viewer shows while you
-edit.
-
-- **zlib**, © 1995-2024 Jean-loup Gailly and Mark Adler, under the zlib
-  license.
-- **mozjpeg**, a libjpeg-turbo derivative, © the Independent JPEG Group
-  and contributors, under the IJG and BSD-3-Clause licenses.
+The frames the viewer shows while you edit are encoded with
+**mozjpeg**, a libjpeg-turbo derivative, © the Independent JPEG Group and
+contributors, under the IJG and BSD-3-Clause licenses.
 
 The IJG license asks for one sentence in particular, so here it is in
 the words it asks for:
 
 > This software is based in part on the work of the Independent JPEG Group.
 
-Neither library has been altered.
+The library has not been altered.
 
 ## JPEG XL
 
@@ -260,15 +237,11 @@ no warranty of any kind. Their licenses say so, and nothing here changes
 that.
 
 Any warranty, support or liability that Heeler offers you is offered
-**by Heeler alone**. It does not come from LibRaw LLC, the Independent
-JPEG Group, or any other author whose work is named on this page, and
+**by Heeler alone**. It does not come from the Independent JPEG Group,
+or any other author whose work is named on this page, and
 none of them takes on any obligation to you because their code is inside
 Heeler. Heeler indemnifies them against any claim arising from terms
 Heeler has offered.
-
-Nothing in Heeler's own license limits or alters your rights in the
-source code covered by the CDDL. Where the two ever appear to disagree
-about that source, the CDDL wins.
 
 ## Heeler itself
 

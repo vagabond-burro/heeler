@@ -182,7 +182,7 @@ function withPairs(ws: string[]): string[] {
 }
 
 /** Pages that are not guidance: other people's license texts. */
-export const NOT_GUIDANCE = new Set(["legal/third-party-notices.md", "legal/cddl.md"]);
+export const NOT_GUIDANCE = new Set(["legal/third-party-notices.md"]);
 
 /** The guide, cut into sections and counted once per session. */
 export function indexGuide(guide: Chapter[]): GuideIndex {

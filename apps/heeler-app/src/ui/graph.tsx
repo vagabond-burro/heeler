@@ -3804,7 +3804,7 @@ hand.*/}
                         <div className="dot" />
                       </div>
                     </div>
-                    {/* Develop's Highlights, Demosaic and Sharpening
+                    {/* Develop's Highlights and Sharpening
                         seats: declared for this type yet unreachable
                         here, because a custom branch skips the generic
                         picker rows that would have drawn them. The

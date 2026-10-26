@@ -167,8 +167,6 @@ const RUNTIME: { file: string; text: string; why: string }[] = [
   {"file": "apps/heeler-app/src/__tests__/userguide.test.ts", "text": "const ROOT = resolve(process.cwd(), \"../../docs\/user-guide\");", "why": "reads or verifies the shipped guide"},
   {"file": "apps/heeler-app/src/__tests__/userguide.test.ts", "text": "  const whatsNew = readFileSync(resolve(process.cwd(), \"../../docs\/whats-new.md\"), \"utf8\");", "why": "reads, links or verifies the shipped release notes"},
   {"file": "apps/heeler-app/src/bridge.ts", "text": "    \"The real guide ships with the installed app and renders here from its `docs\/user-guide` folder.\",", "why": "preview message identifies the rendered guide folder"},
-  {"file": "crates/heeler-raw/src/lib.rs", "text": "            .join(\"../../docs\/user-guide/legal/open-source.md\");", "why": "reads or verifies the shipped guide"},
-  {"file": "crates/heeler-raw/src/lib.rs", "text": "            std::path::Path::new(env!(\"CARGO_MANIFEST_DIR\")).join(\"../../docs\/user-guide/legal/cddl.md\"),", "why": "reads or verifies the shipped guide"},
   {"file": "scripts/check_user_guide_links.py", "text": "GUIDE = ROOT / 'docs\/user-guide'", "why": "reads or verifies the shipped guide"},
   {"file": "scripts/check_user_guide_links.py", "text": "    for page in [*pages, ROOT / 'docs\/whats-new.md']:", "why": "reads, links or verifies the shipped release notes"},
   {"file": "scripts/libraw_source.py", "text": "    print(\"Publish both files at the URL named in docs\/user-guide/legal/open-source.md,\")", "why": "prints the source publication destination required by the guide"},

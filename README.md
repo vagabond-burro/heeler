@@ -142,9 +142,7 @@ platform prerequisites and signing.
 
 ## Third-party software
 
-Heeler includes LibRaw, used under the CDDL-1.0
-([third_party/LibRaw-0.22.2](third_party/LibRaw-0.22.2)), and the Lensfun
-lens database, under CC-BY-SA 3.0
+Heeler includes the Lensfun lens database, under CC-BY-SA 3.0
 ([third_party/lensfun-db](third_party/lensfun-db)). Every bundled
 component and its license is listed in the bundled user guide's
 Third-Party Notices page. The JPEG XL test payload under

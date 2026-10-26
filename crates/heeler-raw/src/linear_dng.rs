@@ -20,9 +20,13 @@
 //! case is declined (LinearDng::open answers None) and LibRaw develops
 //! it as before.
 
-use std::ffi::{c_int, c_void};
+use std::ffi::c_int;
+#[cfg(feature = "libraw")]
+use std::ffi::c_void;
 
-use crate::{check, configured, DevelopOpts, Handle, RawError};
+#[cfg(feature = "libraw")]
+use crate::{check, configured, Handle};
+use crate::{DevelopOpts, RawError};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -84,6 +88,7 @@ pub struct Facts {
     pub gamm: [f64; 6],
 }
 
+#[cfg(feature = "libraw")]
 extern "C" {
     fn heeler_linear_facts(d: *mut c_void, f: *mut Facts, lintable: *mut u16, outcurve: *mut u16) -> c_int;
     fn heeler_opcode_list3(d: *mut c_void, len: *mut usize) -> *const u8;
@@ -656,9 +661,23 @@ pub fn convert(px: [u16; 3], oc: &[[f32; 4]; 3], fused: bool) -> [u16; 3] {
 /// The last value says which.
 fn read_facts(bytes: &[u8], opts: DevelopOpts) -> Result<Option<(Facts, Box<[u16]>, Box<[u16]>, bool)>, RawError> {
     #[cfg(feature = "rust-decoder")]
-    if crate::rust_path::enabled() {
-        return Ok(rust_facts(bytes, opts).and_then(|(f, lin, out, opcode3)| declined(&f, opcode3).is_none().then_some((f, lin, out, true))));
+    let rust = || Ok(rust_facts(bytes, opts).and_then(|(f, lin, out, opcode3)| declined(&f, opcode3).is_none().then_some((f, lin, out, true))));
+    #[cfg(feature = "libraw")]
+    {
+        #[cfg(feature = "rust-decoder")]
+        if crate::rust_path::enabled() {
+            return rust();
+        }
+        libraw_read_facts(bytes, opts)
     }
+    // Without LibRaw the rust-decoder feature is on (lib.rs).
+    #[cfg(not(feature = "libraw"))]
+    rust()
+}
+
+/// read_facts by LibRaw.
+#[cfg(feature = "libraw")]
+fn libraw_read_facts(bytes: &[u8], opts: DevelopOpts) -> Result<Option<(Facts, Box<[u16]>, Box<[u16]>, bool)>, RawError> {
     let handle: Handle = configured(opts)?;
     if check(unsafe { crate::open_buffer(handle.0, bytes) }).is_err() {
         return Ok(None);
@@ -784,6 +803,7 @@ pub fn rust_facts(bytes: &[u8], opts: DevelopOpts) -> Option<(Facts, Box<[u16]>,
 /// LibRaw's two tables for `bytes` (its linearization curve and its
 /// output curve), for the tests that hold rust_facts to them.
 #[doc(hidden)]
+#[cfg(feature = "libraw")]
 pub fn libraw_tables(bytes: &[u8], opts: DevelopOpts) -> Result<(Box<[u16]>, Box<[u16]>), RawError> {
     let handle: Handle = configured(opts)?;
     check(unsafe { crate::open_buffer(handle.0, bytes) })?;
@@ -799,6 +819,7 @@ pub fn libraw_tables(bytes: &[u8], opts: DevelopOpts) -> Result<(Box<[u16]>, Box
 /// Why LibRaw's facts about `bytes` keep it from this module, None when
 /// they do not: for the tests.
 #[doc(hidden)]
+#[cfg(feature = "libraw")]
 pub fn declined_because(bytes: &[u8], opts: DevelopOpts) -> Result<Option<&'static str>, RawError> {
     let handle: Handle = configured(opts)?;
     check(unsafe { crate::open_buffer(handle.0, bytes) })?;
@@ -816,6 +837,7 @@ pub fn declined_because(bytes: &[u8], opts: DevelopOpts) -> Result<Option<&'stat
 /// levels, white balance and matrix, before unpacking. For the tests
 /// and harnesses that hold heeler-rawdec to LibRaw.
 #[doc(hidden)]
+#[cfg(feature = "libraw")]
 pub fn libraw_facts(bytes: &[u8], opts: DevelopOpts) -> Result<Facts, RawError> {
     let handle: Handle = configured(opts)?;
     check(unsafe { crate::open_buffer(handle.0, bytes) })?;
@@ -829,6 +851,7 @@ pub fn libraw_facts(bytes: &[u8], opts: DevelopOpts) -> Result<Facts, RawError> 
 /// The camera LibRaw names when it opens `bytes` (Make, Model) and the
 /// name of the routine it would unpack them with. For the harnesses.
 #[doc(hidden)]
+#[cfg(feature = "libraw")]
 pub fn libraw_identity(bytes: &[u8]) -> Result<(String, String, String), RawError> {
     let handle: Handle = configured(DevelopOpts::default())?;
     check(unsafe { crate::open_buffer(handle.0, bytes) })?;
@@ -839,6 +862,7 @@ pub fn libraw_identity(bytes: &[u8]) -> Result<(String, String, String), RawErro
 /// LibRaw's X-Trans colors for `bytes` from its image area's top left
 /// (0 red, 1 green, 2 blue), or None for another sensor.
 #[doc(hidden)]
+#[cfg(feature = "libraw")]
 pub fn libraw_xtrans(bytes: &[u8]) -> Result<Option<[[u8; 6]; 6]>, RawError> {
     let handle: Handle = configured(DevelopOpts::default())?;
     check(unsafe { crate::open_buffer(handle.0, bytes) })?;
@@ -854,6 +878,7 @@ pub fn libraw_xtrans(bytes: &[u8]) -> Result<Option<[[u8; 6]; 6]>, RawError> {
 
 /// LibRaw's facts for `bytes` once it has unpacked them (a few formats'
 /// levels settle only then: a CRW's white without low bits).
+#[cfg(feature = "libraw")]
 pub fn libraw_facts_unpacked(bytes: &[u8], opts: DevelopOpts) -> Result<Facts, RawError> {
     let handle: Handle = configured(opts)?;
     check(unsafe { crate::open_buffer(handle.0, bytes) })?;
@@ -926,6 +951,7 @@ pub struct Stages {
 }
 
 #[doc(hidden)]
+#[cfg(feature = "libraw")]
 pub fn libraw_stages(bytes: &[u8], opts: DevelopOpts) -> Result<Stages, RawError> {
     let handle: Handle = configured(opts)?;
     check(unsafe { crate::open_buffer(handle.0, bytes) })?;

@@ -425,9 +425,9 @@ const PROBE_PREFIX: usize = 8 * 1024 * 1024;
 /// 24 megapixel frame admits a stack it cannot hold. The whole file keeps
 /// the fallback chain the probe always had.
 fn estimate_from(bytes: &[u8], file_len: usize, raw_ext: bool, prefix: bool) -> Result<Option<DecodeEstimate>, IoError> {
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     let raw = if raw_ext { heeler_raw::dimensions(bytes).ok() } else { None };
-    #[cfg(not(feature = "libraw"))]
+    #[cfg(not(feature = "raw"))]
     let raw: Option<(usize, usize)> = None;
     if raw.is_none() && raw_ext && prefix {
         return Ok(None);
@@ -435,21 +435,15 @@ fn estimate_from(bytes: &[u8], file_len: usize, raw_ext: bool, prefix: bool) -> 
     let dims = raw.or_else(|| source_dimensions(bytes).map(|(w, h)| (w as usize, h as usize)));
     let Some((w, h)) = dims else { return Ok(None); };
     // Small pictures still need codec tables, metadata and inflate storage.
-    // A GoPro GPR is developed from a rewritten copy carrying its decoded
-    // samples, two bytes a pixel more than the file, which LibRaw's own
-    // admission counts: without them a stack's fixed slice per frame came
-    // up short and a full-size GPR stack was refused (the 26.5.1 review).
-    #[cfg(feature = "libraw")]
-    let rewritten = if raw_ext && heeler_raw::is_gpr(bytes) { memory::bytes(w, h, 1, 2)? } else { 0 };
-    #[cfg(not(feature = "libraw"))]
-    let rewritten = 0;
+    // (A GoPro GPR was once developed from a rewritten copy, two bytes a
+    // pixel more; the Rust develop reads its tile in place.)
     // A RAW's demosaic runs across the cores, a tile buffer a worker,
-    // which LibRaw's own admission counts too.
-    #[cfg(feature = "libraw")]
+    // which the develop's own admission counts too.
+    #[cfg(feature = "raw")]
     let workers = if raw.is_some() { heeler_raw::demosaic_extra_bytes(bytes) } else { 0 };
-    #[cfg(not(feature = "libraw"))]
+    #[cfg(not(feature = "raw"))]
     let workers = 0;
-    Ok(Some(DecodeEstimate { width: w, height: h, encoded: file_len, retained: memory::bytes(w, h, 1, 16)?, workspace: memory::sum([memory::bytes(w, h, 1, 32)?, file_len, 64 << 10, rewritten, workers])? }))
+    Ok(Some(DecodeEstimate { width: w, height: h, encoded: file_len, retained: memory::bytes(w, h, 1, 16)?, workspace: memory::sum([memory::bytes(w, h, 1, 32)?, file_len, 64 << 10, workers])? }))
 }
 
 /// Header-only sizing for admission. Reads a capped prefix rather than
@@ -552,8 +546,12 @@ pub fn is_raw_extension(path: &Path) -> bool {
 
 /// LibRaw output is already linear (gamma 1.0, no auto-brighten), sRGB
 /// primaries: straight normalization, no transfer function.
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 fn sensor_to_imagebuf(s: heeler_raw::SensorImage) -> ImageBuf {
+    // The RGBA image beside the develop's samples, admitted here: the
+    // develop admits only what it holds itself (LibRaw's admission once
+    // covered this too, at 48 bytes a sensor pixel).
+    let _job = memory::or_unwind(memory::bytes(s.width, s.height, 4, 4).and_then(|rgba| memory::sum([rgba, s.rgb.len() * 2])).and_then(|n| Job::admit(n, "RAW develop's RGBA image")));
     let mut out = ImageBuf::new(s.width, s.height);
     // headroom is 1.0 for plain clips; with highlight reconstruction
     // it restores the scale LibRaw withheld, so exposure holds still
@@ -583,7 +581,7 @@ fn sensor_to_imagebuf(s: heeler_raw::SensorImage) -> ImageBuf {
 /// clipped areas, feathered so no seam shows. Half-size develops skip
 /// AHD and differ from Clip by under a ten-thousandth, so they take
 /// Blend directly; so does every mode but Blend.
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 fn develop_full(bytes: &[u8], dev: heeler_raw::DevelopOpts) -> Result<(ImageBuf, bool), heeler_raw::RawError> {
     if dev.highlight != 2 || dev.half_size {
         let sensor = heeler_raw::decode_sensor_with(bytes, dev)?;
@@ -620,7 +618,7 @@ fn develop_full(bytes: &[u8], dev: heeler_raw::DevelopOpts) -> Result<(ImageBuf,
 /// alone, so the result is the same to the bit; a Blend develop that did
 /// not finish beside Clip (refused, failed) runs after it, as one did
 /// before, and so do both when the pair does not fit.
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 fn clip_and_blend(bytes: &[u8], dev: heeler_raw::DevelopOpts) -> Result<(heeler_raw::SensorImage, Option<(Vec<u8>, heeler_raw::SensorImage)>), heeler_raw::RawError> {
     use std::sync::atomic::{AtomicBool, Ordering};
     let clip_opts = heeler_raw::DevelopOpts { highlight: 0, ..dev };
@@ -666,7 +664,7 @@ fn clip_and_blend(bytes: &[u8], dev: heeler_raw::DevelopOpts) -> Result<(heeler_
 /// 255 on and within four pixels of a clipped pixel, falling to 0 over
 /// the next six, 0 everywhere else. None when the frame has too little
 /// at white to matter (a few hot pixels), which keeps the Clip develop.
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 fn clipped_weight(s: &heeler_raw::SensorImage) -> Option<Vec<u8>> {
     const AT_WHITE: u16 = (0.98 * 65535.0) as u16;
     const GROW: usize = 4;
@@ -796,7 +794,7 @@ pub fn decode_any_with(path: &Path, opts: RawSourceOpts) -> Result<ImageBuf, IoE
 /// fails and falls back to a preview): the caller decodes it whole, as
 /// before.
 pub fn decode_rows_with(path: &Path, opts: RawSourceOpts) -> Result<Option<std::sync::Arc<dyn heeler_engine::banded::SourceRows>>, IoError> {
-    #[cfg(not(feature = "libraw"))]
+    #[cfg(not(feature = "raw"))]
     let _ = opts;
     at_boundary(path, || {
         let bytes = read_image(path)?;
@@ -807,9 +805,9 @@ pub fn decode_rows_with(path: &Path, opts: RawSourceOpts) -> Result<Option<std::
             return Ok(None);
         }
         if is_raw_file(path, &bytes) {
-            #[cfg(feature = "libraw")]
+            #[cfg(feature = "raw")]
             return keep_develop(path, &bytes, opts);
-            #[cfg(not(feature = "libraw"))]
+            #[cfg(not(feature = "raw"))]
             return Ok(None);
         }
         if exr_passes::is_exr(&bytes) {
@@ -838,7 +836,7 @@ pub fn decode_rows_with(path: &Path, opts: RawSourceOpts) -> Result<Option<std::
 /// (CaptureSharpenRows), rendered by the file's own instructions
 /// (dng_gain, each pixel at its place in the frame) and unbaked. It
 /// keeps 6 bytes a pixel, 13 under Blend, where the decode keeps 16.
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 struct KeptDevelop {
     w: usize,
     h: usize,
@@ -850,7 +848,7 @@ struct KeptDevelop {
 
 /// A develop's samples: one develop and its scale, or the Clip and Blend
 /// develops, the weight between them a byte a pixel, and Blend's scale.
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 enum KeptSamples16 {
     One { rgb: Vec<u16>, gain: f32 },
     Blend { clip: Vec<u16>, blend: BlendRows, weight: Vec<u8>, gain: f32 },
@@ -860,13 +858,13 @@ enum KeptSamples16 {
     Linear(Box<LinearKept>),
 }
 
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 const LINEAR_RUN: usize = 64;
 
 /// What a linear DNG's kept develop needs: the file, the Clip develop's
 /// numbers, and under Blend the Blend develop's and its scale, when
 /// enough of the frame clipped (clipped_weight's rule).
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 struct LinearKept {
     dng: heeler_raw::linear_dng::LinearDng,
     clip: heeler_raw::linear_dng::Numbers,
@@ -878,7 +876,7 @@ struct LinearKept {
 /// (`window`, three samples a pixel), which must hold every row within
 /// seven of the band that the frame has: the same arithmetic, row for
 /// row, as clipped_weight over the whole frame.
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 fn clipped_weight_rows(window: &[u16], a: usize, w: usize, h: usize, y0: usize, y1: usize) -> Vec<u8> {
     const AT_WHITE: u16 = (0.98 * 65535.0) as u16;
     const GROW: usize = 4;
@@ -934,7 +932,7 @@ fn clipped_weight_rows(window: &[u16], a: usize, w: usize, h: usize, y0: usize, 
 /// weight is zero across it never reads the Blend develop, and clipping
 /// is usually a sky or a lamp, so most rows are left out (a 48 MP ProRAW
 /// kept 604 MiB under Blend, its whole second develop among them).
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 struct BlendRows {
     /// Each frame row's place in `rows`, or u32::MAX for a row left out.
     at: Vec<u32>,
@@ -942,7 +940,7 @@ struct BlendRows {
     w: usize,
 }
 
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 impl BlendRows {
     fn keep(full: Vec<u16>, weight: &[u8], w: usize, h: usize) -> Result<Self, heeler_raw::RawError> {
         let wanted: Vec<bool> = (0..h).map(|y| weight[y * w..(y + 1) * w].iter().any(|&v| v != 0)).collect();
@@ -970,7 +968,7 @@ impl BlendRows {
     }
 }
 
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 impl KeptDevelop {
     /// The develop's rows `y0..y1`, unsharpened: sensor_to_imagebuf's and
     /// develop_full's arithmetic, pixel by pixel.
@@ -1107,7 +1105,7 @@ impl KeptDevelop {
     }
 }
 
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 impl heeler_engine::banded::SourceRows for KeptDevelop {
     fn size(&self) -> (usize, usize) {
         (self.w, self.h)
@@ -1150,15 +1148,20 @@ impl heeler_engine::banded::SourceRows for KeptDevelop {
 /// which LibRaw develops as before. The frame-wide numbers are settled
 /// here: the data maximum, and under Blend whether enough of the Clip
 /// develop clipped (clipped_weight's 64 pixels).
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 fn keep_linear(bytes: &[u8], dev: heeler_raw::DevelopOpts) -> Result<Option<(KeptSamples16, usize, usize, bool)>, heeler_raw::RawError> {
     if !cfg!(all(target_arch = "aarch64", target_vendor = "apple")) || !heeler_raw::linear_dng::enabled() {
         return Ok(None);
     }
     let Some(dng) = heeler_raw::linear_dng::LinearDng::open(bytes.to_vec(), dev)? else { return Ok(None) };
+    // Kept as its file only where that is the smaller: a small frame's
+    // developed samples weigh less than the file and its tables.
+    let (w, h) = dng.size();
+    if dng.bytes() >= memory::bytes(w, h, 3, 2)? {
+        return Ok(None);
+    }
     let _job = heeler_engine::memory::Job::admit(dng.bytes(), "linear DNG kept as its file")?;
     let data_max = dng.data_maximum()?;
-    let (w, h) = dng.size();
     let clip = dng.numbers(data_max, 0);
     let blend = if dev.highlight == 2 && dng.count_at_white(&clip, (0.98 * 65535.0) as u16)? >= 64 {
         let n = dng.numbers(data_max, 2);
@@ -1175,7 +1178,7 @@ fn keep_linear(bytes: &[u8], dev: heeler_raw::DevelopOpts) -> Result<Option<(Kep
 
 /// decode_any_with's LibRaw branch, kept (KeptDevelop): None wherever
 /// that branch hands the file on to another reader.
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 fn keep_develop(path: &Path, bytes: &[u8], opts: RawSourceOpts) -> Result<Option<std::sync::Arc<dyn heeler_engine::banded::SourceRows>>, IoError> {
     let _ = path;
     #[cfg(feature = "rawler")]
@@ -1305,7 +1308,7 @@ impl Pixels {
 }
 
 fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<ImageBuf, IoError> {
-    #[cfg(not(feature = "libraw"))]
+    #[cfg(not(feature = "raw"))]
     let _ = opts;
     let bytes = read_image(path)?;
     let raw_file = is_raw_file(path, &bytes);
@@ -1313,6 +1316,10 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
     // the file (rejected_develop).
     #[allow(unused_mut)]
     let mut rejected: Option<(usize, usize)> = None;
+    // A RAW the develop declines (a format or a variant of one it does
+    // not read) or finds damaged, for the error in place of a stand-in.
+    #[allow(unused_mut)]
+    let mut declined: Option<IoError> = None;
     if matches!(pixels, Pixels::SceneLinear) {
         if let Some(img) = decode_jpeg_reduced(&bytes, 0)? {
             return Ok(unbake(apply_orientation(img, media_orientation(&bytes)), &bytes));
@@ -1342,7 +1349,7 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
     if raw_file && is_jxl_dng(&bytes) {
         return decode_jxl_dng(&bytes).map(|img| pixels.of(img, &bytes));
     }
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     if raw_file {
         let dev = heeler_raw::DevelopOpts {
             half_size: false,
@@ -1354,6 +1361,9 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
         };
         let decoded = develop_full(&bytes, dev);
         if let Err(heeler_raw::RawError::Memory(e)) = &decoded { return Err(e.clone().into()); }
+        if let Err(e) = &decoded {
+            declined = declined_raw(e);
+        }
         // A GPR has no embedded preview or readable strip to fall back on:
         // what follows would only misname the damage (a "JPEG SOF" or
         // "photometric" error for a cut file). Say what went wrong.
@@ -1377,7 +1387,7 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
             }
         }
     }
-    #[cfg(not(feature = "libraw"))]
+    #[cfg(not(feature = "raw"))]
     let _ = raw_file;
     // Phone JPEGs store pixels unrotated and describe the device's
     // attitude in EXIF; without this an inverted-landscape iPhone shot
@@ -1390,6 +1400,7 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
             // in when there is one; otherwise the file is refused in
             // words, since a thumbnail shown as the photograph is a
             // wrong picture and a wrong picture is worse than an error.
+            (true, Some(_)) if declined.is_some() => Err(declined.take().unwrap()),
             (true, Some(full)) => {
                 if pixels == Pixels::SceneLinear {
                     return Err(IoError::Unsupported(format!(
@@ -1414,7 +1425,8 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
             _ => Ok(img),
         },
         Err(original) if memory::is_refusal(&original.to_string()) => Err(original),
-        Err(original) if pixels == Pixels::SceneLinear && raw_file => Err(original),
+        Err(original) if pixels == Pixels::SceneLinear && raw_file => Err(declined.take().unwrap_or(original)),
+        Err(_) if declined.is_some() => Err(declined.take().unwrap()),
         Err(original) => match extract_raw_preview(&bytes) {
             Some(preview) => {
                 decode_bytes_oriented(preview, raw_orientation(&bytes))
@@ -1566,6 +1578,22 @@ fn develop_is_the_picture(img: &ImageBuf, bytes: &[u8]) -> bool {
 /// it could read the file either: that, rather than the last reader's
 /// complaint (the image crate's TIFF reader on a linear DNG, which says
 /// nothing about why the develop was not used).
+/// The error for a RAW file the develop does not open, said as that: the
+/// camera's embedded JPEG is no stand-in for its develop. None for a
+/// failure that is not about the file (a cancel), which keeps the
+/// fallbacks it always had.
+#[cfg(feature = "raw")]
+fn declined_raw(e: &heeler_raw::RawError) -> Option<IoError> {
+    match e {
+        // No container the develop knows: the readers after it, and the
+        // file's own preview, answer as they always have.
+        heeler_raw::RawError::Unsupported(why) if why == "not a TIFF" || why == "not a DNG" => None,
+        heeler_raw::RawError::Unsupported(why) => Some(IoError::Unsupported(format!("this RAW file's format is not supported yet ({why}), so it cannot be developed"))),
+        heeler_raw::RawError::Damaged(why) => Some(IoError::Unsupported(format!("this RAW file is damaged ({why}), so it cannot be developed"))),
+        _ => None,
+    }
+}
+
 fn rejected_develop(size: (usize, usize)) -> IoError {
     IoError::Unsupported(format!(
         "the RAW develop ({} x {}) read as noise rather than a photograph, and the file has no other picture this build can read",
@@ -1611,7 +1639,7 @@ impl Default for RawSourceOpts {
 /// per sensor pixel (1 at full size, 0.5 for the half-size preview
 /// develop), so the radius means the same stretch of the photograph in
 /// both and the preview shows what the export will.
-#[cfg(feature = "libraw")]
+#[cfg(feature = "raw")]
 fn capture_sharpen_develop(img: &mut ImageBuf, opts: RawSourceOpts, scale: f32) {
     if opts.capture_sharpen == 0 {
         return;
@@ -1684,7 +1712,7 @@ fn preview_at(path: &Path, opts: RawSourceOpts, edge: usize, pixels: Pixels) -> 
 }
 
 fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, pixels: Pixels) -> Result<ImageBuf, IoError> {
-    #[cfg(not(feature = "libraw"))]
+    #[cfg(not(feature = "raw"))]
     let _ = opts;
     let bytes = read_image(path)?;
     let raw_file = is_raw_file(path, &bytes);
@@ -1707,7 +1735,7 @@ fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, p
             Err(_) => {}
         }
     }
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     if raw_file {
         let dev = heeler_raw::DevelopOpts {
             half_size: true,
@@ -1719,6 +1747,16 @@ fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, p
         };
         let decoded = heeler_raw::decode_sensor_with(&bytes, dev);
         if let Err(heeler_raw::RawError::Memory(e)) = &decoded { return Err(e.clone().into()); }
+        // A RAW the develop does not open says so, rather than showing the
+        // camera's JPEG as though it were the develop (the library's
+        // thumbnail still shows it). Only a reader that decodes the whole
+        // picture may still answer for it.
+        if let Some(e) = decoded.as_ref().err().and_then(declined_raw) {
+            return match decode_bytes_oriented(&bytes, media_orientation(&bytes)) {
+                Ok(img) if reduced_copy_of(&img, &bytes).is_none() => Ok(unbake(img, &bytes)),
+                _ => Err(e),
+            };
+        }
         // A GPR has no embedded preview or readable strip to fall back on:
         // what follows would only misname the damage (a "JPEG SOF" or
         // "photometric" error for a cut file). Say what went wrong.
@@ -1845,7 +1883,7 @@ fn decode_thumbnail_inner(path: &Path) -> Result<ImageBuf, IoError> {
         // A GPR has no preview (so no scan for one), and the TIFF reader below cannot read its
         // VC-5 tile: develop it at half size (plenty for a thumbnail), and
         // report a damaged one as itself.
-        #[cfg(feature = "libraw")]
+        #[cfg(feature = "raw")]
         if heeler_raw::is_gpr(&bytes) {
             return match heeler_raw::decode_sensor_half(&bytes) {
                 Ok(sensor) => Ok(unbake(as_the_file_renders(sensor_to_imagebuf(sensor), &bytes), &bytes)),
@@ -1855,7 +1893,7 @@ fn decode_thumbnail_inner(path: &Path) -> Result<ImageBuf, IoError> {
         }
         // A raw saved as a .tif carries only a postage stamp of itself
         // (156 by 104 on a Kodak DCS 520C): develop it at half size too.
-        #[cfg(feature = "libraw")]
+        #[cfg(feature = "raw")]
         if is_tiff_extension(path) {
             match heeler_raw::decode_sensor_half(&bytes) {
                 Ok(sensor) => return Ok(unbake(as_the_file_renders(sensor_to_imagebuf(sensor), &bytes), &bytes)),
@@ -1875,7 +1913,7 @@ fn decode_thumbnail_inner(path: &Path) -> Result<ImageBuf, IoError> {
     match decode_bytes_oriented(&bytes, media_orientation(&bytes)) {
         Ok(img) => Ok(unbake(img, &bytes)),
         Err(original) => {
-            #[cfg(feature = "libraw")]
+            #[cfg(feature = "raw")]
             if raw_file {
                 if let Ok(sensor) = heeler_raw::decode_sensor(&bytes) {
                     return Ok(unbake(as_the_file_renders(sensor_to_imagebuf(sensor), &bytes), &bytes));
@@ -2172,18 +2210,18 @@ pub fn source_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 /// before the first full decode, and the viewer and the pixel scale
 /// read it until then.
 pub fn picture_dimensions(path: &Path, bytes: &[u8]) -> Option<(u32, u32)> {
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     if is_raw_file(path, bytes) {
         if let Ok((w, h)) = heeler_raw::picture_dimensions(bytes) {
             return Some((w as u32, h as u32));
         }
     }
-    #[cfg(not(feature = "libraw"))]
+    #[cfg(not(feature = "raw"))]
     let _ = path;
     source_dimensions(bytes)
 }
 
-#[cfg(all(test, feature = "libraw"))]
+#[cfg(all(test, feature = "raw"))]
 mod capture_sharpen_tests;
 
 #[cfg(test)]
@@ -2229,7 +2267,7 @@ mod tests {
     /// interpretation"). A DNG not of Heeler's making that develops into
     /// noise is still refused, now in words that say so.
     #[test]
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     fn a_bake_of_a_noisy_picture_opens_and_a_noisy_develop_says_why() {
         let dir = tempfile::tempdir().unwrap();
         let mut noise = ImageBuf::new(96, 64);
@@ -2258,13 +2296,13 @@ mod tests {
         assert!(why.contains("read as noise"), "{why}");
     }
 
-    /// A GoPro GPR's estimate counts the rewritten copy LibRaw develops
-    /// from, two bytes a pixel past the file: a stack lends each frame
-    /// exactly its estimate, and a full-size GPR stack was refused for the
-    /// difference (the 26.5.1 review).
+    /// A GoPro GPR's estimate is its frame's, as any Bayer RAW's: the
+    /// Rust develop reads the VC-5 tile in place, with no rewritten copy
+    /// beside it (which the 26.5.1 review's stack slice once came up short
+    /// for, under LibRaw).
     #[test]
-    #[cfg(feature = "libraw")]
-    fn a_gpr_estimate_counts_the_rewritten_copy() {
+    #[cfg(feature = "raw")]
+    fn a_gpr_estimate_is_its_frames() {
         let gpr = synthetic_gpr(64, 48, &[0x5a; 512]);
         let mut plain = gpr.clone();
         plain[10 + 12 * 3 + 8] = 1; // the fourth entry, Compression, set to 1: not a GPR
@@ -2272,15 +2310,12 @@ mod tests {
         let g = estimate_from(&gpr, gpr.len(), true, false).unwrap().unwrap();
         assert_eq!((g.width, g.height), (64, 48));
         let base = memory::sum([memory::bytes(64, 48, 1, 32).unwrap(), gpr.len(), 64 << 10]).unwrap();
-        // And a GPR is Bayer: its AHD's workers' tile buffers on top.
-        let workers = heeler_raw::demosaic_extra_bytes(&gpr);
-        assert!(workers > 0);
-        assert_eq!(g.workspace, base + 64 * 48 * 2 + workers);
+        assert_eq!(g.workspace, base + heeler_raw::demosaic_extra_bytes(&gpr));
     }
 
     /// One IFD shaped like a GPR's: w by h, 16 bits, compression 9
     /// (VC-5), one tile, RGGB, with `tile` as its contents.
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     fn synthetic_gpr(w: u32, h: u32, tile: &[u8]) -> Vec<u8> {
         let tags: [(u16, u16, u32); 9] = [
             (256, 4, w), (257, 4, h), (258, 3, 16), (259, 3, 9), (322, 4, w), (323, 4, h),
@@ -2312,7 +2347,7 @@ mod tests {
     /// full decode, "unknown photometric interpretation" from the
     /// thumbnail, for a GPR cut short).
     #[test]
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     fn a_damaged_gpr_reports_itself_on_every_path() {
         let dir = tempfile::tempdir().unwrap();
         // A GPR's header over a tile that is no VC-5 stream.
@@ -2331,7 +2366,7 @@ mod tests {
     }
 
     /// heeler-raw's clipped-sky Canon G11 raw (CC0, from raw.pixls.us).
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     fn clipped_sky() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../heeler-raw/tests/fixtures/IMG_3310.CR2")
     }
@@ -2340,7 +2375,7 @@ mod tests {
     /// as its file and its rows developed by heeler-raw's linear_dng, the
     /// whole decode's to the bit, under Blend and Clip, upright and
     /// turned; and LibRaw's own kept develop of it is the same.
-    #[cfg(all(feature = "libraw", target_arch = "aarch64", target_vendor = "apple"))]
+    #[cfg(all(feature = "raw", target_arch = "aarch64", target_vendor = "apple"))]
     #[test]
     fn a_linear_dng_kept_as_its_file_makes_the_whole_decodes_rows() {
         let pixel = |y: usize, x: usize| -> [u16; 3] {
@@ -2376,7 +2411,7 @@ mod tests {
     /// A band's Blend weight is clipped_weight's rows for that band, at
     /// the frame's edges and away from them, from the Clip rows seven
     /// past the band each way.
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     #[test]
     fn a_bands_blend_weight_is_the_whole_frames() {
         let (w, h) = (37usize, 61usize);
@@ -2398,7 +2433,7 @@ mod tests {
     /// both, and one after the other when it holds one: the same frame to
     /// the bit either way, and the same as the two develops run alone. A
     /// develop asked to stop before it starts stops.
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     #[test]
     fn the_blend_develops_side_by_side_are_the_serial_ones() {
         use std::sync::atomic::AtomicBool;
@@ -2427,7 +2462,7 @@ mod tests {
     /// channel, through LibRaw's scaled demosaic), and in the blown sky it
     /// is Blend's: neutral, with what the other channels saw.
     #[test]
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     fn a_blend_develop_is_the_clip_develop_away_from_clipping() {
         let path = clipped_sky();
         // Unsharpened, so a glint sharpening pulls under white is still
@@ -2481,7 +2516,7 @@ mod tests {
     }
 
     /// heeler-raw's real HERO7 Black GPR (CC0, from raw.pixls.us).
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     fn real_gpr() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../heeler-raw/tests/fixtures/GOPR0055.GPR")
     }
@@ -2489,7 +2524,7 @@ mod tests {
     /// A real GPR opens on every path a photograph takes: the library's
     /// thumbnail, the preview tier, the full develop and the EXIF.
     #[test]
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     fn a_real_gpr_opens_on_every_path() {
         let path = real_gpr();
         let full = decode_any(&path).unwrap();
@@ -2504,11 +2539,10 @@ mod tests {
 
     /// A stack lends each frame a fixed slice, the estimate's retained
     /// frame plus its workspace (stack_render's per_frame, unaligned), and
-    /// a real GPR develops inside it. Without the rewritten copy in the
-    /// estimate, the slice is refused, the 26.5.1 review's full-size GPR
-    /// stack.
+    /// a real GPR develops inside it (the 26.5.1 review's full-size GPR
+    /// stack); in a quarter of it, it is refused.
     #[test]
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     fn a_real_gpr_develops_inside_a_stack_frames_slice() {
         let path = real_gpr();
         let est = probe_memory(&path).unwrap().unwrap();
@@ -2522,12 +2556,12 @@ mod tests {
         };
         let (w, h) = develop(per_frame).unwrap();
         assert_eq!((w.max(h), w.min(h)), (4000, 3000));
-        let short = develop(per_frame - memory::bytes(est.width, est.height, 1, 2).unwrap()).unwrap_err().to_string();
+        let short = develop(per_frame / 4).unwrap_err().to_string();
         assert!(memory::is_refusal(&short), "{short}");
     }
 
     #[test]
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
     fn review_scene_linear_white_is_independent_of_the_brightest_sample() {
         let dir = tempfile::tempdir().unwrap();
         let opts = RawSourceOpts {
@@ -2561,8 +2595,35 @@ mod tests {
         assert_eq!(outputs[0], outputs[1]);
     }
 
+    /// A RAW file the develop does not read says so, in the develop and
+    /// the preview alike, rather than showing whatever else the file
+    /// holds as though it were the develop.
     #[test]
-    #[cfg(feature = "libraw")]
+    #[cfg(feature = "raw")]
+    fn a_raw_the_develop_does_not_read_says_so() {
+        // The shipped build's answer; with LibRaw built in (a workspace
+        // run) LibRaw answers after the Rust develop declines.
+        if heeler_raw::LIBRAW_BUILT {
+            eprintln!("LibRaw is built in; this holds the build without it (cargo test -p heeler-io --features raw)");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("unknown.dng");
+        let mut bytes = encode_dng(&ImageBuf::filled(64, 32, [0.5, 0.5, 0.5, 1.0]), None).unwrap();
+        // Compression (259) set to a code no reader knows.
+        let at = u32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
+        let count = u16::from_le_bytes(bytes[at..at + 2].try_into().unwrap()) as usize;
+        let entry = (0..count).map(|k| at + 2 + k * 12).find(|&i| u16::from_le_bytes(bytes[i..i + 2].try_into().unwrap()) == 259).unwrap();
+        bytes[entry + 8..entry + 10].copy_from_slice(&99u16.to_le_bytes());
+        std::fs::write(&path, &bytes).unwrap();
+        for (what, result) in [("develop", decode_any(&path).map(|_| ())), ("preview", decode_preview_at(&path, RawSourceOpts::default(), 64).map(|_| ()))] {
+            let why = result.expect_err(what).to_string();
+            assert!(why.contains("format is not supported yet"), "{what}: {why}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "raw")]
     fn review_linear_dng_levels_define_black_and_white_before_stacking() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("levels.dng");

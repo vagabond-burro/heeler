@@ -1,10 +1,17 @@
 # Publishing LibRaw's source
 
-Heeler reads RAW files with LibRaw, used under **CDDL-1.0**. That license
-asks for one thing Heeler cannot satisfy from inside the binary: the
-source of the covered code has to be **available to anyone who receives
-that binary**. It is a hosting commitment, not a code change, and it is
-the only third-party obligation here that can block a release.
+Heeler through 2026.6 read RAW files with LibRaw, used under
+**CDDL-1.0**. From the release after it, the app develops RAW files in
+Rust and ships no LibRaw: `crates/heeler-raw` builds LibRaw only with its
+`libraw` feature, for the tests and harnesses that hold the Rust develop
+to it, and the app takes that crate with the feature off. A release of
+the app no longer adds an archive here.
+
+The archives of the versions that did ship LibRaw stay published: the
+CDDL asks that the source of the covered code be **available to anyone
+who received those binaries**, and that does not end when a later
+version drops it. The rest of this page is how they were published,
+kept for those archives and for the case of LibRaw ever shipping again.
 
 ## Where it is published
 

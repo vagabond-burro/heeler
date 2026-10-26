@@ -8,7 +8,9 @@ edition.workspace = true
 heeler-engine = { path = "../heeler-engine" }
 # The graph a streamed export renders (band_sink::render_into_sink).
 heeler-graph = { path = "../heeler-graph" }
-heeler-raw = { path = "../heeler-raw", optional = true }
+# RAW files, developed in Rust (heeler-raw's rust-decoder, heeler-rawdec);
+# LibRaw is not built unless the libraw feature asks for it.
+heeler-raw = { path = "../heeler-raw", optional = true, default-features = false, features = ["rust-decoder"] }
 image = "0.25"
 # Multi-page TIFF reading (src/tiff_pages.rs): the image crate decodes
 # the first directory only, and the File node's layer param needs the
@@ -72,7 +74,11 @@ windows = { version = "0.58", features = [
 ] }
 
 [features]
-libraw = ["dep:heeler-raw"]
+# RAW files: the shipped app's.
+raw = ["dep:heeler-raw"]
+# RAW files with LibRaw built beside the Rust develop: for the examples
+# that compare the two, never for the app.
+libraw = ["raw", "heeler-raw/libraw"]
 rawler = ["dep:rawler"]
 
 [[example]]

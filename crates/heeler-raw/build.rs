@@ -105,6 +105,12 @@ const SOURCES: &[&str] = &[
 ];
 
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+    // Without the libraw feature (the shipped app) nothing is compiled
+    // here: every file goes to the Rust develop, heeler-rawdec.
+    if std::env::var_os("CARGO_FEATURE_LIBRAW").is_none() {
+        return;
+    }
     // No canonicalize(): on Windows it yields \\?\ paths that cl.exe rejects.
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../third_party")
@@ -228,6 +234,5 @@ fn main() {
     // A license fact as much as a build fact: the user-facing notice has
     // to name the tree we actually compiled, and a test holds it to this.
     println!("cargo:rustc-env=HEELER_RAW_LIBRAW_VERSION={LIBRAW_VERSION}");
-    println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/shim.cpp");
 }

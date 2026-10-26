@@ -5,6 +5,9 @@
 //! names a depth map's file by its input's key), so they must not change
 //! by accident. Also the admission estimate's read of a planted plane.
 //! Every slot kind, with a raster and without, and the measured mark.
+//! (Moved on purpose 2026-10-26: the Image Source lost its demosaic
+//! param when LibRaw left the app, so depth maps keyed before are made
+//! again once.)
 
 use heeler_engine::{executor::PLANTED_AS, Executor, ImageBuf, SourceImage};
 use heeler_graph::{Graph, ParamValue, Registry, Section};
@@ -69,16 +72,16 @@ fn keys(g: &Graph, s: &HashMap<String, SourceImage>) -> [u64; 3] {
 fn planted_slot_keys_are_pinned() {
     let g = graph();
     let cases: [(&str, HashMap<String, SourceImage>, [u64; 3]); 4] = [
-        ("nothing planted", sources(false, None, false), [15360892943466837378, 10275381172048920720, 15299367817446202319]),
-        ("everything planted", sources(true, Some(false), true), [1305413759917455692, 4226895556898822380, 2616015882822297083]),
-        ("the plane measured", sources(true, Some(true), true), [1305413759917455692, 4226896656410450591, 2616014783310668872]),
+        ("nothing planted", sources(false, None, false), [3239166817372827157, 10275381172048920720, 12210461887890946408]),
+        ("everything planted", sources(true, Some(false), true), [2286676106060509863, 4226895556898822380, 14831783506981278952]),
+        ("the plane measured", sources(true, Some(true), true), [2286676106060509863, 4226896656410450591, 14831784606492907163]),
         ("planted at version 0", {
             let mut s = sources(true, Some(false), true);
             for slot in ["sm", "dm@depth", "kl@normal"] {
                 s.get_mut(slot).unwrap().version = 0;
             }
             s
-        }, [15441957871128761733, 12051243099088134873, 9084895613584890985]),
+        }, [2983452900922325114, 12051243099088134873, 5436855564768700934]),
     ];
     for (name, s, want) in cases {
         assert_eq!(keys(&g, &s), want, "{name}");
@@ -94,7 +97,7 @@ fn a_planted_as_slot_is_keyed_by_the_slot_it_names() {
     let without = Executor::key_of(&g, "sm", &s).unwrap();
     s.insert("other".into(), plant(0.9, 5, false));
     let with = Executor::key_of(&g, "sm", &s).unwrap();
-    assert_eq!([without, with], [2964306275269874477, 5709225847342647771]);
+    assert_eq!([without, with], [17681927189575676562, 484858011323572312]);
 }
 
 /// Admission reads a planted plane's size into the mask it becomes.

@@ -27,9 +27,8 @@ The chapters come from the bundled guide in its own order (the order the
 Help viewer's sidebar draws, docstree.ts: each README's links, folders
 followed downward, pages no README links appended sorted), with the
 screenshot placeholder notes and image references taken out (the images
-are not included) and two long legal texts left out that answer no
-question about using Heeler: the generated third-party notices and the
-CDDL. The version is the workspace Cargo.toml's. The output is
+are not included) and the generated third-party notices left out, a
+long legal text that answers no question about using Heeler. The version is the workspace Cargo.toml's. The output is
 deterministic: the same guide gives byte-identical files, ZIP included
 (sorted entries, fixed timestamps and permissions).
 
@@ -60,7 +59,7 @@ INSTRUCTIONS_FILE = "heeler-help-instructions.txt"
 RELEASE_FILES = (KIT_ZIP, GUIDE_FILE, INSTRUCTIONS_FILE)
 
 # Long legal texts that answer no question about using Heeler.
-EXCLUDED = {"legal/third-party-notices.md", "legal/cddl.md"}
+EXCLUDED = {"legal/third-party-notices.md"}
 
 # 1980-01-01, the earliest time a ZIP can carry: the same guide gives
 # the same bytes whenever and wherever it is built.

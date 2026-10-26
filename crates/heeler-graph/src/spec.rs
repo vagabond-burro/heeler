@@ -271,17 +271,14 @@ impl Registry {
             label: "Image Source".into(),
             // camera_wb / camera_matrix ride as UI flags the decode
             // reads; highlights is the RAW milestone's reconstruction
-            // choice, resolved by the decoder (LibRaw clip/blend/
-            // rebuild). Blend is the default (2026-10-10): it keeps a blown
-            // sky neutral and brings back what one channel saw, where clip
-            // leaves flat white; rebuild is marked experimental, since
-            // LibRaw's rebuild tints a blown sky cyan.
+            // choice, resolved by the decoder (clip or blend). Blend is
+            // the default (2026-10-10): it keeps a blown sky neutral and
+            // brings back what one channel saw, where clip leaves flat
+            // white. LibRaw's rebuild, and its fast (linear) and fine
+            // (DHT) demosaics, left with LibRaw (2026-10-26): a document
+            // that names one develops with clip and the standard demosaic.
             params: vec![
-                choice("highlights", "blend", &["clip", "blend", "rebuild"]),
-                // Demosaic quality, resolved by the decoder: fast is
-                // linear interpolation, fine is DHT, standard leaves
-                // LibRaw's default AHD-class choice.
-                choice("demosaic", "standard", &["fast", "standard", "fine"]),
+                choice("highlights", "blend", &["clip", "blend"]),
                 // Capture sharpening, resolved by the decoder on sensor
                 // data (never on a linear DNG): off, low, standard and
                 // high are 0, 30, 60 and 100 of the develop's gain.

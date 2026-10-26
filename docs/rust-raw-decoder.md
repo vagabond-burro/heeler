@@ -1972,9 +1972,18 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   fields, the even rows then the odd.
 - The D1X's pixels are twice as wide as tall: LibRaw develops each of its
   1324 rows twice, at both sizes, and so does the develop. Its compressed
-  NEFs state no linearization table and stay LibRaw's.
-- Verified: the D1, D1H, D1X, D2H, D70, D70s, E5400, E8400 and E8800
-  (18 files). The D50, D2Hs and D2X files that state only enciphered
+  NEFs state no linearization table and are not read: decoded with the
+  12-bit lossy code and no seeds, their samples map one to one onto
+  LibRaw's, but through a seed and a curve the file states nowhere found
+  (record 0x008C, a lead recalled rather than found in the data, is a
+  contrast curve of 3290 bytes, not a decode record).
+- The D100's uncompressed NEFs say Nikon's compression (34713) and carry
+  no linearization table: their rows are Epson's blocks (10 12-bit samples
+  most significant bits first in the first 15 bytes of each 16), 3040
+  samples a row for an ImageWidth of 3034, found against LibRaw's frame.
+  Both files match LibRaw.
+- Verified: the D1, D100, D1H, D1X, D2H, D70, D70s, E5400, E8400 and
+  E8800 (20 files). The D50, D2Hs and D2X files that state only enciphered
   balance records (4) are verified with LibRaw's balance and develop in
   daylight. The E5700's mosaic is of four colors (see
   Four-color mosaics).
@@ -2004,8 +2013,9 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   written from recall, so the owner chose to ship AHD for these bodies:
   they are verified against LibRaw asked for AHD (the corpus test and
   rustdiff ask for it on a SuperCCD frame), exact at full size under
-  Clip and Blend on the 25 such files of both corpora. Half size is
-  declined. For the S2Pro, S5000 and S7000 LibRaw's balance is not record
+  Clip and Blend on the 25 such files of both corpora. The develop has
+  no half size of its own; without LibRaw (Phase 16) a half size is the
+  full size halved. For the S2Pro, S5000 and S7000 LibRaw's balance is not record
   0x2FF0's, and where it comes from is not found.
 
 ### Fujifilm's lossy compression
@@ -2677,3 +2687,114 @@ Cross-check with the lab measurements: the table's pairs are the
 calibrations the "DNG model" column above scored for the 49 cameras with
 measured spectral sensitivities (2.17 under D65 and 2.73 under illuminant
 A, median, against 2.19 and 3.69 for LibRaw's single matrix).
+
+## Phase 16: LibRaw out of the shipped app
+
+The owner's decision (2026-10-26): the app ships without LibRaw, and a
+camera with no corpus file opens through its format's rules, verified or
+not. LibRaw stays as the reference the tests and harnesses hold the Rust
+develop to.
+
+### The build
+
+- `heeler-raw`'s `libraw` feature (on by default) builds LibRaw, its shim
+  and the C libraries only it used (zlib, and mozjpeg for its lossy DNG
+  decoder); `rust-decoder` is the Rust develop. With both, the Rust path
+  takes the verified cameras and LibRaw the rest, as before (libraw.rs,
+  rust_path.rs). With `rust-decoder` alone (rust_only.rs) every file goes
+  to heeler-rawdec with every camera taken (`set_verified_only(false)`),
+  and a file it declines is `RawError::Unsupported`, one it finds damaged
+  `RawError::Damaged`.
+- `heeler-io` takes `heeler-raw` with default features off: its `raw`
+  feature is the app's, `libraw` adds LibRaw for its comparison examples.
+  The desktop crate asks for `raw`, so building it alone compiles no C++
+  for RAW files. The test runner adds `cargo test -p heeler-raw
+  --no-default-features --features rust-decoder --lib` and `cargo test -p
+  heeler-io --features raw`, the shipped configuration, since the
+  workspace run builds LibRaw for every member.
+- `heeler_raw::LIBRAW_BUILT` says which build a caller is in (a test of
+  the shipped behavior skips itself when LibRaw answers after the Rust
+  develop).
+
+### What only LibRaw offered
+
+- Highlights: Clip and Blend remain. Rebuild (LibRaw's 3 to 9) left the
+  menu; a document saved with it develops with Clip.
+- Demosaic: the Rust develop has one (AHD, X-Trans's own for X-Trans);
+  the Demosaic row left the Source section and the graph inspector, and
+  a saved fast (linear) or fine (DHT) develops with it. The Image
+  Source's demosaic param left its spec, which moves the cache keys of
+  every node downstream of it once (planted_slot_keys.rs repinned).
+- Half size where the Rust develop has none (a SuperCCD frame): the full
+  size scaled down by two, each pixel the mean of a 2 by 2 block.
+- A linear DNG with a black level (one for every sample, or one each)
+  now develops in Rust: subtracted from each channel before the scale,
+  the maximum the white less the least black, as a mosaic's.
+
+### Memory
+
+- The Rust develop admits only what it holds; LibRaw's admission, at 48
+  bytes a sensor pixel, used to cover the RGBA image made after it, and a
+  GPR's preview was refused for the difference. The conversion to RGBA
+  now admits its own (sensor_to_imagebuf).
+- A GPR's estimate no longer counts the rewritten copy LibRaw read:
+  the Rust develop reads the VC-5 tile in place.
+- A linear DNG is kept as its file (linear_dng.rs's rows on demand) only
+  where that is smaller than its developed samples.
+
+### Files the develop does not open
+
+A RAW file the develop declines or finds damaged now says so (`this RAW
+file's format is not supported yet (...)`, or `this RAW file is
+damaged`), in the develop and the preview tier alike, rather than
+showing the camera's embedded JPEG as though it were the develop; a
+reader that decodes the whole picture may still answer, and the
+library's thumbnail still shows the embedded preview. A file that is no
+TIFF or DNG container the develop knows keeps the fallbacks it had. A
+High Efficiency NEF (its strip a JPEG XS codestream, `FF10 FF50`) is
+named as one. A GoPro GPR's failures still say "GoPro GPR".
+
+The survey of both corpora with every camera taken (5108 files LibRaw
+opens): 4987 open in Rust. Of the rest:
+
+| Files | What | Extension the app opens |
+|---:|---|---|
+| 57 | Nikon High Efficiency NEFs (Z 8, Z 9, Z f, Z6III, Z50II, Z5II, ZR) | yes; LibRaw does not decode them either |
+| 31 | Canon CRM movies | no |
+| 9 | JPEG XL DNGs | yes, through heeler-io's own JPEG XL reader, before the develop |
+| 5 | partial downloads (`.part`) | no |
+| 3 | QuickTake 100 and 150 | no |
+| 2 | HIF files of two phone sensors | no (the HEIF reader takes the extension) |
+| 15 | D1X compressed (2), YI DNG 1.0 (2), F700 (2), GX680 back (2), DSC-F828 (2), DC50 (2), Kodak 12MP action camera (2), RD175 (1) | yes: these stop opening |
+
+### Legal
+
+- The open source notices say Heeler develops RAW files with its own
+  decoder, and that the LibRaw source of the versions through 2026.6
+  stays published; zlib left the page with LibRaw, mozjpeg (the viewer's
+  frames) and the IJG sentence stay. The CDDL page left the guide, and
+  the About box points at the notices alone.
+- `scripts/test_release.py` no longer holds the notice to the archive of
+  this tree (a release no longer adds one); the archive script and its
+  other checks stay for the archives already published.
+- The generated third-party notices still list zlib's crate: the
+  generator reads `cargo metadata`, which merges features across the
+  workspace. Listing a license the binary does not need is harmless.
+
+### For the release notes
+
+- RAW files are developed by Heeler's own decoder. Colors shift from
+  2026.6's, most under tungsten light and for the cameras whose develop
+  took the maker's matrix (Olympus and OM System, Pentax, Samsung, Phase
+  One, Leaf, Kodak, some Panasonic and Sony). Fujifilm X-Trans full-size
+  develops come from Heeler's own demosaic, a slightly different look.
+- Highlights offers Clip and Blend; a photograph edited with Rebuild
+  develops with Clip. The Demosaic choice is gone; Fast and Fine develop
+  with the standard demosaic.
+- A RAW file Heeler cannot develop says so instead of showing the
+  camera's preview. Nikon High Efficiency NEFs are not supported yet, and
+  a few old formats no longer open: the D1X's compressed NEFs, YI's DNG
+  1.0 files, the FinePix F700 and the GX680 back's RAFs, the DSC-F828's
+  SRFs, the DC50's KDCs, a Kodak action camera's RAWs and the RD175's
+  MDCs.
+

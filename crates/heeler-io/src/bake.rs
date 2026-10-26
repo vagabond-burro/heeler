@@ -852,7 +852,7 @@ pub fn baked_exposure(bytes: &[u8]) -> Option<f32> {
 /// sensor data a real develop has to demosaic: the repository carries
 /// no camera RAW. Uncompressed CFA, black 0, white 65535, the sRGB
 /// primaries as the camera's, neutral as-shot.
-#[cfg(all(test, feature = "libraw"))]
+#[cfg(all(test, feature = "raw"))]
 pub(crate) fn encode_cfa_dng(mosaic: &[u16], width: usize, height: usize) -> Vec<u8> {
     assert_eq!(mosaic.len(), width * height);
     let mut pixels = Vec::with_capacity(mosaic.len() * 2);

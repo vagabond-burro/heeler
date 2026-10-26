@@ -682,7 +682,7 @@ export const PARAM_TEXT_DEFAULT: Record<string, Record<string, string>> = {
   "heeler.paper": { toner: "" },
   // The Tone Profile's film stock: empty is its own rendering.
   "heeler.tone_profile": { film: "" },
-  "heeler.image_source": { highlights: "blend", demosaic: "standard", sharpening: "standard" },
+  "heeler.image_source": { highlights: "blend", sharpening: "standard" },
   "heeler.lens_correct": { dist_model: "none" },
   "heeler.grid_warp": { cols_u: "", rows_v: "", mesh: "[]", edges: "clamp" },
   "heeler.shape_warp": { shapes: "[]", edges: "clamp" },
@@ -832,12 +832,6 @@ export const PARAM_OPTIONS: Record<string, Record<string, { id: string; label: s
     highlights: [
       { id: "clip", label: "Clip" },
       { id: "blend", label: "Blend" },
-      { id: "rebuild", label: "Rebuild" },
-    ],
-    demosaic: [
-      { id: "fast", label: "Fast" },
-      { id: "standard", label: "Standard" },
-      { id: "fine", label: "Fine" },
     ],
     sharpening: [
       { id: "off", label: "Off" },

@@ -3,7 +3,7 @@
 //! that is their first TIFF image. Opt-in, against a raw.pixls.us copy:
 //!   HEELER_PIXLS=/Volumes/STORAGE/RAW/pixls cargo test --release -p heeler-io --features libraw --test raw_tiffs -- --ignored --nocapture
 
-#![cfg(feature = "libraw")]
+#![cfg(feature = "raw")]
 
 use std::path::PathBuf;
 

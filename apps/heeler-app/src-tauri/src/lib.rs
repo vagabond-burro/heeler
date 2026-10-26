@@ -9208,19 +9208,17 @@ pub(crate) fn source_opts_of(ui: &UiGraph) -> heeler_io::RawSourceOpts {
                 camera_wb: flag("camera_wb"),
                 camera_matrix: flag("camera_matrix"),
                 // The Source panel's Highlights choice, engine words:
-                // clip 0, blend 2, rebuild 5 (mid-strength of LibRaw's
-                // 3..9 rebuild range). Absent is blend, the default
-                // (heeler_io::RawSourceOpts).
+                // clip 0, blend 2. Absent is blend, the default
+                // (heeler_io::RawSourceOpts). A document saved with
+                // LibRaw's rebuild, which left with LibRaw, develops with
+                // clip.
                 highlight: match n.params.get("highlights").and_then(|v| v.as_str()) {
-                    Some("clip") => 0,
-                    Some("rebuild") => 5,
+                    Some("clip") | Some("rebuild") => 0,
                     _ => 2,
                 },
-                demosaic: match n.params.get("demosaic").and_then(|v| v.as_str()) {
-                    Some("fast") => 0,
-                    Some("fine") => 11,
-                    _ => -1,
-                },
+                // Only the standard demosaic remains (a saved "fast" or
+                // "fine" develops with it).
+                demosaic: -1,
                 // The Source section's Sharpening, the develop's capture
                 // sharpening. Absent is Standard, so a photograph saved
                 // before the control existed develops sharpened like a
@@ -35845,10 +35843,17 @@ mod tests {
         let mut ui = ui_graph();
         // Highlights absent is blend, LibRaw's 2 (the default since 2026-10-10).
         assert_eq!(source_opts_of(&ui), heeler_io::RawSourceOpts { camera_wb: true, camera_matrix: true, highlight: 2, demosaic: -1, ..Default::default() });
-        for (choice, mode) in [("clip", 0), ("blend", 2), ("rebuild", 5)] {
+        // A document saved with LibRaw's rebuild develops with clip.
+        for (choice, mode) in [("clip", 0), ("blend", 2), ("rebuild", 0)] {
             let mut chosen = ui.clone();
             chosen.nodes[0].params.insert("highlights".into(), serde_json::json!(choice));
             assert_eq!(source_opts_of(&chosen).highlight, mode, "{choice}");
+        }
+        // And one saved with the fast or fine demosaic, with the standard.
+        for choice in ["fast", "standard", "fine"] {
+            let mut chosen = ui.clone();
+            chosen.nodes[0].params.insert("demosaic".into(), serde_json::json!(choice));
+            assert_eq!(source_opts_of(&chosen).demosaic, -1, "{choice}");
         }
         ui.nodes[0]
             .params

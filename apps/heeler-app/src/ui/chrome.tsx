@@ -1869,10 +1869,10 @@ export function MenuBar({ state, dispatch }: { state: State; dispatch: D }) {
             void buildInfo().then((b) => {
               logMsg("info", `Heeler ${b} · node-based RAW developer · www.heeler.app · © 2026 Vagabond Burro LLC`);
               // Attribution has to be reachable from About, not only
-              // from a page somebody would have to already know about.
-              // LibRaw is used under CDDL-1.0, which obliges us to say
-              // that its source is available and where; the notice
-              // carries that, and this is the signpost to it.
+              // from a page somebody would have to already know about:
+              // the notice carries every component's terms (and where
+              // the LibRaw source of earlier versions stays published),
+              // and this is the signpost to it.
               //
               // The path here has to match where the notice actually
               // lives, and once it did not: the guide became a tree and
@@ -1882,7 +1882,7 @@ export function MenuBar({ state, dispatch }: { state: State; dispatch: D }) {
               // the two together now.
               logMsg(
                 "info",
-                `Built on LibRaw (CDDL-1.0), zlib and mozjpeg. Source, notices and warranty terms: ${OPEN_SOURCE_MENU_PATH}, or www.heeler.app/source/libraw/`,
+                `Open source notices and warranty terms: ${OPEN_SOURCE_MENU_PATH}`,
               );
             });
             void import("../popout").then(({ openConsoleWindow }) => openConsoleWindow());
