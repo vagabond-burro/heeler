@@ -1848,6 +1848,46 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   or LibRaw's own area for the frame where smaller. All 40 such files of
   the corpora (seven bodies) match LibRaw's develop.
 
+### The oldest ARW coding (DSLR-A100, A200 to A390)
+
+- Found from the files' bytes against LibRaw's unpacked frame (its loader
+  sony_arw_load_raw), by flipping single bits of scratch copies and
+  watching which samples move and by how much; no description was read.
+  The general shape (a column-ordered difference code) was faintly
+  familiar before the experiments; every rule below was found and checked
+  against LibRaw's frame, none taken from memory.
+- `arw1.rs`: one stream, bits most significant first. Samples come column
+  by column from the right edge; within a column the even rows from the
+  top, then the odd rows. Each sample is the previous one in that order
+  (0 before the first, carried across columns) plus a difference, wrapping
+  at 16 bits. A difference is a prefix naming its length k, then k bits
+  (values below half the range stand for the value less 2^k - 1): 011 for
+  k = 0, 11 for 1, 10 for 2, 010 for 3, and for 4 or more k - 2 zeros and
+  a one (the files use at most 12).
+- `sony.rs`: the A200 to A390 mark the coding 32767 with 3 in the raw
+  directory's 0x7000 (16 files; no other ARW of the corpora has 3 there).
+  LibRaw's frame is 8 rows taller than ImageLength (2608 for 2600, 3072
+  for 3064), the stream coding those rows. Black and balance are the SR2
+  block's 0x7310 and 0x7313 as for the later older bodies (the A200's
+  black 4, the rest 0), the white level the camera's (4095, geometry.rs).
+- The DSLR-A100 has no raw directory: IFD0's SubIFD entry holds the
+  stream's start, which runs to the end of the file; the frame is
+  LibRaw's 3881 by 2608 (geometry.rs; the file states only smaller
+  sizes). DNGPrivateData points at a block list laid out as an MRW
+  header ("\0MRI", lengths little-endian); its WBG block holds the balance
+  (red, green, green, blue, 16-bit little-endian after 4 bytes). Black 0
+  and white 4075 as LibRaw takes them.
+- LibRaw writes only the rows of its image area: rows below it (the
+  A100's last row, the A350's last 4) keep whatever its buffer held,
+  zeros in a fresh process and another file's samples when the process
+  has unpacked one before. The decoder leaves them 0; the develop never
+  reads them.
+- Verified: the 18 files (9 distinct, each camera's two corpus files
+  identical), frame equal sample for sample, and exact at full and half
+  size, highlights clipped and blended, with LibRaw's numbers and with
+  the develop's own. The decode is serial (one stream), 50 to 75 ms a
+  frame.
+
 ### GoPro GPR
 
 - `vc5.rs` ports GoPro's VC-5 decoder (its MIT option): the bitstream's

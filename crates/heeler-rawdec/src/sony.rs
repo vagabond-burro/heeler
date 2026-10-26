@@ -18,6 +18,17 @@
 //! curve's four knots (each a quarter of the tag's value), the last
 //! segment running on past the white level.
 //!
+//! The oldest bodies' coding (arw1.rs): the DSLR-A200, A230, A290, A300,
+//! A330, A350, A380 and A390 mark it 32767 with 3 in the raw directory's
+//! 0x7000 (no other ARW seen does), and LibRaw's frame is 8 rows taller
+//! than its ImageLength (2608 for 2600, 3072 for 3064), the stream coding
+//! those rows too. The DSLR-A100 has no raw directory: its IFD0's SubIFD
+//! entry holds where the stream starts, which runs to the file's end, and
+//! the frame's size is LibRaw's for the camera (geometry.rs, 3881 by
+//! 2608, larger than any size the file states); its white balance is the
+//! WBG block of the Minolta-style block list DNGPrivateData points at
+//! (see `a100`), its black level 0 as LibRaw takes it.
+//!
 //! The white balance, black level and white level are the raw
 //! directory's own tags (0x7313, 0x7310, and the DNG WhiteLevel tag,
 //! 0xC61D), or for the older bodies the enciphered SR2 block's (the
@@ -208,7 +219,11 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         .iter()
         .find(|i| uint(i, 262) == Some(32803) && uint(i, 254).unwrap_or(0) == 0)
         .or_else(|| ifds[1..].iter().find(|i| uint(i, 262) == Some(6) && uint(i, 259) == Some(7) && uint(i, 254).unwrap_or(0) == 0))
-        .ok_or(Error::Unsupported("no CFA raw frame"))?;
+        .ok_or(Error::Unsupported("no CFA raw frame"));
+    let raw = match raw {
+        Err(e) => return a100(bytes, &t, ifd0).unwrap_or(Err(e)),
+        Ok(r) => r,
+    };
     let ycc = uint(raw, 262) == Some(6);
     if ycc && !matches!(uints(raw, 530).as_deref(), Some(&[2, 2] | &[2, 1])) {
         return Err(Error::Unsupported("a YCbCr frame sampled otherwise"));
@@ -241,6 +256,8 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let tiled = pieces.spans.len() > 1 || pieces.width != width;
     let (coding, bits, compression, linearization) = match uint(raw, 259) {
         Some(7) if ycc && tiled && pieces.width % 2 == 0 && pieces.height % 2 == 0 => (Coding::SonyYcc(Box::new(crate::sony_ycc::SonyYcc { tile: (pieces.width, pieces.height), sampling: (2, 2), spans: pieces.spans.clone(), frame_width: width, image: (0, 0) })), 16, 7, None),
+        // The oldest bodies' coding (arw1.rs), marked 3 in 0x7000.
+        Some(32767) if !tiled && uint(raw, 0x7000) == Some(3) => (Coding::Arw1, 12, 32767, None),
         // A few older bodies mark 12-bit packed uncompressed data so.
         Some(32767) if !tiled && count == width * height * 3 / 2 && bits_tag == 12 => (Coding::PackedLow, 12, 1, None),
         Some(32767) if !tiled && count >= width * height && width % 32 == 0 => {
@@ -256,6 +273,9 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         Some(7) if tiled && pieces.width % 2 == 0 && pieces.height % 2 == 0 && (8..=16).contains(&bits_tag) => (Coding::SonyTiles, bits_tag, 7, None),
         _ => return Err(Error::Unsupported("a Sony coding not read here")),
     };
+    // LibRaw's frame of the oldest coding is 8 rows taller than the
+    // directory says, the stream coding those rows too.
+    let (height, pieces) = if coding == Coding::Arw1 { (height + 8, Pieces { height: height + 8, ..pieces }) } else { (height, pieces) };
     // The levels and white balance the frame states for itself; files
     // that keep them only in the enciphered SR2 block are declined.
     let reals = |tag| raw.get(tag).and_then(|e| t.reals(&e));
@@ -383,6 +403,101 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         cam_mul: Some([wb[0] as f32, wb[1] as f32, wb[3] as f32, wb[2] as f32]),
         border_black: false,
     })
+}
+
+/// The DSLR-A100 (arw1.rs), which has no raw directory, or None for any
+/// other file. IFD0's SubIFD entry (0x14A) holds where the stream starts;
+/// it runs to the file's end. The frame's size, image area, CFA colors and
+/// white level are LibRaw's for the camera (geometry.rs). DNGPrivateData
+/// (0xC634) holds the offset of a block list laid out as an MRW header is
+/// ("\0MRI", its length, then blocks of a 4-byte name and a length), its
+/// lengths little-endian; the WBG block holds, after 4 bytes, the white
+/// balance as shot: red, green, the other green, blue, 16-bit
+/// little-endian, as LibRaw takes it. The black level is 0, as LibRaw
+/// takes it.
+fn a100(bytes: &[u8], t: &Tiff, ifd0: &crate::tiff::Ifd) -> Option<Result<Dng, Error>> {
+    let ascii = |tag| ifd0.get(tag).and_then(|e| t.ascii(&e)).unwrap_or_default();
+    let (make, model) = (ascii(271), ascii(272));
+    if model != "DSLR-A100" {
+        return None;
+    }
+    let le32 = |at: usize| bytes.get(at..at + 4).map(|b| u32::from_le_bytes(b.try_into().unwrap()) as usize);
+    let wbg = || -> Option<[f64; 4]> {
+        let at = t.u32(ifd0.get(0xc634)?.offset())? as usize;
+        if bytes.get(at..at + 4)? != b"\0MRI" {
+            return None;
+        }
+        let end = at.checked_add(8)?.checked_add(le32(at + 4)?)?;
+        let mut b = at + 8;
+        while b + 8 <= end {
+            let n = le32(b + 4)?;
+            if bytes.get(b..b + 4)? == b"\0WBG" {
+                let v = bytes.get(b + 12..b + 20)?;
+                let g = |i: usize| u16::from_le_bytes([v[2 * i], v[2 * i + 1]]) as f64;
+                return Some([g(0), g(1), g(2), g(3)]);
+            }
+            b = b.checked_add(8 + n)?;
+        }
+        None
+    };
+    Some((|| {
+        let start = ifd0.get(0x14a).and_then(|e| t.uint(&e)).ok_or(Error::Corrupt("SubIFDs"))? as usize;
+        if start >= bytes.len() {
+            return Err(Error::Corrupt("a raw stream past the end of the file"));
+        }
+        let wb = wbg().filter(|w| w.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no stated white balance"))?;
+        let geometry = crate::geometry::GEOMETRY.iter().find(|g| g.make == make && g.model == model).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
+        let calibration = crate::cameras::find(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
+        let orientation = ifd0.get(274).and_then(|e| t.uint(&e)).unwrap_or(1);
+        if !(1..=8).contains(&orientation) {
+            return Err(Error::Unsupported("an orientation tag outside 1 to 8"));
+        }
+        let (width, height) = (geometry.raw.0 as usize, geometry.raw.1 as usize);
+        let (top, left) = (geometry.top as usize, geometry.left as usize);
+        let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
+        Ok(Dng {
+            format: Format::Arw,
+            make,
+            model: model.clone(),
+            unique_model: model,
+            version: [0, 0, 0, 0],
+            orientation: orientation as u16,
+            width,
+            height,
+            bits: 12,
+            compression: 32767,
+            photometric: 32803,
+            samples: 1,
+            sample_format: 1,
+            predictor: 1,
+            pieces: Pieces { width, height, spans: vec![(start, bytes.len() - start)] },
+            cfa_dim: (2, 2),
+            cfa: geometry.colors.to_vec(),
+            cfa_layout: 1,
+            linearization: None,
+            black_dim: (2, 2),
+            black: vec![0.0; 4],
+            black_delta_h: Vec::new(),
+            black_delta_v: Vec::new(),
+            white: vec![geometry.white as f64],
+            active: (top, left, top + geometry.height as usize, left + geometry.width as usize),
+            default_crop: None,
+            default_scale: (1.0, 1.0),
+            as_shot_neutral: Some(vec![wb[1] / wb[0], 1.0, wb[1] / wb[3]]),
+            as_shot_white_xy: None,
+            color_matrix: [m(&calibration.color_matrix[0]), m(&calibration.color_matrix[1]), None],
+            camera_calibration: [None, None, None],
+            illuminant: [calibration.illuminants[0], calibration.illuminants[1], 0],
+            analog_balance: None,
+            forward_matrix: [m(&calibration.forward_matrix[0]), m(&calibration.forward_matrix[1]), None],
+            opcodes: [Vec::new(), Vec::new(), Vec::new()],
+            profile_tables: calibration.tables,
+            baseline_exposure: 0.0,
+            coding: Coding::Arw1,
+            cam_mul: Some([wb[0] as f32, wb[1] as f32, wb[3] as f32, wb[2] as f32]),
+            border_black: false,
+        })
+    })())
 }
 
 #[cfg(test)]
