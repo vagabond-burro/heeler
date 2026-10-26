@@ -457,6 +457,10 @@ const CAMERAS: &[(&str, &str, &str)] = &[
     ("NEF", "NIKON CORPORATION", "NIKON D40X"),
     ("NEF", "NIKON CORPORATION", "NIKON D4S"),
     ("NEF", "NIKON CORPORATION", "NIKON D5"),
+    // Its balance record is enciphered in a way not read here: verified
+    // with LibRaw's balance, the shipped develop in daylight (the owner's
+    // call), as for the D2Hs and D2X files of that kind.
+    ("NEF", "NIKON CORPORATION", "NIKON D50"),
     ("NEF", "NIKON CORPORATION", "NIKON D500"),
     ("NEF", "NIKON CORPORATION", "NIKON D5000"),
     ("NEF", "NIKON CORPORATION", "NIKON D5100"),

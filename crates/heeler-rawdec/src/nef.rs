@@ -196,14 +196,15 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     // Else the ColorBalance record, else a Coolpix's record. LibRaw takes
     // the D1 and the E5700 (whose record is another length) at 1 for each
     // channel.
+    // A file with none of these readable (the D2Hs, D2X and D50 encipher
+    // the record in a way not read here) develops in daylight (develop.rs).
     let unity = ["NIKON D1", "E5700"].contains(&model.as_str());
-    let cam_mul: [f64; 4] = match note(0x000c).and_then(|(mt, e)| mt.reals(&e)).filter(|w| w.len() >= 2 && w[0] > 0.0 && w[1] > 0.0) {
-        _ if unity => [1.0; 4],
-        Some(w) => [w[0], 1.0, w[1], 1.0],
+    let cam_mul: Option<[f64; 4]> = match note(0x000c).and_then(|(mt, e)| mt.reals(&e)).filter(|w| w.len() >= 2 && w[0] > 0.0 && w[1] > 0.0) {
+        _ if unity => Some([1.0; 4]),
+        Some(w) => Some([w[0], 1.0, w[1], 1.0]),
         None => note(0x0097)
             .and_then(|(mt, e)| color_balance(mt, &e))
-            .or_else(|| note(0x0014).and_then(|(mt, e)| mt.bytes(&e).and_then(|r| nrw_balance(r).or_else(|| coolpix_balance(r)))))
-            .ok_or(Error::Unsupported("no stated white balance"))?,
+            .or_else(|| note(0x0014).and_then(|(mt, e)| mt.bytes(&e).and_then(|r| nrw_balance(r).or_else(|| coolpix_balance(r))))),
     };
     // The black level, stated for 14-bit data.
     let black = match note(0x003d).and_then(|(mt, e)| mt.uints(&e)) {
@@ -261,7 +262,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
             profile_tables: false,
             baseline_exposure: 0.0,
             coding,
-            cam_mul: Some(cam_mul.map(|v| v as f32)),
+            cam_mul: cam_mul.map(|m| m.map(|v| v as f32)),
             border_black: false,
         });
     }
@@ -318,7 +319,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         default_crop: None,
         // The D1X's pixels are twice as wide as tall (its 1324 rows).
         default_scale: if tall { (1.0, 2.0) } else { (1.0, 1.0) },
-        as_shot_neutral: Some(vec![cam_mul[1] / cam_mul[0], 1.0, cam_mul[1] / cam_mul[2]]),
+        as_shot_neutral: cam_mul.map(|m| vec![m[1] / m[0], 1.0, m[1] / m[2]]),
         as_shot_white_xy: None,
         color_matrix: [m(&calibration.color_matrix[0]), m(&calibration.color_matrix[1]), None],
         camera_calibration: [None, None, None],
@@ -329,7 +330,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         profile_tables: calibration.tables,
         baseline_exposure: 0.0,
         coding,
-        cam_mul: Some(cam_mul.map(|v| v as f32)),
+        cam_mul: cam_mul.map(|m| m.map(|v| v as f32)),
         border_black: false,
     })
 }

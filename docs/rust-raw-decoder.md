@@ -1199,7 +1199,8 @@ tile decodes on four cores at most.
 ### Not yet done
 
 - The balance of the bodies that keep it only in ColorBalance (0x0097),
-  enciphered from version 0200 on; High Efficiency; the small NEF.
+  enciphered from version 0200 on (they develop in daylight); High
+  Efficiency.
 - Calibrations for the D810A and ZR.
 - Speed: the Huffman frame is one stream and decodes on one core.
 
@@ -1965,15 +1966,17 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   green, blue at byte 10; 0103 red, green, blue, green at byte 20), else a
   Coolpix record of 2560 bytes (0x0014: red and blue times 256 at bytes
   14 and 16). LibRaw takes the D1 and the E5700 at 1 for each channel.
-  The later ColorBalance versions are enciphered and stay LibRaw's.
+  The later ColorBalance versions are enciphered and not read: a file
+  with only such a record develops in daylight (the owner's call).
 - The older Coolpix NEFs (models E and digits) hold one strip of two
   fields, the even rows then the odd.
 - The D1X's pixels are twice as wide as tall: LibRaw develops each of its
   1324 rows twice, at both sizes, and so does the develop. Its compressed
   NEFs state no linearization table and stay LibRaw's.
 - Verified: the D1, D1H, D1X, D2H, D70, D70s, E5400, E8400 and E8800
-  (18 files). The D50, D2Hs and D2X files state only enciphered balance
-  records; they stay LibRaw's. The E5700's mosaic is of four colors (see
+  (18 files). The D50, D2Hs and D2X files that state only enciphered
+  balance records (4) are verified with LibRaw's balance and develop in
+  daylight. The E5700's mosaic is of four colors (see
   Four-color mosaics).
 
 ### Fujifilm's earlier RAF layout
