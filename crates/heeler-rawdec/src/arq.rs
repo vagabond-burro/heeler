@@ -26,9 +26,21 @@
 //! ARW), and its matrix for the camera, and develops the image whole at
 //! either size. With highlights clipped (mode 0) the other green plays
 //! no part at all: a copy whose other green is its green throughout
-//! develops to the same output. Blending them (mode 2) mixes all four
-//! samples of a pixel, the other green too, which this module does not
-//! do.
+//! develops to the same output.
+//!
+//! Blending them (mode 2) mixes all four samples of a pixel, the other
+//! green too: LibRaw's develop is then the four-color mosaics' blend
+//! (four_color.rs's blend) of each pixel's four scaled samples (the
+//! multipliers divided by the largest), at the least of the four colors'
+//! clip levels, and its matrix's first three columns after it (its fourth
+//! is zero, so the other green, blended, still reaches the output only
+//! through the other three). That develop matches LibRaw's output to the
+//! bit at full size and half (whole at either). The two greens'
+//! multipliers are equal in every file seen, so whether the clip level
+//! takes the other green's or only the first three's is not settled by
+//! them; a copy whose 0x7313 states another second green does not move
+//! LibRaw's numbers (it reads the balance elsewhere for these files), so
+//! that cannot be probed so.
 
 use rayon::prelude::*;
 
@@ -202,6 +214,33 @@ pub fn decode_three(bytes: &[u8], a: &Arq) -> Result<(Vec<u16>, u16), Error> {
                 let s = |k: usize| u16::from_le_bytes([px[2 * k], px[2 * k + 1]]).saturating_sub(black[k]);
                 o.copy_from_slice(&[s(0), s(1), s(3)]);
                 m = m.max(o[0]).max(o[1]).max(o[2]).max(s(2));
+            }
+            m
+        })
+        .max()
+        .unwrap_or(0);
+    Ok((out, data_max))
+}
+
+/// The image area's four samples a pixel (red, green, blue, the other
+/// green) less their black levels, clipped at zero, and the brightest of
+/// them: for the develop with highlights blended, which mixes all four.
+pub fn decode_four(bytes: &[u8], a: &Arq) -> Result<(Vec<u16>, u16), Error> {
+    let fw = a.frame.0;
+    let data = bytes.get(a.offset..a.offset + fw * a.frame.1 * 8).ok_or(Error::Corrupt("a frame past the end of the file"))?;
+    let mut out = heeler_engine::memory::vector(a.width * a.height * 4, 0u16, "RAW samples")?;
+    // As stored: red, green, the other green, blue.
+    let black = a.black.map(|b| b.min(65535) as u16);
+    let data_max = out
+        .par_chunks_mut(a.width * 4)
+        .enumerate()
+        .map(|(r, o)| {
+            let row = &data[((a.top + r) * fw + a.left) * 8..][..a.width * 8];
+            let mut m = 0;
+            for (o, px) in o.chunks_exact_mut(4).zip(row.chunks_exact(8)) {
+                let s = |k: usize| u16::from_le_bytes([px[2 * k], px[2 * k + 1]]).saturating_sub(black[k]);
+                o.copy_from_slice(&[s(0), s(1), s(3), s(2)]);
+                m = m.max(o[0]).max(o[1]).max(o[2]).max(o[3]);
             }
             m
         })

@@ -239,11 +239,6 @@ impl Plan {
         if dng.black.iter().any(|&b| b != 0.0) {
             return Err(Error::Unsupported("a three-color image with a black level"));
         }
-        // A pixel shift file's highlights blended mix its fourth sample,
-        // not derived (arq.rs).
-        if matches!(dng.coding, Coding::SonyArq(_)) && opts.highlight == 2 {
-            return Err(Error::Unsupported("a pixel shift file's highlights blended"));
-        }
         let (t, l, b, r) = dng.active;
         // A DNG stating its white as a chromaticity (AsShotWhiteXY) instead
         // (a scanner's): the neutral its color matrix gives that white.
@@ -359,7 +354,10 @@ impl Plan {
         let unturned = if let Coding::SuperCcd(sc) = &self.dng.coding { memory::bytes(self.width, self.height, 3, 2)? + memory::bytes(sc.frame.0, sc.frame.1, 1, 2)? } else { 0 };
         // Rows twice: the image twice the size, and the one before it.
         let unstretched = if self.dng.default_scale == (1.0, 2.0) || self.dng.default_scale == crate::kodak::DC120_SCALE { memory::bytes(ow, oh, 3, 4)? } else { 0 };
-        memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES, self.pixel_gains(half).bytes(), frame, unstretched, unturned])
+        // A pixel shift file holds four samples a pixel to blend (three
+        // to clip), beyond the one counted.
+        let shifted = if matches!(self.dng.coding, Coding::SonyArq(_)) { memory::bytes(self.width, self.height, 3, 2)? } else { 0 };
+        memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES, self.pixel_gains(half).bytes(), frame, unstretched, unturned, shifted])
     }
 
     /// The image the stage 3 opcodes see: the active area, or at half size
@@ -1503,6 +1501,9 @@ fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, 
 /// whatever the size asked for (LibRaw shrinks a CFA only).
 fn develop_three(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, t0: std::time::Instant, open: f64) -> Result<(Image, Times), Error> {
     stopped(stop)?;
+    if let (Coding::SonyArq(a), 2) = (&p.dng.coding, opts.highlight) {
+        return develop_arq_blend(bytes, p, a, opts, stop, t0, open);
+    }
     // The brightest sample LibRaw lowers a pixel shift file's white to,
     // its fourth sample's too (arq.rs).
     let mut arq_max = None;
@@ -1573,6 +1574,44 @@ fn develop_three(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>,
     let headroom = if opts.highlight >= 2 { headroom(&n) } else { 1.0 };
     let done = t0.elapsed().as_secs_f64();
     Ok((Image { width: ow, height: oh, rgb: out, headroom }, Times { open, unpack: unpacked - open, develop: done - unpacked }))
+}
+
+/// A pixel shift file's develop with highlights blended (arq.rs): its four
+/// samples a pixel, black off, each scaled by its multiplier, blended as a
+/// four-color pixel (four_color.rs's blend, at the least of the four
+/// colors' clip levels), and the first three through the matrix; whole at
+/// either size.
+fn develop_arq_blend(bytes: &[u8], p: &Plan, a: &crate::arq::Arq, opts: &Opts, stop: Option<&AtomicBool>, t0: std::time::Instant, open: f64) -> Result<(Image, Times), Error> {
+    let (four, data_max) = crate::arq::decode_four(bytes, a)?;
+    if (a.width, a.height) != (p.width, p.height) || p.top != 0 || p.left != 0 {
+        return Err(Error::Corrupt("an image area outside the pixel shift image"));
+    }
+    let unpacked = t0.elapsed().as_secs_f64();
+    stopped(stop)?;
+    let n = numbers(p, opts, data_max);
+    let clip = n.pre_mul.iter().map(|&m| (65535.0f32 * m) as i32).min().unwrap_or(i32::MAX);
+    let (ow, oh) = p.output_size(false);
+    let mut out = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;
+    let o = Out(out.as_mut_ptr());
+    let g = p.pixel_gains(false);
+    let (w, h) = (p.width, p.height);
+    four.par_chunks(w * 4).enumerate().for_each(|(r, row)| {
+        let o = o;
+        for c in 0..w {
+            let px: [u16; 4] = std::array::from_fn(|k| scale(row[c * 4 + k], n.scale_mul[k]));
+            let b = crate::four_color::blend(px, clip);
+            let mut px = [b[0], b[1], b[2]];
+            if !g.is_empty() {
+                g.apply(r, c, &mut px);
+            }
+            let px = convert(px, &p.rgb_cam);
+            let (oy, ox) = to_output(p.flip, w, h, r, c);
+            // SAFETY: each output pixel is written by its own source pixel.
+            unsafe { std::ptr::copy_nonoverlapping(px.as_ptr(), o.at((oy * ow + ox) * 3), 3) };
+        }
+    });
+    let done = t0.elapsed().as_secs_f64();
+    Ok((Image { width: ow, height: oh, rgb: out, headroom: headroom(&n) }, Times { open, unpack: unpacked - open, develop: done - unpacked }))
 }
 
 /// A monochrome frame's develop: the black off, each sample scaled to the
