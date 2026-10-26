@@ -64,6 +64,8 @@ pub struct Panasonic {
     pub tiles: Vec<(usize, usize, usize, usize)>,
     /// Each symbol's code length and code.
     pub code: Vec<(u32, u32)>,
+    /// The rows decoded, those below left at 0 (all of them where 0).
+    pub rows: usize,
 }
 
 /// The bytes of a turned block, and where its stream starts.
@@ -144,7 +146,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let (make, model) = (ascii(271), ascii(272));
     let width = uint(0x02).ok_or(Error::Corrupt("SensorWidth"))? as usize;
     let height = uint(0x03).ok_or(Error::Corrupt("SensorHeight"))? as usize;
-    let mut coding = Panasonic { version: uint(0x2d).unwrap_or(0), bits: uint(0x0a).unwrap_or(0), tiles: Vec::new(), code: Vec::new() };
+    let mut coding = Panasonic { version: uint(0x2d).unwrap_or(0), bits: uint(0x0a).unwrap_or(0), tiles: Vec::new(), code: Vec::new(), rows: 0 };
     if !coding.known() {
         return Err(Error::Unsupported("a Panasonic coding not read here"));
     }
@@ -165,10 +167,12 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
             return Err(Error::Unsupported("an RW2 frame of this size"));
         }
         // LibRaw leaves a RawFormat 7 frame's rows below the sensor's stated
-        // bottom (0x04 and 0x06) at 0 (the high-resolution mode's last two),
-        // a rule two files cannot settle: such a frame stays LibRaw's.
-        if coding.version == 7 && uint(0x04).zip(uint(0x06)).is_none_or(|(top, bottom)| (top + bottom) as usize != height) {
-            return Err(Error::Unsupported("a RawFormat 7 frame taller than its sensor's rows"));
+        // bottom (0x04 and 0x06) at 0: the DC-S5's high-resolution mode's
+        // last two (its one file matches LibRaw so). A frame shorter than
+        // the stated rows is declined.
+        if coding.version == 7 {
+            let rows = uint(0x04).zip(uint(0x06)).map(|(top, bottom)| (top + bottom) as usize).filter(|&r| r <= height).ok_or(Error::Unsupported("a RawFormat 7 frame of this size"))?;
+            coding.rows = rows;
         }
         // The samples' offset, in the oldest files the strip's.
         let at = uint(0x118).or_else(|| uint(273)).ok_or(Error::Corrupt("RawDataOffset"))? as usize;

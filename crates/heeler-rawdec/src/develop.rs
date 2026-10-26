@@ -741,7 +741,8 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         // Packets in one span, or tiles side by side; rows below the image
         // area are not decoded.
         stopped(stop)?;
-        crate::rw2::decode(bytes, &d.pieces.spans, d.width, d.height.min(p.top + p.height), coding, |r, c, line| put_run(out, p, r, c, line, lin))?;
+        let rows = if coding.rows > 0 { coding.rows } else { d.height };
+        crate::rw2::decode(bytes, &d.pieces.spans, d.width, rows.min(p.top + p.height), coding, |r, c, line| put_run(out, p, r, c, line, lin))?;
         return Ok(cfa);
     }
     if let Coding::Hasselblad(h) = &d.coding {

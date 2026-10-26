@@ -2073,6 +2073,9 @@ and half. CSVs in `docs/rust-raw-decoder/formats-rust-faster-*.csv` and
   mode, then rows of 10-bit samples four in five bytes; the balance the
   maker note's "gain_r=" and "gain_b=", the black level LibRaw's for the
   sensor (66). Both files match LibRaw.
+- RW2 RawFormat 7: LibRaw leaves the rows below the sensor's stated
+  bottom (0x04 plus 0x06) at 0; the DC-S5's high-resolution file, two
+  rows taller, matches LibRaw so.
 - The DiMAGE G600's balance (headerless.rs): four big-endian SHORTs at
   byte 2030 of the file, inside the EXIF segment but outside any tag
   (found by changing the file's bytes one at a time against LibRaw's
