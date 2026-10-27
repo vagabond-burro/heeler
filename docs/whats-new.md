@@ -1,5 +1,20 @@
 # What's new
 
+## 2026.7
+
+### New
+
+- **Heeler's own RAW decoder.** Every RAW file Heeler opens is now read and developed by a decoder written for Heeler, in place of the library it used before. It reads most cameras' sensor data in half the time or less. For most cameras the pixels it reads are exactly the ones the old decoder read. [Source](user-guide/adjustments/source.md).
+- **More natural color under warm light.** A camera's color now comes from its calibrations for both daylight and tungsten light, blended for the light the photograph was taken in, instead of from the daylight one alone. Photographs taken indoors or at dusk come out closer to the scene. [Source](user-guide/adjustments/source.md).
+
+### Changed
+
+- **Colors shift a little.** Because of the new color, photographs you have already edited can look slightly different, most of all those taken under tungsten light. For about 200 cameras, among them Olympus and OM System, Pentax, Samsung, Phase One, Leaf and Kodak bodies and some Panasonic and Sony ones, the color in daylight changes a little too, since Heeler now uses the same calibrations for them as for every other camera. Your edits are kept; check the color on a photograph that matters before exporting it again. [Source](user-guide/adjustments/source.md).
+- **Fujifilm X-Trans photographs use Heeler's own demosaic at full size.** Fine detail and edges against a bright sky can look very slightly different from before. [Source](user-guide/adjustments/source.md).
+- **Highlights: Rebuild and the Demosaic menu are gone.** A photograph edited with Rebuild now develops with Clip, and one edited with the Fast or Fine demosaic develops with Heeler's demosaic. [Source](user-guide/adjustments/source.md#raw-controls).
+- **A camera newer than Heeler says so.** A RAW file from a camera Heeler has no color calibration for yet shows its thumbnail and says "this camera is not supported yet", instead of developing with guessed color. An update that adds the camera develops it. [Library](user-guide/library.md#raw-files-heeler-cannot-develop-yet).
+- **A few rare older formats no longer develop.** The Nikon D1X's compressed NEF, the YI action cameras' first DNGs, the FinePix F700's RAF, the GX680 digital back's RAF, the DSC-F828's SRF, the Kodak DC50's KDC, the Minolta RD175's MDC and some action cameras' .RAW files show their thumbnails but do not open for editing. Converting them to DNG with a converter that reads them works in the meantime. [Library](user-guide/library.md#raw-files-heeler-cannot-develop-yet).
+
 ## 2026.6
 
 ### New
