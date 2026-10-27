@@ -63,10 +63,62 @@ fn runtime_crates() -> BTreeSet<String> {
             }
         }
     }
+    let taken = linked(&host);
     seen.into_iter()
         .filter(|id| !packages[id]["source"].is_null())
         .map(|id| format!("{} {}", packages[id]["name"].as_str().unwrap(), packages[id]["version"].as_str().unwrap()))
+        .filter(|c| taken.contains(c))
         .collect()
+}
+
+/// The crates `cargo tree` shows this binary taking on `target`, as
+/// "name version", with the features the binary itself asks for: cargo
+/// metadata resolves features across the workspace, so a feature only a
+/// test or a harness turns on (heeler-raw's libraw, which brings zlib)
+/// would read there as linked when this binary does not link it.
+fn linked(target: &str) -> BTreeSet<String> {
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let out = Command::new(cargo)
+        .args(["tree", "-p", "heeler-desktop", "-e", "normal", "--target", target, "--prefix", "none", "-f", "{p}"])
+        .arg("--manifest-path")
+        .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
+        .output()
+        .expect("cargo tree runs");
+    assert!(out.status.success(), "cargo tree failed: {}", String::from_utf8_lossy(&out.stderr));
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|l| {
+            let mut words = l.split_whitespace();
+            let name = words.next()?;
+            let version = words.next()?.strip_prefix('v')?;
+            Some(format!("{name} {version}"))
+        })
+        .collect()
+}
+
+/// Nothing a build of this binary links is LibRaw's or zlib's: their
+/// notices and source obligations left the shipped pages with them, and a
+/// crate taking heeler-raw with its default features would bring both
+/// back without a word.
+#[test]
+fn this_binary_links_no_libraw_and_no_zlib() {
+    let rustc = Command::new(std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into())).arg("-vV").output().expect("rustc runs");
+    let host = String::from_utf8_lossy(&rustc.stdout).lines().find_map(|l| l.strip_prefix("host: ").map(str::to_string)).expect("rustc names its host");
+    let taken = linked(&host);
+    assert!(taken.len() > 300, "found only {} crates, the walk is broken", taken.len());
+    assert!(!taken.iter().any(|c| c.starts_with("libz-sys ")), "the shipped binary links zlib");
+    // LibRaw is compiled inside heeler-raw, under its libraw feature.
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let out = Command::new(cargo)
+        .args(["tree", "-p", "heeler-desktop", "-e", "normal", "--target", &host, "--prefix", "none", "-f", "{p} [{f}]", "-i", "heeler-raw"])
+        .arg("--manifest-path")
+        .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
+        .output()
+        .expect("cargo tree runs");
+    assert!(out.status.success(), "cargo tree failed: {}", String::from_utf8_lossy(&out.stderr));
+    let tree = String::from_utf8_lossy(&out.stdout);
+    let raw = tree.lines().find(|l| l.starts_with("heeler-raw ")).expect("the binary takes heeler-raw");
+    assert!(!raw.contains("libraw"), "the shipped binary builds heeler-raw with LibRaw: {raw}");
 }
 
 #[test]
