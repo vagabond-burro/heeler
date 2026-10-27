@@ -367,10 +367,26 @@ pub(crate) fn jpeg_planes(s: &[u8]) -> Result<Planes, String> {
     if width == 0 || height == 0 || comps.is_empty() {
         return Err("a JPEG without a frame".into());
     }
+    if comps.len() > 4 || comps.iter().any(|c| !(1..=4).contains(&c.1) || !(1..=4).contains(&c.2)) {
+        return Err("a JPEG of more than four components or sampled outside 1 to 4".into());
+    }
     let hmax = comps.iter().map(|c| c.1).max().unwrap_or(1).max(1);
     let vmax = comps.iter().map(|c| c.2).max().unwrap_or(1).max(1);
     let (mx, my) = (width.div_ceil(8 * hmax), height.div_ceil(8 * vmax));
-    let mut planes: Vec<(usize, usize, usize, usize, Vec<u8>)> = comps.iter().map(|c| (c.1, c.2, mx * c.1 * 8, my * c.2 * 8, vec![0u8; mx * c.1 * 8 * my * c.2 * 8])).collect();
+    // Each block codes in two bits at the least (a DC code and an end of
+    // block), so a frame stating more blocks than its data could hold is
+    // turned away before its planes are made: a 16 by 16 tile whose frame
+    // claimed 65535 by 65535 once took 13 GB.
+    let blocks = mx * my * comps.iter().map(|c| c.1 * c.2).sum::<usize>();
+    if blocks > s.len().saturating_sub(i) * 4 {
+        return Err("a JPEG frame larger than its data".into());
+    }
+    let mut planes = Vec::with_capacity(comps.len());
+    for c in &comps {
+        let (pw, ph) = (mx * c.1 * 8, my * c.2 * 8);
+        let samples = heeler_engine::memory::vector(pw * ph, 0u8, "JPEG planes").map_err(|e| e.to_string())?;
+        planes.push((c.1, c.2, pw, ph, samples));
+    }
     let mut bits = JpegBits { d: &s[i..], at: 0, acc: 0, n: 0 };
     let mut pred = vec![0i32; comps.len()];
     let (mut coef, mut px) = ([0i32; 64], [0u8; 64]);
@@ -600,4 +616,46 @@ pub fn decode_yrgb_420(data: &[u8], width: usize, height: usize) -> Result<Vec<[
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A baseline JPEG `size` square, three components, whose tables
+    /// decode any bits (two one-bit codes), with 64 bytes of data.
+    fn jpeg(size: u16) -> Vec<u8> {
+        let seg = |m: u8, body: &[u8]| {
+            let mut v = vec![0xff, m];
+            v.extend_from_slice(&((body.len() + 2) as u16).to_be_bytes());
+            v.extend_from_slice(body);
+            v
+        };
+        let mut j = vec![0xff, 0xd8];
+        let mut sof = vec![8];
+        sof.extend_from_slice(&size.to_be_bytes());
+        sof.extend_from_slice(&size.to_be_bytes());
+        sof.push(3);
+        for c in 0..3u8 {
+            sof.extend_from_slice(&[c + 1, 0x11, 0]);
+        }
+        j.extend(seg(0xc0, &sof));
+        let mut dht = vec![0x00, 2];
+        dht.extend_from_slice(&[0; 15]);
+        dht.extend_from_slice(&[0, 0, 0x10, 2]);
+        dht.extend_from_slice(&[0; 15]);
+        dht.extend_from_slice(&[0, 0]);
+        j.extend(seg(0xc4, &dht));
+        j.extend(seg(0xda, &[3, 1, 0, 2, 0, 3, 0, 0, 63, 0]));
+        j.extend_from_slice(&[0u8; 64]);
+        j
+    }
+
+    #[test]
+    fn a_frame_larger_than_its_data_is_turned_away_before_its_planes() {
+        assert!(jpeg_planes(&jpeg(16)).is_ok());
+        let t = std::time::Instant::now();
+        assert!(jpeg_planes(&jpeg(65535)).is_err());
+        assert!(t.elapsed().as_millis() < 100, "{:?}", t.elapsed());
+    }
 }
