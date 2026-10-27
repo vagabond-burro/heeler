@@ -23,6 +23,20 @@ fn open_all() {
     ONCE.call_once(|| heeler_rawdec::set_verified_only(false));
 }
 
+/// `f`, a panic in it answered as a damaged file rather than carried
+/// into the app: the develop reads files from cards and copies cut short,
+/// and a reading it has no check for must not take the app down. A
+/// memory refusal (heeler-engine raises those as panics) stays one.
+fn caught<T>(f: impl FnOnce() -> Result<T, heeler_rawdec::Error>) -> Result<T, heeler_rawdec::Error> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
+        Ok(r) => r,
+        Err(e) => match e.downcast::<heeler_engine::memory::MemoryError>() {
+            Ok(m) => Err(heeler_rawdec::Error::Memory(*m)),
+            Err(_) => Err(heeler_rawdec::Error::Corrupt("the develop stopped on data it could not read")),
+        },
+    }
+}
+
 fn error(e: heeler_rawdec::Error) -> RawError {
     match e {
         heeler_rawdec::Error::Memory(m) => RawError::Memory(m),
@@ -47,11 +61,11 @@ fn route(bytes: &[u8], o: DevelopOpts) -> Result<(heeler_rawdec::Plan, DevelopOp
 fn planned(bytes: &[u8], o: DevelopOpts) -> Result<(heeler_rawdec::Plan, DevelopOpts, bool), RawError> {
     open_all();
     let o = normalized(o);
-    match heeler_rawdec::plan(bytes, &rust_path::opts(o)) {
+    match caught(|| heeler_rawdec::plan(bytes, &rust_path::opts(o))) {
         Ok(p) => Ok((p, o, false)),
         Err(e) if o.half_size => {
             let full = DevelopOpts { half_size: false, ..o };
-            match heeler_rawdec::plan(bytes, &rust_path::opts(full)) {
+            match caught(|| heeler_rawdec::plan(bytes, &rust_path::opts(full))) {
                 Ok(p) => Ok((p, full, true)),
                 Err(_) => Err(error(e)),
             }
@@ -134,7 +148,7 @@ fn develop(bytes: &[u8], opts: DevelopOpts, stop: Option<&AtomicBool>, times: Op
         return Err(RawError::Cancelled);
     }
     let (p, o, halve) = route(bytes, opts)?;
-    let (img, t) = heeler_rawdec::develop(bytes, &rust_path::opts(o), stop).map_err(|e| match error(e) {
+    let (img, t) = caught(|| heeler_rawdec::develop(bytes, &rust_path::opts(o), stop)).map_err(|e| match error(e) {
         RawError::Unsupported(why) | RawError::Damaged(why) if gpr::is_gpr(bytes) => RawError::Gpr(why),
         e => e,
     })?;
@@ -156,6 +170,17 @@ mod tests {
         let junk = vec![0xA5u8; 64 * 1024];
         assert!(matches!(crate::decode_sensor(&junk), Err(RawError::Unsupported(_) | RawError::Damaged(_))));
         assert!(crate::decode_sensor(&[]).is_err());
+    }
+
+    #[test]
+    fn a_panic_in_the_develop_is_a_damaged_file_and_a_refusal_stays_one() {
+        let hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let damaged = caught::<()>(|| panic!("an index past the end"));
+        let refused = caught::<()>(|| std::panic::panic_any(heeler_engine::memory::MemoryError::Allocation("RAW samples".into())));
+        std::panic::set_hook(hook);
+        assert!(matches!(error(damaged.unwrap_err()), RawError::Damaged(_)));
+        assert!(matches!(error(refused.unwrap_err()), RawError::Memory(_)));
     }
 
     #[test]
