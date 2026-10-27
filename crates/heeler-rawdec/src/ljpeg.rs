@@ -670,6 +670,11 @@ pub fn table_period(f: &Frame) -> usize {
 /// by side, once the first sample of each line (predicted from the line
 /// above) is known.
 pub fn decode_parallel(data: &[u8], out: &mut [u16]) -> Result<Option<Frame>, Error> {
+    decode_pieces(data, out, rayon::current_num_threads().max(1) * 4, 1 << 14)
+}
+
+/// decode_parallel cut into `pieces`, each at least `least` bits.
+fn decode_pieces(data: &[u8], out: &mut [u16], pieces: usize, least: usize) -> Result<Option<Frame>, Error> {
     use rayon::prelude::*;
     let (f, tables) = headers(data)?;
     if f.point_transform != 0 || f.restart != 0 || f.predictor != 1 {
@@ -693,8 +698,7 @@ pub fn decode_parallel(data: &[u8], out: &mut [u16]) -> Result<Option<Frame>, Er
     if total_bits == 0 {
         return Err(Error::Corrupt("a scan with no data"));
     }
-    let pieces = rayon::current_num_threads().max(1) * 4;
-    let span = (total_bits / pieces).max(1 << 14);
+    let span = (total_bits / pieces.max(1)).max(least.max(1));
     let starts: Vec<usize> = (0..total_bits).step_by(span).collect();
     /// How many code boundaries a piece remembers to fall into step by.
     const SYNC: usize = 4096;
@@ -724,7 +728,9 @@ pub fn decode_parallel(data: &[u8], out: &mut [u16]) -> Result<Option<Frame>, Er
     }
     let read = |from: usize, until: usize, phase: usize, remember: usize| -> Reading {
         let mut r = Flat { data: &bits, pos: from };
-        let mut p = Reading { phase, diffs: Vec::with_capacity((until - from) / 4), bounds: Vec::with_capacity(remember.min(SYNC)), exit: from, ok: true };
+        // A piece the one before it read past (its span inside that
+        // piece's last code, or in the bits after the frame) reads nothing.
+        let mut p = Reading { phase, diffs: Vec::with_capacity(until.saturating_sub(from) / 4), bounds: Vec::with_capacity(remember.min(SYNC)), exit: from, ok: true };
         let mut k = phase;
         while r.pos < until && r.pos < total_bits {
             if p.bounds.len() < remember {
@@ -1068,6 +1074,28 @@ mod tests {
         let lines = pattern(40, 2, 20, 12);
         assert!(decode_parallel(&encode(&lines, 40, 2, 12, 6, 0), &mut vec![0; 1600]).unwrap().is_none());
         assert!(decode_parallel(&encode(&lines, 40, 2, 12, 1, 40), &mut vec![0; 1600]).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_piece_the_one_before_read_past_reads_nothing() {
+        // Bits after the frame, as a camera's scan carries them: cut into
+        // every number of pieces, a short last piece falls inside the last
+        // code read before it, which once asked for an allocation of nearly
+        // 2^64 bytes and aborted (2026-10-27).
+        for tables in [1usize, 2] {
+            let (w, h, comps) = (120usize, 40usize, 2usize);
+            let lines = pattern(w, comps, h, 14);
+            let mut data = crate::synthetic::lossless_jpeg_tables(&lines, w, comps, 14, 1, 0, tables);
+            let eoi = data.len() - 2;
+            data.splice(eoi..eoi, [0x5a, 0xa5, 0x3c, 0x7e, 0x5a, 0xa5]);
+            let mut serial = Vec::new();
+            decode(&data, |_, l| serial.extend_from_slice(l)).unwrap();
+            for pieces in 1..400 {
+                let mut par = vec![0u16; w * comps * h];
+                assert!(decode_pieces(&data, &mut par, pieces, 1).unwrap().is_some(), "{pieces} pieces");
+                assert!(par == serial, "{tables} tables, {pieces} pieces");
+            }
+        }
     }
 
     #[test]
