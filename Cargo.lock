@@ -1894,6 +1894,7 @@ dependencies = [
  "heeler-engine",
  "heeler-graph",
  "heeler-raw",
+ "heeler-rawdec",
  "image",
  "jxl-oxide",
  "mozjpeg-sys",

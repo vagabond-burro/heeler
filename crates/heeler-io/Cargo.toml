@@ -48,6 +48,8 @@ rawler = { git = "https://github.com/dnglab/dnglab", rev = "ac975f5d1b3362feb397
 
 [dev-dependencies]
 tempfile = "3"
+# Only for the synthetic RAW files the probe's tests size.
+heeler-rawdec = { path = "../heeler-rawdec" }
 # Only for examples/highlights.rs, which renders through the real
 # tone-profile op and so needs a Node to hand it. heeler-graph is already
 # in the tree via heeler-engine; this just names it.

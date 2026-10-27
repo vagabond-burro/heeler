@@ -446,6 +446,38 @@ fn estimate_from(bytes: &[u8], file_len: usize, raw_ext: bool, prefix: bool) -> 
     Ok(Some(DecodeEstimate { width: w, height: h, encoded: file_len, retained: memory::bytes(w, h, 1, 16)?, workspace: memory::sum([memory::bytes(w, h, 1, 32)?, file_len, 64 << 10, workers])? }))
 }
 
+/// A RAW's sizing from the front of its file: the develop's parsers take
+/// the whole file, and refuse one whose image data lies past the bytes
+/// they are given, so the front is laid in a buffer of the file's length
+/// whose rest the system hands over as zero pages, never written and so
+/// never made resident. The header answers from the front, as it does
+/// from the file; one that needs more than the front answers nothing,
+/// and the probe reads the whole file as before.
+#[cfg(feature = "raw")]
+fn estimate_from_front(front: &[u8], file_len: usize) -> Result<Option<DecodeEstimate>, IoError> {
+    let _job = Job::admit(memory::bytes(file_len, 1, 1, 1)?, "image header bytes")?;
+    let mut padded = zeroed(file_len)?;
+    padded[..front.len()].copy_from_slice(front);
+    estimate_from(&padded, file_len, true, true)
+}
+
+/// `len` zero bytes, taken zeroed from the allocator (not written here),
+/// or a memory refusal.
+#[cfg(feature = "raw")]
+fn zeroed(len: usize) -> Result<Vec<u8>, IoError> {
+    let layout = std::alloc::Layout::array::<u8>(len.max(1)).map_err(|_| MemoryError::Geometry("image file".into()))?;
+    // SAFETY: the layout is non-zero; a null pointer is a refusal, and a
+    // pointer from alloc_zeroed holds `len` initialized zero bytes, owned
+    // by the Vec from here, with the global allocator's layout.
+    unsafe {
+        let p = std::alloc::alloc_zeroed(layout);
+        if p.is_null() {
+            return Err(MemoryError::Allocation("image header bytes".into()).into());
+        }
+        Ok(Vec::from_raw_parts(p, len, len.max(1)))
+    }
+}
+
 /// Header-only sizing for admission. Reads a capped prefix rather than
 /// the whole file: every probed member of a stack or panorama is read
 /// AGAIN at decode, and the full read here was a stall before the first
@@ -465,7 +497,13 @@ pub fn probe_memory(path: &Path) -> Result<Option<DecodeEstimate>, IoError> {
                 let _job = Job::admit(memory::bytes(prefix_len, 1, 1, 1)?, "image header bytes")?;
                 let mut prefix = memory::vector(prefix_len, 0u8, "image header bytes")?;
                 file.take(prefix_len as u64).read_exact(&mut prefix)?;
-                estimate_from(&prefix, file_len, is_raw_path(path), prefix_len < file_len)?
+                let probed = estimate_from(&prefix, file_len, is_raw_path(path), prefix_len < file_len)?;
+                #[cfg(feature = "raw")]
+                let probed = match probed {
+                    None if is_raw_path(path) && prefix_len < file_len => estimate_from_front(&prefix, file_len)?,
+                    found => found,
+                };
+                probed
             };
             if probed.is_some() || prefix_len >= file_len {
                 return Ok(probed);
@@ -3578,6 +3616,33 @@ mod tests {
         assert_eq!((estimate.width, estimate.height), (64, 32));
         // The estimate still charges the true file size, prefix or not.
         assert_eq!(estimate.encoded, file_len);
+    }
+
+    /// A RAW larger than the prefix is sized from its front: its image
+    /// data lies past the prefix, which the develop's parser refuses, so
+    /// the front is padded with zero pages to the file's length rather
+    /// than the whole file read to find a size in its first kilobytes.
+    #[test]
+    #[cfg(feature = "raw")]
+    fn a_raw_larger_than_the_prefix_is_sized_from_its_front() {
+        use heeler_rawdec::synthetic::{cfa_dng, Spec};
+        let px = |y: usize, x: usize| ((x * 7 + y * 3) % 4000) as u16;
+        let bytes = cfa_dng(&Spec { width: 2400, height: 2000, tile: None, pixel: &px, ..Spec::default() });
+        assert!(bytes.len() > PROBE_PREFIX, "the fixture must run past the prefix");
+        let front = &bytes[..PROBE_PREFIX];
+        // The shipped develop's parser refuses the front alone (LibRaw,
+        // in a build that has it, reads the header from it).
+        if !heeler_raw::LIBRAW_BUILT {
+            assert!(estimate_from(front, bytes.len(), true, true).unwrap().is_none(), "the front alone must miss");
+        }
+        let estimate = estimate_from_front(front, bytes.len()).unwrap().expect("sized from the padded front");
+        let whole = estimate_from(&bytes, bytes.len(), true, false).unwrap().unwrap();
+        assert_eq!((estimate.width, estimate.height, estimate.workspace, estimate.retained), (whole.width, whole.height, whole.workspace, whole.retained));
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("big.dng");
+        std::fs::write(&path, &bytes).unwrap();
+        let probed = probe_memory(&path).unwrap().unwrap();
+        assert_eq!((probed.width, probed.height, probed.encoded), (whole.width, whole.height, bytes.len()));
     }
 
     /// A TIFF whose directory sits past the prefix is the prefix's miss:
