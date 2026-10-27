@@ -538,7 +538,7 @@ pub fn decode_file(path: &Path) -> Result<ImageBuf, IoError> {
 }
 
 /// Extensions handed to the RAW develop (heeler-raw). Every entry
-/// developed in the raw.pixls.us corpus; what is not here either failed
+/// developed in the sample corpus; what is not here either failed
 /// there outright (X3F is Foveon, ARI, LRI, CAM) or was never seen.
 /// GoPro's GPR goes to the develop too, which decodes its VC-5 tile. The
 /// catalog must index each of these too, and a test below holds the two

@@ -27,9 +27,8 @@ heeler-gpu = { path = "../../../crates/heeler-gpu" }
 # No "rawler" here on purpose. It is LGPL-2.1 with no dual option, and
 # static linking it into a shipped binary carries a relinking obligation.
 # Nor "libraw": RAW files develop in Rust (heeler-rawdec), and LibRaw is
-# built only for the tests and harnesses that compare against it. Rawler
-# stays an
-# optional dependency of heeler-io so `--features rawler` still builds
+# built only for the tests and harnesses that compare against it. It
+# stays an optional dependency of heeler-io so `--features rawler` still builds
 # the rawdiff comparison harness on a developer's machine; it just does
 # not travel to users. See the ledger entry for 2026-08-25.
 heeler-io = { path = "../../../crates/heeler-io", features = ["raw"] }
