@@ -46,6 +46,12 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.heeler-raw]
 opt-level = 3
+[profile.dev.package.heeler-rawdec]
+# The RAW develop itself: a full develop took 5.3 s in a dev build
+# against 0.35 s in release (2026-10-26, a 16 MP NRW), the overflow
+# checks a part of it. Same reason as the engine's entry above.
+opt-level = 3
+overflow-checks = false
 [profile.dev.package.heeler-graph]
 opt-level = 3
 [profile.dev.package.heeler-stitch]
