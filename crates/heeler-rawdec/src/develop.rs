@@ -393,7 +393,8 @@ impl Plan {
         let (ow, oh) = self.demosaiced_size(half);
         // The unpack's buffers are gone before the demosaic's arrive.
         // The four-color demosaic holds nothing beyond the mosaic and output.
-        let working = self.parallel_bytes()?.max(if half || self.four.is_some() { 0 } else { self.demosaic_extra() });
+        let unpack = memory::sum([self.parallel_bytes()?, self.unpack_bytes()?])?;
+        let working = unpack.max(if half || self.four.is_some() { 0 } else { self.demosaic_extra() });
         // A black measured on the border holds the whole frame a while.
         let frame = if self.dng.border_black || matches!(self.dng.coding, Coding::PhaseOne(_)) { memory::bytes(self.dng.width, self.dng.height, 1, 2)? } else { 0 };
         // A SuperCCD frame: its frame while it is placed, then the
@@ -470,10 +471,38 @@ impl Plan {
         memory::sum([samples, diffs + samples / 2, largest, rayon::current_num_threads() * 64 * 4096 + 65536])
     }
 
+    /// What the unpack holds at its peak beyond the mosaic, for the codings
+    /// whose decoders keep more than the frame's samples: bytes a pixel of
+    /// the frame, measured as the most any file of the two corpora held
+    /// (a counting allocator around each develop, every camera at both
+    /// sizes) and a quarter more. A Huffman stream read across the cores
+    /// keeps each piece's differences once for each of its codes, four
+    /// bytes each with room for two a byte of the stream, beside the
+    /// differences in order; C-RAW's wavelet keeps its bands in 32 bits;
+    /// a three-color image is read whole, then copied to its area.
+    fn unpack_bytes(&self) -> Result<usize, memory::MemoryError> {
+        let per_pixel = match &self.dng.coding {
+            Coding::NikonHuffman(_) => 34,
+            Coding::Pentax(_) => 23,
+            Coding::CrxWavelet(_) => 20,
+            Coding::KodakSmall(..) => 12,
+            Coding::CanonCrw(_) => 9,
+            Coding::Tiff if self.dng.samples == 3 => 6,
+            Coding::Tiff if self.dng.compression == 7 => 6,
+            Coding::Tiff if self.dng.compression == 9 => 5,
+            Coding::Coolscan(_) | Coding::NefSmall(_) | Coding::SonyYcc(_) => 5,
+            Coding::Fuji(_) | Coding::Samsung(_) | Coding::Slices(_) => 4,
+            Coding::Arw1 | Coding::Kodak65000(_) | Coding::Dc120 { .. } => 1,
+            _ => 0,
+        };
+        memory::bytes(self.dng.width, self.dng.height, 1, per_pixel)
+    }
+
     /// The demosaic's buffers beyond the mosaic and output: one set a
-    /// worker.
+    /// worker, and the list of tiles they take.
     pub fn demosaic_extra(&self) -> usize {
-        rayon::current_num_threads() * if self.xtrans.is_some() { crate::xtrans::worker_bytes() } else { ahd::worker_bytes() }
+        let workers = rayon::current_num_threads() * if self.xtrans.is_some() { crate::xtrans::worker_bytes() } else { ahd::worker_bytes() };
+        workers + ahd::tile_list_bytes(self.width, self.height)
     }
 }
 

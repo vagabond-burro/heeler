@@ -39,6 +39,13 @@ pub const fn worker_bytes() -> usize {
     SPAN * SPAN * (2 * 2 + 2 * 6 + 2 * 6 + 2)
 }
 
+/// The list of tiles the demosaic hands out over a `width` by `height`
+/// image, in bytes: a row and column a tile, twice over for the room the
+/// list grows into while it is collected.
+pub fn tile_list_bytes(width: usize, height: usize) -> usize {
+    width.div_ceil(TILE) * height.div_ceil(TILE) * 2 * std::mem::size_of::<(usize, usize)>()
+}
+
 /// A Bayer mosaic, its colors 0 red, 1 green, 2 blue repeating every two
 /// rows and columns.
 pub struct Mosaic<'a> {
