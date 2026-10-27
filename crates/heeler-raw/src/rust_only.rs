@@ -5,7 +5,8 @@
 //!
 //! What only LibRaw offered develops the nearest way the Rust develop
 //! can: a rebuild highlight mode (3 to 9) as clip, another demosaic as
-//! the default one, and a half size the Rust develop declines (a
+//! the default one, a develop without the camera's matrix (no control
+//! offers one) with it, and a half size the Rust develop declines (a
 //! SuperCCD frame's) as the full size scaled down by two.
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,7 +15,7 @@ use crate::{gpr, rust_path, DevelopOpts, RawError, SensorImage, StageTimes};
 
 /// The options as the Rust develop takes them (see the module's note).
 fn normalized(o: DevelopOpts) -> DevelopOpts {
-    DevelopOpts { highlight: if o.highlight == 2 { 2 } else { 0 }, demosaic: -1, ..o }
+    DevelopOpts { highlight: if o.highlight == 2 { 2 } else { 0 }, demosaic: -1, camera_matrix: true, ..o }
 }
 
 /// Every camera the develop's rules accept, not only the verified ones.

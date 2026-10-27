@@ -191,8 +191,8 @@ impl Plan {
                 return Err(Error::Unsupported("a tile layout LibRaw reads its own way"));
             }
         }
-        if !(opts.camera_wb && opts.camera_matrix) {
-            return Err(Error::Unsupported("a develop without the camera's white balance and matrix"));
+        if !opts.camera_matrix {
+            return Err(Error::Unsupported("a develop without the camera's matrix"));
         }
         if !matches!(opts.highlight, 0 | 2) {
             return Err(Error::Unsupported("a highlight rebuild"));
@@ -203,16 +203,22 @@ impl Plan {
         // A file that states no balance develops in daylight, as LibRaw
         // falls back to it: the neutral of the camera's D65 calibration.
         // Or, for a camera without a matrix, 1 for each channel.
-        let daylight = if dng.as_shot_neutral.is_none() && dng.cam_mul.is_none() {
+        // Without the camera's balance (the Source section's As-shot white
+        // balance off), daylight too, from the start: a neutral decode for
+        // the Color section to balance.
+        let daylight = if !opts.camera_wb {
+            Some(matrix_neutral(&dng).unwrap_or_else(|| vec![1.0; 3]))
+        } else if dng.as_shot_neutral.is_none() && dng.cam_mul.is_none() {
             daylight_neutral(&dng).or_else(|| (!dng.is_dng() && dng.color_matrix.iter().all(|m| m.is_none())).then(|| vec![1.0; 3]))
         } else {
             None
         };
-        let neutral = dng.as_shot_neutral.as_deref().or(daylight.as_deref()).filter(|n| n.len() == 3 && n.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no AsShotNeutral"))?;
+        let stated = if opts.camera_wb { dng.as_shot_neutral.as_deref() } else { None };
+        let neutral = stated.or(daylight.as_deref()).filter(|n| n.len() == 3 && n.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no AsShotNeutral"))?;
         // A DNG's: the reciprocal in single precision, as LibRaw takes it;
         // another format's as the file states it.
         let inv = |v: f64| 1.0f32 / v as f32;
-        let cam_mul = dng.cam_mul.unwrap_or([inv(neutral[0]), inv(neutral[1]), inv(neutral[2]), inv(neutral[1])]);
+        let cam_mul = dng.cam_mul.filter(|_| opts.camera_wb).unwrap_or([inv(neutral[0]), inv(neutral[1]), inv(neutral[2]), inv(neutral[1])]);
         let rgb_cam = develop_matrix(&dng, [neutral[0], neutral[1], neutral[2]], opts.libraw_color)?.map(|row| row.map(|v| v as f32));
         let (br, bc) = dng.black_dim;
         // The black pattern over its own period and the CFA's, so one
@@ -235,8 +241,8 @@ impl Plan {
     /// CFA and no black level, the camera's balance and matrix as for its
     /// raw frames. LibRaw develops it whole at either size.
     fn three_colors(dng: Dng, opts: &Opts) -> Result<Plan, Error> {
-        if !(opts.camera_wb && opts.camera_matrix) {
-            return Err(Error::Unsupported("a develop without the camera's white balance and matrix"));
+        if !opts.camera_matrix {
+            return Err(Error::Unsupported("a develop without the camera's matrix"));
         }
         if !matches!(opts.highlight, 0 | 2) {
             return Err(Error::Unsupported("a highlight rebuild"));
@@ -256,10 +262,14 @@ impl Plan {
         let (t, l, b, r) = dng.active;
         // A DNG stating its white as a chromaticity (AsShotWhiteXY) instead
         // (a scanner's): the neutral its color matrix gives that white.
-        let neutral = dng.as_shot_neutral.clone().or_else(|| xy_neutral(&dng)).filter(|n| n.len() == 3 && n.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no AsShotNeutral"))?;
+        // Without the camera's balance, a DNG's from daylight; the other
+        // three-color codings (a Canon sRAW, Sony's M and S sizes, Nikon's
+        // small raws) keep theirs, which their samples carry already.
+        let daylight = (!opts.camera_wb && dng.is_dng()).then(|| matrix_neutral(&dng).unwrap_or_else(|| vec![1.0; 3]));
+        let neutral = daylight.clone().or_else(|| dng.as_shot_neutral.clone()).or_else(|| xy_neutral(&dng)).filter(|n| n.len() == 3 && n.iter().all(|&v| v > 0.0)).ok_or(Error::Unsupported("no AsShotNeutral"))?;
         // A DNG's: the reciprocal in single precision, as LibRaw takes it.
         let inv = |v: f64| 1.0f32 / v as f32;
-        let cam_mul = dng.cam_mul.or_else(|| dng.is_dng().then(|| [inv(neutral[0]), inv(neutral[1]), inv(neutral[2]), inv(neutral[1])])).ok_or(Error::Unsupported("no stated white balance"))?;
+        let cam_mul = dng.cam_mul.filter(|_| daylight.is_none()).or_else(|| dng.is_dng().then(|| [inv(neutral[0]), inv(neutral[1]), inv(neutral[2]), inv(neutral[1])])).ok_or(Error::Unsupported("no stated white balance"))?;
         let rgb_cam = develop_matrix(&dng, [neutral[0], neutral[1], neutral[2]], opts.libraw_color)?.map(|row| row.map(|v| v as f32));
         // A lossy DNG's samples come through its curves to 16 bits, whatever
         // its WhiteLevel (LibRaw's maximum is 65535).
@@ -276,8 +286,8 @@ impl Plan {
     /// precision, as LibRaw holds its table's). LibRaw's color whatever
     /// `libraw_color` says: no DNG profile describes these cameras.
     fn four_colors(dng: Dng, opts: &Opts) -> Result<Plan, Error> {
-        if !(opts.camera_wb && opts.camera_matrix) {
-            return Err(Error::Unsupported("a develop without the camera's white balance and matrix"));
+        if !opts.camera_matrix {
+            return Err(Error::Unsupported("a develop without the camera's matrix"));
         }
         if !matches!(opts.highlight, 0 | 2) {
             return Err(Error::Unsupported("a highlight rebuild"));
@@ -297,7 +307,8 @@ impl Plan {
         let cam_xyz: [[f64; 3]; 4] = std::array::from_fn(|i| std::array::from_fn(|j| m[i * 3 + j] as f32 as f64));
         let (rgb_cam4, implied) = crate::color::srgb_from_camera4(&cam_xyz).ok_or(Error::Unsupported("a singular color matrix"))?;
         let rgb_cam4 = rgb_cam4.map(|row| row.map(|v| v as f32));
-        let cam_mul = dng.cam_mul.unwrap_or(implied.map(|v| v as f32));
+        // Without the camera's balance, daylight's (the matrix's own).
+        let cam_mul = dng.cam_mul.filter(|_| opts.camera_wb).unwrap_or(implied.map(|v| v as f32));
         let (br, bc) = dng.black_dim;
         let (rows, cols) = (lcm(br, 8), lcm(bc, 2));
         if rows * cols > 4096 {
@@ -315,8 +326,8 @@ impl Plan {
     /// black level and white level, no white balance and no matrix, as
     /// LibRaw develops it (each sample's value in all three channels).
     fn monochrome(dng: Dng, opts: &Opts) -> Result<Plan, Error> {
-        if !(opts.camera_wb && opts.camera_matrix) {
-            return Err(Error::Unsupported("a develop without the camera's white balance and matrix"));
+        if !opts.camera_matrix {
+            return Err(Error::Unsupported("a develop without the camera's matrix"));
         }
         if !matches!(opts.highlight, 0 | 2) {
             return Err(Error::Unsupported("a highlight rebuild"));
@@ -1270,6 +1281,19 @@ fn daylight_neutral(dng: &Dng) -> Option<Vec<f64>> {
     let xyz = [0.3127 / 0.3290, 1.0, (1.0 - 0.3127 - 0.3290) / 0.3290];
     let n: Vec<f64> = (0..3).map(|r| (0..3).map(|c| m[r * 3 + c] * xyz[c]).sum()).collect();
     (n[1] > 0.0).then(|| n.iter().map(|v| v / n[1]).collect())
+}
+
+/// The neutral the camera's matrix implies for sRGB's white, green 1:
+/// the balance a develop without the camera's takes, as LibRaw's does
+/// (its multipliers, found against LibRaw's develop of a DNG with the
+/// camera's balance off, are the reciprocals). The matrix as
+/// develop_matrix takes it for LibRaw's color.
+fn matrix_neutral(dng: &Dng) -> Option<Vec<f64>> {
+    let single = dng.color_matrix.iter().filter(|m| m.is_some()).count() > 1;
+    let cm = dng.color_matrix()?.map(|r| r.map(|v| if single { v as f32 as f64 } else { v }));
+    let (_, implied) = crate::color::srgb_from_camera(&cm)?;
+    let n = implied.map(|w| 1.0 / w);
+    (n[1] > 0.0 && n.iter().all(|&v| v > 0.0)).then(|| n.iter().map(|v| v / n[1]).collect())
 }
 
 /// The camera's neutral for a DNG's AsShotWhiteXY: its one color matrix

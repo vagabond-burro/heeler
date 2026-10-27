@@ -179,6 +179,25 @@ fn a_cr2_whose_slice_tag_states_one_slice_or_none_unpacks_as_libraw_does() {
     }
 }
 
+/// As-shot white balance off develops in daylight, the balance the
+/// camera's matrix implies, as LibRaw's develop without the camera's
+/// balance did (the Source section's switch once refused every RAW).
+#[test]
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
+fn without_the_cameras_balance_a_dng_develops_in_daylight_as_libraw_does() {
+    let bytes = cfa_dng(&Spec { width: 76, pixel: &scene, ..Spec::default() });
+    for half_size in [false, true] {
+        let o = DevelopOpts { camera_wb: false, half_size, ..DevelopOpts::default() };
+        let theirs = libraw(&bytes, o);
+        let (mine, _) = heeler_rawdec::develop::develop(&bytes, &opts(o), None).unwrap();
+        assert_eq!((mine.width, mine.height), (theirs.width, theirs.height));
+        let first = mine.rgb.iter().zip(&theirs.rgb).position(|(a, b)| a != b);
+        assert!(first.is_none(), "half {half_size}: differs first at {first:?}");
+        let (shot, _) = heeler_rawdec::develop::develop(&bytes, &opts(DevelopOpts { half_size, ..DevelopOpts::default() }), None).unwrap();
+        assert!(shot.rgb != mine.rgb, "half {half_size}: the same as the camera's balance");
+    }
+}
+
 #[test]
 fn a_stopped_develop_ends_canceled() {
     let bytes = cfa_dng(&Spec { width: 76, pixel: &scene, ..Spec::default() });
@@ -227,7 +246,7 @@ fn files_outside_the_verified_develop_are_left_to_libraw() {
     assert!(!declined(&bytes, base));
     assert!(declined(&bytes, Opts { demosaic: 0, ..base }), "another demosaic");
     assert!(declined(&bytes, Opts { highlight: 5, ..base }), "a highlight rebuild");
-    assert!(declined(&bytes, Opts { camera_wb: false, ..base }), "no camera white balance");
+    assert!(declined(&bytes, Opts { camera_matrix: false, ..base }), "no camera matrix");
     // Exactly two tiles across, each JPEG line a tile row: LibRaw reads
     // that layout two tile rows a line, and keeps such files.
     assert!(declined(&cfa_dng(&Spec { width: 64, height: 48, tile: Some((32, 16)), pixel: &scene, ..Spec::default() }), base), "a layout LibRaw reads its own way");
