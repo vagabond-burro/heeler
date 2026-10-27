@@ -360,8 +360,23 @@ impl Plan {
         matches!(self.dng.coding, Coding::Sraw(_) | Coding::SonyYcc(_) | Coding::Coolscan(_) | Coding::SonyArq(_) | Coding::NefSmall(_)) || matches!(self.dng.coding, Coding::KodakSmall(k, _) if k.three()) || (self.dng.photometric == 34892 && self.dng.samples == 3)
     }
 
-    /// The output's size (turned when the file says so).
+    /// The output's size (turned when the file says so), non-square
+    /// pixels made square as the develop's last step makes them.
     pub fn output_size(&self, half: bool) -> (usize, usize) {
+        let (w, h) = self.demosaiced_size(half);
+        if self.dng.default_scale == (1.0, 2.0) {
+            if self.flip & 4 != 0 { (w * 2, h) } else { (w, h * 2) }
+        } else if self.dng.default_scale == crate::kodak::DC120_SCALE {
+            let (num, den) = crate::kodak::DC120_WIDEN;
+            ((w * num + den / 2) / den, h)
+        } else {
+            (w, h)
+        }
+    }
+
+    /// The demosaic's image (turned when the file says so), before any
+    /// non-square pixels are made square.
+    fn demosaiced_size(&self, half: bool) -> (usize, usize) {
         let (w, h) = if let Coding::SuperCcd(sc) = &self.dng.coding { crate::superccd::turned_size(&sc.layout) } else if half { self.half_size() } else { (self.width, self.height) };
         if self.flip & 4 != 0 { (h, w) } else { (w, h) }
     }
@@ -369,7 +384,7 @@ impl Plan {
     /// The bytes a develop holds at its peak beyond the file: the mosaic,
     /// the output, the demosaic's workers and the tables.
     pub fn bytes(&self, half: bool) -> Result<usize, memory::MemoryError> {
-        let (ow, oh) = self.output_size(half);
+        let (ow, oh) = self.demosaiced_size(half);
         // The unpack's buffers are gone before the demosaic's arrive.
         // The four-color demosaic holds nothing beyond the mosaic and output.
         let working = self.parallel_bytes()?.max(if half || self.four.is_some() { 0 } else { self.demosaic_extra() });
@@ -378,8 +393,13 @@ impl Plan {
         // A SuperCCD frame: its frame while it is placed, then the
         // demosaiced diagonal image while it is turned.
         let unturned = if let Coding::SuperCcd(sc) = &self.dng.coding { memory::bytes(self.width, self.height, 3, 2)? + memory::bytes(sc.frame.0, sc.frame.1, 1, 2)? } else { 0 };
-        // Rows twice: the image twice the size, and the one before it.
-        let unstretched = if self.dng.default_scale == (1.0, 2.0) || self.dng.default_scale == crate::kodak::DC120_SCALE { memory::bytes(ow, oh, 3, 4)? } else { 0 };
+        // Non-square pixels: the stretched image beside the one before it.
+        let unstretched = if self.dng.default_scale == (1.0, 2.0) || self.dng.default_scale == crate::kodak::DC120_SCALE {
+            let (sw, sh) = self.output_size(half);
+            memory::bytes(sw, sh, 3, 2)?
+        } else {
+            0
+        };
         // A pixel shift file holds four samples a pixel to blend (three
         // to clip), beyond the one counted.
         let shifted = if matches!(self.dng.coding, Coding::SonyArq(_)) { memory::bytes(self.width, self.height, 3, 2)? } else { 0 };
@@ -1641,7 +1661,7 @@ fn develop_three(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>,
         (p, data_max)
     };
     let n = numbers(p, opts, data_max);
-    let (ow, oh) = p.output_size(false);
+    let (ow, oh) = p.demosaiced_size(false);
     let mut out = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;
     let o = Out(out.as_mut_ptr());
     let g = p.pixel_gains(false);
@@ -1675,7 +1695,7 @@ fn develop_arq_blend(bytes: &[u8], p: &Plan, a: &crate::arq::Arq, opts: &Opts, s
     stopped(stop)?;
     let n = numbers(p, opts, data_max);
     let clip = n.pre_mul.iter().map(|&m| (65535.0f32 * m) as i32).min().unwrap_or(i32::MAX);
-    let (ow, oh) = p.output_size(false);
+    let (ow, oh) = p.demosaiced_size(false);
     let mut out = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;
     let o = Out(out.as_mut_ptr());
     let g = p.pixel_gains(false);
@@ -1818,7 +1838,7 @@ fn full_turned(cfa: &[u16], p: &Plan, n: &Numbers, layout: &crate::superccd::Lay
     // The blend is done: the rest of the finish without it.
     let n = &Numbers { highlight: 0, ..*n };
     drop(diag);
-    let (ow, oh) = p.output_size(false);
+    let (ow, oh) = p.demosaiced_size(false);
     let mut rgb = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;
     let out = Out(rgb.as_mut_ptr());
     let g = p.pixel_gains(false);
@@ -1867,7 +1887,7 @@ fn half(cfa: &[u16], p: &Plan, n: &Numbers) -> Result<Image, Error> {
     }
     let (w, h) = (p.width, p.height);
     let (hw, hh) = (w / 2, h / 2);
-    let (ow, oh) = p.output_size(true);
+    let (ow, oh) = p.demosaiced_size(true);
     let mut rgb = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;
     let out = Out(rgb.as_mut_ptr());
     let g = p.pixel_gains(true);
@@ -1902,7 +1922,7 @@ fn half(cfa: &[u16], p: &Plan, n: &Numbers) -> Result<Image, Error> {
 fn half_xtrans(cfa: &[u16], p: &Plan, n: &Numbers, x: &[[u8; 6]; 6]) -> Result<Image, Error> {
     let (w, h) = (p.width, p.height);
     let (hw, hh) = p.half_size();
-    let (ow, oh) = p.output_size(true);
+    let (ow, oh) = p.demosaiced_size(true);
     let mut rgb = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;
     let out = Out(rgb.as_mut_ptr());
     let g = p.pixel_gains(true);
@@ -1947,7 +1967,7 @@ fn full(cfa: &[u16], p: &Plan, n: &Numbers, stop: Option<&AtomicBool>) -> Result
         return full_turned(cfa, p, n, &sc.layout, stop);
     }
     let (w, h) = (p.width, p.height);
-    let (ow, oh) = p.output_size(false);
+    let (ow, oh) = p.demosaiced_size(false);
     let mut rgb = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;
     let out = Out(rgb.as_mut_ptr());
     let lab = ahd::Lab::new(&p.rgb_cam);

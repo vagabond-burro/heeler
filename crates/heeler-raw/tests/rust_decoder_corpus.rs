@@ -158,6 +158,11 @@ fn every_corpus_raw_the_rust_develop_takes_is_libraws_develop() {
                 let o = DevelopOpts { half_size, highlight, ..DevelopOpts::default() };
                 let theirs = heeler_raw::decode_sensor_with(lb, if superccd { DevelopOpts { demosaic: 3, ..o } } else { o }).unwrap();
                 let with = heeler_raw::with_libraw_balance(lb, &with, o);
+                // The size the app is told before the develop is the one
+                // the develop hands back, stretched pixels included.
+                if with.output_size(half_size) != (theirs.width, theirs.height) {
+                    failures.push(format!("{name}: half {half_size}: the plan's size {:?}, LibRaw's {:?}", with.output_size(half_size), (theirs.width, theirs.height)));
+                }
                 match heeler_rawdec::develop::develop_with(&bytes, &with, &opts(o), None) {
                     // A monochrome frame's headroom is 1: LibRaw's, from
                     // multipliers it never applies, means nothing.
