@@ -1,13 +1,100 @@
-# A pure Rust raw decoder beside LibRaw
+# Heeler's Rust raw decoder
 
-Heeler opens every raw file through LibRaw 0.22.2 (vendored, with Heeler's
-patches, reached through `crates/heeler-raw`). This plan replaces it,
-format by format, with a pure Rust decoder and develop, for two reasons:
-opening a raw is a visible cost, and the C++ dependency complicates every
-build, the iOS one most of all. LibRaw stays in place for every file the
-Rust path has not been verified on.
+Heeler develops every RAW file with its own pure Rust decoder,
+`crates/heeler-rawdec`, reached through `crates/heeler-raw`. LibRaw 0.22.2
+(vendored, with Heeler's patches) shipped through 2026.6; from 2026.7 it
+is built only behind `heeler-raw`'s `libraw` feature, as the reference
+the tests and harnesses hold the Rust develop to. The reasons for the
+change were speed (opening a raw is a visible cost) and the C++
+dependency, which complicated every build and the iOS one most of all.
 
-## The goal, in numbers
+"Where it stands" below describes the decoder as it is. Every section
+after it is the plan and the record of each phase as they were written,
+in order: they speak of LibRaw as the shipped decoder, of a verified
+camera list that decided which files the Rust path took, and of a
+fallback to LibRaw, all of which Phase 16 ended for the shipped app.
+
+## Where it stands
+
+### The build
+
+- The desktop app takes `heeler-io`'s `raw` feature, which takes
+  `heeler-raw` with default features off and `rust-decoder` on. Every
+  file goes to heeler-rawdec through `src/rust_only.rs`, every camera
+  taken. A file the develop declines is `RawError::Unsupported` (shown as
+  "not supported yet"), one it finds damaged is `RawError::Damaged`, and
+  a panic inside the plan or the develop is caught and reported as
+  damaged, except a memory refusal, which stays one.
+- `heeler-raw`'s default `libraw` feature builds LibRaw beside the Rust
+  develop for the tests and harnesses: there the Rust path takes the
+  verified cameras (`verified.rs`) and LibRaw the rest, as in the phases
+  below.
+- heeler-rawdec has no C, no C++ and no build script, and builds for
+  `aarch64-apple-ios` as is. The third-party notices list what the
+  desktop binary links (`cargo tree`, not `cargo metadata`), and a test
+  fails if that build ever takes LibRaw or zlib.
+
+### Where its numbers come from
+
+- Codings: derived from the data against LibRaw's output, or written
+  from permissively licensed descriptions; never from LGPL, GPL or CDDL
+  decoder code. ORF and Fujifilm's compressed RAF were built from a
+  recalled structure, written in Heeler's own words and proven bit-exact
+  against LibRaw's frames; their phases say so.
+- Color: each camera's pair of calibrations from a converter's output
+  (`cameras.rs`, see "Camera calibrations for the other formats"),
+  developed with the DNG dual-illuminant model. Cameras the converter
+  never supported take LibRaw's matrix as measured from its output
+  (`libraw_matrices.rs`, "Cameras without a converter calibration").
+- Image area and white level for formats other than DNG: LibRaw's output
+  per camera (`geometry_table.rs`), because edits store geometry as
+  fractions of the image.
+
+### Verification
+
+- `crates/heeler-raw/tests/rust_decoder.rs` builds files in code and
+  needs no corpus. `rust_decoder_corpus.rs` (about 3.7 hours over both
+  corpora, from `HEELER_RAW_CORPUS`) holds every file the Rust path takes
+  to LibRaw's develop: to the bit for verified cameras, X-Trans full size
+  at a PSNR floor of 38 dB. It feeds the develop LibRaw's levels, balance
+  and matrix, so it checks the decoding and the develop, not the shipped
+  numbers; `rustdiff --own` develops with the shipped numbers.
+- The last full corpus run recorded here, on 85d1271 (2026-10-26),
+  compared 4943 files from 1027 cameras with no mismatch. With every
+  camera taken, 4987 of the 5108 files LibRaw opens develop in Rust; the
+  rest are listed under Phase 16.
+
+### Known differences from LibRaw
+
+- White balance: the Nikon D2X and D50 (enciphered balance, developed in
+  daylight), the Canon S60 and the Fujifilm S2Pro differ from LibRaw's
+  multipliers; which side is right is not established.
+- White level: the Phase One IQ3 100MP and iXM backs take 64508 where
+  LibRaw takes 65535, about 1.6% brighter.
+- Color: every camera follows the calibration table, so cameras LibRaw
+  develops with the maker's matrix differ from it in daylight, and every
+  camera differs under tungsten (the release notes say so).
+
+### Open items
+
+- Memory: `Plan::bytes` underestimates the peak of the Huffman, VC-5 and
+  Samsung decoders (a 645D at half size uses about six times its
+  estimate). The 8 MiB header probe no longer sizes a RAW, so stacks and
+  panoramas read each file whole to size it. `output_size` ignores the
+  D1X's and DC120's stretched pixels before the first develop.
+- Develop: an odd ActiveArea's black and a GainMap's offset;
+  OpcodeList2 and 3 are not applied on linear, monochrome and four-color
+  plans; half-size stage 3 coordinates; cancellation is not checked
+  inside a single-stream decode; Leaf's records are found in quadratic
+  time; a NEF Huffman error is reported as unsupported, not damaged.
+- Formats: Nikon High Efficiency NEFs (parked; LibRaw cannot decode them
+  either) and the rare formats Phase 16's survey lists.
+- Elsewhere: GPR errors are not matched by the app's undevelopable test;
+  `heeler-raw --no-default-features --all-targets` does not compile;
+  the tests run without overflow checks; libwebp's own notice is
+  missing.
+
+## The goal, in numbers (as planned, 2026-10-19)
 
 Speed is wall time in release, on one file, from the file's bytes to the
 `SensorImage` Heeler takes from LibRaw today, under the same `DevelopOpts`,
@@ -24,7 +111,7 @@ Every number in this document was measured on one machine: a 16-core
 Apple M4 Max (12 performance and 4 efficiency cores), 48 GB, macOS,
 `cargo build --release`, every core available to both decoders.
 
-## What Heeler takes from LibRaw
+## What Heeler took from LibRaw (before Phase 16)
 
 Only `heeler-io` calls `heeler-raw`; the app, `heeler-vision`, the engine
 and the graph reach raw files through `heeler-io`'s `decode_*`,
@@ -354,6 +441,10 @@ corpus. `rust_decoder_corpus.rs` does the same for every corpus DNG the
 Rust path takes, and skips when `HEELER_RAW_CORPUS` is unset.
 
 ## The fallback design
+
+This is the design of the builds with both `libraw` and `rust-decoder`,
+which the tests and harnesses still use; the shipped app has no fallback
+(see "Where it stands").
 
 - A new pure Rust crate, `crates/heeler-rawdec`, with no C or C++ and no
   build script; it builds for `aarch64-apple-ios` as is.
@@ -2783,9 +2874,10 @@ opens): 4987 open in Rust. Of the rest:
 - `scripts/test_release.py` no longer holds the notice to the archive of
   this tree (a release no longer adds one); the archive script and its
   other checks stay for the archives already published.
-- The generated third-party notices still list zlib's crate: the
-  generator reads `cargo metadata`, which merges features across the
-  workspace. Listing a license the binary does not need is harmless.
+- The generated third-party notices listed zlib's crate and crates only
+  build scripts use, because the generator read `cargo metadata`, which
+  merges features across the workspace. It now reads `cargo tree` for
+  the desktop binary (3b8d5d5).
 
 ### For the release notes
 
