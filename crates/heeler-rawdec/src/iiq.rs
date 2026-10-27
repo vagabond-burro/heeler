@@ -159,8 +159,10 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let cal = crate::iiq_cal::read(bytes).ok_or(Error::Unsupported("a Phase One calibration not read here"))?;
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
     // LibRaw's white level once the calibration has taken the black off:
-    // 65532 less it.
-    let white = (65532 - cal.black).max(1) as f64;
+    // 65532 less it, or the back's own where that is lower (a Leaf Credo
+    // 40's samples are 14 bits: 16383, where 64508 developed it two stops
+    // dark).
+    let white = ((65532 - cal.black).max(1) as f64).min(if geometry.white > 0 { geometry.white as f64 } else { f64::MAX });
     let calibration = crate::cameras::find(&make, &model).ok_or(Error::Unsupported("a camera without calibrations"))?;
     let m = |v: &Option<[f64; 9]>| v.map(|v| v.to_vec());
     let (top, left) = (geometry.top as usize, geometry.left as usize);
