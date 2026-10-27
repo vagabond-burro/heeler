@@ -59,6 +59,11 @@ fallback to LibRaw, all of which Phase 16 ended for the shipped app.
   at a PSNR floor of 38 dB. It feeds the develop LibRaw's levels, balance
   and matrix, so it checks the decoding and the develop, not the shipped
   numbers; `rustdiff --own` develops with the shipped numbers.
+- `rust_decoder_memory_corpus.rs` (about 12 minutes) develops one file
+  of every corpus folder at both sizes under a counting allocator and
+  fails if the develop holds more than `Plan::bytes` admits. Each
+  coding's unpack term (`unpack_bytes`) is a quarter above the most any
+  corpus file held.
 - The last full corpus run recorded here, on 85d1271 (2026-10-26),
   compared 4943 files from 1027 cameras with no mismatch. With every
   camera taken, 4987 of the 5108 files LibRaw opens develop in Rust; the
@@ -77,22 +82,20 @@ fallback to LibRaw, all of which Phase 16 ended for the shipped app.
 
 ### Open items
 
-- Memory: `Plan::bytes` underestimates the peak of the Huffman, VC-5 and
-  Samsung decoders (a 645D at half size uses about six times its
-  estimate). The 8 MiB header probe no longer sizes a RAW, so stacks and
-  panoramas read each file whole to size it. `output_size` ignores the
-  D1X's and DC120's stretched pixels before the first develop.
-- Develop: an odd ActiveArea's black and a GainMap's offset;
-  OpcodeList2 and 3 are not applied on linear, monochrome and four-color
-  plans; half-size stage 3 coordinates; cancellation is not checked
-  inside a single-stream decode; Leaf's records are found in quadratic
-  time; a NEF Huffman error is reported as unsupported, not damaged.
+- Develop: an odd ActiveArea's black and a GainMap's offset; half-size
+  stage 3 coordinates; cancellation is not checked inside a
+  single-stream decode; Leaf's records are found in quadratic time; a
+  NEF Huffman error is reported as unsupported, not damaged. OpcodeList2
+  is not applied on linear and monochrome plans, as 2026.6 did not apply
+  it either.
+- Memory: the parallel Huffman decode holds up to about 27 bytes a frame
+  pixel (each piece's differences once for each code); `Plan::bytes`
+  now counts it, but the decode itself could hold far less.
 - Formats: Nikon High Efficiency NEFs (parked; LibRaw cannot decode them
   either) and the rare formats Phase 16's survey lists.
 - Elsewhere: GPR errors are not matched by the app's undevelopable test;
   `heeler-raw --no-default-features --all-targets` does not compile;
-  the tests run without overflow checks; libwebp's own notice is
-  missing.
+  the tests run without overflow checks.
 
 ## The goal, in numbers (as planned, 2026-10-19)
 
