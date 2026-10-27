@@ -124,7 +124,20 @@ struct Boxes {
     tracks: Vec<Track>,
 }
 
+/// How deep boxes nest before the rest are passed over: a camera's go
+/// eight deep (moov, trak, mdia, minf, stbl, stsd, CRAW, CMP1), and a
+/// file nesting them without end would overflow the stack.
+const DEPTH: usize = 16;
+
 fn walk(b: &[u8], at: usize, end: usize, out: &mut Boxes) {
+    walk_in(b, at, end, out, 0)
+}
+
+fn walk_in(b: &[u8], at: usize, end: usize, out: &mut Boxes, depth: usize) {
+    if depth > DEPTH {
+        return;
+    }
+    let walk = |b: &[u8], at: usize, end: usize, out: &mut Boxes| walk_in(b, at, end, out, depth + 1);
     for (typ, c, e) in boxes(b, at, end) {
         match &typ {
             b"moov" | b"mdia" | b"minf" | b"stbl" => walk(b, c, e, out),
@@ -174,9 +187,11 @@ fn be32(b: &[u8], at: usize) -> Option<usize> {
 /// 12th byte) records of a size, a tag and a TIFF file, the maker notes
 /// tagged 0x927C.
 fn color_data(b: &[u8], meta: &Track) -> Option<Vec<u32>> {
-    let (mut at, end) = (meta.offset?, meta.offset? + meta.size?);
+    // The track as far as the file holds it: a file cut short loses its
+    // last records, not its bounds.
+    let (mut at, end) = (meta.offset?, meta.offset?.checked_add(meta.size?)?.min(b.len()));
     let le32 = |at: usize| b.get(at..at + 4).map(|v| u32::from_le_bytes(v.try_into().unwrap()) as usize);
-    while at + 12 <= end.min(b.len()) {
+    while at + 12 <= end {
         let n = le32(at)?;
         let typ = u16::from_le_bytes(b.get(at + 4..at + 6)?.try_into().unwrap());
         if n < 12 || at + n > end {
@@ -190,7 +205,7 @@ fn color_data(b: &[u8], meta: &Track) -> Option<Vec<u32>> {
                     break;
                 }
                 if tag == 0x927c {
-                    let t = Tiff::new(&b[p + 8..p + rn])?;
+                    let t = Tiff::new(b.get(p + 8..p + rn)?)?;
                     let ifd = t.ifds().into_iter().next()?;
                     let e = ifd.get(0x4001)?;
                     return match e.typ {
@@ -383,6 +398,10 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         return Err(Error::Unsupported("a CR3 camera without a white level"));
     }
     let meta = found.tracks.iter().find(|t| &t.handler == b"meta").ok_or(Error::Unsupported("a CR3 without its metadata track"))?;
+    // A metadata track past the end of the file: a file cut short.
+    if meta.offset.zip(meta.size).is_some_and(|(o, n)| o.checked_add(n).is_none_or(|e| e > bytes.len())) {
+        return Err(Error::Corrupt("a CR3 cut short of its metadata track"));
+    }
     let color = color_data(bytes, meta).ok_or(Error::Unsupported("no ColorData"))?;
     let (wb_at, black_at) = color.first().and_then(|&v| layout(v)).ok_or(Error::Unsupported("a ColorData layout not read here"))?;
     let wb = color.get(wb_at..wb_at + 4).ok_or(Error::Corrupt("ColorData"))?;
@@ -447,4 +466,39 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         cam_mul: Some(cam_mul),
         border_black: false,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn boxes_nested_without_end_are_passed_over() {
+        // 200,000 moov boxes one inside the next once overflowed the stack.
+        let n = 200_000;
+        let mut b = Vec::with_capacity(n * 8 + 16);
+        for k in 0..n {
+            b.extend_from_slice(&(((n - k) * 8) as u32).to_be_bytes());
+            b.extend_from_slice(b"moov");
+        }
+        assert!(make_model(&b).is_none());
+        assert!(parse(&b).is_err());
+    }
+
+    #[test]
+    fn a_metadata_track_cut_short_reads_what_the_file_holds() {
+        // A type 8 record whose maker notes run past the end of a file cut
+        // short (an interrupted copy) once panicked; now it reads as none.
+        let mut record = 16u32.to_le_bytes().to_vec();
+        record.extend_from_slice(&0x927cu32.to_le_bytes());
+        record.extend_from_slice(&[0u8; 4]);
+        let mut b = 4096u32.to_le_bytes().to_vec();
+        b.extend_from_slice(&8u16.to_le_bytes());
+        b.extend_from_slice(&[0u8; 6]);
+        b.extend_from_slice(&record[..10]);
+        let meta = Track { offset: Some(0), size: Some(4096), ..Track::default() };
+        assert!(color_data(&b, &meta).is_none());
+        let meta = Track { offset: Some(usize::MAX - 4), size: Some(4096), ..Track::default() };
+        assert!(color_data(&b, &meta).is_none());
+    }
 }
