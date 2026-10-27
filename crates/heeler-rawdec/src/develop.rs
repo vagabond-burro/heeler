@@ -1577,8 +1577,12 @@ fn develop_three(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>,
     let mut rgb = memory::vector(p.width * p.height * 3, 0u16, "RAW samples")?;
     rgb.par_chunks_mut(p.width * 3).enumerate().for_each(|(r, row)| row.copy_from_slice(&all[((p.top + r) * fw + p.left) * 3..][..p.width * 3]));
     drop(all);
-    // A linear DNG's black, one a channel (Plan::three_colors).
-    if p.black.iter().any(|&b| b != 0) {
+    // A linear DNG's black, one a channel (Plan::three_colors). The other
+    // three-color codings decode with the black already off, so a black
+    // in their plan (LibRaw's, handed in by a comparison) is not taken
+    // off again.
+    let linear = matches!(p.dng.coding, Coding::Tiff) && p.dng.photometric == 34892 && p.dng.samples == 3;
+    if linear && p.black.iter().take(3).any(|&b| b != 0) {
         rgb.par_chunks_mut(3).for_each(|px| {
             for (v, &b) in px.iter_mut().zip(&p.black) {
                 *v = (*v as u32).saturating_sub(b) as u16;
