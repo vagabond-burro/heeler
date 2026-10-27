@@ -119,7 +119,14 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     if wb.iter().any(|&v| v <= 0.0) || black.iter().any(|&v| v < 0.0) {
         return Err(Error::Unsupported("no stated white balance"));
     }
-    let white = geometry.white as f64;
+    // The camera's white level (geometry.rs), else, where the table leaves
+    // it to the file (0: the NX500, whose frames come in 12 and 14 bits),
+    // the samples' depth full.
+    let white = match (geometry.white, bits_tag) {
+        (w, _) if w > 0 => w as f64,
+        (_, b @ (12 | 14)) => ((1u32 << b) - 1) as f64,
+        _ => return Err(Error::Unsupported("no white level")),
+    };
     let orientation = uint(ifd0, 274).unwrap_or(1);
     if !(1..=8).contains(&orientation) {
         return Err(Error::Unsupported("an orientation tag outside 1 to 8"));

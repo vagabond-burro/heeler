@@ -229,7 +229,7 @@ impl Plan {
             return Err(Error::Unsupported("a black level pattern this large"));
         }
         let black = (0..rows).flat_map(|i| (0..cols).map(move |j| (i, j))).map(|(i, j)| dng.black_at(i, j)).collect();
-        let white = dng.white.first().copied().unwrap_or(65535.0).clamp(1.0, 65535.0) as u32;
+        let white = white_level(&dng)?;
         // Other opcodes are left alone, as heeler-raw leaves them around
         // LibRaw's develop.
         let gains2 = gain_map::parse_list(&dng.opcodes[1]);
@@ -273,7 +273,7 @@ impl Plan {
         let rgb_cam = develop_matrix(&dng, [neutral[0], neutral[1], neutral[2]], opts.libraw_color)?.map(|row| row.map(|v| v as f32));
         // A lossy DNG's samples come through its curves to 16 bits, whatever
         // its WhiteLevel (LibRaw's maximum is 65535).
-        let white = if dng.compression == 34892 { 65535 } else { dng.white.first().copied().unwrap_or(65535.0).clamp(1.0, 65535.0) as u32 };
+        let white = if dng.compression == 34892 { 65535 } else { white_level(&dng)? };
         // The black, one a channel, in `black` (black_cols 3).
         Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 1], [1, 2]], xtrans: None, black, black_rows: 1, black_cols: 3, white, cam_mul, rgb_cam, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, four: None, dng })
     }
@@ -315,7 +315,7 @@ impl Plan {
             return Err(Error::Unsupported("a black level pattern this large"));
         }
         let black = (0..rows).flat_map(|i| (0..cols).map(move |j| (i, j))).map(|(i, j)| dng.black_at(i, j)).collect();
-        let white = dng.white.first().copied().unwrap_or(65535.0).clamp(1.0, 65535.0) as u32;
+        let white = white_level(&dng)?;
         let pattern = [[pattern8[0][0], pattern8[0][1]], [pattern8[1][0], pattern8[1][1]]];
         let rgb_cam = rgb_cam4.map(|row| [row[0], row[1], row[2]]);
         let four = Some(Box::new(crate::four_color::Four { pattern: pattern8, rgb_cam: rgb_cam4 }));
@@ -345,7 +345,7 @@ impl Plan {
         }
         // The pattern from the image area's top left.
         let black: Vec<u32> = (0..br * bc).map(|k| dng.black[((k / bc + t) % br) * bc + (k % bc + l) % bc].round() as u32).collect();
-        let white = dng.white.first().copied().unwrap_or(65535.0).clamp(1.0, 65535.0) as u32;
+        let white = white_level(&dng)?;
         let identity = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
         Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 0], [0, 0]], xtrans: None, black, black_rows: br, black_cols: bc, white, cam_mul: [1.0; 4], rgb_cam: identity, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, four: None, dng })
     }
@@ -1281,6 +1281,16 @@ fn daylight_neutral(dng: &Dng) -> Option<Vec<f64>> {
     let xyz = [0.3127 / 0.3290, 1.0, (1.0 - 0.3127 - 0.3290) / 0.3290];
     let n: Vec<f64> = (0..3).map(|r| (0..3).map(|c| m[r * 3 + c] * xyz[c]).sum()).collect();
     (n[1] > 0.0).then(|| n.iter().map(|v| v / n[1]).collect())
+}
+
+/// The white level the file states (65535 when it states none). One
+/// below 1 (a reader's table leaving it to a file that does not state it)
+/// is turned away: clamped to 1, every sample read as white.
+fn white_level(dng: &Dng) -> Result<u32, Error> {
+    match dng.white.first().copied() {
+        Some(w) if !(w >= 1.0) => Err(Error::Unsupported("no white level")),
+        w => Ok(w.unwrap_or(65535.0).min(65535.0) as u32),
+    }
 }
 
 /// The neutral the camera's matrix implies for sRGB's white, green 1:
