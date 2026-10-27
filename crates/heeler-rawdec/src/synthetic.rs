@@ -173,6 +173,9 @@ pub struct Spec<'a> {
     /// OpcodeList2 and OpcodeList3 bytes, if any.
     pub opcodes2: Option<Vec<u8>>,
     pub opcodes3: Option<Vec<u8>>,
+    /// 0 for a mosaic; 1 or 3 for LinearRaw with that many samples a
+    /// pixel (strips only), `pixel(y, x * samples + k)` each sample.
+    pub linear: u16,
     pub pixel: &'a dyn Fn(usize, usize) -> u16,
 }
 
@@ -196,6 +199,7 @@ impl Default for Spec<'_> {
             ],
             opcodes2: None,
             opcodes3: None,
+            linear: 0,
             pixel: &|_, _| 0,
         }
     }
@@ -217,6 +221,8 @@ pub fn scene(y: usize, x: usize) -> u16 {
 
 pub fn cfa_dng(s: &Spec) -> Vec<u8> {
     let (w, h) = (s.width, s.height);
+    assert!(s.linear == 0 || s.tile.is_none(), "a linear DNG in strips");
+    let spp = s.linear.max(1) as usize;
     // The raw image's pieces.
     let mut pieces: Vec<Vec<u8>> = Vec::new();
     let (pw, ph) = match s.tile {
@@ -240,7 +246,7 @@ pub fn cfa_dng(s: &Spec) -> Vec<u8> {
                 let mut out = Vec::new();
                 for y in r0..(r0 + rows).min(h) {
                     let (mut acc, mut have) = (0u64, 0u32);
-                    for x in 0..w {
+                    for x in 0..w * spp {
                         let v = (s.pixel)(y, x) as u64;
                         match s.bits {
                             8 => out.push(v as u8),
@@ -274,13 +280,13 @@ pub fn cfa_dng(s: &Spec) -> Vec<u8> {
         (254, 4, 1, long(&[0])),
         (256, 4, 1, long(&[w as u32])),
         (257, 4, 1, long(&[h as u32])),
-        (258, 3, 1, short(&[bits])),
+        (258, 3, spp as u32, short(&vec![bits; spp])),
         (259, 3, 1, short(&[if tiled { 7 } else { 1 }])),
-        (262, 3, 1, short(&[32803])),
+        (262, 3, 1, short(&[if s.linear > 0 { 34892 } else { 32803 }])),
         (271, 2, 7, b"Heeler\0".to_vec()),
         (272, 2, 5, b"Test\0".to_vec()),
         (274, 3, 1, short(&[s.orientation])),
-        (277, 3, 1, short(&[1])),
+        (277, 3, 1, short(&[spp as u16])),
         (284, 3, 1, short(&[1])),
         (33421, 3, 2, short(&[2, 2])),
         (33422, 1, 4, s.cfa.to_vec()),
@@ -297,6 +303,14 @@ pub fn cfa_dng(s: &Spec) -> Vec<u8> {
         (50778, 3, 1, short(&[17])),
         (50779, 3, 1, short(&[21])),
     ];
+    if s.linear > 0 {
+        // No CFA: its pattern's tags leave.
+        e.retain(|x| !matches!(x.0, 33421 | 33422 | 50710));
+    }
+    if s.linear == 1 {
+        // A monochrome frame has no three colors to balance or convert.
+        e.retain(|x| !matches!(x.0, 50721 | 50722 | 50728 | 50778 | 50779));
+    }
     if let Some(t) = &s.linearization {
         e.push((50712, 3, t.len() as u32, short(t)));
     }

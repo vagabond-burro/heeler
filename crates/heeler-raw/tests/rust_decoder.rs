@@ -121,6 +121,40 @@ fn lens_shading_opcodes_develop_as_heeler_raw_applies_them_around_libraw() {
     same_as_libraw("lens shading, odd sizes", &bytes);
 }
 
+/// A linear DNG's and a monochrome DNG's OpcodeList3 (a vignette, then a
+/// map on each plane) as LibRaw's develop applies it with heeler-raw's
+/// stage 3 pass: full size and half (both whole), Clip and Blend.
+#[test]
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
+fn lens_shading_on_linear_and_monochrome_dngs_develops_as_libraw_does() {
+    use heeler_rawdec::synthetic::{gain_map, opcode_list, vignette};
+    for samples in [3u16, 1] {
+        let per_plane: Vec<f32> = (0..2 * 2 * samples as usize).map(|i| 1.0 + 0.07 * i as f32).collect();
+        let list3 = opcode_list(&[vignette([0.3, 0.1, 0.0, 0.0, 0.0], 0.45, 0.55), gain_map([0, 0, 41, 71], [0, samples as u32], [1, 1], [2, 2], samples as u32, &per_plane)]);
+        for (what, opcodes3) in [("plain", None), ("lens shading", Some(list3))] {
+            for orientation in [1u16, 6] {
+                let px = move |y: usize, x: usize| scene(y, x / samples as usize) / 2 + (x % samples as usize) as u16 * 300;
+                let bytes = cfa_dng(&Spec { width: 71, height: 41, tile: None, linear: samples, orientation, opcodes3: opcodes3.clone(), pixel: &px, ..Spec::default() });
+                for half_size in [false, true] {
+                    for highlight in [0, 2] {
+                        let o = DevelopOpts { half_size, highlight, ..DevelopOpts::default() };
+                        // A monochrome frame has no channels to blend, and
+                        // LibRaw's Blend scales it by a headroom from
+                        // multipliers it never applies: both are held to
+                        // its Clip.
+                        let theirs = libraw(&bytes, if samples == 1 { DevelopOpts { highlight: 0, ..o } } else { o });
+                        let (mine, _) = heeler_rawdec::develop::develop(&bytes, &opts(o), None).unwrap_or_else(|e| panic!("{samples} samples, {what}: declined: {e}"));
+                        let case = format!("{samples} samples, {what}, orientation {orientation}, half {half_size}, highlight {highlight}");
+                        assert_eq!((mine.width, mine.height), (theirs.width, theirs.height), "{case}: size");
+                        let first = mine.rgb.iter().zip(&theirs.rgb).position(|(a, b)| a != b);
+                        assert!(first.is_none(), "{case}: differs first at sample {first:?} of {}", mine.rgb.len());
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// A CR2 made in code, its frame in slices: unpacked into the right
 /// places, and developed as LibRaw does (given LibRaw's levels and
 /// matrix), full size and half, Clip and Blend.

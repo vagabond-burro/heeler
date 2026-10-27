@@ -274,8 +274,12 @@ impl Plan {
         // A lossy DNG's samples come through its curves to 16 bits, whatever
         // its WhiteLevel (LibRaw's maximum is 65535).
         let white = if dng.compression == 34892 { 65535 } else { white_level(&dng)? };
+        // A DNG's OpcodeList3 (lens shading), applied between the
+        // highlights and the matrix as on a mosaic's develop; its
+        // OpcodeList2 is left alone, as heeler-raw left it around LibRaw's.
+        let stage3 = if dng.is_dng() { gain_map::parse_list3(&dng.opcodes[2]) } else { Vec::new() };
         // The black, one a channel, in `black` (black_cols 3).
-        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 1], [1, 2]], xtrans: None, black, black_rows: 1, black_cols: 3, white, cam_mul, rgb_cam, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, four: None, dng })
+        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 1], [1, 2]], xtrans: None, black, black_rows: 1, black_cols: 3, white, cam_mul, rgb_cam, flip: dng.flip(), gains2: Vec::new(), stage3, table_period: 1, four: None, dng })
     }
 
     /// A mosaic of four colors (Dng::four_colors): LibRaw's pattern, its
@@ -347,7 +351,9 @@ impl Plan {
         let black: Vec<u32> = (0..br * bc).map(|k| dng.black[((k / bc + t) % br) * bc + (k % bc + l) % bc].round() as u32).collect();
         let white = white_level(&dng)?;
         let identity = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
-        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 0], [0, 0]], xtrans: None, black, black_rows: br, black_cols: bc, white, cam_mul: [1.0; 4], rgb_cam: identity, flip: dng.flip(), gains2: Vec::new(), stage3: Vec::new(), table_period: 1, four: None, dng })
+        // OpcodeList3 on the one plane, as on a mosaic's three.
+        let stage3 = gain_map::parse_list3(&dng.opcodes[2]);
+        Ok(Plan { top: t, left: l, width: r - l, height: b - t, pattern: [[0, 0], [0, 0]], xtrans: None, black, black_rows: br, black_cols: bc, white, cam_mul: [1.0; 4], rgb_cam: identity, flip: dng.flip(), gains2: Vec::new(), stage3, table_period: 1, four: None, dng })
     }
 
     /// Whether the image is one sample a pixel (monochrome).
@@ -422,10 +428,11 @@ impl Plan {
         if self.xtrans.is_some() { (self.width.div_ceil(2), self.height.div_ceil(2)) } else { (self.width / 2, self.height / 2) }
     }
 
-    /// OpcodeList3 worked out for the develop's image.
+    /// OpcodeList3 worked out for the develop's image: one plane for a
+    /// monochrome frame, three for the rest.
     pub fn pixel_gains(&self, half: bool) -> PixelGains {
         let (w, h) = self.stage3_size(half);
-        PixelGains::new(&self.stage3, w as u32, h as u32, 3)
+        PixelGains::new(&self.stage3, w as u32, h as u32, if self.mono() { 1 } else { 3 })
     }
 
     /// Whether the unpack reads each piece's code stream across the cores
@@ -1720,8 +1727,8 @@ fn develop_arq_blend(bytes: &[u8], p: &Plan, a: &crate::arq::Arq, opts: &Opts, s
 }
 
 /// A monochrome frame's develop: the black off, each sample scaled to the
-/// white level (LibRaw keeps a monochrome frame whole at either size) and
-/// written to all three channels.
+/// white level (LibRaw keeps a monochrome frame whole at either size),
+/// through the stage 3 opcodes and written to all three channels.
 fn develop_mono(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, t0: std::time::Instant, open: f64) -> Result<(Image, Times), Error> {
     let mut v = unpack(bytes, p, stop)?;
     let unpacked = t0.elapsed().as_secs_f64();
@@ -1732,10 +1739,15 @@ fn develop_mono(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, 
     let (ow, oh) = if p.flip & 4 != 0 { (h, w) } else { (w, h) };
     let mut out = memory::vector(ow * oh * 3, 0u16, "RAW samples")?;
     let o = Out(out.as_mut_ptr());
+    let g = p.pixel_gains(false);
     v.par_chunks(w).enumerate().for_each(|(r, row)| {
         let o = o;
         for (c, &x) in row.iter().enumerate() {
-            let y = scale(x, n.scale_mul[0]);
+            let mut y = [scale(x, n.scale_mul[0])];
+            if !g.is_empty() {
+                g.apply(r, c, &mut y);
+            }
+            let [y] = y;
             let (oy, ox) = to_output(p.flip, w, h, r, c);
             // SAFETY: each output pixel is written by its own source pixel.
             unsafe { std::ptr::copy_nonoverlapping([y; 3].as_ptr(), o.at((oy * ow + ox) * 3), 3) };
