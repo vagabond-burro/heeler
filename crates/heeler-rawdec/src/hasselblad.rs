@@ -71,11 +71,16 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         return Err(Error::Unsupported("a Hasselblad frame of this size or depth"));
     }
     let offset = uint(273).ok_or(Error::Corrupt("StripOffsets"))? as usize;
+    if offset >= bytes.len() {
+        return Err(Error::Corrupt("a Hasselblad strip past the end of the file"));
+    }
     // The stated length is the samples' uncompressed size; the stream ends
     // with the file.
-    let count = (uint(279).ok_or(Error::Corrupt("StripByteCounts"))? as usize).min(bytes.len().saturating_sub(offset));
+    let stated = uint(279).ok_or(Error::Corrupt("StripByteCounts"))? as usize;
+    let count = stated.min(bytes.len().saturating_sub(offset));
     let compressed = match uint(259) {
         Some(1) if count >= width * height * 2 => false,
+        Some(1) if stated >= width * height * 2 => return Err(Error::Corrupt("an uncompressed Hasselblad strip cut short")),
         Some(7) => true,
         _ => return Err(Error::Unsupported("a Hasselblad coding not read here")),
     };
@@ -185,6 +190,11 @@ pub fn decode(data: &[u8], width: usize, height: usize, offset: u16, mut put: im
             row[c + 1] = pred[1].wrapping_add(offset);
         }
         put(r, &row);
+    }
+    // A stream read past its end (zeros, for a file cut short) is
+    // damaged, not a frame of rows rebuilt from nothing.
+    if (bits.at * 8).saturating_sub(bits.n as usize) > data.len() * 8 {
+        return Err(Error::Corrupt("a Hasselblad stream cut short"));
     }
     Ok(())
 }
