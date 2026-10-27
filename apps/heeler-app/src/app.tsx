@@ -108,7 +108,7 @@ import { Viewer } from "./ui/viewer";
 import { quadGestureBlendId, transformPreviewPlan } from "./ui/transformpreviewparts";
 // The pump's retry policy lives in its own module: exported from here
 // it defeated Vite's fast refresh, and every edit cost a full reload.
-import { PREVIEW_RETRY_ATTEMPTS, isMissingSource, missingSourcePath, previewRetryDelay } from "./previewretry";
+import { PREVIEW_RETRY_ATTEMPTS, isMissingSource, isUndevelopable, missingSourcePath, previewRetryDelay, undevelopableMessage } from "./previewretry";
 
 /** How long the hand stays off before the full-resolution settle
  * starts: long enough that a run of quick edits never queues a
@@ -1536,6 +1536,20 @@ export function App() {
               // line"). Every time, because every time is a click on the missing
               // photo.
               flashStatus(missingMsg);
+              setPreviewError(result.error);
+              previewRetry.current = 0;
+              continue;
+            }
+            // A file the develop turns away (a format not read yet, a
+            // damaged file) is no hiccup either: say why once, long enough
+            // to read, and wait for the next edit.
+            if (isUndevelopable(result.error)) {
+              const undevelopable = undevelopableMessage(result.error);
+              if (!missingLogged.current.has(result.error)) {
+                missingLogged.current.add(result.error);
+                logMsg("warn", undevelopable.log);
+              }
+              flashStatus(undevelopable.status, 20000);
               setPreviewError(result.error);
               previewRetry.current = 0;
               continue;

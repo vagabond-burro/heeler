@@ -21,7 +21,7 @@ import { reduce, trashConfirmAction, type Command, type ImageEntry, type State }
 import { mockRemovalCalls, mockResetRemovalCalls, type FolderImage } from "../bridge";
 import { ConfirmDialog } from "../ui/catalogui";
 import { confirmCopy } from "../ui/cataloguiparts";
-import { isMissingSource } from "../previewretry";
+import { HIGH_EFFICIENCY_NEF_ISSUE, isMissingSource, isUndevelopable, undevelopableMessage } from "../previewretry";
 
 const files: FolderImage[] = [
   { id: "img_here", name: "here.NEF", stars: 3, flag: "", edited: true },
@@ -130,6 +130,33 @@ describe("a render that cannot be retried into working", () => {
     expect(isMissingSource("engine busy")).toBe(false);
     expect(isMissingSource("Slow engine render: 500ms")).toBe(false);
     expect(isMissingSource("gpu device lost")).toBe(false);
+    expect(isUndevelopable("engine busy")).toBe(false);
+    expect(isUndevelopable("Slow engine render: 500ms")).toBe(false);
+  });
+
+  it("does not retry a RAW the develop turns away, and says why", () => {
+    // The "hiccup" walk hid "not supported yet" in the log for thirty-one
+    // seconds; the reason belongs on the status line, once.
+    const generic = "unsupported: this RAW file's format is not supported yet, so it cannot be developed: /photos/M001.MDC";
+    expect(isUndevelopable(generic)).toBe(true);
+    expect(isUndevelopable("unsupported: this RAW file is damaged (a raw strip past the end of the file), so it cannot be developed: /a/b.NEF")).toBe(true);
+    expect(isUndevelopable("unsupported: the photograph in this file is 756 x 504 but only its 96 x 64 thumbnail could be read; its main image uses an encoding this build cannot decode: /a/b.KDC")).toBe(true);
+    const plain = undevelopableMessage(generic);
+    expect(plain.status).toBe("M001.MDC: this RAW file's format is not supported yet, so it cannot be developed");
+    expect(plain.log).toContain("/photos/M001.MDC");
+  });
+
+  it("gives a High Efficiency NEF its options and the issue that tracks it", () => {
+    // 2026-10-26: "link to the issue from the error", "list options (like
+    // convert to DNG) for users". The options lead, since the status line
+    // ends in an ellipsis; the issue's address goes to the console.
+    const he = "unsupported: this RAW file's format is not supported yet (a Nikon High Efficiency NEF), so it cannot be developed: /photos/DSC_0068.NEF";
+    expect(isUndevelopable(he)).toBe(true);
+    const { status, log } = undevelopableMessage(he);
+    expect(status).toMatch(/^DSC_0068\.NEF: Nikon's High Efficiency RAW is not supported yet\. Record Lossless compressed RAW, or convert the file to DNG/);
+    expect(status).toContain("Help > User Documentation > Library");
+    expect(log).toContain(HIGH_EFFICIENCY_NEF_ISSUE);
+    expect(HIGH_EFFICIENCY_NEF_ISSUE).toBe("https://github.com/vagabond-burro/heeler/issues/76");
   });
 });
 

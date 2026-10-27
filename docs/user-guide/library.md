@@ -6,9 +6,21 @@ The Library is the left panel. It organizes photographs by their actual folders 
 
 ## Open and resize the Library
 
-Heeler reads the raw file every camera maker writes, including DNG, CR2, CR3, CRW, NEF, NRW, ARW, SR2, SRF, ARQ, RAF, ORF, ORI, RW2, PEF, SRW, IIQ, 3FR, FFF, ERF, RWL, MRW, KDC, DCR, MOS, MEF, STI, MDC, RAW and GoPro's GPR, and the raw files older Kodak DCS, Canon EOS-1D and Phase One cameras saved with a .TIF name, alongside JPEG, PNG, TIFF, HEIC and OpenEXR. An OpenEXR's alpha is premultiplied by convention and is unpremultiplied on the way in, so a render on a transparent background reads at the colors the renderer composited. Monochrome sensors and grayscale scanner DNGs develop like any other. Sigma X3F is the one raw format from a still camera it does not open; the rare ARI, CAM and LRI files are not listed either. Many phones and drones and every GoPro write a lens shading correction into the file, which brightens the corners the lens leaves dark and evens out any color shift there; Heeler applies it as the photograph develops. The repository file `docs/raw-support-matrix.md` records the full per-camera results.
+Heeler reads the raw file every camera maker writes, including DNG, CR2, CR3, CRW, NEF, NRW, ARW, SR2, SRF, ARQ, RAF, ORF, ORI, RW2, PEF, SRW, IIQ, 3FR, FFF, ERF, RWL, MRW, KDC, DCR, MOS, MEF, STI, MDC, RAW and GoPro's GPR, and the raw files older Kodak DCS, Canon EOS-1D and Phase One cameras saved with a .TIF name, alongside JPEG, PNG, TIFF, HEIC and OpenEXR. An OpenEXR's alpha is premultiplied by convention and is unpremultiplied on the way in, so a render on a transparent background reads at the colors the renderer composited. Monochrome sensors and grayscale scanner DNGs develop like any other. Sigma X3F is the one raw format from a still camera it does not open; the rare ARI, CAM and LRI files are not listed either, and a few variants of the formats above do not develop yet (see [RAW files Heeler cannot develop yet](#raw-files-heeler-cannot-develop-yet)). Many phones and drones and every GoPro write a lens shading correction into the file, which brightens the corners the lens leaves dark and evens out any color shift there; Heeler applies it as the photograph develops. The repository file `docs/raw-support-matrix.md` records the full per-camera results.
 
 Open a folder with **File > Open folder…** or the folder icon in the Catalog header. The folder joins the current catalog and remains where it is on disk. Use the Library's collapse control to reduce it to a narrow rail; click the rail to restore it. Drag the right edge to resize the panel.
+
+## RAW files Heeler cannot develop yet
+
+A RAW file Heeler does not read yet still shows in the Library, with the camera's own preview as its thumbnail, but it does not open for editing. The status line names the file and the reason, and the console keeps the same words.
+
+**Nikon High Efficiency and High Efficiency★ NEFs** (the Z8, Z9, Zf, Z6III, Z5II, Z50II and ZR among them) are the common case. Their compression is not documented, and Heeler's work on reading it is backlogged until a later date. Progress is tracked at https://github.com/vagabond-burro/heeler/issues/76. Until then:
+
+- **For new photographs**, set **RAW recording** in the camera's photo shooting menu to **Lossless compressed**. Those NEFs develop in Heeler like any other.
+- **For High Efficiency NEFs you already have**, convert them to DNG with a converter that reads them, keeping the raw data (not a linear DNG), and open the DNG. Heeler develops the converted file as it develops any camera's DNG. Keep the original NEF.
+- **Or develop them in software that reads them** and export a 16-bit TIFF. Heeler opens it as a finished picture, so the Source section's RAW controls (white balance as shot, highlights) do not apply to it.
+
+A few rare older formats do not develop yet either: the Nikon D1X's compressed NEF, the YI action cameras' first DNGs, the FinePix F700's RAF, the GX680 digital back's RAF, the DSC-F828's SRF, the Kodak DC50's KDC, the Minolta RD175's MDC and some action cameras' .RAW files. A damaged file says that it is damaged instead.
 
 ## Folders
 
