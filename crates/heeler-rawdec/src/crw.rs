@@ -61,9 +61,17 @@ fn u32le(b: &[u8], at: usize) -> Option<u32> {
     b.get(at..at + 4).map(|v| u32::from_le_bytes(v.try_into().unwrap()))
 }
 
-/// The heap from `start` to `end` and every heap it holds.
-fn heap(b: &[u8], start: usize, end: usize, out: &mut Vec<Record>, depth: u32) -> Option<()> {
-    if depth > 8 || end < start + 4 || end > b.len() {
+/// How many heaps and records a file may hold before it is turned away:
+/// a camera's hold a few dozen heaps and a few hundred records, and heaps
+/// pointing at one another many times over once took minutes and many GB.
+const HEAPS: usize = 4096;
+const RECORDS: usize = 1 << 16;
+
+/// The heap from `start` to `end` and every heap it holds, `visits` the
+/// heaps read so far.
+fn heap(b: &[u8], start: usize, end: usize, out: &mut Vec<Record>, depth: u32, visits: &mut usize) -> Option<()> {
+    *visits += 1;
+    if depth > 8 || *visits > HEAPS || out.len() > RECORDS || end < start.checked_add(4)? || end > b.len() {
         return None;
     }
     let dir = start + u32le(b, end - 4)? as usize;
@@ -78,7 +86,7 @@ fn heap(b: &[u8], start: usize, end: usize, out: &mut Vec<Record>, depth: u32) -
         let (len, off) = (u32le(b, e + 2)? as usize, u32le(b, e + 6)? as usize);
         let at = start.checked_add(off)?;
         if (tag >> 8) & 0x38 == 0x28 || (tag >> 8) & 0x38 == 0x30 {
-            heap(b, at, at.checked_add(len)?, out, depth + 1)?;
+            heap(b, at, at.checked_add(len)?, out, depth + 1, visits)?;
         }
         out.push(Record { tag: tag & 0x3fff, at, len });
     }
@@ -91,7 +99,7 @@ fn records(bytes: &[u8]) -> Option<Vec<Record>> {
     }
     let start = u32le(bytes, 2)? as usize;
     let mut out = Vec::new();
-    heap(bytes, start, bytes.len(), &mut out, 0)?;
+    heap(bytes, start, bytes.len(), &mut out, 0, &mut 0)?;
     Some(out)
 }
 
@@ -624,4 +632,35 @@ fn decode_in_order(data: &[u8], width: usize, rows: usize, c: &CanonCrw, put: im
         return Err(Error::Corrupt("CRW samples that end early"));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn heaps_pointing_at_one_another_many_times_over_are_turned_away() {
+        // Nine heaps, each but the last listing the next twenty times:
+        // 20^8 heaps to read, which once took minutes and many GB.
+        let mut inner = vec![0u8, 0, 0, 0, 0, 0];
+        for _ in 0..8 {
+            let len = inner.len() as u32;
+            let mut h = inner.clone();
+            h.extend_from_slice(&20u16.to_le_bytes());
+            for _ in 0..20 {
+                h.extend_from_slice(&0x2800u16.to_le_bytes());
+                h.extend_from_slice(&len.to_le_bytes());
+                h.extend_from_slice(&0u32.to_le_bytes());
+            }
+            h.extend_from_slice(&len.to_le_bytes());
+            inner = h;
+        }
+        let mut b = b"II".to_vec();
+        b.extend_from_slice(&14u32.to_le_bytes());
+        b.extend_from_slice(b"HEAPCCDR");
+        b.extend_from_slice(&inner);
+        let t = std::time::Instant::now();
+        assert!(records(&b).is_none());
+        assert!(t.elapsed().as_secs() < 5, "{:?}", t.elapsed());
+    }
 }
