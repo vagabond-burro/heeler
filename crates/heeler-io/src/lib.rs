@@ -419,7 +419,7 @@ impl DecodeEstimate {
 const PROBE_PREFIX: usize = 8 * 1024 * 1024;
 
 /// `prefix` says the bytes are a capped front of the file rather than the
-/// whole of it. On a prefix, a RAW answers through LibRaw or not at all:
+/// whole of it. On a prefix, a RAW answers through the develop or not at all:
 /// the standard readers see a TIFF-based RAW's first directory, which on
 /// many cameras is a thumbnail, and a probe that reports 160 by 120 for a
 /// 24 megapixel frame admits a stack it cannot hold. The whole file keeps
@@ -499,25 +499,26 @@ pub fn decode_file(path: &Path) -> Result<ImageBuf, IoError> {
     at_boundary(path, || read_image(path).and_then(|b| decode_bytes(&b)))
 }
 
-/// Extensions handed to LibRaw. Every entry developed in the
-/// raw.pixls.us corpus; what is not here either failed there outright
-/// (X3F is Foveon, ARI, LRI, CAM) or was never seen. GoPro's GPR goes
-/// to LibRaw too, after heeler-raw has decoded its VC-5 tile. The catalog must index each of these too, and a test below
-/// holds the two lists together.
+/// Extensions handed to the RAW develop (heeler-raw). Every entry
+/// developed in the raw.pixls.us corpus; what is not here either failed
+/// there outright (X3F is Foveon, ARI, LRI, CAM) or was never seen.
+/// GoPro's GPR goes to the develop too, which decodes its VC-5 tile. The
+/// catalog must index each of these too, and a test below holds the two
+/// lists together.
 const RAW_EXTENSIONS: &[&str] = &[
     "dng", "cr2", "cr3", "nef", "nrw", "arw", "srf", "sr2", "raf", "orf", "rw2", "pef", "srw",
     "3fr", "iiq", "erf",
     // Canon CIFF, Leica and Panasonic compacts (.rwl, and the older .raw),
     // Olympus high-res originals, Hasselblad, Minolta, Kodak, Leaf,
     // Mamiya, Sony pixel-shift composites, Sinar, Minolta RD175. A .raw
-    // from an action camera or a Pi is not a photograph LibRaw knows; it
-    // fails or trips the noise gate and the file says so honestly.
+    // from an action camera or a Pi the develop does not know says so
+    // (unread_raw), or trips the noise gate and says that.
     "crw", "rwl", "raw", "ori", "fff", "mrw", "kdc", "dcr", "mos", "mef", "arq", "sti", "mdc",
     // GoPro HERO5 on and Fusion: a DNG with a VC-5 tile (heeler-raw's gpr.rs).
     "gpr",
 ];
 
-/// Whether the loader develops this file through LibRaw: an extension
+/// Whether the loader develops this file as a RAW: an extension
 /// in RAW_EXTENSIONS, or a .tif that is a camera's raw (src/raw_tiff.rs:
 /// Kodak DCS, Canon EOS-1D and D2000, Phase One backs), whose first
 /// image is only its thumbnail. The answer for a .tif is kept per file.
@@ -534,7 +535,7 @@ fn is_tiff_extension(path: &Path) -> bool {
     path.extension().is_some_and(|e| e.eq_ignore_ascii_case("tif") || e.eq_ignore_ascii_case("tiff"))
 }
 
-/// Whether the extension is one LibRaw is asked to develop. Public so the
+/// Whether the extension is one the RAW develop is asked for. Public so the
 /// support-matrix probe (examples/rawmatrix.rs) can report the same
 /// answer the loader gives, next to what the catalog will index.
 pub fn is_raw_extension(path: &Path) -> bool {
@@ -544,8 +545,8 @@ pub fn is_raw_extension(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// LibRaw output is already linear (gamma 1.0, no auto-brighten), sRGB
-/// primaries: straight normalization, no transfer function.
+/// The develop's output is already linear (gamma 1.0, no auto-brighten),
+/// sRGB primaries: straight normalization, no transfer function.
 #[cfg(feature = "raw")]
 fn sensor_to_imagebuf(s: heeler_raw::SensorImage) -> ImageBuf {
     // The RGBA image beside the develop's samples, admitted here: the
@@ -554,7 +555,7 @@ fn sensor_to_imagebuf(s: heeler_raw::SensorImage) -> ImageBuf {
     let _job = memory::or_unwind(memory::bytes(s.width, s.height, 4, 4).and_then(|rgba| memory::sum([rgba, s.rgb.len() * 2])).and_then(|n| Job::admit(n, "RAW develop's RGBA image")));
     let mut out = ImageBuf::new(s.width, s.height);
     // headroom is 1.0 for plain clips; with highlight reconstruction
-    // it restores the scale LibRaw withheld, so exposure holds still
+    // it restores the scale the develop withheld, so exposure holds still
     // across modes and reconstructed super-whites come through above
     // 1.0 for the tone profile's shoulder to roll off.
     let gain = s.headroom.max(1.0);
@@ -721,9 +722,10 @@ fn clipped_weight(s: &heeler_raw::SensorImage) -> Option<Vec<u8>> {
     Some(soft.iter().map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8).collect())
 }
 
-/// Decodes any supported file. RAW files go through sensor-level LibRaw
-/// develop when the `libraw` feature is on, falling back to the embedded
-/// JPEG preview, then to the standard decoders.
+/// Decodes any supported file. RAW files go through the sensor-level
+/// develop when the `raw` feature is on; a file the develop declines
+/// says why, and one whose container it does not know falls back to the
+/// standard decoders and the embedded JPEG preview.
 pub fn decode_any(path: &Path) -> Result<ImageBuf, IoError> {
     decode_any_with(path, RawSourceOpts::default())
 }
@@ -787,8 +789,8 @@ pub fn decode_any_with(path: &Path, opts: RawSourceOpts) -> Result<ImageBuf, IoE
 /// made on demand (heeler_engine::banded::SourceRows) as the decode
 /// makes them, to the bit: a JPEG, PNG, TIFF or WebP as the codes it
 /// stores (3 bytes a pixel for an 8-bit JPEG, against the decode's 16),
-/// a HEIF on macOS as the bitmap ImageIO draws, a raw file LibRaw
-/// develops as its 16-bit develop (KeptDevelop). None for a file the
+/// a HEIF on macOS as the bitmap ImageIO draws, a raw file the develop
+/// reads as its 16-bit develop (KeptDevelop). None for a file the
 /// decode reads another way (a float or EXR frame, a HEIF with no OS
 /// codec, a JPEG XL DNG, a develop turned away, a file whose own decode
 /// fails and falls back to a preview): the caller decodes it whole, as
@@ -829,7 +831,7 @@ pub fn decode_rows_with(path: &Path, opts: RawSourceOpts) -> Result<Option<std::
     })
 }
 
-/// A raw file's LibRaw develop kept as its 16-bit samples, its rows made
+/// A raw file's develop kept as its 16-bit samples, its rows made
 /// on demand as decode_any_with makes them: the develop's samples scaled
 /// (and under Blend, the Clip develop mixed toward the Blend develop by
 /// the clipped areas' weight), capture sharpened run by run
@@ -1176,7 +1178,7 @@ fn keep_linear(bytes: &[u8], dev: heeler_raw::DevelopOpts) -> Result<Option<(Kep
     Ok(Some((KeptSamples16::Linear(Box::new(kept)), w, h, false)))
 }
 
-/// decode_any_with's LibRaw branch, kept (KeptDevelop): None wherever
+/// decode_any_with's RAW develop branch, kept (KeptDevelop): None wherever
 /// that branch hands the file on to another reader.
 #[cfg(feature = "raw")]
 fn keep_develop(path: &Path, bytes: &[u8], opts: RawSourceOpts) -> Result<Option<std::sync::Arc<dyn heeler_engine::banded::SourceRows>>, IoError> {
@@ -1320,6 +1322,10 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
     // not read) or finds damaged, for the error in place of a stand-in.
     #[allow(unused_mut)]
     let mut declined: Option<IoError> = None;
+    // A RAW whose container the develop does not know, for the error if
+    // nothing after it reads the file (unread_raw).
+    #[allow(unused_mut)]
+    let mut unknown = false;
     if matches!(pixels, Pixels::SceneLinear) {
         if let Some(img) = decode_jpeg_reduced(&bytes, 0)? {
             return Ok(unbake(apply_orientation(img, media_orientation(&bytes)), &bytes));
@@ -1363,6 +1369,7 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
         if let Err(heeler_raw::RawError::Memory(e)) = &decoded { return Err(e.clone().into()); }
         if let Err(e) = &decoded {
             declined = declined_raw(e);
+            unknown = unknown_container(e);
         }
         // A GPR has no embedded preview or readable strip to fall back on:
         // what follows would only misname the damage (a "JPEG SOF" or
@@ -1375,8 +1382,8 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
                 capture_sharpen_develop(&mut img, opts, 1.0);
             }
             // A develop the size of the file's thumbnail IS the thumbnail:
-            // LibRaw, meeting a main image it has no decoder for, develops
-            // the one IFD it can read, and a 160 by 120 strip then wears
+            // a develop meeting a main image it has no decoder for can
+            // develop the one IFD it reads (LibRaw did), and a 160 by 120 strip then wears
             // the photograph's name with raw color treatment on top (the
             // pink Capitol Reef sky of 2026-09-20, a RAW editor's HDR DNG).
             if develop_is_the_picture(&img, &bytes) && reduced_copy_of(&img, &bytes).is_none() {
@@ -1412,14 +1419,7 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
                     .filter(|p| reduced_copy_of(p, &bytes).is_none());
                 match preview {
                     Some(p) => Ok(p),
-                    // The thumbnail's size as stored, before the turn.
-                    None => {
-                        let (tw, th) = if matches!(orientation, 5..=8) { (img.height, img.width) } else { (img.width, img.height) };
-                        Err(IoError::Unsupported(format!(
-                            "the photograph in this file is {} x {} but only its {} x {} thumbnail could be read; its main image uses an encoding this build cannot decode",
-                            full.0, full.1, tw, th
-                        )))
-                    }
+                    None => Err(thumbnail_only(full, &img, orientation)),
                 }
             }
             _ => Ok(img),
@@ -1436,6 +1436,7 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
     };
     match (out, rejected) {
         (Err(e), Some(size)) if !memory::is_refusal(&e.to_string()) => Err(rejected_develop(size)),
+        (Err(e), None) if unknown && !matches!(e, IoError::Memory(_) | IoError::Unsupported(_)) && !memory::is_refusal(&e.to_string()) => Err(unread_raw()),
         (out, _) => out.map(|img| unbake(img, &bytes)),
     }
 }
@@ -1560,10 +1561,10 @@ pub fn develop_looks_sane(img: &ImageBuf) -> bool {
     n == 0 || (diff / n as f64) < 0.15
 }
 
-/// Whether a develop LibRaw produced is the photograph: it passes
+/// Whether a RAW develop is the photograph: it passes
 /// develop_looks_sane, or the file is Heeler's own bake. The noise test
-/// is for a camera's compression LibRaw cannot read, which develops into
-/// noise; a bake is a format Heeler writes and LibRaw reads, and a
+/// is for a camera's compression the develop misreads, which develops
+/// into noise; a bake is a format Heeler writes and reads, and a
 /// picture that is itself mostly fine noise is still the picture. A max
 /// stack of 432 night frames (2026-10-08) keeps every frame's
 /// brightest noise, failed the test, and then had nothing to fall back
@@ -1594,6 +1595,33 @@ fn declined_raw(e: &heeler_raw::RawError) -> Option<IoError> {
     }
 }
 
+/// Whether the develop turned `e`'s file away for its container: none it
+/// knows (declined_raw leaves these to the readers after it).
+#[cfg(feature = "raw")]
+fn unknown_container(e: &heeler_raw::RawError) -> bool {
+    matches!(e, heeler_raw::RawError::Unsupported(why) if why == "not a TIFF" || why == "not a DNG")
+}
+
+/// The error for a RAW file nothing here reads: the develop knows no
+/// container in it, and neither the image readers nor an embedded
+/// preview make a picture of it.
+fn unread_raw() -> IoError {
+    IoError::Unsupported("this RAW file's format is not supported yet, so it cannot be developed".into())
+}
+
+/// The refusal of `thumb` (as turned by `orientation`) as the picture
+/// of a file whose photograph is `full`: a thumbnail shown as the
+/// photograph is a wrong picture, and a wrong picture is worse than an
+/// error.
+fn thumbnail_only(full: (u32, u32), thumb: &ImageBuf, orientation: u16) -> IoError {
+    // The thumbnail's size as stored, before the turn.
+    let (tw, th) = if matches!(orientation, 5..=8) { (thumb.height, thumb.width) } else { (thumb.width, thumb.height) };
+    IoError::Unsupported(format!(
+        "the photograph in this file is {} x {} but only its {} x {} thumbnail could be read; its main image uses an encoding this build cannot decode",
+        full.0, full.1, tw, th
+    ))
+}
+
 fn rejected_develop(size: (usize, usize)) -> IoError {
     IoError::Unsupported(format!(
         "the RAW develop ({} x {}) read as noise rather than a photograph, and the file has no other picture this build can read",
@@ -1606,9 +1634,11 @@ fn rejected_develop(size: (usize, usize)) -> IoError {
 pub struct RawSourceOpts {
     pub camera_wb: bool,
     pub camera_matrix: bool,
-    /// LibRaw highlight handling: 0 clip, 2 blend, 3..9 rebuild.
+    /// Highlight handling: 0 clip, 2 blend (an old edit's 3..9 rebuild
+    /// develops as clip).
     pub highlight: i32,
-    /// LibRaw demosaic (user_qual): -1 default, 0 linear, 11 DHT.
+    /// The demosaic: -1, the develop's own (an old edit's other choices
+    /// develop as it).
     pub demosaic: i32,
     /// Capture sharpening, 0..100 (the Source section's Sharpening):
     /// what every RAW develop owes the picture for the demosaic, the
@@ -1716,6 +1746,10 @@ fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, p
     let _ = opts;
     let bytes = read_image(path)?;
     let raw_file = is_raw_file(path, &bytes);
+    // A RAW whose container the develop does not know, as in
+    // decode_any_inner.
+    #[allow(unused_mut)]
+    let mut unknown = false;
     // A scene-linear render is previewed at the tier's size, reduced
     // while its blocks are read; the full planes belong to export.
     if exr_passes::is_exr(&bytes) {
@@ -1757,6 +1791,7 @@ fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, p
                 _ => Err(e),
             };
         }
+        unknown = decoded.as_ref().err().is_some_and(unknown_container);
         // A GPR has no embedded preview or readable strip to fall back on:
         // what follows would only misname the damage (a "JPEG SOF" or
         // "photometric" error for a cut file). Say what went wrong.
@@ -1776,10 +1811,14 @@ fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, p
             }
         }
     }
+    // The camera's own preview, when it is the picture and not a
+    // thumbnail of it (decode_any_inner asks the same of it).
     if raw_file && pixels == Pixels::AsTheFileRenders {
         if let Some(preview) = extract_raw_preview(&bytes) {
             if let Ok(img) = decode_bytes_oriented(preview, raw_orientation(&bytes)) {
-                return Ok(img);
+                if reduced_copy_of(&img, &bytes).is_none() {
+                    return Ok(img);
+                }
             }
         }
     }
@@ -1790,12 +1829,27 @@ fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, p
             return Ok(unbake(apply_orientation(img, media_orientation(&bytes)), &bytes));
         }
     }
-    decode_bytes_oriented(&bytes, media_orientation(&bytes)).and_then(|img| {
-        if pixels == Pixels::SceneLinear && raw_file && reduced_copy_of(&img, &bytes).is_some() {
-            return Err(IoError::Unsupported("scene-linear stack member needs a sensor develop, not a thumbnail".into()));
+    let orientation = media_orientation(&bytes);
+    let out = decode_bytes_oriented(&bytes, orientation).and_then(|img| {
+        match (raw_file, reduced_copy_of(&img, &bytes)) {
+            (true, Some(_)) if pixels == Pixels::SceneLinear => {
+                Err(IoError::Unsupported("scene-linear stack member needs a sensor develop, not a thumbnail".into()))
+            }
+            // What the full develop refuses, the preview refuses too, so a
+            // tier never shows a thumbnail the develop then turns away.
+            (true, Some(full)) => Err(thumbnail_only(full, &img, orientation)),
+            _ => Ok(unbake(img, &bytes)),
         }
-        Ok(unbake(img, &bytes))
-    })
+    });
+    #[cfg(feature = "raw")]
+    if let Err(e) = &out {
+        if unknown && !matches!(e, IoError::Memory(_) | IoError::Unsupported(_)) && !memory::is_refusal(&e.to_string()) {
+            return Err(unread_raw());
+        }
+    }
+    #[cfg(not(feature = "raw"))]
+    let _ = unknown;
+    out
 }
 
 /// A JPEG through turbo, with optional DCT reduction. A zero edge keeps
@@ -2203,7 +2257,7 @@ pub fn source_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 }
 
 /// The photograph's size for a file on disk, upright, from its header:
-/// a RAW the loader develops through LibRaw answers with LibRaw's own
+/// a RAW the loader develops answers with the develop's own
 /// output size (margins trimmed, a SuperCCD unrotated, non-square
 /// pixels stretched), which is what the decode hands back; anything
 /// else answers as source_dimensions does. The catalog records this
@@ -2624,6 +2678,40 @@ mod tests {
 
     #[test]
     #[cfg(feature = "raw")]
+    fn a_raw_no_reader_knows_says_so_as_a_raw() {
+        if heeler_raw::LIBRAW_BUILT {
+            eprintln!("LibRaw is built in; this holds the build without it (cargo test -p heeler-io --features raw)");
+            return;
+        }
+        // No container the develop knows and no picture the image readers
+        // find (a Minolta RD175's .mdc, an action camera's .raw): the
+        // error is about the RAW, not "the image format could not be
+        // determined".
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("unknown.mdc");
+        std::fs::write(&path, vec![0x5Au8; 64 * 1024]).unwrap();
+        for (what, result) in [("develop", decode_any(&path).map(|_| ())), ("preview", decode_preview_at(&path, RawSourceOpts::default(), 64).map(|_| ()))] {
+            let why = result.expect_err(what).to_string();
+            assert!(why.contains("RAW file's format is not supported yet"), "{what}: {why}");
+        }
+    }
+
+    #[test]
+    fn a_preview_tier_refuses_a_thumbnail_as_the_develop_does() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("merge_HDR.dng");
+        std::fs::write(&path, thumbnail_first_dng((4000, 3000))).unwrap();
+        match decode_preview_at(&path, RawSourceOpts::default(), 1600) {
+            Ok(img) => panic!("a {} x {} thumbnail was shown as the preview", img.width, img.height),
+            Err(e) => {
+                let words = e.to_string();
+                assert!(words.contains("4000 x 3000") && words.contains("160 x 120"), "{words}");
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "raw")]
     fn review_linear_dng_levels_define_black_and_white_before_stacking() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("levels.dng");
@@ -2698,7 +2786,7 @@ mod tests {
         for ext in super::RAW_EXTENSIONS {
             assert!(
                 heeler_catalog::SUPPORTED_EXTENSIONS.contains(ext),
-                "{ext} develops through LibRaw but the catalog never lists it"
+                "{ext} develops as a RAW but the catalog never lists it"
             );
         }
     }
@@ -3539,14 +3627,14 @@ mod tests {
     }
 
     /// A RAW's first directory is often its thumbnail, so a prefix that
-    /// LibRaw cannot read yields no estimate at all (the probe goes on to
+    /// the develop cannot read yields no estimate at all (the probe goes on to
     /// the whole file) rather than the thumbnail's size.
     #[test]
-    fn a_raw_prefix_answers_through_libraw_or_not_at_all() {
+    fn a_raw_prefix_answers_through_the_develop_or_not_at_all() {
         let tiff = encode_tiff16_export(&ImageBuf::filled(64, 32, [0.25; 4]), crate::TiffExportOptions { exif: None, ..Default::default() }).unwrap();
         assert_eq!(source_dimensions(&tiff), Some((64, 32)), "the fixture must read as a TIFF");
-        // Not a RAW LibRaw knows: with the feature on it refuses, with it
-        // off there is no LibRaw. Either way the standard reader's answer
+        // Not a RAW the develop knows: with the feature on it refuses,
+        // with it off there is no develop. Either way the standard reader's answer
         // is withheld on a prefix and given on the whole file.
         assert!(estimate_from(&tiff, tiff.len(), true, true).unwrap().is_none());
         let whole = estimate_from(&tiff, tiff.len(), true, false).unwrap().unwrap();

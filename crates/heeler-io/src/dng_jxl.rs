@@ -299,8 +299,8 @@ pub fn is_jxl_dng(bytes: &[u8]) -> bool {
 /// main image that is not JPEG XL at all (NewSubfileType 4, photometric
 /// 4, and the same pixel dimensions as the real picture, so choosing by
 /// area does not save you). Accepting either one makes this module claim
-/// a file it cannot read and, worse, takes it away from LibRaw, which
-/// could. So: NewSubfileType exactly 0, and LinearRaw, or it is not ours.
+/// a file it cannot read and, worse, takes it away from the RAW develop,
+/// which could. So: NewSubfileType exactly 0, and LinearRaw, or it is not ours.
 fn raw_ifd(t: &Tiff, ifd0: &[(u16, Entry)], subs: &[usize]) -> Option<Vec<(u16, Entry)>> {
     let mut best: Option<(u64, Vec<(u16, Entry)>)> = None;
     let mut consider = |entries: Vec<(u16, Entry)>| {
@@ -319,7 +319,7 @@ fn raw_ifd(t: &Tiff, ifd0: &[(u16, Entry)], subs: &[usize]) -> Option<Vec<(u16, 
         }
         // The converters demosaic on the way into a JPEG XL DNG, so the main
         // image is LinearRaw. A JPEG XL CFA mosaic would need a demosaic
-        // this module does not own; declining lets LibRaw try instead.
+        // this module does not own; declining lets the RAW develop try.
         let photometric = get(&entries, TAG_PHOTOMETRIC).and_then(|e| t.number(e, 0));
         if photometric != Some(PHOTOMETRIC_LINEAR_RAW as f64) {
             return;
@@ -838,7 +838,8 @@ mod tests {
     /// The regression that a real file caught: a converter writes a JPEG XL
     /// TRANSPARENCY MASK (NewSubfileType 4) beside a main image that is
     /// plain uncompressed LinearRaw. Claiming that file broke it, because
-    /// this module cannot read a mask and LibRaw was never given a turn.
+    /// this module cannot read a mask and the RAW develop was never given
+    /// a turn.
     /// Same pixel dimensions as the real image, so area is no defense.
     #[test]
     fn a_jpeg_xl_transparency_mask_does_not_make_this_our_file() {

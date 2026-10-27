@@ -2750,7 +2750,13 @@ damaged`), in the develop and the preview tier alike, rather than
 showing the camera's embedded JPEG as though it were the develop; a
 reader that decodes the whole picture may still answer, and the
 library's thumbnail still shows the embedded preview. A file that is no
-TIFF or DNG container the develop knows keeps the fallbacks it had. A
+TIFF or DNG container the develop knows keeps the fallbacks it had (an
+embedded JPEG that is the whole picture still opens it); when none of
+them makes a picture, the error is `this RAW file's format is not
+supported yet` rather than the image readers' "format could not be
+determined" (the RD175, the Kodak-sensor action cameras). The preview
+tier refuses a thumbnail as the picture as the develop does (the
+DC50's 96 by 64 thumbnail showed as its preview). A
 High Efficiency NEF (its strip a JPEG XS codestream, `FF10 FF50`) is
 named as one. A GoPro GPR's failures still say "GoPro GPR".
 

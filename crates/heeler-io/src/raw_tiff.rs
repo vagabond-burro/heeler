@@ -2,9 +2,9 @@
 //! Canon's EOS-1D, EOS-1Ds and D2000, and Phase One backs saved their
 //! raws as .TIF. The first image in such a file is a small RGB
 //! thumbnail, which is all a TIFF reader sees, so the loader has to hand
-//! the file to LibRaw instead. LibRaw is the judge: it recognizes these
-//! and refuses an ordinary TIFF, Heeler's own exports included, even one
-//! that carries a camera's make.
+//! the file to the RAW develop instead. The develop is the judge: it
+//! recognizes these and refuses an ordinary TIFF, Heeler's own exports
+//! included, even one that carries a camera's make.
 //!
 //! Most callers ask with a path alone, and some ask under every preview
 //! render, so the answer is kept per file (its path, modified time and
@@ -36,7 +36,7 @@ fn seen() -> &'static Mutex<HashMap<PathBuf, (Identity, bool)>> {
     SEEN.get_or_init(Default::default)
 }
 
-/// Whether the .tif at `path` is a camera raw LibRaw develops. `bytes`,
+/// Whether the .tif at `path` is a camera raw the develop reads. `bytes`,
 /// when the caller already holds the whole file, saves reading it again.
 pub(crate) fn at(path: &Path, bytes: Option<&[u8]>) -> bool {
     let Ok(meta) = std::fs::metadata(path) else {
@@ -74,21 +74,21 @@ fn read_and_judge(path: &Path) -> bool {
     if !screen().unwrap_or(false) {
         return false;
     }
-    // LibRaw needs the whole file.
+    // The develop needs the whole file.
     std::fs::read(path).is_ok_and(|b| is_raw_tiff(&b))
 }
 
 fn is_raw_tiff(bytes: &[u8]) -> bool {
-    screened(bytes) && libraw_knows(bytes)
+    screened(bytes) && develop_knows(bytes)
 }
 
 #[cfg(feature = "raw")]
-fn libraw_knows(bytes: &[u8]) -> bool {
+fn develop_knows(bytes: &[u8]) -> bool {
     heeler_raw::picture_dimensions(bytes).is_ok()
 }
 
 #[cfg(not(feature = "raw"))]
-fn libraw_knows(_: &[u8]) -> bool {
+fn develop_knows(_: &[u8]) -> bool {
     false
 }
 
@@ -201,7 +201,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("a.tif");
         std::fs::write(&path, tiff(156, 104, true)).unwrap();
-        assert!(!at(&path, None), "screened in, but LibRaw does not know it");
+        assert!(!at(&path, None), "screened in, but the develop does not know it");
         seen().lock().unwrap().insert(path.clone(), ((std::fs::metadata(&path).unwrap().modified().ok(), 0), true));
         assert!(!at(&path, None), "a stale answer (another length) is not used");
         let len = std::fs::metadata(&path).unwrap().len();

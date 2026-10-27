@@ -10,9 +10,10 @@
 //! is 2.3 ms against 6.0 ms for the same frame's compression, with the
 //! same error against the source (mean 1.71 levels, max 24 against 25).
 //!
-//! mozjpeg is already linked for LibRaw's lossy DNG decode (heeler-raw),
-//! so this is no new code in the binary and no new license: the notice
-//! and the IJG sentence it requires ship already. `JCP_FASTEST` turns
+//! mozjpeg was first linked for LibRaw's lossy DNG decode; since the
+//! app develops without LibRaw it is linked for this file alone, and its
+//! notice and the IJG sentence it requires ship in the open source
+//! notices, under libjpeg. `JCP_FASTEST` turns
 //! mozjpeg's trellis quantization, progressive scans and table
 //! optimization off, which is what makes it libjpeg-turbo's speed; those
 //! extensions buy smaller files at several times the time, the wrong
