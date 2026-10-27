@@ -18,7 +18,7 @@ Inspect at 100%. Increase Chroma until colored speckling is controlled, then add
 
 Detail's Smoothing control moves both kinds together. Setting Classic's Luminance and Chroma to the same value is equivalent to that simple treatment; the value of this section is independent control. Avoid using both heavily, because the photograph would be smoothed twice.
 
-The model reads the photograph before any other adjustment, so its answer holds while you edit; a change to the Source section's white balance or demosaic asks it again. Highlights the sensor clipped are left exactly as they are. The model's answers are kept beside the smart-selection rasters and can be cleared from Preferences, Storage.
+The model reads the photograph before any other adjustment, so its answer holds while you edit; a change to the Source section's white balance, highlights or sharpening asks it again. Highlights the sensor clipped are left exactly as they are. The model's answers are kept beside the smart-selection rasters and can be cleared from Preferences, Storage.
 
 ![Noise comparison](../assets/screenshots/section-noise-reduction.png)
 

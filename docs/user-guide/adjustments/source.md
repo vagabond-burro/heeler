@@ -4,15 +4,11 @@ Source controls raw decoding and the base tone rendering applied before creative
 
 ## Raw controls
 
-Highlights, Demosaic, Sharpening and Profile are dropdown menus, all one width. Click one, or focus it and press the Down arrow, to open its list; the arrow keys move through the choices, `Return` (`Enter` on Windows) picks one, and `Escape` closes the list unchanged. Resting the pointer on a choice shows what it does in the status bar.
+Highlights, Sharpening and Profile are dropdown menus, all one width. Click one, or focus it and press the Down arrow, to open its list; the arrow keys move through the choices, `Return` (`Enter` on Windows) picks one, and `Escape` closes the list unchanged. Resting the pointer on a choice shows what it does in the status bar.
 
-- **As-shot white balance** uses the camera's recorded white-balance multipliers. Turn it off when you want the later Color section to begin from a neutral decoder state.
+- **As-shot white balance** uses the camera's recorded white-balance multipliers. Turn it off when you want the later Color section to begin from a neutral decoder state: the photograph then develops in daylight balance, the balance the camera's own color response gives a daylight scene. Canon's sRAW, the smaller RAW sizes of Sony and Nikon cameras and Sony's pixel shift files record the camera's balance in their samples, so for those the switch changes nothing.
 - **Highlights: Blend** (the default) fills a blown channel from the channels that survived. A blown sky stays neutral, white rather than pink, and pulling Exposure or Highlights down brings back what the other channels saw, such as the shape of clouds.
 - **Highlights: Clip** cuts blown sensor channels at white. Blown areas stay neutral too, but they are flat: pulled down, a blown sky turns an even gray.
-- **Highlights: Rebuild** reconstructs blown areas further, and is marked **Experimental** beside the menu while it is chosen: it can tint what it rebuilds, turning a blown sky cyan in testing. Use Blend unless Rebuild looks right on the photograph in front of you.
-- **Demosaic: Fast** uses the quickest, softest interpolation for culling.
-- **Demosaic: Standard** uses the decoder's normal quality.
-- **Demosaic: Fine** uses slower DHT processing to resolve fine detail.
 - **Sharpening** is capture sharpening: a small-scale detail correction applied while decoding sensor RAW data. **Standard** is the initial choice unless you change the import preference; **Low** is lighter, for soft subjects and high ISO; **High** is crisper, for landscapes and architecture at base ISO; **Off** shows the RAW as the demosaic leaves it. A newly imported RAW starts at the choice in **Preferences > Import & Files > RAW default sharpening** (Standard unless you change it); changing that preference never changes a photograph that already has edits, and one edited before Sharpening existed reads as Standard.
 
 ## Tone profile
@@ -33,7 +29,9 @@ Phones differ in how much of the rendering their files carry. An iPhone's ProRAW
 
 Capture sharpening works on brightness only, so no edge changes color and color noise is not sharpened. It reaches about one sensor pixel, the scale of the detail a RAW loses, over an edge-aware base, so texture gains and a high-contrast edge does not ring. It measures the photograph's own noise in its smoothest places and leaves differences smaller than that alone, so a high ISO frame sharpens its detail without growing its grain for Noise Reduction to fight. It applies to sensor data only: a linear DNG, such as a Bake to Image result, was sharpened when it was made and is never sharpened again. The Fit preview is sharpened at its own scale, so it shows what the export will. For creative sharpening on top, use the Sharpening section or Detail's Unsharp.
 
-Choose demosaic quality for the stage of work: Fast while rapidly culling, Standard for routine editing, and Fine when judging detail or exporting. Choose the tone profile before building the rest of the look, because it changes the starting contrast under every later section.
+Earlier versions also offered **Highlights: Rebuild** and a **Demosaic** menu (Fast, Standard, Fine). A photograph edited with Rebuild now develops with Clip, and every RAW develops with Heeler's own demosaic, whatever demosaic it was edited with.
+
+Choose the tone profile before building the rest of the look, because it changes the starting contrast under every later section.
 
 Use the [Metadata tab](../metadata.md) for file and camera facts. Graph's source and tone-profile inspectors expose the same operations in node context.
 

@@ -12,9 +12,9 @@ The photograph itself, decoded. Every graph has exactly one and it cannot be del
 
 - **Menu:** Source > Source > Image Source.
 - **Ports:** rgb out.
-- **Highlights:** Blend (the default) fills a blown channel from the ones that survived, keeping blown areas neutral; Clip cuts blown channels at white; Rebuild, marked Experimental, reconstructs blown areas further but can tint them. See [Source](../../adjustments/source.md).
-- **Demosaic:** Fast for culling, Standard for routine work, Fine (DHT) when judging detail or exporting.
-- **As-shot white balance** and **camera matrix** are the decoder's own; switch them off to start from a neutral decode.
+- **Highlights:** Blend (the default) fills a blown channel from the ones that survived, keeping blown areas neutral; Clip cuts blown channels at white. See [Source](../../adjustments/source.md).
+- **Sharpening:** capture sharpening, Standard, Low, High or Off.
+- **As-shot white balance** uses the camera's recorded balance; switch it off to start from a neutral, daylight-balanced decode.
 
 Use it as the start of every chain. Its settings are Adjustments' Source section.
 

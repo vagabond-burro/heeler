@@ -1589,6 +1589,9 @@ fn declined_raw(e: &heeler_raw::RawError) -> Option<IoError> {
         // No container the develop knows: the readers after it, and the
         // file's own preview, answer as they always have.
         heeler_raw::RawError::Unsupported(why) if why == "not a TIFF" || why == "not a DNG" => None,
+        // A format the develop reads, from a camera newer than its table of
+        // color calibrations: about the camera, not the format.
+        heeler_raw::RawError::Unsupported(why) if why == "a camera without calibrations" => Some(IoError::Unsupported("this camera is not supported yet (Heeler has no color calibration for it), so its RAW files cannot be developed".into())),
         heeler_raw::RawError::Unsupported(why) => Some(IoError::Unsupported(format!("this RAW file's format is not supported yet ({why}), so it cannot be developed"))),
         heeler_raw::RawError::Damaged(why) => Some(IoError::Unsupported(format!("this RAW file is damaged ({why}), so it cannot be developed"))),
         _ => None,
@@ -2694,6 +2697,13 @@ mod tests {
             let why = result.expect_err(what).to_string();
             assert!(why.contains("RAW file's format is not supported yet"), "{what}: {why}");
         }
+    }
+
+    #[test]
+    #[cfg(feature = "raw")]
+    fn a_camera_without_calibrations_is_said_to_be_the_camera() {
+        let why = declined_raw(&heeler_raw::RawError::Unsupported("a camera without calibrations".into())).unwrap().to_string();
+        assert!(why.contains("this camera is not supported yet") && why.contains("cannot be developed"), "{why}");
     }
 
     #[test]
