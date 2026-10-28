@@ -14,7 +14,7 @@ import { makeNode, specFor } from "../nodes";
 import { reduce, type Command, type NodeCard, type State } from "../state";
 import { Inspector, NodeEditor } from "../ui/graph";
 import { activeSmartMask } from "../ui/smarttoolparts";
-import { smartCardNote, smartModelMissing } from "../ui/smartnodeparts";
+import { samFor, smartCardNote, smartModelMissing } from "../ui/smartnodeparts";
 import * as bridge from "../bridge";
 
 let samInstalled = true;
@@ -171,6 +171,14 @@ describe("a Smart Mask card", () => {
     expect(smartModelMissing(models(false, true), "sky")).toBe(true);
     // Not known yet is not missing.
     expect(smartModelMissing(null, "sky")).toBe(false);
+    // An old Subject's matte id still names MobileSAM for its SAM fallback.
+    const legacy = {
+      sam: model("sam2_1_hiera_tiny", false),
+      samLegacy: model("mobile_sam", true),
+      matte: model("birefnet_lite", false),
+    } as unknown as Parameters<typeof smartModelMissing>[0];
+    expect(samFor(legacy!, "birefnet_lite").id).toBe("mobile_sam");
+    expect(smartModelMissing(legacy, "subject", "birefnet_lite")).toBe(false);
   });
 
   it("wears the note on the canvas", async () => {

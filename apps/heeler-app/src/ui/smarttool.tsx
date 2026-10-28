@@ -495,6 +495,10 @@ export function SmartModePanel({
   const [matches, setMatches] = useState<FlorenceRegion[] | null>(null);
   const [findNote, setFindNote] = useState("");
   const [findConsent, setFindConsent] = useState(false);
+  const findRequest = useRef(0);
+  const computeRequest = useRef(0);
+  const mask = aimed ?? activeSmartMask(state);
+  const maskId = mask?.id ?? "";
   useEffect(() => {
     let live = true;
     void smartModelStatus().then((m) => {
@@ -504,7 +508,19 @@ export function SmartModePanel({
       live = false;
     };
   }, [matteConsent, matting, findConsent]);
-  const mask = aimed ?? activeSmartMask(state);
+  useEffect(() => {
+    setPhrase("");
+    setMatches(null);
+    setFindNote("");
+    setFindConsent(false);
+    setBusy(false);
+    return () => {
+      // A late answer belongs to the photograph and mask that asked for it.
+      findRequest.current += 1;
+      computeRequest.current += 1;
+      publishBusy(null);
+    };
+  }, [state.activeImage, maskId]);
   if (!mask) return null;
   const mode = mask.textParams?.mode ?? "click";
   const prompts = mask.textParams?.prompts ?? "[]";
@@ -513,16 +529,21 @@ export function SmartModePanel({
   // remaking it with SAM 2.1 is the user's call, offered beside it.
   const madeWithMobileSam = (mask.textParams?.model ?? "").split("+")[0] === "mobile_sam";
   const compute = (m: string, pts: string, aim = "", model = mask.textParams?.model ?? "") => {
+    const request = ++computeRequest.current;
     setBusy(true);
     publishBusy("SELECTING \u00b7 the model is computing the mask");
     void smartClick(state.activeImage, mask.id, pts, m, aim, model)
       .then((used) => {
-        dispatch({ type: "set_text_param", id: mask.id, param: "model", value: used });
+        if (computeRequest.current === request) {
+          dispatch({ type: "set_text_param", id: mask.id, param: "model", value: used });
+        }
       })
       .catch((err) => reportToolError("Smart selection", err))
       .finally(() => {
-        publishBusy(null);
-        setBusy(false);
+        if (computeRequest.current === request) {
+          publishBusy(null);
+          setBusy(false);
+        }
       });
   };
   // A phrase's matches become the selection: the phrase and the boxes
@@ -539,17 +560,21 @@ export function SmartModePanel({
   const find = () => {
     const text = phrase.trim();
     if (!text || busy) return;
+    const request = ++findRequest.current;
+    let handedOff = false;
     setFindNote("");
     setMatches(null);
     setBusy(true);
     publishBusy("FINDING \u00b7 the picture reader is looking for the phrase");
     void smartFind(state.activeImage, text)
       .then((found) => {
-        setBusy(false);
+        if (findRequest.current !== request) return;
         if (found.length === 0) {
           setFindNote(`Nothing in the photograph matches \u201c${text}\u201d.`);
           logMsg("info", `Select by text: nothing matches "${text}"`);
         } else if (found.length === 1) {
+          // SAM owns the busy state from here, including the global status.
+          handedOff = true;
           selectBoxes(text, found);
         } else {
           // Numbered left to right, the way they are read off the photograph.
@@ -557,11 +582,16 @@ export function SmartModePanel({
         }
       })
       .catch((err) => {
-        setBusy(false);
+        if (findRequest.current !== request) return;
         if (String(err).includes(FLORENCE_NOT_INSTALLED)) setFindConsent(true);
         else reportToolError("Select by text", err);
       })
-      .finally(() => publishBusy(null));
+      .finally(() => {
+        if (findRequest.current === request && !handedOff) {
+          publishBusy(null);
+          setBusy(false);
+        }
+      });
   };
   return (
     <div data-testid="smart-modes" style={{ display: "flex", alignItems: "center", gap: 4, margin: "2px 0 6px", flexWrap: "wrap" }}>
@@ -761,7 +791,12 @@ what it found. On the click tool's row, under the buttons. */}
           aria-label="Select by text"
           data-hint="Select by text: type what to select and press Return; the picture reader finds it and the model selects it"
           style={{ flex: "1 1 120px", minWidth: 0, fontSize: 11 }}
-          onChange={(e) => setPhrase(e.target.value)}
+          onChange={(e) => {
+            setPhrase(e.target.value);
+            // These boxes answer the old phrase, not the one being typed.
+            setMatches(null);
+            setFindNote("");
+          }}
           onKeyDown={(e) => {
             e.stopPropagation();
             if (e.key === "Enter") find();

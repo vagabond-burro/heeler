@@ -2,7 +2,7 @@
 // click tool's recipe writes, and the consent card. The model itself
 // is pinned by the vision crate's gated test; nothing here needs it.
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import { artMaskNode, reduce, toolForMaskType, type Command, type State } from "../state";
@@ -476,6 +476,41 @@ describe("the click overlay", () => {
       expect(got).toHaveLength(0);
       const { smartClick } = await import("../bridge");
       expect(vi.mocked(smartClick)).not.toHaveBeenCalled();
+    });
+
+    it("editing the phrase retires the old phrase's matches", async () => {
+      mockFound = [
+        { label: "dog", x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.5 },
+        { label: "dog", x0: 0.6, y0: 0.1, x1: 0.9, y1: 0.5 },
+      ];
+      render(<SmartModePanel state={withSmart()} dispatch={() => {}} />);
+      await type("the dog");
+      await screen.findByTestId("smart-find-matches");
+      fireEvent.change(screen.getByTestId("smart-find"), { target: { value: "the cat" } });
+      expect(screen.queryByTestId("smart-find-matches")).toBeNull();
+    });
+
+    it("a late find does not select on another photograph", async () => {
+      const bridge = await import("../bridge");
+      let finish!: (regions: typeof mockFound) => void;
+      vi.mocked(bridge.smartFind).mockImplementationOnce(
+        () => new Promise((resolve) => { finish = resolve; }),
+      );
+      const s = withSmart();
+      const got: Command[] = [];
+      const view = render(<SmartModePanel state={s} dispatch={(c) => got.push(c)} />);
+      await type("the dog");
+      view.rerender(
+        <SmartModePanel
+          state={{ ...s, activeImage: "another-photograph" }}
+          dispatch={(c) => got.push(c)}
+        />,
+      );
+      await act(async () => {
+        finish([{ label: "dog", x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.5 }]);
+      });
+      expect(got).toHaveLength(0);
+      expect(bridge.smartClick).not.toHaveBeenCalled();
     });
 
     it("without Florence-2 it names the download instead", async () => {

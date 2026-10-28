@@ -2,7 +2,7 @@
 // smartnode.tsx exports components alone and Vite can refresh it in place as
 // it is edited instead of reloading the window.
 import { useEffect, useState } from "react";
-import { smartModelStatus, type SmartModels, type SmartModelStatus } from "../bridge";
+import { SAM_MODEL, smartModelStatus, type SmartModels, type SmartModelStatus } from "../bridge";
 import type { NodeCard } from "../state";
 
 /** The smart models' standing for a face or a card: asked when `ask`
@@ -37,10 +37,12 @@ export function smartAsk(textParams: Record<string, string> | undefined): string
 }
 
 /** The SAM a Smart mask's next compute runs on, from the model its
- * recipe records (lib.rs smart_sam_spec): MobileSAM for a selection
- * made with it while MobileSAM is installed, SAM 2.1 otherwise. */
+ * recipe records (lib.rs smart_sam_spec). Any nonempty record from
+ * before SAM 2.1 keeps MobileSAM while it is installed, including an
+ * old Subject's matte id when its SAM fallback has to run. */
 export function samFor(models: SmartModels, recorded: string): SmartModelStatus {
-  if (recorded.split("+")[0] === "mobile_sam" && models.samLegacy?.installed) return models.samLegacy;
+  const base = recorded.split("+")[0];
+  if (base !== "" && base !== SAM_MODEL && models.samLegacy?.installed) return models.samLegacy;
   return models.sam;
 }
 

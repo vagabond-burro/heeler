@@ -1768,6 +1768,9 @@ fn smart_ask<'a>(params: &'a HashMap<String, serde_json::Value>, mode: &str) -> 
     params.get(key).and_then(|v| v.as_str()).unwrap_or("")
 }
 
+/// A saved document can ask for only so many decoder runs in one mask.
+const SMART_BOX_LIMIT: usize = 64;
+
 /// Text's boxes as the node stores them: x0, y0, x1, y1, fractions of
 /// the photograph, upright and uncropped like the clicks. Each is
 /// ordered and clamped; an unreadable list is no boxes.
@@ -1781,6 +1784,7 @@ fn smart_boxes(text: &str) -> Vec<[f32; 4]> {
             [c(x0.min(x1)), c(y0.min(y1)), c(x0.max(x1)), c(y0.max(y1))]
         })
         .filter(|[x0, y0, x1, y1]| x1 > x0 && y1 > y0)
+        .take(SMART_BOX_LIMIT)
         .collect()
 }
 
@@ -3983,8 +3987,15 @@ pub(crate) fn smart_sources_offline(
         }
         // Exactly the model the recipe records, never a stand-in: a
         // MobileSAM selection recomputed by SAM 2.1 would be a
-        // different mask filed under the old one's name.
-        let spec = recorded_sam(n.params.get("model").and_then(|v| v.as_str()).unwrap_or(""));
+        // different mask filed under the old one's name. A matte's
+        // record names no SAM, and its fallback was never the recorded
+        // mask, so whichever generation is here serves it.
+        let recorded = n.params.get("model").and_then(|v| v.as_str()).unwrap_or("");
+        let spec = if recorded.split('+').next() == Some(heeler_vision::BIREFNET_LITE.id) {
+            smart_sam_spec(vision_base, recorded)
+        } else {
+            recorded_sam(recorded)
+        };
         if (mode == "click" && points.is_empty()) || !heeler_vision::installed(vision_base, spec) {
             continue;
         }
@@ -4193,14 +4204,16 @@ fn smart_model_missing(base: &Path, mode: &str, recorded: &str) -> bool {
     !matte && !heeler_vision::installed(base, smart_sam_spec(base, recorded))
 }
 
-/// The SAM generation a recipe's recorded model names: MobileSAM for
-/// the selections made with it (refined ones included, "+vitmatte"),
-/// SAM 2.1 for everything else, a selection never computed among them.
+/// The SAM generation a recipe's recorded model names. SAM 2.1 and an
+/// empty record (a selection never computed) use SAM 2.1. Every other
+/// record predates it, including Subject's matte id when the matte is
+/// missing and its old SAM fallback has to run, so those use MobileSAM.
 fn recorded_sam(recorded: &str) -> &'static heeler_vision::ModelSpec {
-    if recorded.split('+').next() == Some(heeler_vision::MOBILE_SAM.id) {
-        &heeler_vision::MOBILE_SAM
-    } else {
+    let base = recorded.split('+').next().unwrap_or("");
+    if base.is_empty() || base == heeler_vision::SAM2_1_TINY.id {
         &heeler_vision::SAM2_1_TINY
+    } else {
+        &heeler_vision::MOBILE_SAM
     }
 }
 
@@ -31979,6 +31992,8 @@ mod tests {
         assert_eq!(smart_boxes("[[0.9,0.8,0.1,1.4]]"), vec![[0.1, 0.8, 0.9, 1.0]]);
         assert!(smart_boxes("[[0.2,0.2,0.2,0.5]]").is_empty(), "a box with no width is no box");
         assert!(smart_boxes("not boxes").is_empty());
+        let many = serde_json::to_string(&vec![[0.1f32, 0.1, 0.9, 0.9]; SMART_BOX_LIMIT * 2]).unwrap();
+        assert_eq!(smart_boxes(&many).len(), SMART_BOX_LIMIT, "a saved document cannot request unbounded decoder runs");
     }
 
     /// Select by text against the real model, gated: two bright discs
@@ -32035,10 +32050,13 @@ mod tests {
         assert_eq!(recorded_sam("mobile_sam+vitmatte").id, "mobile_sam");
         assert_eq!(recorded_sam("").id, "sam2_1_hiera_tiny");
         assert_eq!(recorded_sam("sam2_1_hiera_tiny+vitmatte").id, "sam2_1_hiera_tiny");
-        assert_eq!(recorded_sam("birefnet_lite").id, "sam2_1_hiera_tiny");
+        assert_eq!(recorded_sam("birefnet_lite").id, "mobile_sam");
+        assert_eq!(recorded_sam("unknown_legacy_model").id, "mobile_sam");
         let empty = tempfile::tempdir().unwrap();
         assert_eq!(smart_sam_spec(empty.path(), "mobile_sam").id, "sam2_1_hiera_tiny");
         assert_eq!(smart_sam_spec(empty.path(), "").id, "sam2_1_hiera_tiny");
+        // A matte's SAM fallback takes SAM 2.1 when MobileSAM is gone.
+        assert_eq!(smart_sam_spec(empty.path(), "birefnet_lite").id, "sam2_1_hiera_tiny");
 
         let clicks = "[{\"x\":0.4,\"y\":0.5,\"positive\":true}]";
         let mut node = UiNode {
