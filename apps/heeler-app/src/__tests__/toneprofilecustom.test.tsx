@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const SAVED = JSON.stringify({ name: "Soft Fade", interp: "smooth", points: [[-8, 0.04], [0, 0.42], [3, 0.95]] });
@@ -15,20 +15,23 @@ vi.mock("../bridge", async (importOriginal) => {
 });
 
 import { App } from "../app";
-import { serializeGraph, toneProfileSave } from "../bridge";
+import { serializeGraph, toneProfileList, toneProfileSave } from "../bridge";
 import { initialState } from "../data";
 import { reduce, type State } from "../state";
 import {
   WHITE_STOPS,
+  curveBroken,
   parseToneCurve,
   profileChoices,
   profileMenuValue,
   profilePick,
+  reloadToneProfiles,
   standardAt,
   standardSeed,
   toneCurveAt,
+  useToneProfiles,
 } from "../toneprofile";
-import { ToneCurveBlock } from "../ui/tonecurve";
+import { ProfileMenuRow, ToneCurveBlock } from "../ui/tonecurve";
 import { chooseWith, menuValue } from "./menuhelp";
 
 const profileOf = (s: State) => s.nodes.find((n) => n.type === "heeler.tone_profile")!;
@@ -114,6 +117,66 @@ describe("Tone Profile: Custom", () => {
     expect(dispatch).toHaveBeenCalledWith({ type: "end_gesture" });
     fireEvent(editor, new MouseEvent("pointerup", { bubbles: true }));
     expect(dispatch.mock.calls.filter(([cmd]) => cmd.type === "end_gesture")).toHaveLength(1);
+  });
+
+  it("a broken curve shows as broken, not as Standard, and stays until Reset replaces it", () => {
+    const base = profileOf(initialState());
+    const node = { ...base, textParams: { ...base.textParams, mode: "custom", curve: '{"points":[[0,0],[0,1]]}' } };
+    expect(curveBroken(node)).toBe(true);
+    expect(curveBroken({ ...node, textParams: { ...node.textParams, curve: "" } })).toBe(false);
+    // Picking Custom again keeps the broken curve rather than seeding over it.
+    expect(profilePick({ ...node, textParams: { ...node.textParams, mode: "standard" } }, "custom", [])).toEqual({
+      type: "set_text_param",
+      id: node.id,
+      param: "mode",
+      value: "custom",
+    });
+    const dispatch = vi.fn();
+    render(<ToneCurveBlock node={node} dispatch={dispatch} />);
+    expect(screen.getByTestId("tone-curve-broken")).toBeInTheDocument();
+    expect(screen.queryByTestId("tone-curve-editor")).toBeNull();
+    expect(screen.getByTestId("tone-curve-import")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("tone-curve-reset"));
+    expect(dispatch).toHaveBeenCalledWith({ type: "set_tone_curve", id: node.id, curve: JSON.stringify(standardSeed()) });
+  });
+
+  it("a profiles folder that cannot be read keeps the last listing and says why", async () => {
+    const Names = () => <div data-testid="names">{useToneProfiles().map((p) => p.name).join(",")}</div>;
+    const node = profileOf(initialState());
+    render(
+      <>
+        <Names />
+        <ProfileMenuRow node={node} dispatch={vi.fn()} testid="tp" />
+      </>,
+    );
+    await act(() => reloadToneProfiles());
+    await waitFor(() => expect(screen.getByTestId("names")).toHaveTextContent("Soft Fade"));
+    expect(screen.queryByTestId("tp-list-error")).toBeNull();
+    vi.mocked(toneProfileList).mockRejectedValueOnce("permission denied");
+    await act(() => reloadToneProfiles());
+    await waitFor(() => expect(screen.getByTestId("tp-list-error")).toHaveTextContent("permission denied"));
+    expect(screen.getByTestId("names")).toHaveTextContent("Soft Fade");
+    // A later read that works clears the notice.
+    await act(() => reloadToneProfiles());
+    await waitFor(() => expect(screen.queryByTestId("tp-list-error")).toBeNull());
+  });
+
+  it("a slow profile listing from before a newer one does not replace it", async () => {
+    const Names = () => <div data-testid="names">{useToneProfiles().map((p) => p.name).join(",")}</div>;
+    render(<Names />);
+    const entry = (name: string) => ({ path: `/p/${name}.heelerprofile`, file: name, name, curve: SAVED, error: null });
+    let finishOld: (v: ReturnType<typeof entry>[]) => void = () => {};
+    vi.mocked(toneProfileList).mockImplementationOnce(() => new Promise((r) => (finishOld = r)));
+    const old = reloadToneProfiles();
+    vi.mocked(toneProfileList).mockResolvedValueOnce([entry("Newer")]);
+    await act(() => reloadToneProfiles());
+    await act(async () => {
+      finishOld([entry("Older")]);
+      await old;
+    });
+    await waitFor(() => expect(screen.getByTestId("names")).toHaveTextContent("Newer"));
+    expect(screen.getByTestId("names")).not.toHaveTextContent("Older");
+    await act(() => reloadToneProfiles());
   });
 
   it("Develop draws the curve under Custom, hides Toe and Highlight roll, and saves, imports and edits it", async () => {

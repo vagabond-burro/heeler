@@ -84,6 +84,14 @@ export function standardSeed(): ToneCurveDoc {
 /** The node's curve, or the seed when it has none yet. */
 export const curveOf = (node: NodeCard): ToneCurveDoc => parseToneCurve(node.textParams?.curve) ?? standardSeed();
 
+/** The node carries a curve the engine refuses: not a missing one, which
+ * the seed stands in for, but one the panel must not draw as Standard
+ * while the render reports it. */
+export function curveBroken(node: NodeCard): boolean {
+  const raw = node.textParams?.curve;
+  return !!raw && !!raw.trim() && parseToneCurve(raw) === null;
+}
+
 // --- The profiles folder ---------------------------------------------------
 
 /** The saved profiles, read once and again after a save or an import,
@@ -91,19 +99,25 @@ export const curveOf = (node: NodeCard): ToneCurveDoc => parseToneCurve(node.tex
 let profiles: ToneProfileEntry[] = [];
 let loaded = false;
 let profileRequest = 0;
+/** Why the folder could not be read last time, or null. */
+let listError: string | null = null;
 const listeners = new Set<() => void>();
 
 export async function reloadToneProfiles(): Promise<void> {
   const request = ++profileRequest;
-  let next: ToneProfileEntry[];
+  let next: ToneProfileEntry[] | null;
+  let error: string | null = null;
   try {
     next = await toneProfileList();
-  } catch {
-    next = [];
+  } catch (e) {
+    next = null;
+    error = String(e);
   }
   // A slow read from before a save must not cover the newer folder.
   if (request !== profileRequest) return;
-  profiles = next;
+  // A failed read keeps the profiles last read and says why.
+  if (next) profiles = next;
+  listError = error;
   loaded = true;
   listeners.forEach((l) => l());
 }
@@ -118,6 +132,7 @@ function subscribe(l: () => void): () => void {
 }
 
 export const useToneProfiles = (): ToneProfileEntry[] => useSyncExternalStore(subscribe, () => profiles);
+export const useToneProfilesError = (): string | null => useSyncExternalStore(subscribe, () => listError);
 
 export const PROFILE_PREFIX = "profile:";
 
@@ -159,13 +174,16 @@ export function profileMenuValue(node: NodeCard, saved: ToneProfileEntry[]): str
 }
 
 /** The command a menu pick makes: a built-in mode is the mode alone;
- * Custom keeps the node's curve, or starts from the seed; a saved
+ * Custom keeps the node's curve, a broken one too, or starts from the seed; a saved
  * profile copies its curve into the node. */
 export function profilePick(
   node: NodeCard,
   id: string,
   saved: ToneProfileEntry[],
 ): { type: "set_text_param"; id: string; param: string; value: string } | { type: "set_tone_curve"; id: string; curve: string } | null {
+  // A broken curve stays as it is, for the panel to show and offer to
+  // replace, rather than turning quietly into the seed.
+  if (id === "custom" && curveBroken(node)) return { type: "set_text_param", id: node.id, param: "mode", value: "custom" };
   if (id === "custom") return { type: "set_tone_curve", id: node.id, curve: toneCurveJson(curveOf(node)) };
   if (id.startsWith(PROFILE_PREFIX)) {
     const p = saved.find((e) => PROFILE_PREFIX + e.path === id);

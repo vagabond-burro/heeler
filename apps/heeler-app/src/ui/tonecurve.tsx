@@ -11,6 +11,7 @@ import {
   AXIS_MAX,
   AXIS_MIN,
   WHITE_STOPS,
+  curveBroken,
   curveOf,
   profileChoices,
   profileMenuValue,
@@ -19,7 +20,9 @@ import {
   toneCurveAt,
   toneCurveJson,
   toneCurvePath,
+  standardSeed,
   useToneProfiles,
+  useToneProfilesError,
   type ToneCurveDoc,
 } from "../toneprofile";
 import { vtToDisplay } from "../viewtransform";
@@ -29,19 +32,27 @@ type D = React.Dispatch<Command>;
 
 export function ProfileMenuRow({ node, dispatch, testid }: { node: NodeCard; dispatch: D; testid: string }) {
   const saved = useToneProfiles();
+  const listError = useToneProfilesError();
   const choices = profileChoices(saved);
   return (
-    <SourceMenuRow
-      label="Profile"
-      name="Tone profile"
-      value={profileMenuValue(node, saved)}
-      choices={choices}
-      testid={testid}
-      onChange={(id) => {
-        const cmd = profilePick(node, id, saved);
-        if (cmd) dispatch(cmd);
-      }}
-    />
+    <>
+      <SourceMenuRow
+        label="Profile"
+        name="Tone profile"
+        value={profileMenuValue(node, saved)}
+        choices={choices}
+        testid={testid}
+        onChange={(id) => {
+          const cmd = profilePick(node, id, saved);
+          if (cmd) dispatch(cmd);
+        }}
+      />
+      {listError && (
+        <div data-testid={`${testid}-list-error`} style={{ fontSize: 11, color: "var(--text-ghost)", lineHeight: 1.5, margin: "2px 0 4px" }}>
+          The saved tone profiles could not be read: {listError}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -51,6 +62,7 @@ const round4 = (v: number) => Math.round(v * 1e4) / 1e4;
 const say = (dispatch: D, text: string) => dispatch({ type: "set_notice", text });
 
 export function ToneCurveBlock({ node, dispatch, width = 260 }: { node: NodeCard; dispatch: D; width?: number }) {
+  const broken = curveBroken(node);
   const curve = curveOf(node);
   const [name, setName] = useState<string | null>(null);
   const shownName = name ?? (curve.name || "Custom");
@@ -88,6 +100,31 @@ export function ToneCurveBlock({ node, dispatch, width = 260 }: { node: NodeCard
       say(dispatch, `The tone profile was not exported: ${String(e)}`);
     }
   };
+
+  // A curve the engine refuses is shown as broken, not drawn as the seed,
+  // and stays in the document until Reset or Import replaces it.
+  if (broken) {
+    return (
+      <div data-testid="tone-curve-block" style={{ display: "flex", flexDirection: "column", gap: 6, margin: "2px 0 4px" }}>
+        <div data-testid="tone-curve-broken" role="alert" style={{ fontSize: 11, color: "var(--text-ghost)", lineHeight: 1.5 }}>
+          This document's custom curve cannot be read, and the render reports it. Reset starts a new curve from Standard;
+          Import reads one from a file.
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button
+            data-testid="tone-curve-reset"
+            data-hint="Replace the unreadable curve with one that starts on the Standard curve"
+            onClick={() => dispatch({ type: "set_tone_curve", id: node.id, curve: toneCurveJson(standardSeed()) })}
+          >
+            Reset
+          </button>
+          <button data-testid="tone-curve-import" data-hint="Replace the unreadable curve with one read from a file" onClick={() => void importFile()}>
+            Import…
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div data-testid="tone-curve-block" style={{ display: "flex", flexDirection: "column", gap: 6, margin: "2px 0 4px" }}>
