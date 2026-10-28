@@ -277,6 +277,12 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     if width == 0 || height == 0 || tile_w == 0 || tile_h == 0 || tile_w % 2 != 0 || tile_h % 2 != 0 {
         return Err(Error::Corrupt("the CR3's frame or tile size"));
     }
+    // A camera's own frame size, looked up before anything is held for the
+    // frame's tiles or its quantizer map.
+    let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
+    if geometry.white == 0 {
+        return Err(Error::Unsupported("a CR3 camera without a white level"));
+    }
     let start = raw.offset.ok_or(Error::Corrupt("the raw track's offset"))?;
     let size = raw.size.ok_or(Error::Corrupt("the raw track's size"))?;
     if start.checked_add(size).is_none_or(|e| e > bytes.len()) || header > size {
@@ -393,10 +399,6 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         let low_lossless = std::array::from_fn(|p| plane_words.get(p).is_none_or(|&w| crate::crx_more::low_band_lossless(w)));
         Coding::CrxWavelet(Box::new(CrxWavelet { width: width / 2, height: height / 2, tile: tile_w / 2, sites, map, encoding, low_lossless }))
     };
-    let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
-    if geometry.white == 0 {
-        return Err(Error::Unsupported("a CR3 camera without a white level"));
-    }
     let meta = found.tracks.iter().find(|t| &t.handler == b"meta").ok_or(Error::Unsupported("a CR3 without its metadata track"))?;
     // A metadata track past the end of the file: a file cut short.
     if meta.offset.zip(meta.size).is_some_and(|(o, n)| o.checked_add(n).is_none_or(|e| e > bytes.len())) {

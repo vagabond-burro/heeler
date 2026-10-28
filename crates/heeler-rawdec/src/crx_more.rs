@@ -46,6 +46,11 @@ pub fn decode_quant_map(data: &[u8], width: usize, rows: usize) -> Result<QuantM
     if width == 0 || rows == 0 {
         return Err(Error::Unsupported("a C-RAW quantizer map of no size"));
     }
+    // Every entry but the first takes a bit of the map at least, so a map
+    // of more entries than its bits is damaged, and nothing is held for it.
+    if width.checked_mul(rows).is_none_or(|n| n > data.len().saturating_mul(8)) {
+        return Err(Error::Corrupt("a C-RAW quantizer map larger than its data"));
+    }
     let mut br = crx::Bits::new(data);
     if br.bits(24) != 1 {
         return Err(Error::Unsupported("a C-RAW quantizer map's header not read here"));
@@ -340,6 +345,11 @@ mod tests {
         let mut long = encode_quant_map(20, &map);
         long.extend([0xff; 2]);
         assert!(decode_quant_map(&long, 37, 40).is_err());
+        // Nor a map stated larger than its data could hold, before anything
+        // is held for its entries.
+        let map = encode_quant_map(20, &map);
+        assert!(decode_quant_map(&map, 1 << 30, 1 << 20).is_err());
+        assert!(decode_quant_map(&map, usize::MAX, 2).is_err());
     }
 
     #[test]
