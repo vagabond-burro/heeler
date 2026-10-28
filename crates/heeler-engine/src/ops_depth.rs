@@ -810,28 +810,46 @@ pub(crate) fn key_light(
         .map(|l| {
             let tint = tint_of(&l.color);
             if l.kind == "spot" {
-                let range_px = (l.range / 100.0 * short * 1.2).max(8.0);
+                // A JSON exponent past f32's range reads as infinity,
+                // and a huge finite one overflows the distance squared.
+                // Clamp user data to the controls' ranges (with generous
+                // room for an off-frame lamp) rather than panic the pixel
+                // workers or write NaN pixels.
+                let finite = |v: f32, default: f32| if v.is_finite() { v } else { default };
+                let range_px =
+                    (finite(l.range, default_range()).clamp(0.0, 100.0) / 100.0 * short * 1.2)
+                        .max(8.0);
                 // Both ends are HEIGHTFIELD levels, the lamp's rule, so
                 // Invert mirrors the spot and its target together. The
                 // spot stands where a lamp at the same depth would; its
                 // target lies ON its plane, so a spot aimed at a subject's
                 // depth meets the subject rather than a step in front.
                 let pos = [
-                    (l.px - frame.roi[0]) * frame.w,
-                    (l.py - frame.roi[1]) * frame.h,
-                    (1.0 - l.depth / 100.0) * z_scale + 0.2 * z_scale,
+                    (finite(l.px, default_half()).clamp(-10.0, 10.0) - frame.roi[0]) * frame.w,
+                    (finite(l.py, default_half()).clamp(-10.0, 10.0) - frame.roi[1]) * frame.h,
+                    (1.0 - finite(l.depth, default_height()).clamp(0.0, 100.0) / 100.0) * z_scale
+                        + 0.2 * z_scale,
                 ];
                 let target = [
-                    (l.tx - frame.roi[0]) * frame.w,
-                    (l.ty - frame.roi[1]) * frame.h,
-                    (1.0 - l.target_depth / 100.0) * z_scale,
+                    (finite(l.tx, default_half()).clamp(-10.0, 10.0) - frame.roi[0]) * frame.w,
+                    (finite(l.ty, default_half()).clamp(-10.0, 10.0) - frame.roi[1]) * frame.h,
+                    (1.0 - finite(l.target_depth, default_height()).clamp(0.0, 100.0) / 100.0)
+                        * z_scale,
                 ];
                 let d = [target[0] - pos[0], target[1] - pos[1], target[2] - pos[2]];
                 let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
                 // A target on the spot itself has no direction: it
                 // shines straight into the scene, away from the camera.
                 let axis = if len > 1e-3 { [d[0] / len, d[1] / len, d[2] / len] } else { [0.0, 0.0, -1.0] };
-                Rig::Spot { pos, axis, cone: spot_cone(l.cone, l.softness), range2: range_px * range_px, s: l.strength, tint }
+                let s = finite(l.strength, 0.0).clamp(-100.0 * POWER_SCALE, 100.0 * POWER_SCALE);
+                Rig::Spot {
+                    pos,
+                    axis,
+                    cone: spot_cone(l.cone, l.softness),
+                    range2: range_px * range_px,
+                    s,
+                    tint,
+                }
             } else if l.kind == "point" {
                 let range_px = (l.range / 100.0 * short * 1.2).max(8.0);
                 // The lamp keeps its HEIGHTFIELD level under Invert, so flipping the
@@ -4046,8 +4064,21 @@ mod tests {
         assert_eq!(left, 0.3, "the mirror of the target is not");
         // A target on the spot itself has no direction and shines into
         // the scene; it renders, and it lights the plane below it.
-        let img = spot_on_flat(w, h, r#"{"kind":"spot","px":0.5,"py":0.5,"depth":0,"tx":0.5,"ty":0.5,"target_depth":-20,"cone":30,"power":80}"#);
+        let img = spot_on_flat(w, h, r#"{"kind":"spot","px":0.5,"py":0.5,"depth":20,"tx":0.5,"ty":0.5,"target_depth":0,"cone":30,"power":80}"#);
         assert!(img.pixel(w / 2, h / 2)[0] > 0.3);
+    }
+
+    /// JSON cannot spell NaN, but an exponent past f32's range becomes
+    /// infinity. A huge finite exponent overflows the geometry too.
+    #[test]
+    fn a_spot_with_out_of_range_fields_still_renders_finite_pixels() {
+        for exponent in ["1e39", "1e38"] {
+            let rig = format!(
+                r#"{{"kind":"spot","px":{exponent},"py":0.5,"depth":{exponent},"tx":0.5,"ty":{exponent},"target_depth":{exponent},"range":{exponent},"power":{exponent}}}"#
+            );
+            let img = spot_on_flat(96, 64, &rig);
+            assert!(img.data.iter().all(|v| v.is_finite()), "{exponent}");
+        }
     }
 
     /// A rig that never had a spot reads the same with the spot's fields
