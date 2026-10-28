@@ -6,6 +6,7 @@
 
 - **Heeler's own RAW decoder.** Every RAW file Heeler opens is now read and developed by a decoder written for Heeler, in place of the library it used before. It reads most cameras' sensor data in half the time or less. For most cameras the pixels it reads are exactly the ones the old decoder read. [Source](user-guide/adjustments/source.md).
 - **More natural color under warm light.** A camera's color now comes from its calibrations for both daylight and tungsten light, blended for the light the photograph was taken in, instead of from the daylight one alone. Photographs taken indoors or at dusk come out closer to the scene. [Source](user-guide/adjustments/source.md).
+- **Cleaner smart selections.** Click, Subject and Sky now use Segment Anything 2.1, with cleaner edges and thin parts that hold together. It is a new 156 MB download the first time a Smart tool asks for it. Selections made in earlier versions keep the model they were made with, so documents open exactly as they were saved; a **SAM 2.1** button beside the mode buttons remakes one with the new model. [Masks and selections](user-guide/finish/masks-selections.md#the-model-behind-a-smart-selection).
 
 ### Changed
 

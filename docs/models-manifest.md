@@ -120,7 +120,11 @@ its pinned version, each with two sources, upstream first and the
 the pins). Florence-2 (`florence_2_base`, added 2026-09-28) has its
 five files (`florence_2_base_*`) on the same release, uploaded with the owner's
 approval the same day and each verified by download against its pin;
-Hugging Face, at a pinned revision, stays its first source. A check against this
+Hugging Face, at a pinned revision, stays its first source. SAM 2.1
+Hiera Tiny (`sam2_1_hiera_tiny`, added 2026-10-27 for 2026.7) names its
+four files on the same release as `sam2_1_hiera_tiny_*`; until the owner
+uploads them, Hugging Face at its pinned revision is its only working
+source. A check against this
 file reads as current. The same text is kept as `docs/models.json`,
 ready to upload with the next app release.
 
@@ -274,6 +278,65 @@ ready to upload with the next app release.
         "https://github.com/vagabond-burro/heeler/releases/download/models/mobile_sam_20230629.zip"
       ],
       "version": "2023.06"
+    },
+    "sam2_1_hiera_tiny": {
+      "archive_bytes": 354238,
+      "archive_sha256": "4f30aacd3aaefbca81a0b7fe4c1fc96345570ea0a6f80ced599493d1b3be2e8c",
+      "extra": [
+        {
+          "bytes": 134084864,
+          "name": "vision_encoder.onnx_data",
+          "sha256": "e83df9866a5afe68ea7f0f721f18f65137fc3acbf0da1c74e946d363e09c69cc",
+          "urls": [
+            "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX/resolve/814a066640debee5a91e70aa401fb8e17e030503/onnx/vision_encoder.onnx_data",
+            "https://github.com/vagabond-burro/heeler/releases/download/models/sam2_1_hiera_tiny_vision_encoder.onnx_data"
+          ]
+        },
+        {
+          "bytes": 213114,
+          "name": "prompt_encoder_mask_decoder.onnx",
+          "sha256": "874414704c5d686db7d206a35f6e15d26563d50c8c4468fccc6739bd7e491dcf",
+          "urls": [
+            "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX/resolve/814a066640debee5a91e70aa401fb8e17e030503/onnx/prompt_encoder_mask_decoder.onnx",
+            "https://github.com/vagabond-burro/heeler/releases/download/models/sam2_1_hiera_tiny_prompt_encoder_mask_decoder.onnx"
+          ]
+        },
+        {
+          "bytes": 20958208,
+          "name": "prompt_encoder_mask_decoder.onnx_data",
+          "sha256": "e9874d900dd4134ed60eab1e97910327c2419e0b2954485d8fd6e7f1a1470f47",
+          "urls": [
+            "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX/resolve/814a066640debee5a91e70aa401fb8e17e030503/onnx/prompt_encoder_mask_decoder.onnx_data",
+            "https://github.com/vagabond-burro/heeler/releases/download/models/sam2_1_hiera_tiny_prompt_encoder_mask_decoder.onnx_data"
+          ]
+        }
+      ],
+      "files": [
+        [
+          "vision_encoder.onnx",
+          "4f30aacd3aaefbca81a0b7fe4c1fc96345570ea0a6f80ced599493d1b3be2e8c"
+        ],
+        [
+          "vision_encoder.onnx_data",
+          "e83df9866a5afe68ea7f0f721f18f65137fc3acbf0da1c74e946d363e09c69cc"
+        ],
+        [
+          "prompt_encoder_mask_decoder.onnx",
+          "874414704c5d686db7d206a35f6e15d26563d50c8c4468fccc6739bd7e491dcf"
+        ],
+        [
+          "prompt_encoder_mask_decoder.onnx_data",
+          "e9874d900dd4134ed60eab1e97910327c2419e0b2954485d8fd6e7f1a1470f47"
+        ]
+      ],
+      "kind": "file",
+      "label": "Segment Anything 2.1 (Hiera Tiny)",
+      "notes": "",
+      "urls": [
+        "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX/resolve/814a066640debee5a91e70aa401fb8e17e030503/onnx/vision_encoder.onnx",
+        "https://github.com/vagabond-burro/heeler/releases/download/models/sam2_1_hiera_tiny_vision_encoder.onnx"
+      ],
+      "version": "2024.09"
     },
     "scunet_color_real_psnr": {
       "archive_bytes": 3798678,

@@ -95,7 +95,7 @@ describe("a Smart Mask node's face", () => {
     await waitFor(() => expect(status).toHaveAttribute("data-state", "not-detected"));
     fireEvent.click(screen.getByTestId("smart-node-detect"));
     await waitFor(() => expect(got).toContainEqual({ type: "set_text_param", id: node.id, param: "model", value: "mobile_sam" }));
-    expect(bridge.smartClick).toHaveBeenCalledWith(s.activeImage, node.id, "[]", "sky");
+    expect(bridge.smartClick).toHaveBeenCalledWith(s.activeImage, node.id, "[]", "sky", "", "");
   });
 
   it("a computed Sky reads as detected", async () => {
@@ -119,7 +119,7 @@ describe("a Smart Mask node's face", () => {
       fireEvent.click(screen.getByTestId("smart-mode-sky"));
     });
     expect(got).toContainEqual({ type: "set_text_param", id: node.id, param: "mode", value: "sky" });
-    await waitFor(() => expect(bridge.smartClick).toHaveBeenCalledWith(s.activeImage, node.id, "[]", "sky"));
+    await waitFor(() => expect(bridge.smartClick).toHaveBeenCalledWith(s.activeImage, node.id, "[]", "sky", "", ""));
   });
 
   it("Click mode offers the viewer pick, aimed at this node", async () => {

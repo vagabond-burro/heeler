@@ -1987,13 +1987,14 @@ fn smart_want(image_id: &str, n: &UiNode, depth: DepthRecipe, depth_input: Optio
     let prompts = n.params.get("prompts").and_then(|v| v.as_str()).unwrap_or("[]");
     let mode = n.params.get("mode").and_then(|v| v.as_str()).unwrap_or("click");
     // The model that MADE the raster keys it; before any compute the
-    // param is empty and the guess is SAM (a miss only costs the badge).
+    // param is empty and the guess is SAM 2.1, what a first compute
+    // runs (a miss only costs the badge).
     let model = n
         .params
         .get("model")
         .and_then(|v| v.as_str())
         .filter(|m| !m.is_empty())
-        .unwrap_or(heeler_vision::MOBILE_SAM.id);
+        .unwrap_or(heeler_vision::SAM2_1_TINY.id);
     let aim = n.params.get("aim").and_then(|v| v.as_str()).unwrap_or("");
     smart_recipe_version(image_id, &n.id, mode, prompts, aim, model)
 }
@@ -3365,7 +3366,12 @@ fn model_status_of(base: &Path, spec: &heeler_vision::ModelSpec) -> SmartModelSt
 /// optional matte upgrade for the subject one-shot.
 #[derive(Serialize)]
 pub struct SmartModels {
+    /// SAM 2.1, what every new selection is made with.
     pub sam: SmartModelStatus,
+    /// MobileSAM, kept for the selections made with it before SAM 2.1
+    /// (smart_sam_spec).
+    #[serde(rename = "samLegacy")]
+    pub sam_legacy: SmartModelStatus,
     pub matte: SmartModelStatus,
     pub fill: SmartModelStatus,
     /// ViTMatte, the P4 Selection Polish refinement.
@@ -3383,7 +3389,8 @@ pub struct SmartModels {
 async fn smart_model_status(app: tauri::AppHandle) -> Result<SmartModels, String> {
     let base = vision_base(&app)?;
     Ok(SmartModels {
-        sam: model_status_of(&base, &heeler_vision::MOBILE_SAM),
+        sam: model_status_of(&base, &heeler_vision::SAM2_1_TINY),
+        sam_legacy: model_status_of(&base, &heeler_vision::MOBILE_SAM),
         matte: model_status_of(&base, &heeler_vision::BIREFNET_LITE),
         fill: model_status_of(&base, &heeler_vision::LAMA),
         refine: model_status_of(&base, &heeler_vision::VITMATTE),
@@ -3406,7 +3413,8 @@ async fn smart_model_download(app: tauri::AppHandle, model: Option<String>) -> R
         Some("depth_anything_v2_small") => &heeler_vision::DEPTH_ANYTHING,
         Some("scunet_color_real_psnr") => &heeler_vision::SCUNET,
         Some("florence_2_base") => &heeler_vision::FLORENCE_2,
-        _ => &heeler_vision::MOBILE_SAM,
+        Some("mobile_sam") => &heeler_vision::MOBILE_SAM,
+        _ => &heeler_vision::SAM2_1_TINY,
     };
     tauri::async_runtime::spawn_blocking(move || {
         heeler_vision::download_model(&base, spec, |_, _| {}).map_err(|e| e.to_string())
@@ -3425,6 +3433,9 @@ async fn smart_model_remove(app: tauri::AppHandle, model: Option<String>) -> Res
     drop_model_sessions(&app)?;
     let base = vision_base(&app)?;
     match model.as_deref() {
+        Some("sam2_1_hiera_tiny") => {
+            heeler_vision::remove_model(&base, &heeler_vision::SAM2_1_TINY).map_err(|e| e.to_string())
+        }
         Some("mobile_sam") => {
             heeler_vision::remove_model(&base, &heeler_vision::MOBILE_SAM).map_err(|e| e.to_string())
         }
@@ -3445,6 +3456,8 @@ async fn smart_model_remove(app: tauri::AppHandle, model: Option<String>) -> Res
             heeler_vision::remove_model(&base, &heeler_vision::FLORENCE_2).map_err(|e| e.to_string())
         }
         _ => {
+            heeler_vision::remove_model(&base, &heeler_vision::SAM2_1_TINY)
+                .map_err(|e| e.to_string())?;
             heeler_vision::remove_model(&base, &heeler_vision::MOBILE_SAM)
                 .map_err(|e| e.to_string())?;
             heeler_vision::remove_model(&base, &heeler_vision::BIREFNET_LITE)
@@ -3626,10 +3639,11 @@ async fn florence_cancel() -> Result<(), String> {
     Ok(())
 }
 
-/// The seven models Preferences can relocate, in one list so status,
+/// The eight models Preferences can relocate, in one list so status,
 /// removal, moving and the update check can never disagree about what
 /// exists.
-pub(crate) const RELOCATABLE_MODELS: [&heeler_vision::ModelSpec; 7] = [
+pub(crate) const RELOCATABLE_MODELS: [&heeler_vision::ModelSpec; 8] = [
+    &heeler_vision::SAM2_1_TINY,
     &heeler_vision::MOBILE_SAM,
     &heeler_vision::BIREFNET_LITE,
     &heeler_vision::LAMA,
@@ -3768,10 +3782,10 @@ pub(crate) fn smart_sources_offline(
     source_path: Option<&Path>,
 ) -> HashMap<String, SourceImage> {
     let mut out = HashMap::new();
-    let spec = &heeler_vision::MOBILE_SAM;
-    let mut sam: Option<heeler_vision::Sam> = None;
+    // One session and one embedding per SAM generation a document's
+    // selections were made with, loaded as the first of them asks.
+    let mut sams: HashMap<&'static str, (heeler_vision::Sam, Option<heeler_vision::Embedding>)> = HashMap::new();
     let mut matting: Option<heeler_vision::Matting> = None;
-    let mut emb: Option<heeler_vision::Embedding> = None;
     let depth = depth_recipe(ui);
     // The same input key the GUI folds into the plane's version, so a
     // batch reads the raster the session computed rather than asking
@@ -3870,16 +3884,22 @@ pub(crate) fn smart_sources_offline(
             out.insert(n.id.clone(), SourceImage { image: Arc::new(raster), version: matte_want, measured: false });
             continue;
         }
+        // Exactly the model the recipe records, never a stand-in: a
+        // MobileSAM selection recomputed by SAM 2.1 would be a
+        // different mask filed under the old one's name.
+        let spec = recorded_sam(n.params.get("model").and_then(|v| v.as_str()).unwrap_or(""));
         if (mode == "click" && points.is_empty()) || !heeler_vision::installed(vision_base, spec) {
             continue;
         }
-        if sam.is_none() {
+        if !sams.contains_key(spec.id) {
             match heeler_vision::Sam::load(vision_base, spec) {
-                Ok(s) => sam = Some(s),
+                Ok(s) => {
+                    sams.insert(spec.id, (s, None));
+                }
                 Err(_) => return out,
             }
         }
-        let sam_ref = sam.as_mut().expect("just loaded");
+        let (sam_ref, emb) = sams.get_mut(spec.id).expect("just loaded");
         if emb.is_none() {
             // Embed at roughly the preview tier: the clicks are
             // normalized, so resolution only buys encoder time.
@@ -3899,7 +3919,7 @@ pub(crate) fn smart_sources_offline(
                 }
             }
             match sam_ref.embed(&rgb, w, h) {
-                Ok(e) => emb = Some(e),
+                Ok(e) => *emb = Some(e),
                 Err(_) => return out,
             }
         }
@@ -4017,7 +4037,7 @@ async fn smart_raster_status(
     aim: Option<String>,
 ) -> Result<bool, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let model = model.filter(|m| !m.is_empty()).unwrap_or_else(|| heeler_vision::MOBILE_SAM.id.into());
+        let model = model.filter(|m| !m.is_empty()).unwrap_or_else(|| heeler_vision::SAM2_1_TINY.id.into());
         let want = smart_recipe_version(&image_id, &node_id, &mode, &prompts, aim.as_deref().unwrap_or(""), &model);
         let in_session = with_session(&app, |s| {
             Ok(s.smart_rasters
@@ -4037,13 +4057,45 @@ async fn smart_raster_status(
 const SMART_MODEL_MISSING: &str = "model not installed";
 
 /// Whether the model a Smart mask's mode runs on is missing from the
-/// store: SAM for every mode, except Subject, which BiRefNet answers
-/// when it is installed. The graph face's missing-model line asks the
-/// same question of the status (smartnode.tsx smartModelMissing).
-fn smart_model_missing(base: &Path, mode: &str) -> bool {
+/// store: SAM for every mode (the generation smart_sam_spec picks for
+/// the node), except Subject, which BiRefNet answers when it is
+/// installed. The graph face's missing-model line asks the same
+/// question of the status (smartnode.tsx smartModelMissing).
+fn smart_model_missing(base: &Path, mode: &str, recorded: &str) -> bool {
     let matte = mode == "subject" && heeler_vision::installed(base, &heeler_vision::BIREFNET_LITE);
-    !matte && !heeler_vision::installed(base, &heeler_vision::MOBILE_SAM)
+    !matte && !heeler_vision::installed(base, smart_sam_spec(base, recorded))
 }
+
+/// The SAM generation a recipe's recorded model names: MobileSAM for
+/// the selections made with it (refined ones included, "+vitmatte"),
+/// SAM 2.1 for everything else, a selection never computed among them.
+fn recorded_sam(recorded: &str) -> &'static heeler_vision::ModelSpec {
+    if recorded.split('+').next() == Some(heeler_vision::MOBILE_SAM.id) {
+        &heeler_vision::MOBILE_SAM
+    } else {
+        &heeler_vision::SAM2_1_TINY
+    }
+}
+
+/// The SAM a compute the user asked for runs on: the one the selection
+/// was made with, so a MobileSAM selection keeps its shape as clicks
+/// are added, unless MobileSAM is no longer installed, when the click
+/// remakes it with SAM 2.1 (and the returned id says so). Saved
+/// documents never take this path: smart_sources_offline recomputes
+/// with exactly the recorded model or not at all.
+fn smart_sam_spec(base: &Path, recorded: &str) -> &'static heeler_vision::ModelSpec {
+    let spec = recorded_sam(recorded);
+    if spec.id == heeler_vision::MOBILE_SAM.id && !heeler_vision::installed(base, spec) {
+        &heeler_vision::SAM2_1_TINY
+    } else {
+        spec
+    }
+}
+
+/// What the session's embeddings may hold before the cache starts
+/// over: four SAM 2.1 photos (about 16 MB each: two high-resolution
+/// feature maps beside the embedding), or sixteen MobileSAM ones.
+const SAM_EMBEDDING_BUDGET: usize = 72 << 20;
 
 /// A model's mask plane as the raster the render plants: the
 /// probability in every color channel, opaque.
@@ -4071,13 +4123,16 @@ async fn smart_compute(
     mode: Option<String>,
     prompts: String,
     aim: Option<String>,
+    model: Option<String>,
 ) -> Result<(String, u64), String> {
     let base = vision_base(&app)?;
     let mode = mode.unwrap_or_else(|| "click".into());
     let aim = aim.unwrap_or_default();
-    if smart_model_missing(&base, &mode) {
+    let model = model.unwrap_or_default();
+    if smart_model_missing(&base, &mode, &model) {
         return Err(SMART_MODEL_MISSING.into());
     }
+    let spec = smart_sam_spec(&base, &model);
     // Subject prefers the dedicated matte when it is installed; every
     // other path (and the fallback) is SAM.
     let use_matte =
@@ -4123,14 +4178,15 @@ async fn smart_compute(
             // Take the session pieces out, work unlocked, put them
             // back: the encoder can take a moment, and the render pump
             // must not wait on it for frames that need no mask.
+            // One session is held at a time; a document mixing the two
+            // generations swaps it, and the embeddings, keyed by model,
+            // survive the swap.
+            let emb_key = format!("{}|{image_id}", spec.id);
             let (mut sam, cached_emb) = with_session(&app, |s| {
-                Ok((s.sam.take(), s.sam_embeddings.get(&image_id).cloned()))
+                Ok((s.sam.take(), s.sam_embeddings.get(&emb_key).cloned()))
             })?;
-            if sam.is_none() {
-                sam = Some(
-                    heeler_vision::Sam::load(&base, &heeler_vision::MOBILE_SAM)
-                        .map_err(|e| e.to_string())?,
-                );
+            if sam.as_ref().is_none_or(|s| s.model() != spec.id) {
+                sam = Some(heeler_vision::Sam::load(&base, spec).map_err(|e| e.to_string())?);
             }
             let mut sam = sam.expect("just loaded");
             let emb = match cached_emb {
@@ -4138,12 +4194,15 @@ async fn smart_compute(
                 None => {
                     let e = Arc::new(sam.embed(&to_rgb(&source), w, h).map_err(|e| e.to_string())?);
                     with_session(&app, |s| {
-                        // A handful is plenty; wholesale clear keeps
-                        // this from becoming a slow leak of embeddings.
-                        if s.sam_embeddings.len() >= 4 {
+                        // A handful is plenty, counted in bytes since
+                        // SAM 2.1's are four times MobileSAM's; a
+                        // wholesale clear keeps this from becoming a
+                        // slow leak of embeddings.
+                        let held: usize = s.sam_embeddings.values().map(|e| e.bytes()).sum();
+                        if held + e.bytes() > SAM_EMBEDDING_BUDGET {
                             s.sam_embeddings.clear();
                         }
-                        s.sam_embeddings.insert(image_id.clone(), e.clone());
+                        s.sam_embeddings.insert(emb_key.clone(), e.clone());
                         Ok(())
                     })?;
                     e
@@ -4154,7 +4213,7 @@ async fn smart_compute(
                 s.sam = Some(sam);
                 Ok(())
             })?;
-            (mask, heeler_vision::MOBILE_SAM.id)
+            (mask, spec.id)
         };
 
         let raster = smart_mask_raster(&mask, w, h);
@@ -4191,8 +4250,9 @@ async fn smart_click(
     mode: Option<String>,
     prompts: String,
     aim: Option<String>,
+    model: Option<String>,
 ) -> Result<String, String> {
-    smart_compute(app, image_id, node_id, mode, prompts, aim).await.map(|(model, _)| model)
+    smart_compute(app, image_id, node_id, mode, prompts, aim, model).await.map(|(model, _)| model)
 }
 
 /// The document-selection flavor (Select > Selection Tools > Click /
@@ -4209,8 +4269,9 @@ async fn smart_select(
     mode: Option<String>,
     prompts: String,
     aim: Option<String>,
+    model: Option<String>,
 ) -> Result<String, String> {
-    smart_compute(app, image_id, node_id, mode, prompts, aim)
+    smart_compute(app, image_id, node_id, mode, prompts, aim, model)
         .await
         .map(|(_, version)| format!("{version:016x}"))
 }
@@ -31708,9 +31769,9 @@ mod tests {
         assert_eq!(image.pixel(3, 1)[0], 0.5);
     }
 
-    /// The one-shot modes against the real model, gated like the vision
-    /// crate's own test: a synthetic sky over a dark ground, found from
-    /// the top of the frame.
+    /// The one-shot modes against the real models, gated like the
+    /// vision crate's own test: a synthetic sky over a dark ground,
+    /// found from the top of the frame by SAM 2.1 and by MobileSAM.
     #[test]
     fn gated_sky_mode_finds_the_sky() {
         let Ok(base) = std::env::var("HEELER_VISION_MODELS") else {
@@ -31718,10 +31779,16 @@ mod tests {
             return;
         };
         let base = PathBuf::from(base);
-        if !heeler_vision::installed(&base, &heeler_vision::MOBILE_SAM) {
-            eprintln!("skipped: mobile_sam not installed");
-            return;
+        for spec in [&heeler_vision::SAM2_1_TINY, &heeler_vision::MOBILE_SAM] {
+            if !heeler_vision::installed(&base, spec) {
+                eprintln!("skipped: {} not installed", spec.id);
+                continue;
+            }
+            sky_mode_finds_the_sky(&base, spec);
         }
+    }
+
+    fn sky_mode_finds_the_sky(base: &Path, spec: &heeler_vision::ModelSpec) {
         let (w, h) = (640usize, 480usize);
         let mut rgb = vec![0.0f32; w * h * 3];
         for y in 0..h {
@@ -31741,15 +31808,54 @@ mod tests {
                 }
             }
         }
-        let mut sam = heeler_vision::Sam::load(&base, &heeler_vision::MOBILE_SAM).unwrap();
+        let mut sam = heeler_vision::Sam::load(base, spec).unwrap();
         let emb = sam.embed(&rgb, w, h).unwrap();
         let mask = smart_mode_mask(&mut sam, &emb, "sky", &[], "").unwrap();
         let top: f32 = mask[..w * (h / 5)].iter().filter(|v| **v > 0.5).count() as f32
             / (w * (h / 5)) as f32;
         let bottom: f32 = mask[w * (h * 3 / 5)..].iter().filter(|v| **v > 0.5).count() as f32
             / (w * (h * 2 / 5)) as f32;
-        assert!(top > 0.8, "the sky band should be selected: {top}");
-        assert!(bottom < 0.15, "the ground should not: {bottom}");
+        assert!(top > 0.8, "{}: the sky band should be selected: {top}", spec.id);
+        assert!(bottom < 0.15, "{}: the ground should not: {bottom}", spec.id);
+    }
+
+    /// A selection keeps the SAM it was made with (2026.7, SAM 2.1 in
+    /// place of MobileSAM): the recipe's recorded model picks the
+    /// generation, refined ones included, and keys the raster exactly
+    /// as before, so a document saved with MobileSAM selections finds
+    /// its rasters and recomputes with MobileSAM. A selection never
+    /// computed is SAM 2.1's, and so is a click on a MobileSAM one when
+    /// MobileSAM is gone from the store.
+    #[test]
+    fn a_selection_keeps_the_sam_it_was_made_with() {
+        assert_eq!(recorded_sam("mobile_sam").id, "mobile_sam");
+        assert_eq!(recorded_sam("mobile_sam+vitmatte").id, "mobile_sam");
+        assert_eq!(recorded_sam("").id, "sam2_1_hiera_tiny");
+        assert_eq!(recorded_sam("sam2_1_hiera_tiny+vitmatte").id, "sam2_1_hiera_tiny");
+        assert_eq!(recorded_sam("birefnet_lite").id, "sam2_1_hiera_tiny");
+        let empty = tempfile::tempdir().unwrap();
+        assert_eq!(smart_sam_spec(empty.path(), "mobile_sam").id, "sam2_1_hiera_tiny");
+        assert_eq!(smart_sam_spec(empty.path(), "").id, "sam2_1_hiera_tiny");
+
+        let clicks = "[{\"x\":0.4,\"y\":0.5,\"positive\":true}]";
+        let mut node = UiNode {
+            id: "smart_mask_old".into(),
+            node_type: "heeler.smart_mask".into(),
+            enabled: true,
+            params: HashMap::from([
+                ("mode".to_string(), serde_json::json!("click")),
+                ("prompts".to_string(), serde_json::json!(clicks)),
+                ("model".to_string(), serde_json::json!("mobile_sam")),
+            ]),
+        };
+        let old = smart_recipe_version("img", &node.id, "click", clicks, "", "mobile_sam");
+        assert_eq!(smart_want("img", &node, DepthRecipe::default(), None), old, "an old selection asks for its old raster");
+        node.params.remove("model");
+        assert_eq!(
+            smart_want("img", &node, DepthRecipe::default(), None),
+            smart_recipe_version("img", &node.id, "click", clicks, "", "sam2_1_hiera_tiny"),
+            "a selection never computed is SAM 2.1's"
+        );
     }
 
     /// A Smart Mask added in the Graph with Sky chosen (2026-10-01:
@@ -31777,9 +31883,10 @@ mod tests {
         // No model in the store: missing, said for every mode but a
         // Subject the matte answers; and the render plants nothing.
         let empty = tempfile::tempdir().unwrap();
-        assert!(smart_model_missing(empty.path(), "sky"));
-        assert!(smart_model_missing(empty.path(), "click"));
-        assert!(smart_model_missing(empty.path(), "subject"));
+        assert!(smart_model_missing(empty.path(), "sky", ""));
+        assert!(smart_model_missing(empty.path(), "click", ""));
+        assert!(smart_model_missing(empty.path(), "subject", ""));
+        assert!(smart_model_missing(empty.path(), "click", "mobile_sam"));
         assert!(
             smart_sources_offline(empty.path(), &ui, "img", &ExportPhoto::decoded(source.clone()), None).is_empty(),
             "a Sky node never detected plants nothing: the empty mask"
@@ -31790,8 +31897,8 @@ mod tests {
             return;
         };
         let store = PathBuf::from(store);
-        if smart_model_missing(&store, "sky") {
-            eprintln!("skipped the model half: mobile_sam not installed");
+        if smart_model_missing(&store, "sky", "") {
+            eprintln!("skipped the model half: sam2_1_hiera_tiny not installed");
             return;
         }
         // Detect, as smart_compute runs it: a synthetic sky over dark
@@ -31811,19 +31918,20 @@ mod tests {
                 rgb[i..i + 3].copy_from_slice(&px);
             }
         }
-        let mut sam = heeler_vision::Sam::load(&store, &heeler_vision::MOBILE_SAM).unwrap();
+        let spec = smart_sam_spec(&store, "");
+        let mut sam = heeler_vision::Sam::load(&store, spec).unwrap();
         let emb = sam.embed(&rgb, w, h).unwrap();
         let mask = smart_mode_mask(&mut sam, &emb, "sky", &[], "").unwrap();
         let raster = smart_mask_raster(&mask, w, h);
         let rasters = tempfile::tempdir().unwrap();
-        let version = smart_recipe_version("img", &node.id, "sky", "[]", "", heeler_vision::MOBILE_SAM.id);
+        let version = smart_recipe_version("img", &node.id, "sky", "[]", "", spec.id);
         let path = smart_raster_path(rasters.path(), version);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, heeler_io::encode_png_raw(&raster).unwrap()).unwrap();
 
         // The node as the face leaves it after Detect: the model signed.
         let mut detected = node.clone();
-        detected.params.insert("model".into(), serde_json::json!(heeler_vision::MOBILE_SAM.id));
+        detected.params.insert("model".into(), serde_json::json!(spec.id));
         let ui = UiGraph { graph_id: "g".into(), nodes: vec![detected], connections: vec![] };
         let planted = smart_sources_offline(rasters.path(), &ui, "img", &ExportPhoto::decoded(source.clone()), None);
         let got = planted.get("smart_mask_g1").expect("the detected raster plants for the graph's node");

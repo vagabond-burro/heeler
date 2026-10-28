@@ -1,6 +1,7 @@
 //! The model registry: what can be downloaded, from where, and the
-//! checksums that make the download trustworthy. Seven entries: SAM
-//! (click selection), BiRefNet (subject matte), LaMa (inpaint fill),
+//! checksums that make the download trustworthy. Eight entries: SAM
+//! 2.1 (click selection) and MobileSAM (the selections made before
+//! it), BiRefNet (subject matte), LaMa (inpaint fill),
 //! ViTMatte (edge refinement), Depth Anything V2 Small (scene depth),
 //! SCUNet (noise reduction) and Florence-2 (what is in the picture),
 //! each with its license caveat recorded on the entry.
@@ -107,6 +108,66 @@ pub const MOBILE_SAM: ModelSpec = ModelSpec {
         ),
     ],
     extra: &[],
+};
+
+/// SAM 2.1 Hiera Tiny (Meta, Apache-2.0, code and weights; SA-V
+/// training data under CC-BY-4.0; ONNX packaging by the Hugging Face
+/// onnx-community): click selection and the Subject and Sky one-shots
+/// for every selection made since 2026.7, in place of MobileSAM, which
+/// stays for the selections made with it. Tiny over Small: Small's
+/// encoder measured two to three times Tiny's on the same machine,
+/// past the two-second budget on a laptop. Four files from one pinned
+/// revision: the vision encoder (the download proper) and its external
+/// weights, then the prompt encoder and mask decoder and its weights.
+/// Each graph names its `.onnx_data` sibling by relative path, so the
+/// local names are upstream's; the mirror prefixes them with the id.
+pub const SAM2_1_TINY: ModelSpec = ModelSpec {
+    id: "sam2_1_hiera_tiny",
+    version: "2024.09",
+    label: "Segment Anything 2.1 (Hiera Tiny)",
+    license: "Apache-2.0 (code and weights; SA-V training data under CC-BY-4.0)",
+    urls: &[
+        "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX/resolve/814a066640debee5a91e70aa401fb8e17e030503/onnx/vision_encoder.onnx",
+        "https://github.com/vagabond-burro/heeler/releases/download/models/sam2_1_hiera_tiny_vision_encoder.onnx",
+    ],
+    archive_sha256: "4f30aacd3aaefbca81a0b7fe4c1fc96345570ea0a6f80ced599493d1b3be2e8c",
+    archive_bytes: 354_238,
+    kind: ArchiveKind::File,
+    files: &[
+        ("vision_encoder.onnx", "4f30aacd3aaefbca81a0b7fe4c1fc96345570ea0a6f80ced599493d1b3be2e8c"),
+        ("vision_encoder.onnx_data", "e83df9866a5afe68ea7f0f721f18f65137fc3acbf0da1c74e946d363e09c69cc"),
+        ("prompt_encoder_mask_decoder.onnx", "874414704c5d686db7d206a35f6e15d26563d50c8c4468fccc6739bd7e491dcf"),
+        ("prompt_encoder_mask_decoder.onnx_data", "e9874d900dd4134ed60eab1e97910327c2419e0b2954485d8fd6e7f1a1470f47"),
+    ],
+    extra: &[
+        ExtraFile {
+            name: "vision_encoder.onnx_data",
+            urls: &[
+                "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX/resolve/814a066640debee5a91e70aa401fb8e17e030503/onnx/vision_encoder.onnx_data",
+                "https://github.com/vagabond-burro/heeler/releases/download/models/sam2_1_hiera_tiny_vision_encoder.onnx_data",
+            ],
+            sha256: "e83df9866a5afe68ea7f0f721f18f65137fc3acbf0da1c74e946d363e09c69cc",
+            bytes: 134_084_864,
+        },
+        ExtraFile {
+            name: "prompt_encoder_mask_decoder.onnx",
+            urls: &[
+                "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX/resolve/814a066640debee5a91e70aa401fb8e17e030503/onnx/prompt_encoder_mask_decoder.onnx",
+                "https://github.com/vagabond-burro/heeler/releases/download/models/sam2_1_hiera_tiny_prompt_encoder_mask_decoder.onnx",
+            ],
+            sha256: "874414704c5d686db7d206a35f6e15d26563d50c8c4468fccc6739bd7e491dcf",
+            bytes: 213_114,
+        },
+        ExtraFile {
+            name: "prompt_encoder_mask_decoder.onnx_data",
+            urls: &[
+                "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX/resolve/814a066640debee5a91e70aa401fb8e17e030503/onnx/prompt_encoder_mask_decoder.onnx_data",
+                "https://github.com/vagabond-burro/heeler/releases/download/models/sam2_1_hiera_tiny_prompt_encoder_mask_decoder.onnx_data",
+            ],
+            sha256: "e9874d900dd4134ed60eab1e97910327c2419e0b2954485d8fd6e7f1a1470f47",
+            bytes: 20_958_208,
+        },
+    ],
 };
 
 /// BiRefNet Lite (MIT, weights by the author; ONNX packaging by the
@@ -803,7 +864,7 @@ mod tests {
 
     #[test]
     fn every_registry_source_validates_and_inconsistent_sources_fail_before_staging() {
-        for spec in [&MOBILE_SAM, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &SCUNET, &FLORENCE_2] {
+        for spec in [&SAM2_1_TINY, &MOBILE_SAM, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &SCUNET, &FLORENCE_2] {
             ModelSource::from(spec).validate().unwrap();
         }
         let base = tempdir();
@@ -956,7 +1017,7 @@ mod tests {
     #[test]
     fn every_model_carries_the_release_mirror_as_a_second_source() {
         let mirror = "https://github.com/vagabond-burro/heeler/releases/download/models/";
-        for spec in [&MOBILE_SAM, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &SCUNET, &FLORENCE_2] {
+        for spec in [&SAM2_1_TINY, &MOBILE_SAM, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &SCUNET, &FLORENCE_2] {
             assert!(spec.urls.len() >= 2, "{}: one source only", spec.id);
             assert!(spec.urls.iter().any(|u| u.starts_with(mirror)), "{}: no mirror", spec.id);
             assert!(spec.urls.iter().all(|u| u.starts_with("https://")), "{}: a plain http source", spec.id);

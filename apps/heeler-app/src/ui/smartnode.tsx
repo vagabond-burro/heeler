@@ -84,7 +84,7 @@ export function SmartNodeStatus({
       live = false;
     };
   }, [state.activeImage, node.id, mode, prompts, model, aim, asked, busy]);
-  const missing = smartModelMissing(models, mode);
+  const missing = smartModelMissing(models, mode, model);
   const detect = () => {
     const request = generation.current;
     detecting.current = true;
@@ -94,9 +94,7 @@ export function SmartNodeStatus({
     // stored yet, as the panel's Subject button does.
     const at = mode === "subject" ? aim || subjectAim(state) : "";
     if (mode === "subject" && !aim) dispatch({ type: "set_text_param", id: node.id, param: "aim", value: at });
-    void (mode === "subject"
-      ? smartClick(state.activeImage, node.id, prompts, mode, at)
-      : smartClick(state.activeImage, node.id, prompts, mode))
+    void smartClick(state.activeImage, node.id, prompts, mode, at, model)
       .then((used) => {
         if (generation.current === request) dispatch({ type: "set_text_param", id: node.id, param: "model", value: used });
       })

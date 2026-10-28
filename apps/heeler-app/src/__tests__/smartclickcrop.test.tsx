@@ -243,7 +243,7 @@ describe("Subject on a cropped photograph", () => {
     expect(aim.x > SUBJECT[0] && aim.x < SUBJECT[2] && aim.y > SUBJECT[1] && aim.y < SUBJECT[3]).toBe(true);
     // The compute was asked with the aim, and the clicks stayed put.
     const { smartClick } = await import("../bridge");
-    expect(vi.mocked(smartClick)).toHaveBeenCalledWith(IMAGE, mid, "[]", "subject", node.textParams!.aim);
+    expect(vi.mocked(smartClick)).toHaveBeenCalledWith(IMAGE, mid, "[]", "subject", node.textParams!.aim, "");
     expect(node.textParams!.prompts).toBe(clicks);
   });
 

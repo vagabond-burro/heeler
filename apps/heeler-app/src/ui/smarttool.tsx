@@ -24,8 +24,10 @@ import {
   smartModelStatus,
   smartRasterStatus,
   smartSelect,
+  SAM_MODEL,
   type SmartModels,
 } from "../bridge";
+import { samFor } from "./smartnodeparts";
 import { logMsg } from "../log";
 import { reportToolError } from "./hints";
 import { DepthViewIcon, MaskEyeIcon, MaskOverlayIcon, SmartIcon } from "./panelicons";
@@ -497,10 +499,13 @@ export function SmartModePanel({
   const mode = mask.textParams?.mode ?? "click";
   const prompts = mask.textParams?.prompts ?? "[]";
   const hasSelection = prompts !== "[]" || (mask.textParams?.model ?? "") !== "";
-  const compute = (m: string, pts: string, aim = "") => {
+  // A selection made with MobileSAM keeps it (lib.rs smart_sam_spec);
+  // remaking it with SAM 2.1 is the user's call, offered beside it.
+  const madeWithMobileSam = (mask.textParams?.model ?? "").split("+")[0] === "mobile_sam";
+  const compute = (m: string, pts: string, aim = "", model = mask.textParams?.model ?? "") => {
     setBusy(true);
     publishBusy("SELECTING \u00b7 the model is computing the mask");
-    void (m === "subject" ? smartClick(state.activeImage, mask.id, pts, m, aim) : smartClick(state.activeImage, mask.id, pts, m))
+    void smartClick(state.activeImage, mask.id, pts, m, aim, model)
       .then((used) => {
         dispatch({ type: "set_text_param", id: mask.id, param: "model", value: used });
       })
@@ -560,6 +565,17 @@ click/subject/sky that refine/remove/to-mask have").*/}
         <span style={{ fontSize: 9, color: "var(--text-faint)", letterSpacing: ".08em" }}>
           {matting ? "REFINING…" : "COMPUTING…"}
         </span>
+      )}
+      {madeWithMobileSam && !busy && !matting && models?.sam.installed && (
+        <button
+          className="chip small"
+          data-testid="smart-remake"
+          data-tip="Remake with SAM 2.1"
+          data-hint="Made with MobileSAM: remakes this selection from its clicks with SAM 2.1, whose edges are cleaner; the shape may change"
+          onClick={() => compute(mode, prompts, mask.textParams?.aim ?? "", SAM_MODEL)}
+        >
+          SAM 2.1
+        </button>
       )}
       {/* The actions, at the mode buttons' own size (one square, a picture in
 each, since 2026-09-29) and pushed to the right edge with the space
@@ -775,10 +791,11 @@ export function SmartClickOverlay({
   if (!mask) return null;
 
   const models = status !== "loading" ? status : null;
-  const needsModel = models !== null && !models.sam.installed;
+  const sam = models !== null ? samFor(models, mask?.textParams?.model ?? "") : null;
+  const needsModel = sam !== null && !sam.installed;
   // The matte upgrade offer: subject mode works via SAM regardless,
   // but BiRefNet's soft edges are the real thing.
-  const offerMatte = models !== null && models.sam.installed && !models.matte.installed;
+  const offerMatte = sam !== null && models !== null && sam.installed && !models.matte.installed;
 
   return (
     <div
@@ -807,7 +824,7 @@ export function SmartClickOverlay({
         dispatch({ type: "set_text_param", id: mask.id, param: "prompts", value: json });
         setBusy(true);
         publishBusy("SELECTING \u00b7 the model is computing the mask");
-        void smartClick(state.activeImage, mask.id, json)
+        void smartClick(state.activeImage, mask.id, json, "click", "", mask.textParams?.model ?? "")
           .then((used) => {
             dispatch({ type: "set_text_param", id: mask.id, param: "model", value: used });
           })
@@ -885,16 +902,16 @@ export function SmartClickOverlay({
       })()}
       {/* The consent card, when the tool is armed but the model is not
           here: name, license, size, source, and an explicit button. */}
-      {needsModel && models !== null && (
+      {needsModel && sam !== null && (
         <ModelConsentCard
           title="SMART SELECTION NEEDS ITS MODEL"
-          model={models.sam}
+          model={sam}
           testid="smart"
           downloading={downloading}
           place={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)" }}
           onDownload={() => {
             setDownloading(true);
-            void smartModelDownload()
+            void smartModelDownload(sam.id)
               .then(() => logMsg("info", "Smart selection model installed"))
               .catch((err) => reportToolError("Download", err))
               .finally(() => setDownloading(false));
@@ -926,7 +943,7 @@ export function SmartClickOverlay({
             onClick={() => {
               setBusy(true);
               publishBusy("SELECTING \u00b7 the model is computing the mask");
-              void (mode === "subject" ? smartClick(state.activeImage, mask.id, prompts, mode, aim) : smartClick(state.activeImage, mask.id, prompts, mode))
+              void smartClick(state.activeImage, mask.id, prompts, mode, mode === "subject" ? aim : "", mask.textParams?.model ?? "")
                 .then((used) => {
                   dispatch({ type: "set_text_param", id: mask.id, param: "model", value: used });
                 })

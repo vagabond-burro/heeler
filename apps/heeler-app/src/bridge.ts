@@ -1562,7 +1562,11 @@ export type SmartModelStatus = {
 /** Both models: SAM is the backbone, BiRefNet the optional matte
  * upgrade for the subject one-shot. */
 export type SmartModels = {
+  /** SAM 2.1, what every new selection is made with */
   sam: SmartModelStatus;
+  /** MobileSAM, kept for the selections made with it; absent from a
+   * desktop older than SAM 2.1 */
+  samLegacy?: SmartModelStatus;
   matte: SmartModelStatus;
   /** the inpainting model behind Remove and the Finish fill */
   fill: SmartModelStatus;
@@ -1582,7 +1586,8 @@ function mockSmartModels(): SmartModels {
     id, installed: false, label, bytes, license, url, version,
   });
   return {
-    sam: m("mobile_sam", "Segment Anything (MobileSAM)", 36_655_105, "Apache-2.0", "https://huggingface.co/vietanhdev/segment-anything-onnx-models", "2023.06"),
+    sam: m("sam2_1_hiera_tiny", "Segment Anything 2.1 (Hiera Tiny)", 155_610_424, "Apache-2.0", "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX", "2024.09"),
+    samLegacy: m("mobile_sam", "Segment Anything (MobileSAM)", 36_655_105, "Apache-2.0", "https://huggingface.co/vietanhdev/segment-anything-onnx-models", "2023.06"),
     matte: m("birefnet_lite", "BiRefNet Lite (subject matte)", 224_005_088, "MIT", "https://huggingface.co/onnx-community/BiRefNet_lite-ONNX", "2024.09"),
     fill: m("lama", "LaMa (inpainting)", 208_044_816, "Apache-2.0", "https://huggingface.co/Carve/LaMa-ONNX", "2024.03"),
     refine: m("vitmatte", "ViTMatte (edge refinement)", 103_885_865, "Apache-2.0 weights, MIT code", "https://huggingface.co/Xenova/vitmatte-small-composition-1k", "2024.06"),
@@ -1667,7 +1672,7 @@ function modelsChanged() {
 
 /** The consented download: call ONLY from a dialog that has already
  * named the model, its license, its size, and its source. */
-export async function smartModelDownload(model = "mobile_sam"): Promise<void> {
+export async function smartModelDownload(model = SAM_MODEL): Promise<void> {
   if (isTauri()) await call("smart_model_download", { model });
   modelsChanged();
 }
@@ -1793,17 +1798,23 @@ export async function smartRasterStatus(
  * raster; writing that id into the node's `model` param is both
  * provenance and the render trigger. `aim` is Subject's ask for the
  * SAM fallback (smartpoints.ts subjectAim), on the photograph like the
- * clicks. */
+ * clicks. `model` is the node's own: a selection made with MobileSAM
+ * keeps it while it is installed (lib.rs smart_sam_spec), and SAM 2.1's
+ * id asks for a remake with SAM 2.1. */
 export async function smartClick(
   imageId: string,
   nodeId: string,
   prompts: string,
   mode = "click",
   aim = "",
+  model = "",
 ): Promise<string> {
-  if (!isTauri()) return "mobile_sam";
-  return await call("smart_click", { imageId, nodeId, mode, prompts, aim });
+  if (!isTauri()) return model.startsWith("mobile_sam") ? "mobile_sam" : SAM_MODEL;
+  return await call("smart_click", { imageId, nodeId, mode, prompts, aim, model });
 }
+
+/** SAM 2.1's model id: what every new selection is made with. */
+export const SAM_MODEL = "sam2_1_hiera_tiny";
 
 /** Smart selection straight onto the document selection (Select >
  * Selection Tools > Click / Subject / Sky): same compute as
