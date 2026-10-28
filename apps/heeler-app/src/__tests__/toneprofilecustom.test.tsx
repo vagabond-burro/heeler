@@ -28,6 +28,7 @@ import {
   standardSeed,
   toneCurveAt,
 } from "../toneprofile";
+import { ToneCurveBlock } from "../ui/tonecurve";
 import { chooseWith, menuValue } from "./menuhelp";
 
 const profileOf = (s: State) => s.nodes.find((n) => n.type === "heeler.tone_profile")!;
@@ -51,6 +52,24 @@ describe("Tone Profile: Custom", () => {
     expect(parseToneCurve('{"points":[[0,0.5]]}')).toBeNull();
     expect(parseToneCurve('{"points":[[2,1],[-2,0]]}')!.points[0]).toEqual([-2, 0]);
     expect(parseToneCurve('{"interp":"linear","points":[[0,0],[1,1]]}')!.interp).toBe("linear");
+    expect(parseToneCurve('{"interp":"cubic","points":[[0,0],[1,1]]}')).toBeNull();
+    expect(parseToneCurve('{"points":[[0,0],[0,1]]}')).toBeNull();
+    expect(parseToneCurve('{"points":[[0,0],[25,1]]}')).toBeNull();
+    expect(parseToneCurve('{"points":[[0,0],"bad",[1,1]]}')).toBeNull();
+    expect(parseToneCurve(JSON.stringify({ points: Array.from({ length: 1025 }, (_, i) => [i / 100, 0]) }))).toBeNull();
+    // The engine clamps display values rather than refusing them.
+    expect(parseToneCurve('{"points":[[0,-1],[1,2]]}')!.points).toEqual([[0, 0], [1, 1]]);
+  });
+
+  it("the menu still names a saved profile after the writer rounds its curve", () => {
+    const before = profileOf(initialState());
+    const curve = JSON.stringify({ name: "Soft", interp: "smooth", points: [[-8, 0], [0, 0.123456], [3, 1]] });
+    const rounded = JSON.stringify({ name: "Soft", interp: "smooth", points: [[-8.0, 0.0], [0.0, 0.1235], [3.0, 1.0]] });
+    const node = { ...before, textParams: { ...before.textParams, mode: "custom", curve } };
+    const saved = [{ path: "/p/Soft.heelerprofile", file: "Soft", name: "Soft", curve: rounded, error: null }];
+    expect(profileMenuValue(node, saved)).toBe("profile:/p/Soft.heelerprofile");
+    const changed = { ...node, textParams: { ...node.textParams, curve: JSON.stringify({ ...JSON.parse(curve), points: [[-8, 0], [0, 0.124], [3, 1]] }) } };
+    expect(profileMenuValue(changed, saved)).toBe("custom");
   });
 
   it("the menu lists saved profiles beside the modes; picking one copies its curve in one undo step", () => {
@@ -82,6 +101,19 @@ describe("Tone Profile: Custom", () => {
     const fresh = profilePick(profileOf(s), "custom", saved)!;
     expect(fresh.type).toBe("set_tone_curve");
     expect(parseToneCurve((fresh as { curve: string }).curve)).toEqual(standardSeed());
+  });
+
+  it("a canceled point drag closes its undo gesture", () => {
+    const dispatch = vi.fn();
+    render(<ToneCurveBlock node={profileOf(initialState())} dispatch={dispatch} />);
+    const editor = screen.getByTestId("tone-curve-editor") as unknown as SVGSVGElement;
+    editor.setPointerCapture = vi.fn();
+    fireEvent(screen.getByTestId("tone-curve-point-2"), new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "begin_gesture", key: `${profileOf(initialState()).id}.tone_curve` });
+    fireEvent(editor, new MouseEvent("pointercancel", { bubbles: true }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "end_gesture" });
+    fireEvent(editor, new MouseEvent("pointerup", { bubbles: true }));
+    expect(dispatch.mock.calls.filter(([cmd]) => cmd.type === "end_gesture")).toHaveLength(1);
   });
 
   it("Develop draws the curve under Custom, hides Toe and Highlight roll, and saves, imports and edits it", async () => {

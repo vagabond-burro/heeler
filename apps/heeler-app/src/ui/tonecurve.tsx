@@ -195,6 +195,11 @@ function ToneCurveEditor({
   const linear = (x: number) => Math.min(1, vtToDisplay(0.18 * 2 ** x));
   const ticks = [];
   for (let x = Math.ceil(lo / 2) * 2; x <= hi; x += 2) ticks.push(x);
+  const finish = () => {
+    if (drag.current === null) return;
+    drag.current = null;
+    dispatch({ type: "end_gesture" });
+  };
 
   return (
     <svg
@@ -221,11 +226,9 @@ function ToneCurveEditor({
         if (drag.current === null) return;
         onChange(moved(drag.current, at(e)));
       }}
-      onPointerUp={() => {
-        if (drag.current === null) return;
-        drag.current = null;
-        dispatch({ type: "end_gesture" });
-      }}
+      onPointerUp={finish}
+      onPointerCancel={finish}
+      onLostPointerCapture={finish}
     >
       {ticks.map((x) => (
         <g key={x}>

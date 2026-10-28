@@ -212,6 +212,11 @@ fn gain_map_entry(t: &Tiff, ifd0: &[(u16, Entry)], subs: &[usize]) -> Option<Ent
 /// ProfileToneCurve's pairs, kept only when they are a curve: finite,
 /// at least two, inputs never stepping back.
 fn tone_curve(t: &Tiff, e: &Entry) -> Vec<(f32, f32)> {
+    // The tag is FLOAT pairs. Do not drop an odd trailing value or
+    // reinterpret another numeric type as a different curve.
+    if e.kind != 11 || e.count < 4 || e.count % 2 != 0 {
+        return Vec::new();
+    }
     let values = t.numbers(e);
     let pairs: Vec<(f32, f32)> = values.chunks_exact(2).map(|p| (p[0] as f32, p[1] as f32)).collect();
     let sound = pairs.len() >= 2
@@ -748,6 +753,12 @@ mod tests {
         }
         assert!(profile_tone_curve(&tiff(true, &[baseline(true, 1.0)], None)).is_none());
         assert!(profile_tone_curve(&tiff(true, &[curve_field(true, &[(0.5, 0.0), (0.2, 1.0)])], None)).is_none());
+        let mut wrong_type = curve_field(true, &curve);
+        wrong_type.1 = 3;
+        assert!(profile_tone_curve(&tiff(true, &[wrong_type], None)).is_none());
+        let mut odd_count = curve_field(true, &curve);
+        odd_count.2 = 5;
+        assert!(profile_tone_curve(&tiff(true, &[odd_count], None)).is_none());
         assert!(profile_tone_curve(b"not a tiff").is_none());
     }
 

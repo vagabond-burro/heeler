@@ -252,6 +252,9 @@ impl ToneCurve {
         if pairs.len() < 2 {
             return Err("the file needs two lines of two numbers at least: stops, then a display value".into());
         }
+        if pairs.iter().any(|(x, y)| !x.is_finite() || !y.is_finite() || x.abs() > MAX_STOPS) {
+            return Err(format!("the file's points must be finite and within {MAX_STOPS} stops of middle gray"));
+        }
         if pairs.len() <= 64 {
             let points = pairs.iter().map(|&(x, y)| [x, y]).collect();
             return ToneCurve { name: name.into(), interp: "smooth".into(), points }.checked();
@@ -438,5 +441,11 @@ mod tests {
         assert_eq!(long.points[0][0], -8.0);
         assert_eq!(long.points[long.points.len() - 1][0], 2.0);
         assert!((long.eval(-3.0) - 0.5).abs() < 0.01);
+        // Validate before resampling too: an extreme endpoint must not
+        // send the half-stop sampler into an effectively endless loop.
+        let outside: String = (0..65).map(|i| if i == 64 { "40 1\n".into() } else { format!("{i} 0\n") }).collect();
+        assert!(ToneCurve::from_two_columns("x", &outside).is_err());
+        let nonfinite: String = (0..65).map(|i| if i == 64 { "64 NaN\n".into() } else { format!("{i} 0\n") }).collect();
+        assert!(ToneCurve::from_two_columns("x", &nonfinite).is_err());
     }
 }

@@ -33,14 +33,19 @@ export function parseToneCurve(json: string | undefined): ToneCurveDoc | null {
   if (!json || !json.trim()) return null;
   try {
     const v = JSON.parse(json);
-    const pts: Pt[] = Array.isArray(v?.points)
-      ? v.points.filter((p: unknown) => Array.isArray(p) && p.length === 2 && p.every((x) => typeof x === "number" && Number.isFinite(x)))
-      : [];
-    if (pts.length < 2) return null;
+    const raw = v?.points;
+    if (!Array.isArray(raw) || raw.length < 2 || raw.length > 1024) return null;
+    if (v?.interp !== undefined && v.interp !== "smooth" && v.interp !== "linear") return null;
+    if (v?.name !== undefined && typeof v.name !== "string") return null;
+    if (!raw.every((p: unknown) => Array.isArray(p) && p.length === 2 && p.every((x) => typeof x === "number" && Number.isFinite(x)))) return null;
+    const pts: Pt[] = raw.map((p: Pt) => [p[0], Math.min(1, Math.max(0, p[1]))]);
+    if (pts.some(([x]) => Math.abs(x) > 24)) return null;
+    pts.sort((a, b) => a[0] - b[0]);
+    if (pts.some((p, i) => i > 0 && p[0] - pts[i - 1][0] < 1e-4)) return null;
     return {
-      name: typeof v.name === "string" ? v.name : "",
+      name: v.name ?? "",
       interp: v.interp === "linear" ? "linear" : "smooth",
-      points: [...pts].sort((a, b) => a[0] - b[0]),
+      points: pts,
     };
   } catch {
     return null;
@@ -85,14 +90,20 @@ export const curveOf = (node: NodeCard): ToneCurveDoc => parseToneCurve(node.tex
  * shared by every seat of the profile menu (Develop and the inspector). */
 let profiles: ToneProfileEntry[] = [];
 let loaded = false;
+let profileRequest = 0;
 const listeners = new Set<() => void>();
 
 export async function reloadToneProfiles(): Promise<void> {
+  const request = ++profileRequest;
+  let next: ToneProfileEntry[];
   try {
-    profiles = await toneProfileList();
+    next = await toneProfileList();
   } catch {
-    profiles = [];
+    next = [];
   }
+  // A slow read from before a save must not cover the newer folder.
+  if (request !== profileRequest) return;
+  profiles = next;
   loaded = true;
   listeners.forEach((l) => l());
 }
@@ -122,13 +133,28 @@ export function profileChoices(saved: ToneProfileEntry[]): Choice[] {
   ];
 }
 
+/** The same curve before and after the profile writer's four-decimal
+ * rounding, rather than the same JSON spelling. */
+function sameToneCurve(a: string, b: string): boolean {
+  const ca = parseToneCurve(a);
+  const cb = parseToneCurve(b);
+  return !!(
+    ca &&
+    cb &&
+    ca.name === cb.name &&
+    ca.interp === cb.interp &&
+    ca.points.length === cb.points.length &&
+    ca.points.every((p, i) => Math.abs(p[0] - cb.points[i][0]) <= 1e-4 && Math.abs(p[1] - cb.points[i][1]) <= 1e-4)
+  );
+}
+
 /** What the menu shows: the mode, or for Custom the saved profile whose
  * curve the node carries unchanged, else Custom. */
 export function profileMenuValue(node: NodeCard, saved: ToneProfileEntry[]): string {
   const mode = node.textParams?.mode ?? "standard";
   if (mode !== "custom") return mode;
   const curve = node.textParams?.curve ?? "";
-  const match = saved.find((p) => p.curve && p.curve === curve);
+  const match = saved.find((p) => p.curve && sameToneCurve(p.curve, curve));
   return match ? PROFILE_PREFIX + match.path : "custom";
 }
 
