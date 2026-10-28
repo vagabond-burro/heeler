@@ -645,6 +645,13 @@ impl GpuEngine {
                     .and_then(|v| v.as_str())
                     .unwrap_or("standard")
                     .to_string();
+                // Custom's curve is a table the kernel has no buffer for:
+                // refused, so the node falls back to the CPU rather than
+                // rendering as Standard. The desktop's cpu_only says the
+                // same before a chain is offered.
+                if mode == "custom" {
+                    return Err(GpuError::Unsupported("heeler.tone_profile custom".into()));
+                }
                 let strength = get("contrast", 100.0) / 100.0;
                 let (s_amount, toe) = match mode.as_str() {
                     "linear" => (0.0, 0.0),
@@ -1287,6 +1294,15 @@ mod tests {
             GpuEngine::kernel_for(&node),
             Err(GpuError::Unsupported(_))
         ));
+    }
+
+    /// A custom Tone Profile's curve has no place in the kernel's
+    /// uniforms; the kernel refuses it rather than drawing Standard.
+    #[test]
+    fn custom_tone_profile_is_refused_for_cpu_fallback() {
+        let mut node = node_with("heeler.tone_profile", &[]);
+        node.params.insert("mode".into(), heeler_graph::ParamValue::Text("custom".into()));
+        assert!(matches!(GpuEngine::kernel_for(&node), Err(GpuError::Unsupported(_))));
     }
 
     #[test]

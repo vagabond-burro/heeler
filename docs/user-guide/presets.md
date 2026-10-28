@@ -16,6 +16,8 @@ Your presets work the same way but can be created and removed. The two glyphs be
 
 Presets replace the whole look. To keep a group of nodes you drop into a graph beside what is there, save it as a node recipe instead: recipes are files too, in a `recipes` folder beside `presets`, with the same Import, Export and `.trash`. See [Node recipes](graph/recipes.md#recipe-files).
 
+A Custom tone curve saved as a tone profile is kept apart from presets: it is a file in a `profiles` folder beside `presets`, listed in the Profile menu of every photograph. See [Custom profiles](adjustments/source.md#custom-profiles).
+
 ## Preset files
 
 A preset is a text file you can read and edit, written in YAML, the same format as [node recipe files](graph/recipes.md#recipe-files). Your presets live in a `presets` folder in Heeler's app data, one file per preset, with each category a folder: `presets/Travel/Warm Afternoon.heelerpreset`. **Export** writes the same kind of file wherever you choose, and **Import** adds one to the **Imported** category.

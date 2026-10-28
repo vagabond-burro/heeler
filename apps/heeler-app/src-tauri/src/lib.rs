@@ -58,6 +58,7 @@ pub mod trash;
 mod graphstore;
 pub mod recovery;
 pub mod recipe_files;
+pub mod tone_profiles;
 use heeler_engine::memory::{self, Job};
 
 /// The open-folder session: stable ids mapped to source paths, backed by a
@@ -11861,6 +11862,9 @@ pub(crate) fn gpu_tail_of(ui: &UiGraph) -> Option<(String, Vec<String>)> {
             // the modes, not the characteristic curves.
             || (n.node_type == "heeler.tone_profile"
                 && n.params.get("film").and_then(|v| v.as_str()).map(|f| !f.is_empty()).unwrap_or(false))
+            // A custom Tone Profile: its curve is a table the kernel has
+            // no buffer for.
+            || (n.node_type == "heeler.tone_profile" && n.params.get("mode").and_then(|v| v.as_str()) == Some("custom"))
     };
 
     let mut tail: Vec<String> = Vec::new();
@@ -22664,6 +22668,10 @@ pub fn run() {
             recipe_files::recipe_trash,
             recipe_files::recipe_import,
             recipe_files::recipe_export,
+            tone_profiles::tone_profile_list,
+            tone_profiles::tone_profile_save,
+            tone_profiles::tone_profile_import,
+            tone_profiles::tone_profile_export,
             pick_lut_file,
             pick_image_file,
             save_console_log,
@@ -35677,6 +35685,25 @@ mod tests {
         let (prefix, _) = gpu_tail_of(&ui).expect("tail found");
         assert_eq!(prefix, "src");
         ui.nodes[1].params.insert("film".into(), serde_json::json!("hp5"));
+        let (prefix, tail) = gpu_tail_of(&ui).expect("tail found");
+        assert_eq!(prefix, "p");
+        assert_eq!(tail, vec!["l", "e"]);
+    }
+
+    /// So is a custom Tone Profile: the kernel has no table for its curve.
+    #[test]
+    fn gpu_tail_stops_at_a_custom_profile() {
+        let mut ui = chain_graph(
+            &[
+                ("src", "heeler.image_source", true),
+                ("p", "heeler.tone_profile", true),
+                ("l", "heeler.levels", true),
+                ("e", "heeler.exposure", true),
+            ],
+            &[("src", "p", "in"), ("p", "l", "in"), ("l", "e", "in")],
+        );
+        ui.nodes[1].params.insert("mode".into(), serde_json::json!("custom"));
+        ui.nodes[1].params.insert("curve".into(), serde_json::json!(r#"{"points":[[-8,0],[0,0.5],[3,1]]}"#));
         let (prefix, tail) = gpu_tail_of(&ui).expect("tail found");
         assert_eq!(prefix, "p");
         assert_eq!(tail, vec!["l", "e"]);

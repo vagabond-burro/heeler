@@ -7,7 +7,8 @@ import { SharpeningRecipeControl } from "./simple";
 import { SmartMaskFace } from "./smartnode";
 import { smartCardNote, useSmartModels } from "./smartnodeparts";
 import { SourceMenuRow } from "./sourcemenus";
-import { PROFILE_CHOICES, SOURCE_MENU_ROWS } from "./sourcemenusparts";
+import { SOURCE_MENU_ROWS } from "./sourcemenusparts";
+import { ProfileMenuRow, ToneCurveBlock } from "./tonecurve";
 import { FeatherFollowsToggle } from "./featherfollows";
 import { FEATHER_FOLLOWS_LABEL } from "./featherfollowsparts";
 import { KeyLightControls } from "./keylightgizmo";
@@ -3610,15 +3611,9 @@ two controls Develop's treatment block has, on the node.*/}
                 />
                 {/* Develop's Profile dropdown, the same component. */}
                 <div style={{ marginBottom: 8 }}>
-                  <SourceMenuRow
-                    label="Profile"
-                    name="Tone profile"
-                    value={node.textParams?.mode ?? "standard"}
-                    choices={PROFILE_CHOICES}
-                    testid="inspector-profile"
-                    onChange={(value) => dispatch({ type: "set_text_param", id: node.id, param: "mode", value })}
-                  />
+                  <ProfileMenuRow node={node} dispatch={dispatch} testid="inspector-profile" />
                 </div>
+                {node.textParams?.mode === "custom" && <ToneCurveBlock node={node} dispatch={dispatch} />}
                 {/* Same rows, same names, same order as Develop's
                     Source block, gate included: a linear profile has no
                     amount to turn. */}
@@ -3626,8 +3621,13 @@ two controls Develop's treatment block has, on the node.*/}
                 {(node.textParams?.mode ?? "standard") !== "linear" && (
                   <Slider label="Profile amt" param="contrast" node={node} dispatch={dispatch} centered={false} />
                 )}
-                <Slider label="Toe" param="shadow_toe" node={node} dispatch={dispatch} centered={false} />
-                <Slider label="Highlight roll" param="highlight_rolloff" node={node} dispatch={dispatch} centered={false} />
+                {/* A custom curve is its own toe and shoulder. */}
+                {node.textParams?.mode !== "custom" && (
+                  <>
+                    <Slider label="Toe" param="shadow_toe" node={node} dispatch={dispatch} centered={false} />
+                    <Slider label="Highlight roll" param="highlight_rolloff" node={node} dispatch={dispatch} centered={false} />
+                  </>
+                )}
                 <Slider label="Colorfulness" param="colorfulness" node={node} dispatch={dispatch} />
               </>
             )}

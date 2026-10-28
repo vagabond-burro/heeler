@@ -3384,6 +3384,41 @@ export async function recipeExport(doc: unknown, name: string): Promise<string |
   return await call("recipe_export", { doc, name });
 }
 
+/** One file of the tone profiles folder as the desktop reads it
+ * (src-tauri/src/tone_profiles.rs): its curve as the JSON the Tone
+ * Profile's `curve` param holds, or the reason it could not be read. */
+export interface ToneProfileEntry {
+  path: string;
+  file: string;
+  name: string;
+  curve: string | null;
+  error: string | null;
+}
+
+/** Empty outside the desktop: the browser build has no profiles folder. */
+export async function toneProfileList(): Promise<ToneProfileEntry[]> {
+  if (!isTauri()) return [];
+  return await call("tone_profile_list");
+}
+
+/** Writes the curve as profiles/<name>.heelerprofile; the path. */
+export async function toneProfileSave(curve: string, name: string): Promise<string> {
+  if (!isTauri()) return "mock-profile-path";
+  return await call("tone_profile_save", { curve, name });
+}
+
+/** A picked file's curve; a profile file is also added to the folder
+ * (`saved`). Null when the picker was closed or outside the desktop. */
+export async function toneProfileImport(): Promise<{ name: string; curve: string; saved: string | null } | null> {
+  if (!isTauri()) return null;
+  return await call("tone_profile_import");
+}
+
+export async function toneProfileExport(curve: string, name: string): Promise<string | null> {
+  if (!isTauri()) return null;
+  return await call("tone_profile_export", { curve, name });
+}
+
 /** Shows a file selected in the file browser (revealFolder opens a
  * directory; this one points at one file inside it). */
 export async function revealFile(path: string): Promise<void> {

@@ -1019,7 +1019,7 @@ pub(crate) struct HandlePair {
 
 /// Fritsch-Carlson monotone cubic tangents: smooth through the points with
 /// no overshoot, so a rising curve can never dip.
-fn monotone_tangents(points: &[[f32; 2]]) -> Vec<f32> {
+pub(crate) fn monotone_tangents(points: &[[f32; 2]]) -> Vec<f32> {
     let n = points.len();
     let mut d = vec![0.0f32; n - 1];
     for i in 0..n - 1 {
@@ -1052,7 +1052,7 @@ fn monotone_tangents(points: &[[f32; 2]]) -> Vec<f32> {
 /// Curve evaluation. Inside the point range: linear or monotone-cubic
 /// interpolation. Outside: extend with slope 1 so scene-linear values above
 /// the last point are offset, not flattened. Fewer than 2 points: identity.
-fn eval_curve_with(points: &[[f32; 2]], tangents: Option<&[f32]>, x: f32) -> f32 {
+pub(crate) fn eval_curve_with(points: &[[f32; 2]], tangents: Option<&[f32]>, x: f32) -> f32 {
     if points.len() < 2 {
         return x;
     }
@@ -1533,7 +1533,8 @@ pub fn to_scene(v: f32) -> f32 {
 /// The curve runs in display space (sRGB-encoded), where an S-curve
 /// behaves the way photographers expect, then returns to scene linear.
 /// Modes: linear (identity), standard (gentle S), film (stronger S with
-/// a slight toe lift). Contrast scales the chosen mode.
+/// a slight toe lift), custom (the user's curve, tone_curve.rs).
+/// Contrast scales the chosen mode.
 /// Brings values above display white back into range.
 ///
 /// The display transform used to end in `.min(1.0)`, which is a hard
@@ -1618,6 +1619,45 @@ fn tone_profile(node: &Node, inputs: &[(String, Value)]) -> Result<Value, Engine
             let mut px = [r, g, b];
             for v in &mut px {
                 *v = stock.display(v.max(0.0) * gain, n, strength);
+            }
+            if color != 1.0 {
+                let y = luma(px[0], px[1], px[2]);
+                for v in &mut px {
+                    *v = (y + (*v - y) * color).max(0.0);
+                }
+            }
+            px
+        });
+        return Ok(Value::Image(Arc::new(out)));
+    }
+    // Custom: the user's curve from scene stops to display
+    // (tone_curve.rs), carried whole in the `curve` param. The Profile amt
+    // dial mixes it with the identity in display terms, as it scales the
+    // S above; the baseline lift applies before and the colorfulness
+    // after. The curve is its own toe and shoulder, so the profile's
+    // stand down, as they do for a film stock. No curve yet is the
+    // identity.
+    if mode == "custom" {
+        let raw = node.params.get("curve").and_then(|v| v.as_str()).unwrap_or("");
+        let table = if raw.trim().is_empty() {
+            None
+        } else {
+            Some(
+                crate::tone_curve::ToneCurve::from_json(raw)
+                    .map_err(|e| invalid_param(node, "curve", e))?
+                    .table(),
+            )
+        };
+        if table.is_none() && gain == 1.0 && color == 1.0 {
+            return Ok(Value::Image(src.clone()));
+        }
+        let out = map_rgb(src, |r, g, b| {
+            let mut px = [r, g, b];
+            for v in &mut px {
+                let scene = v.max(0.0) * gain;
+                let d = to_display(scene.min(1.0));
+                let c = table.as_ref().map_or(d, |t| t.at_scene(scene));
+                *v = to_scene((d + (c - d) * strength).clamp(0.0, 1.0));
             }
             if color != 1.0 {
                 let y = luma(px[0], px[1], px[2]);
@@ -5687,6 +5727,46 @@ mod tests {
         let n0 = run_on(&hp5, dark.clone()).unwrap().as_image().unwrap().pixel(0, 0)[0];
         let n1 = run_on(&pushed, dark).unwrap().as_image().unwrap().pixel(0, 0)[0];
         assert!(n1 < n0, "a push is steeper: the shadow two stops under goes darker against white");
+    }
+
+    /// Custom renders the curve in its params: middle gray lands on the
+    /// curve's value at 0 stops, a highlight past white comes back under
+    /// it where the curve says so, Profile amt 0 is the identity, the
+    /// baseline lift moves the scene along the curve, and the profile's
+    /// own toe and shoulder stand down.
+    #[test]
+    fn tone_profile_custom_renders_its_curve() {
+        let curve = r#"{"name":"t","interp":"smooth","points":[[-8,0],[-2,0.2],[0,0.4],[4,0.95]]}"#;
+        let mut node = make_node("heeler.tone_profile");
+        set_text(&mut node, "mode", "custom");
+        set_text(&mut node, "curve", curve);
+        set_num(&mut node, "contrast", 100.0);
+        let at = |n: &Node, v: f32| run_on(n, gray(v)).unwrap().as_image().unwrap().pixel(0, 0)[0];
+        assert!((at(&node, 0.18) - to_scene(0.4)).abs() < 1e-4);
+        // Two stops past white sits under it, on the curve.
+        let t = crate::tone_curve::ToneCurve::from_json(curve).unwrap();
+        let over = at(&node, 0.18 * 8.0);
+        assert!((over - to_scene(t.eval(3.0))).abs() < 1e-3 && over < 1.0, "{over}");
+        assert_eq!(at(&node, 0.0), 0.0);
+        let mut off = node.clone();
+        set_num(&mut off, "contrast", 0.0);
+        assert!((at(&off, 0.18) - 0.18).abs() < 1e-5, "amount 0 is the identity");
+        let mut lifted = node.clone();
+        set_num(&mut lifted, "baseline_ev", 2.0);
+        assert!((at(&lifted, 0.045) - at(&node, 0.18)).abs() < 1e-5);
+        let mut toed = node.clone();
+        set_num(&mut toed, "shadow_toe", 100.0);
+        set_num(&mut toed, "highlight_rolloff", 100.0);
+        for v in [0.02, 0.18, 0.9, 3.0] {
+            assert_eq!(at(&toed, v), at(&node, v));
+        }
+        // No curve yet is the identity; a broken one is an error.
+        let mut empty = make_node("heeler.tone_profile");
+        set_text(&mut empty, "mode", "custom");
+        let img = ImageBuf::filled(2, 2, [0.3, 0.5, 0.7, 1.0]);
+        assert_eq!(**run_on(&empty, img.clone()).unwrap().as_image().unwrap(), img);
+        set_text(&mut empty, "curve", r#"{"points":[[0,0.5]]}"#);
+        assert!(run_on(&empty, img).is_err());
     }
 
     #[test]
