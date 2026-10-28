@@ -94,7 +94,7 @@ impl<'a> Reader<'a> {
 /// One code and its difference from `r`: the difference rule `diff` reads
 /// the bits after the code.
 #[inline(always)]
-fn next(r: &mut Reader, t: &Table, diff: &(impl Fn(u8, &mut Reader) -> Result<i32, Error> + Sync)) -> Result<i32, Error> {
+fn next<T>(r: &mut Reader, t: &Table, diff: &(impl Fn(u8, &mut Reader) -> Result<T, Error> + Sync)) -> Result<T, Error> {
     let (sym, len) = t.lookup[r.peek(t.longest) as usize];
     if len == 0 {
         return Err(Error::Corrupt("a Huffman code not in its table"));
@@ -110,8 +110,10 @@ fn code_at<'t>(codes: &[(usize, &'t Table)], i: usize) -> &'t Table {
 }
 
 /// The first `count` differences of the stream, in order, each read with
-/// its code (`codes`: each from a difference on, the first from 0).
-pub fn serial(data: &[u8], codes: &[(usize, &Table)], count: usize, diff: &(impl Fn(u8, &mut Reader) -> Result<i32, Error> + Sync)) -> Result<Vec<i32>, Error> {
+/// its code (`codes`: each from a difference on, the first from 0). A
+/// difference is whatever `diff` makes of a symbol and the bits after it:
+/// 16 bits where the coding's differences fit, to hold half as much.
+pub fn serial<T>(data: &[u8], codes: &[(usize, &Table)], count: usize, diff: &(impl Fn(u8, &mut Reader) -> Result<T, Error> + Sync)) -> Result<Vec<T>, Error> {
     let mut r = Reader::new(data, 0);
     let mut out = Vec::with_capacity(count);
     for i in 0..count {
@@ -134,9 +136,9 @@ const REMEMBERED: usize = 4096;
 /// code at or past the next piece's start). A reading from mid-code can
 /// meet bits no code has; it then starts afresh a bit on, so what it keeps
 /// is one reading from one bit.
-struct Piece {
+struct Piece<T> {
     starts: Vec<u64>,
-    diffs: Vec<i32>,
+    diffs: Vec<T>,
     end: u64,
 }
 
@@ -144,7 +146,12 @@ struct Piece {
 /// pieces of about `piece` bytes; the same as `serial`. Each piece is read
 /// once with each code, and the piece a change of code falls in is read
 /// again in order.
-pub fn parallel(data: &[u8], codes: &[(usize, &Table)], count: usize, piece: usize, diff: &(impl Fn(u8, &mut Reader) -> Result<i32, Error> + Sync)) -> Result<Vec<i32>, Error> {
+///
+/// What it holds at its peak: each piece's readings (a difference for
+/// each sample the piece holds, and a sixteenth more, for each code)
+/// beside the differences in order. A piece's readings go once it is
+/// placed.
+pub fn parallel<T: Copy + Send>(data: &[u8], codes: &[(usize, &Table)], count: usize, piece: usize, diff: &(impl Fn(u8, &mut Reader) -> Result<T, Error> + Sync)) -> Result<Vec<T>, Error> {
     let pieces = data.len().div_ceil(piece.max(64));
     if pieces < 2 || codes.is_empty() {
         return serial(data, codes, count, diff);
@@ -152,15 +159,19 @@ pub fn parallel(data: &[u8], codes: &[(usize, &Table)], count: usize, piece: usi
     let bits = data.len() as u64 * 8;
     let start = |k: usize| (k * piece) as u64 * 8;
     let stop = |k: usize| if k + 1 < pieces { start(k + 1) } else { bits };
+    // The differences a piece holds if the stream's codes are spread
+    // evenly over it, and a sixteenth more: a piece of denser codes grows
+    // its vector rather than every piece holding two a byte.
+    let expected = |k: usize| ((count as u128 * (stop(k) - start(k)) as u128 / bits.max(1) as u128) as usize).saturating_add(count / pieces / 16 + 64);
     // Each piece's reading with each code.
-    let read: Vec<Vec<Piece>> = (0..pieces)
+    let read: Vec<Vec<Piece<T>>> = (0..pieces)
         .into_par_iter()
         .map(|k| {
             codes
                 .iter()
                 .map(|&(_, t)| {
                     let mut r = Reader::new(data, start(k));
-                    let mut p = Piece { starts: Vec::with_capacity(REMEMBERED), diffs: Vec::with_capacity(piece * 2), end: 0 };
+                    let mut p = Piece { starts: Vec::with_capacity(REMEMBERED), diffs: Vec::with_capacity(expected(k)), end: 0 };
                     while r.bit() < stop(k) {
                         let at = r.bit();
                         match next(&mut r, t, diff) {
@@ -185,9 +196,9 @@ pub fn parallel(data: &[u8], codes: &[(usize, &Table)], count: usize, piece: usi
                 .collect()
         })
         .collect();
-    let mut out: Vec<i32> = Vec::with_capacity(count);
+    let mut out: Vec<T> = Vec::with_capacity(count);
     let mut at = 0u64;
-    for (k, readings) in read.iter().enumerate() {
+    for (k, mut readings) in read.into_iter().enumerate() {
         if out.len() >= count {
             break;
         }
@@ -195,7 +206,9 @@ pub fn parallel(data: &[u8], codes: &[(usize, &Table)], count: usize, piece: usi
         // next code starts.
         let c = codes.iter().rposition(|c| c.0 <= out.len()).unwrap_or(0);
         let next_code = codes.get(c + 1).map_or(usize::MAX, |n| n.0);
-        let p = &readings[c];
+        // The piece's other readings go now, this one once it is placed.
+        let p = readings.swap_remove(c);
+        drop(readings);
         let mut r = Reader::new(data, at);
         // Fall into step with the piece's own reading (piece 0 starts at a
         // true boundary).

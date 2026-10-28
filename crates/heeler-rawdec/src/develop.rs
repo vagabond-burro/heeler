@@ -482,14 +482,14 @@ impl Plan {
     /// the frame, measured as the most any file of the two corpora held
     /// (a counting allocator around each develop, every camera at both
     /// sizes) and a quarter more. A Huffman stream read across the cores
-    /// keeps each piece's differences once for each of its codes, four
-    /// bytes each with room for two a byte of the stream, beside the
-    /// differences in order; C-RAW's wavelet keeps its bands in 32 bits;
+    /// keeps each piece's differences once for each of its codes, beside
+    /// the differences in order (Nikon's in 16 bits, Pentax's in 32);
+    /// C-RAW's wavelet keeps its bands in 32 bits;
     /// a three-color image is read whole, then copied to its area.
     fn unpack_bytes(&self) -> Result<usize, memory::MemoryError> {
         let per_pixel = match &self.dng.coding {
-            Coding::NikonHuffman(_) => 34,
-            Coding::Pentax(_) => 23,
+            Coding::NikonHuffman(_) => 13,
+            Coding::Pentax(_) => 13,
             Coding::CrxWavelet(_) => 20,
             Coding::KodakSmall(..) => 12,
             Coding::CanonCrw(_) => 9,
