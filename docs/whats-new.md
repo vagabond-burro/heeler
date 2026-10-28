@@ -5,6 +5,7 @@
 ### New
 
 - **Heeler's own RAW decoder.** Every RAW file Heeler opens is now read and developed by a decoder written for Heeler, in place of the library it used before. It reads most cameras' sensor data in half the time or less. For most cameras the pixels it reads are exactly the ones the old decoder read. [Source](user-guide/adjustments/source.md).
+- **A spot light in Depth Lighting.** A third kind of light beside the sun and the lamp: a spot stands at one place and depth and points at another, lighting only inside its cone, with a dial for how wide the cone opens and how soft its edge is. Its cone is drawn on the photograph where it lands. [Depth Lighting](user-guide/adjustments/depth-lighting.md).
 - **More natural color under warm light.** A camera's color now comes from its calibrations for both daylight and tungsten light, blended for the light the photograph was taken in, instead of from the daylight one alone. Photographs taken indoors or at dusk come out closer to the scene. [Source](user-guide/adjustments/source.md).
 
 ### Changed

@@ -17,10 +17,14 @@ import { usePickSessions } from "../picksession";
 // - a POINT light is a single disc IN the scene with a dashed range
 // ring: drag it where the lamp sits; when selected, a grip rides the
 // ring at 45 degrees and dragging it IS the Reach dial;
+// - a SPOT is a disc where the lamp sits and a diamond where it points,
+// joined by a line, with its cone's footprint drawn where the cone
+// meets the target's plane (the inner, full-strength cone dashed inside
+// it): drag either end;
 // - click selects (the panel's controls follow), ALT-drag changes
 // strength through zero into the dark, SHIFT-click deletes.
 
-import { DirectionalLightIcon, PointLightIcon } from "./panelicons";
+import { DirectionalLightIcon, PointLightIcon, SpotLightIcon } from "./panelicons";
 import React, { useLayoutEffect, useRef, useState } from "react";
 import { toolNode, type NodeCard, type State } from "../state";
 import { depthAt } from "../bridge";
@@ -30,12 +34,12 @@ import { resolveLineColor, useAutoLineColor } from "./linecolorparts";
 import { lineColorCss } from "../gridwarp";
 import { TrackSlider, ValueField } from "./track";
 import { MenuField } from "./menufield";
-import { type D, type KeyLight, STRENGTH_MAX, flareSourceOf, lightsOf, writeLights } from "./keylightgizmoparts";
+import { type D, type KeyLight, STRENGTH_MAX, flareSourceOf, lightsOf, spotFootprint, writeLights } from "./keylightgizmoparts";
 
 const RIM = 0.42;
 
 function handlePos(l: KeyLight): [number, number] {
-  if (l.kind === "point") return [l.px, l.py];
+  if (l.kind === "point" || l.kind === "spot") return [l.px, l.py];
   const az = (l.azimuth * Math.PI) / 180;
   const r = ((90 - Math.min(90, Math.max(5, l.elevation))) / 85) * RIM;
   return [l.tx + Math.cos(az) * r, l.ty - Math.sin(az) * r];
@@ -183,7 +187,7 @@ export function KeyLightGizmo({
           patch.range = Math.round(
             Math.max(0, Math.min(100, ((r - d.reachOffset) / (1.2 * Math.min(w, h))) * 100)),
           );
-        } else if (l.kind === "point") {
+        } else if (l.kind === "point" || (l.kind === "spot" && d.part === "handle")) {
           patch.px = nx;
           patch.py = ny;
         } else if (d.part === "target") {
@@ -214,6 +218,47 @@ export function KeyLightGizmo({
         aria-hidden="true"
       >
         {lights.map((l, i) => {
+          if (l.kind === "spot") {
+            // The cone's footprint on the target's plane, in the
+            // engine's own geometry, so it lands where the light will.
+            const [w, h] = dims[0] && dims[1] ? dims : [1.5, 1];
+            const ring = (angle: number) =>
+              spotFootprint(l, w, h, angle)
+                .map(([x, y]) => `${x * w},${y * h}`)
+                .join(" ");
+            const inner = l.cone * (1 - l.softness / 100);
+            return (
+              <g key={i} data-testid={`keylight-cone-${i}`}>
+                {dims[0] > 0 && (
+                  <>
+                    <polygon
+                      points={ring(l.cone)}
+                      fill="none"
+                      stroke={ink(l.strength < 0 ? 0.45 : 0.6)}
+                      strokeWidth={stroke(1)}
+                    />
+                    {inner >= 0.5 && (
+                      <polygon
+                        points={ring(inner)}
+                        fill="none"
+                        stroke={ink(0.35)}
+                        strokeWidth={stroke(1)}
+                        strokeDasharray="3 4"
+                      />
+                    )}
+                  </>
+                )}
+                <line
+                  x1={`${l.px * 100}%`}
+                  y1={`${l.py * 100}%`}
+                  x2={`${l.tx * 100}%`}
+                  y2={`${l.ty * 100}%`}
+                  stroke={ink(l.strength < 0 ? 0.6 : 0.8)}
+                  strokeWidth={stroke(1.2)}
+                />
+              </g>
+            );
+          }
           if (l.kind === "point") {
             return (
               <circle
@@ -264,15 +309,16 @@ aligned with the handle?" The handle aims; this is the source.*/}
           const inside = sx >= 0 && sx <= 1 && sy >= 0 && sy <= 1;
           const cx = Math.min(1, Math.max(0, sx));
           const cy = Math.min(1, Math.max(0, sy));
-          const [hx, hy] = l.kind === "point" ? [l.px, l.py] : handlePos(l);
-          // A point lamp and its flare share a center. Keep the source
+          const lamp = l.kind === "point" || l.kind === "spot";
+          const [hx, hy] = lamp ? [l.px, l.py] : handlePos(l);
+          // A lamp and its flare share a center. Keep the source
           // ring outside the enlarged disc so flaring remains visible.
-          const sourceRadius = l.kind === "point"
+          const sourceRadius = lamp
             ? Math.max(9, handleSize(lampSize(l), state.keyLightSel === i ? 2 : 1.5) / 2 + 2 + stroke(1.5) / 2)
             : inside ? 9 : 7;
           return (
             <g key={`flare-${i}`} data-testid={`keylight-flare-source-${i}`}>
-              {l.kind !== "point" && (
+              {!lamp && (
                 <line
                   x1={`${hx * 100}%`}
                   y1={`${hy * 100}%`}
@@ -315,7 +361,7 @@ aligned with the handle?" The handle aims; this is the source.*/}
               title={
                 part === "target"
                   ? `Light ${i + 1} target`
-                  : `Light ${i + 1}: ${Math.round(l.strength)}${dark ? " (dark)" : ""}${l.kind === "point" ? " (point)" : ""}`
+                  : `Light ${i + 1}: ${Math.round(l.strength)}${dark ? " (dark)" : ""}${l.kind === "directional" ? "" : ` (${l.kind})`}`
               }
               style={{
                 position: "absolute",
@@ -390,6 +436,14 @@ aligned with the handle?" The handle aims; this is the source.*/}
             </React.Fragment>
           );
         }
+        if (l.kind === "spot") {
+          return (
+            <React.Fragment key={i}>
+              {disc("target", l.tx, l.ty, 9, "diamond")}
+              {disc("handle", l.px, l.py, size, "round")}
+            </React.Fragment>
+          );
+        }
         const [hx, hy] = handlePos(l);
         return (
           <React.Fragment key={i}>
@@ -403,8 +457,9 @@ aligned with the handle?" The handle aims; this is the source.*/}
 }
 
 /** The selected light's controls, seated in the Key Light section:
- * type, strength, the point light's depth and reach, and the
- * directional light's elevation, depth and reach. Every light is
+ * type, strength, the point light's depth and reach, the spot's depth,
+ * target depth, cone, softness and reach, and the directional light's
+ * elevation, depth and reach. Every light is
  * first-class here ("Added lights share same properties
  * as the original").*/
 export function KeyLightControls({
@@ -433,7 +488,7 @@ export function KeyLightControls({
       placeholder="Select a light…"
       options={lights.map((k, i) => ({
         id: String(i),
-        label: `Light ${i + 1} · ${k.kind === "point" ? "point" : "directional"}${k.strength < 0 ? " (dark)" : ""}${k.on ? "" : " (off)"}`,
+        label: `Light ${i + 1} · ${k.kind}${k.strength < 0 ? " (dark)" : ""}${k.on ? "" : " (off)"}`,
       }))}
       onChange={(id) => dispatch({ type: "select_keylight", index: Number(id) })}
     />
@@ -498,7 +553,7 @@ export function KeyLightControls({
   // never occluded the flare ("I barely saw a change"). The
   // same read the Depth of Field focus picker makes, on one click: the
   // lamp's own spot for a point light, its target for a directional.
-  const fromScene = (key: "depth" | "sun_depth", at: { x: number; y: number }, testid: string, hint: string) => (
+  const fromScene = (key: "depth" | "sun_depth" | "target_depth", at: { x: number; y: number }, testid: string, hint: string) => (
     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -2 }}>
       <button
         className="chip"
@@ -572,7 +627,7 @@ below answers WHAT KIND, and the sliders follow.*/}
           onChange={(hex) => put({ color: hex })}
         />
         <div className="zoom-seg" role="group" aria-label="Light type" style={{ border: "1px solid var(--line-4)" }}>
-          {(["directional", "point"] as const).map((kind) => (
+          {(["directional", "point", "spot"] as const).map((kind) => (
             <button
               key={kind}
               data-testid={`keylight-kind-${kind}`}
@@ -581,24 +636,39 @@ below answers WHAT KIND, and the sliders follow.*/}
               data-hint={
                 kind === "point"
                   ? "A lamp IN the scene: sits at a spot, pushes light that fades with distance"
-                  : "A sun: one direction over the whole scene, aimed from its target"
+                  : kind === "spot"
+                    ? "A spot: a lamp aimed at a target, lighting only inside its cone"
+                    : "A sun: one direction over the whole scene, aimed from its target"
               }
-              aria-label={kind === "point" ? "Point light" : "Directional light"}
+              aria-label={kind === "point" ? "Point light" : kind === "spot" ? "Spot light" : "Directional light"}
               style={{ padding: "2px 9px", display: "inline-flex", alignItems: "center" }}
-              onClick={() =>
+              onClick={() => {
+                if (kind === l.kind) return;
                 // Converting keeps the light where the eye already
                 // is: a directional becomes a lamp at its target,
-                // a lamp becomes a sun targeting its old spot.
-                put(
-                  kind === "point"
-                    ? { kind, px: l.tx, py: l.ty }
-                    : { kind, tx: l.px, ty: l.py },
-                )
-              }
+                // a lamp becomes a sun targeting its old spot. A spot
+                // keeps its lamp where it was and aims at what the
+                // light was on: a sun's target and plane, or for a
+                // lamp, the spot under it a little deeper. Leaving a
+                // spot, a lamp stays at the spot and a sun aims from
+                // the spot's target toward the spot.
+                if (kind === "spot") {
+                  const [hx, hy] = handlePos(l);
+                  put(
+                    l.kind === "point"
+                      ? { kind, tx: l.px, ty: l.py, target_depth: Math.min(100, l.depth + 20) }
+                      : { kind, px: hx, py: hy, target_depth: l.sun_depth },
+                  );
+                } else if (kind === "point") {
+                  put(l.kind === "spot" ? { kind } : { kind, px: l.tx, py: l.ty });
+                } else {
+                  put(l.kind === "spot" ? { kind, ...aimFrom(l, l.px, l.py) } : { kind, tx: l.px, ty: l.py });
+                }
+              }}
             >
               {/* A picture, not a word (2026-09-20): the hint carries the
 words.*/}
-              {kind === "point" ? <PointLightIcon /> : <DirectionalLightIcon />}
+              {kind === "point" ? <PointLightIcon /> : kind === "spot" ? <SpotLightIcon /> : <DirectionalLightIcon />}
             </button>
           ))}
         </div>
@@ -614,6 +684,38 @@ words.*/}
             "Set this light's depth to the scene's depth where it sits, from the depth plane: a lamp placed on a streetlamp then sits at the streetlamp's distance",
           )}
           {slider("Reach", "keylight-sel-range", l.range, 0, 100, (v) => put({ range: v }))}
+        </>
+      )}
+      {/* The spot: where the lamp sits along depth and where it aims,
+each with its pick from the plane, then the cone. A spot deeper than
+its target shines back toward the camera, the backlight case.*/}
+      {l.kind === "spot" && (
+        <>
+          {slider("Depth", "keylight-sel-depth", l.depth, 0, 100, (v) => put({ depth: v }), "Where the spot sits along depth: 0 the nearest thing in frame, 100 the farthest")}
+          {fromScene(
+            "depth",
+            { x: l.px, y: l.py },
+            "keylight-sel-depth-from-scene",
+            "Set the spot's depth to the scene's depth where it sits, from the depth plane",
+          )}
+          {slider(
+            "Target depth",
+            "keylight-sel-target-depth",
+            l.target_depth,
+            0,
+            100,
+            (v) => put({ target_depth: v }),
+            "The plane the spot aims at: set it nearer than the spot's own depth to shine back toward the camera",
+          )}
+          {fromScene(
+            "target_depth",
+            { x: l.tx, y: l.ty },
+            "keylight-sel-target-depth-from-scene",
+            "Set the spot's target depth to the scene's depth at its target, from the depth plane: the spot then aims at what the target sits on",
+          )}
+          {slider("Cone", "keylight-sel-cone", l.cone, 1, 89, (v) => put({ cone: v }), "How wide the beam opens, as the angle from its axis to its edge")}
+          {slider("Softness", "keylight-sel-softness", l.softness, 0, 100, (v) => put({ softness: v }), "How much of the cone the edge takes to fade: 0 a hard edge, 100 a beam that fades from its center out")}
+          {slider("Reach", "keylight-sel-range", l.range, 0, 100, (v) => put({ range: v }), "How far the beam carries before it fades")}
         </>
       )}
       {/* The directional light's own three (2026-10-03: "We added a depth

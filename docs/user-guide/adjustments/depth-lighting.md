@@ -13,10 +13,21 @@ Depth Lighting uses inferred scene depth to relight forms with a movable light r
   - **Depth** is the plane it lands hardest on, 0 the nearest thing in frame and 100 the farthest. At 0 it favors the near relief, as a directional light always has; raise it to light the middle distance or the background. **From scene** sets it to the depth under the light's target.
   - **Reach** is how far it carries along depth from that plane. 50 is the falloff it always had, down to about a third at the far end of the scene; 100 lights every plane alike; toward 0 it keeps to its own plane and leaves the rest unlit.
 - **A point light** is a lamp in the scene. **Depth** is where it stands along the near-far axis, with **From scene** to read it from the spot the lamp sits on, and **Reach** is how far its push carries, which the ring around it on the photograph also sets.
-- **Ambient** sets baseline illumination outside direct lights.
+- **A spot light** is a lamp aimed at something, lighting only inside its cone. On the photograph it is a disc where the lamp sits and a diamond where it points, joined by a line; drag either. The outline around the diamond is where the cone meets the plane of its target, with the full-strength part of the beam dashed inside it. Its dials:
+  - **Depth** is where the lamp stands along the near-far axis, and **Target depth** the plane it aims at, both 0 the nearest thing in frame and 100 the farthest, each with **From scene** to read it from the depth under the lamp or under its target. A spot deeper than its target shines back toward the camera.
+  - **Cone** is the beam's half angle, from 1 to 89 degrees.
+  - **Softness** is how much of the cone its edge takes to fade: 0 is a hard edge, 100 a beam that fades from its center out.
+  - **Reach** is how far the beam carries before it fades, as a point light's does.
+
+  Switching a light to a spot keeps it where it was: a point light becomes a spot aimed a little deeper at the place under it, and a directional light becomes a spot standing at its handle, aimed at its target and its Depth.
+- **Ambient** is the floor of a directional light's shading: how much of it still reaches surfaces that face away from it. Point lights and spots add only where they reach, so Ambient does not change them.
 - **Relief** controls how strongly depth differences are interpreted as shape.
 - **View depth** shows the plane itself; **Invert** flips it when the inferred order is reversed. Every section that reads the depth map carries the View depth eye.
 - **Normals**, shown only for an OpenEXR that carries a normals pass: **File** shades with the render's own surface normals when the file also says which way its camera faces (when it does not, the section says NO CAMERA IN THE FILE), **Camera** takes the pass as camera space already, the way a compositor's Vector Transform writes it, and **Off** shades from the depth map alone. With the render's normals the relief is the geometry's, not an estimate, and Relief no longer applies to the shading's direction.
+
+### Backlighting
+
+A light behind a subject, aimed back toward the camera, does not draw a rim of light around it. The depth map describes only the surfaces that face the camera, so no surface in it faces a light that sits behind it: a spot placed deeper than the subject and aimed through it lights nothing on the subject, and raising Relief or Ambient does not change that. For light along an edge, place a spot level with the subject, or a directional light at a low Elevation, to one side: it lights the flank and the edge that face it and leaves the front darker.
 
 Begin with one light and moderate Relief. Position it in the on-image rig, then use Ambient to keep unlit regions from collapsing. Add lights only when one source cannot describe the intended result.
 
@@ -41,7 +52,7 @@ the flare renders fresh at every size, in the export included.
   the source is off-frame, so the aiming handle and the source are never
   mistaken for each other. A directional light flares from
   the frame edge its direction names; its elevation sets how far past the edge
-  the source sits. A point light flares from where it stands.
+  the source sits. A point light or a spot flares from where it stands.
 - **Lens** picks a preset for the look: modern prime, zoom, vintage, telephoto,
   wide, anamorphic, phone. Heeler suggests one from the photograph's focal
   length and lens name but never applies it for you.

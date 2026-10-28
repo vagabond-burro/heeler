@@ -539,7 +539,7 @@ function remapLights(text: string, r: FrameRemap): string {
         if (!l || typeof l !== "object") return l;
         const out = { ...l } as Record<string, unknown>;
         const n = (k: string) => (typeof out[k] === "number" ? (out[k] as number) : undefined);
-        if ((out.kind ?? "directional") === "point") {
+        if (out.kind === "point" || out.kind === "spot") {
           const [px, py] = pt(r, [n("px") ?? 0.5, n("py") ?? 0.5]);
           out.px = px;
           out.py = py;

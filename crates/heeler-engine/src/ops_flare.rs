@@ -101,13 +101,13 @@ fn smoothstep(t: f32) -> f32 {
 }
 
 /// Where a light sits, in FULL-frame normalized coordinates, and its
-/// depth 0..1 (farness). A point lamp is where it says. A directional
-/// light is the sun: it flares from where its direction meets the
-/// frame edge, and its elevation is how far PAST the edge the source
-/// sits ("sell the effect of faking a Z axis"); it is
-/// behind everything, so depth 1.
+/// depth 0..1 (farness). A point lamp or a spot is where it says. A
+/// directional light is the sun: it flares from where its direction
+/// meets the frame edge, and its elevation is how far PAST the edge the
+/// source sits ("sell the effect of faking a Z axis"); it is behind
+/// everything, so depth 1.
 fn light_position(l: &FlareLight, aspect: f32) -> ([f32; 2], f32) {
-    if l.kind == "point" {
+    if l.kind == "point" || l.kind == "spot" {
         return ([l.px, l.py], (l.depth / 100.0).clamp(0.0, 1.0));
     }
     // Azimuth: 0 lights from the right, 90 from above (the key light's
@@ -463,6 +463,15 @@ mod tests {
     fn rig(px: f32, py: f32, depth: f32) -> String {
         format!(r##"[{{"kind":"point","px":{px},"py":{py},"depth":{depth},"on":true,"color":"#ffffff","flare":true,"flare_strength":100}}]"##)
     }
+    /// A spot flares where it stands, like a lamp, at its own depth.
+    #[test]
+    fn a_spot_flares_from_where_it_stands() {
+        let l: FlareLight = serde_json::from_str(r#"{"kind":"spot","px":0.3,"py":0.7,"depth":40,"tx":0.9,"ty":0.1}"#).unwrap();
+        let (at, depth) = light_position(&l, 1.5);
+        assert_eq!(at, [0.3, 0.7]);
+        assert!((depth - 0.4).abs() < 1e-6);
+    }
+
     fn added(out: &ImageBuf, base: f32, x: usize, y: usize) -> f32 {
         out.pixel(x, y)[1] - base
     }
