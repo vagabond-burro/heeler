@@ -52,6 +52,8 @@ pub struct StitchOpts {
     /// Legacy option retained for callers. The shared machine budget admits
     /// the requested canvas or refuses it without changing its resolution.
     pub memory_budget: usize,
+    /// Cut the seams between frames where they agree (CompositeOpts::seams).
+    pub seams: bool,
 }
 
 impl Default for StitchOpts {
@@ -63,6 +65,7 @@ impl Default for StitchOpts {
             bands: 4,
             straighten: true,
             memory_budget: 2 << 30,
+            seams: true,
         }
     }
 }
@@ -302,6 +305,7 @@ pub fn stitch_with_control(
             gain_compensation: opts.gain_compensation,
             bands: opts.bands,
             memory_budget: opts.memory_budget,
+            seams: opts.seams,
         },
         &|f, stage| on_progress(P_SOLVE + (1.0 - P_SOLVE) * f, stage),
         stop,

@@ -2,6 +2,14 @@
 
 Merges and panoramas keep recipes referring to their source frames. You can change that recipe and develop the result. Bake creates a separate photograph from the result you see.
 
+## Panoramas
+
+**Photo > Stitch to Panorama…** makes a panorama from the selected frames. It finds which frames overlap, solves how the camera was turned for each, and paints them onto one surface. A frame that overlaps nothing else is left out, and the console names it. The Pano panel changes the recipe afterwards: the surface it is projected on (Auto, Cylindrical, Spherical or Planar), **Match exposure** and **Straighten**.
+
+### Seams
+
+Where two frames overlap, each part of the overlap comes from one of them, and the join is blended so it does not show. The join runs where the two frames agree: through sky, grass or anything that stayed still, and around anything that moved between the shots. Someone walking through the overlap appears whole, in the place one frame caught them, or not at all; they are not cut in half or left as a faint double. When the frames agree everywhere the seam runs down the middle of the overlap, where each frame is at its sharpest.
+
 ## Bake to Image
 
 Select one or more photographs, then choose **Photo > Bake to Image…** or use the thumbnail context menu. Bake works on ordinary photographs as well as merges and panoramas.

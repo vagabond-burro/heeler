@@ -16,8 +16,8 @@
 //! 3. Bundle adjustment: all cameras solved together as rotations and a
 //!    focal length, so error spreads evenly instead of piling up at the
 //!    end of a chain.
-//! 4. Compositing: gain compensation and multi-band blending onto the
-//!    output surface.
+//! 4. Compositing: gain compensation, seams cut where the frames agree,
+//!    and multi-band blending onto the output surface.
 //!
 //! What makes it automatic is step 2: the panorama is not told which
 //! images belong together or in what order. It is handed a pile of
@@ -32,6 +32,7 @@ pub mod gray;
 pub mod kdtree;
 pub mod matching;
 pub mod pipeline;
+pub mod seam;
 
 pub use bundle::Camera;
 pub use composite::{composite, composite_with_control, composite_with_progress, CompositeOpts, Frame, Surface};

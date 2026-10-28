@@ -9481,8 +9481,9 @@ macro_rules! debug_log {
 /// may hold the wrong frames, so it is not answered again, and neither
 /// is one composited before a registered frame came back at each side's
 /// own scale (Frame::aspect, the latest review's R1), which placed its
-/// frames up to a few pixels off.
-const PANO_SOLVE: &str = "register2048-aspect";
+/// frames up to a few pixels off, nor one whose seams ran down the
+/// middle of each overlap instead of where the frames agree.
+const PANO_SOLVE: &str = "register2048-aspect-seams";
 
 /// The proxy-cache tier of a full-size stitch.
 fn pano_full_tier(image_id: &str, opts: heeler_io::RawSourceOpts) -> String {
@@ -9594,6 +9595,7 @@ fn render_pano_at(
         bands: manifest.bands as usize,
         straighten: manifest.straighten,
         memory_budget: usize::MAX, // legacy field; the shared budget admits the canvas
+        seams: true,
     };
     let stitched = heeler_stitch::stitch_with_control(&refs, &opts, &|f, stage| {
         on_progress(DECODE_SHARE + (1.0 - DECODE_SHARE) * f, stage)

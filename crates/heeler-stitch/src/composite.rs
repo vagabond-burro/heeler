@@ -20,6 +20,7 @@
 use crate::bundle::Camera;
 use crate::geom::solve;
 use crate::gray::{blur_with_stop, Gray};
+use crate::seam::{seam_bytes, seam_ownership};
 use heeler_engine::buffers::ImageBuf;
 
 /// Expected variance of the intensity error between two frames of the
@@ -62,6 +63,10 @@ pub struct CompositeOpts {
     /// Legacy serialized option. Admission uses the shared machine budget;
     /// memory pressure never changes the requested canvas dimensions.
     pub memory_budget: usize,
+    /// Cut the seams between frames where they agree (the seam module).
+    /// Off, each pixel goes to the frame that looks at it most directly,
+    /// which slices or ghosts anything that moved between the shots.
+    pub seams: bool,
 }
 
 impl Default for CompositeOpts {
@@ -72,6 +77,7 @@ impl Default for CompositeOpts {
             gain_compensation: true,
             bands: 4,
             memory_budget: 2 << 30, // 2 GiB
+            seams: true,
         }
     }
 }
@@ -90,6 +96,9 @@ impl Default for CompositeOpts {
 /// - the per-band accumulators, three color planes and a weight: `16 * bands`
 /// - the scratch a single frame's band decomposition needs: about 32
 /// - the finished image: 16
+///
+/// The seam finder's reduced canvas is a fixed allowance beside this
+/// (seam::seam_bytes), admitted with it.
 ///
 /// Six frames into four bands is a little over 200 bytes per pixel, so a
 /// 2 GiB allowance holds around ten megapixels of panorama. Admission
@@ -365,9 +374,9 @@ fn bounds(frames: &[Frame], proj: &Projection) -> Option<(f64, f64, f64, f64)> {
 }
 
 /// One frame, warped onto the canvas.
-struct Warped {
-    rgb: [Gray; 3],
-    weight: Gray,
+pub(crate) struct Warped {
+    pub(crate) rgb: [Gray; 3],
+    pub(crate) weight: Gray,
 }
 
 fn warp(frame: &Frame, proj: &Projection, width: usize, height: usize) -> Warped {
@@ -553,7 +562,7 @@ pub fn composite_with_control(
     }
 
     let needed = heeler_engine::memory::or_unwind(heeler_engine::memory::bytes(width, height, 1, bytes_per_pixel(frames.len(), opts.bands))
-        .and_then(|canvas| heeler_engine::memory::sum(std::iter::once(canvas).chain(frames.iter().map(|f| f.image.data.len().saturating_mul(4))))));
+        .and_then(|canvas| heeler_engine::memory::sum(std::iter::once(canvas).chain(frames.iter().map(|f| f.image.data.len().saturating_mul(4))).chain(std::iter::once(if opts.seams { seam_bytes(frames.len(), width, height) } else { 0 })))));
     let _job = heeler_engine::memory::or_unwind(heeler_engine::memory::Job::admit(needed, "panorama canvas, warps and blend pyramids"));
 
     // Warping is the first of the two heavy passes over the canvas, and
@@ -588,7 +597,15 @@ pub fn composite_with_control(
         }
     }
 
-    let owner = ownership(&warps, width, height);
+    let owner = if opts.seams && warps.len() > 1 {
+        if stop() {
+            return None;
+        }
+        on_progress(0.52, "Finding seams between frames");
+        seam_ownership(&warps, width, height, stop)?
+    } else {
+        ownership(&warps, width, height)
+    };
     let bands = opts.bands.max(1);
 
     // Per band: the weighted sum of every frame's contribution, and the
@@ -752,6 +769,76 @@ mod tests {
             }
         }
         img
+    }
+
+    /// The same scene with a figure standing in it, in world angles: the
+    /// columns `theta` across and `phi` up, bright against the scene.
+    fn render_with(cam: &Camera, w: usize, h: usize, figures: &[(f64, f64)]) -> ImageBuf {
+        let mut img = render(cam, w, h, 1.0);
+        for y in 0..h {
+            for x in 0..w {
+                let d = [(x as f64 - w as f64 * 0.5) / cam.f, (y as f64 - h as f64 * 0.5) / cam.f, 1.0];
+                let world = cam.r.transpose().mul_vec(d);
+                let len = (world[0] * world[0] + world[1] * world[1] + world[2] * world[2]).sqrt();
+                let (theta, phi) = (world[0].atan2(world[2]), (world[1] / len).asin());
+                if figures.iter().any(|&(lo, hi)| theta >= lo && theta < hi && phi.abs() < 0.17) {
+                    img.set_pixel(x, y, [0.95, 0.3, 0.25, 1.0]);
+                }
+            }
+        }
+        img
+    }
+
+    /// A pan with someone walking through the overlap: the left
+    /// frame caught them at one place, the right frame a step further
+    /// on. The seam must go round them, so each figure is in the
+    /// panorama whole or not at all: never sliced, never a ghost. Each
+    /// pixel to the frame that looks at it most directly put the seam
+    /// down the middle of the overlap, through the first figure.
+    #[test]
+    fn a_figure_walking_through_the_overlap_is_neither_sliced_nor_ghosted() {
+        let (a, b) = (cam(300.0, [0.0, -0.25, 0.0]), cam(300.0, [0.0, 0.25, 0.0]));
+        // Where each frame saw the walker; the overlap is about a
+        // quarter radian either side of straight ahead.
+        let (first, second) = ((-0.035, 0.025), (0.07, 0.11));
+        let opts = CompositeOpts { surface: Surface::Cylindrical, gain_compensation: false, ..Default::default() };
+        let stitch = |fa: &[(f64, f64)], fb: &[(f64, f64)], seams: bool| {
+            let (ia, ib) = (render_with(&a, 240, 180, fa), render_with(&b, 240, 180, fb));
+            composite(&[Frame::new(&ia, a), Frame::new(&ib, b)], &CompositeOpts { seams, ..opts.clone() }).unwrap()
+        };
+        let clean = stitch(&[], &[], true);
+        // Where each figure lands on the canvas: stood still in both
+        // frames, it is wherever the output differs from the empty scene.
+        let place = |f: (f64, f64)| {
+            let with = stitch(&[f], &[f], true);
+            (0..clean.width * clean.height)
+                .filter(|&p| (with.data[p * 4] - clean.data[p * 4]).abs() > 0.25)
+                .collect::<Vec<_>>()
+        };
+        let (r1, r2) = (place(first), place(second));
+        assert!(r1.len() > 200 && r2.len() > 200, "figures of {} and {} pixels", r1.len(), r2.len());
+
+        // How much of a figure's place shows the figure, and how far the
+        // rest strays from the empty scene.
+        let judge = |out: &ImageBuf, region: &[usize]| {
+            let shown = region.iter().filter(|&&p| out.data[p * 4] > 0.7).count() as f32 / region.len() as f32;
+            let ghost = region
+                .iter()
+                .filter(|&&p| out.data[p * 4] <= 0.7)
+                .map(|&p| (out.data[p * 4] - clean.data[p * 4]).abs())
+                .fold(0.0f32, f32::max);
+            (shown, ghost)
+        };
+        let cut = stitch(&[first], &[second], true);
+        for (name, region) in [("first", &r1), ("second", &r2)] {
+            let (shown, ghost) = judge(&cut, region);
+            assert!(shown < 0.03 || shown > 0.97, "the {name} figure is sliced: {:.0}% shown", shown * 100.0);
+            assert!(ghost < 0.06, "the {name} figure left a ghost {ghost} strong");
+        }
+        let old = stitch(&[first], &[second], false);
+        let (shown, ghost) = judge(&old, &r1);
+        assert!(shown > 0.1 && shown < 0.9, "the middle seam should slice the first figure: {:.0}% shown", shown * 100.0);
+        assert!(ghost > 0.15, "and leave the rest of it as a ghost: {ghost}");
     }
 
     #[test]
