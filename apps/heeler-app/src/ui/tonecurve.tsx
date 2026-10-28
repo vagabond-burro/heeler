@@ -10,6 +10,7 @@ import type { Command, NodeCard } from "../state";
 import {
   AXIS_MAX,
   AXIS_MIN,
+  MAX_POINTS,
   WHITE_STOPS,
   curveBroken,
   curveOf,
@@ -252,6 +253,11 @@ function ToneCurveEditor({
         // A click off the points adds one there and drags it.
         const [x, y] = at(e);
         if (pts.some(([px]) => Math.abs(px - x) < 0.05)) return;
+        // One more would be a curve the engine refuses.
+        if (pts.length >= MAX_POINTS) {
+          say(dispatch, `A tone curve may have at most ${MAX_POINTS} points; remove one to add another`);
+          return;
+        }
         const added: [number, number] = [round4(x), round4(y)];
         const next = [...pts, added].sort((a, b) => a[0] - b[0]);
         drag.current = next.findIndex((p) => p[0] === round4(x));

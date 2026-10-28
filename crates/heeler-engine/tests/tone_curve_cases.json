@@ -1,0 +1,20 @@
+{
+  "about": "Custom tone curves checked once for both sides: the engine's ToneCurve::from_json (tone_curve.rs) and the panel's parseToneCurve (toneprofile.ts) must take the same curves and refuse the same ones. A taken curve comes back with its points sorted and its display values held to 0 to 1; points is null where both must refuse it.",
+  "cases": [
+    {"name": "taken as given", "json": "{\"name\":\"a\",\"interp\":\"smooth\",\"points\":[[-8,0],[0,0.4],[3,1]]}", "interp": "smooth", "points": [[-8, 0], [0, 0.4], [3, 1]]},
+    {"name": "linear", "json": "{\"interp\":\"linear\",\"points\":[[0,0],[1,1]]}", "interp": "linear", "points": [[0, 0], [1, 1]]},
+    {"name": "no interp is smooth", "json": "{\"points\":[[0,0],[1,1]]}", "interp": "smooth", "points": [[0, 0], [1, 1]]},
+    {"name": "sorted and held", "json": "{\"points\":[[2,1.5],[-2,-0.1]]}", "interp": "smooth", "points": [[-2, 0], [2, 1]]},
+    {"name": "the axis ends are inside", "json": "{\"points\":[[-24,0],[24,1]]}", "interp": "smooth", "points": [[-24, 0], [24, 1]]},
+    {"name": "past the axis", "json": "{\"points\":[[0,0],[24.5,1]]}", "points": null},
+    {"name": "one point", "json": "{\"points\":[[0,0.5]]}", "points": null},
+    {"name": "no points", "json": "{\"name\":\"a\"}", "points": null},
+    {"name": "two at one stop", "json": "{\"points\":[[0,0],[0.00005,1]]}", "points": null},
+    {"name": "unknown interp", "json": "{\"interp\":\"cubic\",\"points\":[[0,0],[1,1]]}", "points": null},
+    {"name": "interp not a string", "json": "{\"interp\":null,\"points\":[[0,0],[1,1]]}", "points": null},
+    {"name": "name not a string", "json": "{\"name\":7,\"points\":[[0,0],[1,1]]}", "points": null},
+    {"name": "a point not a pair", "json": "{\"points\":[[0,0],[0.5],[1,1]]}", "points": null},
+    {"name": "a point not numbers", "json": "{\"points\":[[0,0],[\"1\",1]]}", "points": null},
+    {"name": "not JSON", "json": "{\"points\":", "points": null}
+  ]
+}

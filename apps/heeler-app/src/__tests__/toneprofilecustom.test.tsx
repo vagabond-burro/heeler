@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -19,6 +21,7 @@ import { serializeGraph, toneProfileList, toneProfileSave } from "../bridge";
 import { initialState } from "../data";
 import { reduce, type State } from "../state";
 import {
+  MAX_POINTS,
   WHITE_STOPS,
   curveBroken,
   parseToneCurve,
@@ -62,6 +65,36 @@ describe("Tone Profile: Custom", () => {
     expect(parseToneCurve(JSON.stringify({ points: Array.from({ length: 1025 }, (_, i) => [i / 100, 0]) }))).toBeNull();
     // The engine clamps display values rather than refusing them.
     expect(parseToneCurve('{"points":[[0,-1],[1,2]]}')!.points).toEqual([[0, 0], [1, 1]]);
+  });
+
+  it("takes and refuses the same curves as the engine (tests/tone_curve_cases.json)", () => {
+    type Case = { name: string; json: string; interp?: string; points: [number, number][] | null };
+    const { cases }: { cases: Case[] } = JSON.parse(
+      readFileSync(resolve(process.cwd(), "../../crates/heeler-engine/tests/tone_curve_cases.json"), "utf8"),
+    );
+    for (const c of cases) {
+      const got = parseToneCurve(c.json);
+      if (c.points === null) expect(got, c.name).toBeNull();
+      else {
+        expect(got?.points, c.name).toEqual(c.points);
+        expect(got?.interp, c.name).toBe(c.interp);
+      }
+    }
+  });
+
+  it("the editor adds no point past the engine's limit", () => {
+    const base = profileOf(initialState());
+    const full = { name: "full", interp: "linear", points: Array.from({ length: MAX_POINTS }, (_, i) => [-20 + i * 0.01, i / MAX_POINTS]) };
+    const node = { ...base, textParams: { ...base.textParams, mode: "custom", curve: JSON.stringify(full) } };
+    const dispatch = vi.fn();
+    render(<ToneCurveBlock node={node} dispatch={dispatch} />);
+    const editor = screen.getByTestId("tone-curve-editor") as unknown as SVGSVGElement;
+    editor.setPointerCapture = vi.fn();
+    editor.getBoundingClientRect = () => ({ left: 0, top: 0, width: 260, height: 150, right: 260, bottom: 150, x: 0, y: 0, toJSON: () => ({}) });
+    // Far right of the plot, clear of every point.
+    fireEvent(editor, new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 250, clientY: 40 }));
+    expect(dispatch.mock.calls.some(([cmd]) => cmd.type === "set_tone_curve" || cmd.type === "begin_gesture")).toBe(false);
+    expect(dispatch).toHaveBeenCalledWith({ type: "set_notice", text: expect.stringContaining(`${MAX_POINTS} points`) });
   });
 
   it("the menu still names a saved profile after the writer rounds its curve", () => {

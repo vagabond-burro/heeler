@@ -27,6 +27,9 @@ export const WHITE_STOPS = Math.log2(1 / 0.18);
 export const AXIS_MIN = -8;
 export const AXIS_MAX = 6;
 
+/** The most points a curve may have, the engine's limit too. */
+export const MAX_POINTS = 1024;
+
 /** The curve a `curve` param holds, or null for none or one that is
  * not a curve (the engine refuses the same). */
 export function parseToneCurve(json: string | undefined): ToneCurveDoc | null {
@@ -34,7 +37,7 @@ export function parseToneCurve(json: string | undefined): ToneCurveDoc | null {
   try {
     const v = JSON.parse(json);
     const raw = v?.points;
-    if (!Array.isArray(raw) || raw.length < 2 || raw.length > 1024) return null;
+    if (!Array.isArray(raw) || raw.length < 2 || raw.length > MAX_POINTS) return null;
     if (v?.interp !== undefined && v.interp !== "smooth" && v.interp !== "linear") return null;
     if (v?.name !== undefined && typeof v.name !== "string") return null;
     if (!raw.every((p: unknown) => Array.isArray(p) && p.length === 2 && p.every((x) => typeof x === "number" && Number.isFinite(x)))) return null;

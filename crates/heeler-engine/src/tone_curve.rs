@@ -448,4 +448,33 @@ mod tests {
         let nonfinite: String = (0..65).map(|i| if i == 64 { "64 NaN\n".into() } else { format!("{i} 0\n") }).collect();
         assert!(ToneCurve::from_two_columns("x", &nonfinite).is_err());
     }
+
+    /// tests/tone_curve_cases.json is read by the panel's test too
+    /// (toneprofilecustom.test.tsx): the panel must draw a curve exactly
+    /// when this renders it, so the two take and refuse the same curves.
+    #[test]
+    fn curves_match_the_shared_cases() {
+        #[derive(Deserialize)]
+        struct Case {
+            name: String,
+            json: String,
+            interp: Option<String>,
+            points: Option<Vec<[f32; 2]>>,
+        }
+        #[derive(Deserialize)]
+        struct Cases {
+            cases: Vec<Case>,
+        }
+        let v: Cases = serde_json::from_str(include_str!("../tests/tone_curve_cases.json")).unwrap();
+        for c in v.cases {
+            match (ToneCurve::from_json(&c.json), c.points) {
+                (Ok(got), Some(want)) => {
+                    assert_eq!(got.points, want, "{}", c.name);
+                    assert_eq!(Some(got.interp), c.interp, "{}", c.name);
+                }
+                (Err(_), None) => {}
+                (got, want) => panic!("{}: got {got:?}, want {want:?}", c.name),
+            }
+        }
+    }
 }
