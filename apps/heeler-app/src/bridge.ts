@@ -1586,7 +1586,7 @@ function mockSmartModels(): SmartModels {
     id, installed: false, label, bytes, license, url, version,
   });
   return {
-    sam: m("sam2_1_hiera_tiny", "Segment Anything 2.1 (Hiera Tiny)", 155_610_424, "Apache-2.0", "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX", "2024.09"),
+    sam: m("sam2_1_hiera_tiny", "Segment Anything 2.1 (Tiny)", 155_610_424, "Apache-2.0", "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX", "2024.09"),
     samLegacy: m("mobile_sam", "Segment Anything (MobileSAM)", 36_655_105, "Apache-2.0", "https://huggingface.co/vietanhdev/segment-anything-onnx-models", "2023.06"),
     matte: m("birefnet_lite", "BiRefNet Lite (subject matte)", 224_005_088, "MIT", "https://huggingface.co/onnx-community/BiRefNet_lite-ONNX", "2024.09"),
     fill: m("lama", "LaMa (inpainting)", 208_044_816, "Apache-2.0", "https://huggingface.co/Carve/LaMa-ONNX", "2024.03"),

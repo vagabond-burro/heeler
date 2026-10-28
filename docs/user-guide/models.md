@@ -6,7 +6,7 @@ The smart selection tools, the depth tools, Noise Reduction's Model method and t
 
 | Model | Used by | Size |
 |---|---|---|
-| Segment Anything 2.1 (Hiera Tiny) | Smart selection: Click, Subject and Sky | 156 MB |
+| Segment Anything 2.1 (Tiny) | Smart selection: Click, Subject and Sky | 156 MB |
 | Segment Anything (MobileSAM) | Smart selections made before Heeler 2026.7 | 37 MB |
 | BiRefNet Lite | The subject one-shot matte | 224 MB |
 | LaMa | Remove and the Finish Fill layer | 208 MB |

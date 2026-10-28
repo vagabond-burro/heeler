@@ -330,7 +330,7 @@ ready to upload with the next app release.
         ]
       ],
       "kind": "file",
-      "label": "Segment Anything 2.1 (Hiera Tiny)",
+      "label": "Segment Anything 2.1 (Tiny)",
       "notes": "",
       "urls": [
         "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX/resolve/814a066640debee5a91e70aa401fb8e17e030503/onnx/vision_encoder.onnx",

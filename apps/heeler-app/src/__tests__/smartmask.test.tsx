@@ -16,7 +16,7 @@ vi.mock("../bridge", async (importOriginal) => {
       sam: {
         id: "sam2_1_hiera_tiny",
         installed: mockInstalled,
-        label: "Segment Anything 2.1 (Hiera Tiny)",
+        label: "Segment Anything 2.1 (Tiny)",
         license: "Apache-2.0",
         url: "https://example.test/vision_encoder.onnx",
         bytes: 155_610_424,

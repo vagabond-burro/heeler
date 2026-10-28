@@ -553,7 +553,7 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
   }, [busy, refresh, state.prefs.modelStoreDir]);
 
   const known = [
-    { id: "sam2_1_hiera_tiny", label: "Segment Anything 2.1 (Hiera Tiny)" },
+    { id: "sam2_1_hiera_tiny", label: "Segment Anything 2.1 (Tiny)" },
     { id: "mobile_sam", label: "Segment Anything (MobileSAM)" },
     { id: "birefnet_lite", label: "BiRefNet Lite (subject matte)" },
     { id: "lama", label: "LaMa (inpainting)" },

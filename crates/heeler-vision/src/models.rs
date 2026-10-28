@@ -124,8 +124,8 @@ pub const MOBILE_SAM: ModelSpec = ModelSpec {
 pub const SAM2_1_TINY: ModelSpec = ModelSpec {
     id: "sam2_1_hiera_tiny",
     version: "2024.09",
-    label: "Segment Anything 2.1 (Hiera Tiny)",
-    license: "Apache-2.0 (code and weights; SA-V training data under CC-BY-4.0)",
+    label: "Segment Anything 2.1 (Tiny)",
+    license: "Apache-2.0 (code and weights)",
     urls: &[
         "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX/resolve/814a066640debee5a91e70aa401fb8e17e030503/onnx/vision_encoder.onnx",
         "https://github.com/vagabond-burro/heeler/releases/download/models/sam2_1_hiera_tiny_vision_encoder.onnx",
