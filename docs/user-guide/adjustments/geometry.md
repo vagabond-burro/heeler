@@ -4,12 +4,22 @@ Geometry controls image rotation, aspect transformation, and the nondestructive 
 
 ## Controls
 
-- **Straighten** rotates the photograph. Use the viewport tool to drag along a line that should be level.
+- **Straighten** rotates the photograph, up to 45° either way. Use the viewport tool to drag along a line that should be level, or turn it by hand with the crop tool's rotation ring.
 - **Aspect** stretches the picture: negative values widen it and positive values heighten it. It is not the crop's ratio. To crop to 16:9, 3:2 or another ratio, choose **Photo > Crop / Straighten** and pick the ratio there (see [Image viewport](../image-viewport.md)).
 - **Crop width** and **Crop height** set the retained size.
 - **Crop left** and **Crop top** position the retained rectangle.
 
 Geometry starts off, and a photograph carries no geometry node until it is used: switching the section on or making the first crop or straighten drag in the viewport adds it. The viewport crop tool is the normal visual way to edit these values. Numeric rows are useful for matching crops or entering exact geometry. Pixels outside the crop are retained and can be restored.
+
+## Rotation ring
+
+With the crop tool up, the crop wears a dashed ring about its center. Drag along the ring, or anywhere in the shaded area outside the crop, and the picture turns about the crop's center as the pointer goes round; the cursor is the rotate arrow wherever a drag will turn. The angle shows in the middle of the crop while you drag, and a level grid replaces the thirds so a horizon or an upright can be set against it.
+
+- Hold `Shift` to land on whole degrees.
+- Hold `Option` (`Alt` on Windows) for fine control: the picture turns a tenth as far as the pointer.
+- Double-click the ring to put the picture level again.
+
+The ring writes the same angle as the **Straighten** row, so the two always agree, and it stops at the same 45° either way; quarter turns stay with **Rotate**. A whole drag is one undo step. With **Stay inside picture** on, the crop shrinks as you turn so no empty corner shows, and turning back gives back the crop you started with (see [Crop to picture](#crop-to-picture)).
 
 ## Crop ratios
 
