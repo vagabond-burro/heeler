@@ -13,6 +13,11 @@ Heeler develops RAW files with its own decoder, written in Rust for
 Heeler and under Heeler's own license. (GoPro's VC-5 codec, below, is the
 one part ported from another project.)
 
+The decoder's color for each camera is data, not code. For most cameras it
+is the pair of calibrations a converter writes into the camera profile of
+the DNG files it makes. For cameras no converter reads, it is the matrix
+LibRaw develops the camera with, as measured from LibRaw's output.
+
 Earlier versions of Heeler, through 2026.6, read RAW files with
 **LibRaw**, © 2008-2024 LibRaw LLC, under the **Common Development and
 Distribution License, version 1.0 (CDDL-1.0)**. This version contains no
