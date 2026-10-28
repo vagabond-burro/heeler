@@ -11,7 +11,7 @@ import { logMsg } from "./log";
 import { fileWarpValues } from "./lenspresets";
 import { cornersOf, mapPoint, solveHomography, type Pt } from "./quadmap";
 import { flipQuad, frameAspectFor, reframeQuad } from "./imagelayers";
-import { cropInside, cropRatio, cropRectOf, stayInside, type CropRect } from "./cropfit";
+import { cropInside, cropIsInside, cropRatio, cropRectOf, stayInside, type CropRect } from "./cropfit";
 import { cropGeomOf, flippedCropParams, sourceSizeFor, frameRemap, mirrorRemap, remapNode, remapNodes, sameCrop, sourceAspectFor, turnedCropParams, turnRemap, type CropGeom, type FrameRemap } from "./framemap";
 import type { NavState } from "./keynav";
 import {
@@ -9474,8 +9474,24 @@ export function cropRatioList(prefs: { cropRatios?: SavedCropRatio[] }): [string
   return [...CROP_RATIOS, ...(prefs.cropRatios ?? []).map((r): [string, number] => [r.name, r.w / r.h])];
 }
 
-/** Crop ratios, offered wherever a ratio is offered. One list, because
- * two lists of ratios is a bug waiting to be reported. */
+/** The film crops, named as the trade names them: by their decimal
+ * (2.39, not 239:100), widest last. 1.85 is widescreen theatrical, 2.35
+ * the traditional name for anamorphic scope and 2.39 its current
+ * standard, 2.76 the ultra-wide 65 mm frame. Each is width over height;
+ * the crop bar's swap button gives the portrait form. */
+export const CINEMA_RATIOS: [string, number][] = [
+  ["1.85", 1.85],
+  ["2.00", 2],
+  ["2.35", 2.35],
+  ["2.39", 2.39],
+  ["2.40", 2.4],
+  ["2.50", 2.5],
+  ["2.76", 2.76],
+];
+
+/** Crop ratios, offered wherever a ratio is offered: the common ones,
+ * then the film crops in a group of their own. One list, because two
+ * lists of ratios is a bug waiting to be reported. */
 export const CROP_RATIOS: [string, number][] = [
   ["1:1", 1],
   ["3:2", 1.5],
@@ -9485,7 +9501,12 @@ export const CROP_RATIOS: [string, number][] = [
   ["2:3", 2 / 3],
   ["3:4", 0.75],
   ["9:16", 9 / 16],
+  ...CINEMA_RATIOS,
 ];
+
+/** Where the film crops start in CROP_RATIOS, for the rule the menus
+ * draw above them. */
+export const CINEMA_FROM = CROP_RATIOS.length - CINEMA_RATIOS.length;
 
 /** Parses "3:2", "1.5" or "3x2" into a ratio. Null when it is not a
  * ratio at all, so a typo leaves the crop alone rather than collapsing
@@ -13823,6 +13844,18 @@ function cropHeldInside(s: State, id: string, values: Record<string, number>): R
   if (values.angle === from) return values;
   const fit = stayInside(cropRectOf(n.params), cropFrameAspect(s), from, values.angle);
   return fit ? { ...values, ...fit } : values;
+}
+
+/** A crop the crop bar sets from a ratio, held to the turned picture
+ * while Stay inside picture is on: a ratio that would carry it past the
+ * picture's edge (an upright 1:2.39 on a straightened landscape) gets
+ * the largest of that ratio about the same center instead. */
+export function keepCropInside(s: State, next: CropRect): CropRect {
+  if (!s.prefs.cropStayInside) return next;
+  const frame = cropFrameAspect(s);
+  const angle = cropNode(s).params.angle ?? 0;
+  if (cropIsInside(next, frame, angle)) return next;
+  return cropInside(frame, angle, cropRatio(next, frame), [next.crop_x + next.crop_w / 2, next.crop_y + next.crop_h / 2]);
 }
 
 /** Crop to picture: the largest crop that is all picture at the angle

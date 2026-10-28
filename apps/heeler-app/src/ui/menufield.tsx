@@ -46,7 +46,7 @@ export function MenuField({
    * closed field and on the option's row, for a choice that IS a color
    * (2026-09-30, on the mask overlay color: "make the 4 color options a
    * dropdown option menu but keep the color dots with labels").*/
-  options: { id: string; label: string; icon?: React.ReactNode; hint?: string; swatch?: string; disabled?: boolean }[];
+  options: { id: string; label: string; icon?: React.ReactNode; hint?: string; swatch?: string; disabled?: boolean; ruleAbove?: boolean }[];
   onChange: (id: string) => void;
   label: string;
   testid: string;
@@ -309,8 +309,11 @@ export function MenuField({
           }}
         >
           {options.map((o) => (
+            <React.Fragment key={o.id}>
+            {/* A rule starts a group of its own (the crop ratios' film
+crops, the saved ratios). */}
+            {o.ruleAbove && <div aria-hidden style={{ height: 1, margin: "3px 6px", background: "var(--line-4)" }} />}
             <button
-              key={o.id}
               role="option"
               aria-selected={o.id === value}
               data-testid={`${testid}-option-${o.id}`}
@@ -339,6 +342,7 @@ export function MenuField({
               {o.swatch !== undefined && <Swatch color={o.swatch} testid={`${testid}-option-${o.id}-swatch`} />}
               {o.label}
             </button>
+            </React.Fragment>
           ))}
         </div>
       )}

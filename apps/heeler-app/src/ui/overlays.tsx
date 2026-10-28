@@ -637,6 +637,7 @@ export function CropOverlay({
   aspect = null,
   view = IDENTITY_VIEW,
   stayInside = false,
+  ratioName = null,
 }: {
   node: NodeCard;
   dispatch: D;
@@ -646,6 +647,8 @@ export function CropOverlay({
   /** Stay inside picture (Prefs.cropStayInside): a drag stops where the
    * crop would take in an empty corner of the turned photograph */
   stayInside?: boolean;
+  /** the held ratio's name, worn on the crop's corner (2.39, 16:9) */
+  ratioName?: string | null;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const drag = useRef<CropDrag | null>(null);
@@ -779,6 +782,17 @@ export function CropOverlay({
             <div style={{ position: "absolute", top: pct(t), left: 0, right: 0, height: 1, background: "rgba(238,242,245,.35)" }} />
           </React.Fragment>
         ))}
+        {ratioName && (
+          <div
+            data-testid="crop-ratio-label"
+            style={{
+              position: "absolute", left: 6, top: 6, padding: "1px 5px", fontSize: 11, lineHeight: "15px",
+              color: "#eef2f5", background: "rgba(8,8,8,.55)", borderRadius: 3, pointerEvents: "none",
+            }}
+          >
+            {ratioName}
+          </div>
+        )}
       </div>
       {handle("tl", x, y)}
       {handle("tr", x + w, y)}

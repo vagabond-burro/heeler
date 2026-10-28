@@ -6,10 +6,10 @@
 // fields its 11px.
 
 import React, { useEffect, useRef, useState } from "react";
-import { CROP_RATIO_NAME_MAX, cropRatioList, cropRatioNameReserved, cropRatioOk, type SavedCropRatio } from "../state";
+import { CINEMA_FROM, CROP_RATIOS, CROP_RATIO_NAME_MAX, cropRatioList, cropRatioNameReserved, cropRatioOk, type SavedCropRatio } from "../state";
 import { MenuField } from "./menufield";
 import { useDismiss } from "./hooks";
-import { SAME_RATIO, ratioPair, resolutionRatio } from "./cropratioparts";
+import { SAME_RATIO, ratioLabel, ratioPair, resolutionRatio } from "./cropratioparts";
 
 /** A side of the ratio as typed: a positive number, or null. */
 function side(text: string): number | null {
@@ -70,6 +70,10 @@ export function CropRatioBar({
   // rather than lying about which preset is active.
   const value = match >= 0 ? String(match) : "custom";
 
+  // A ratio and its other side: 2.39 portrait is 1:2.39. A square has
+  // no other side.
+  const canSwap = aspect !== null && Math.abs(aspect - 1) >= SAME_RATIO && cropRatioOk(1 / aspect);
+
   const [draft, setDraft] = useState<[string, string]>(() => ratioPair(aspect, saved));
   // The fields follow the ratio in force: a preset fills them with its
   // numbers, Free empties them.
@@ -125,9 +129,21 @@ export function CropRatioBar({
         hint="Hold the crop to a ratio"
         value={value}
         placeholder={aspect ? `${ratioPair(aspect, saved).join(":")}` : "Custom"}
-        options={options.map(([label], i) => ({ id: String(i), label }))}
+        // The film crops, then the saved ratios, each under a rule.
+        options={options.map(([label], i) => ({ id: String(i), label, ruleAbove: i === 2 + CINEMA_FROM || (i === 2 + CROP_RATIOS.length && i < options.length) }))}
         onChange={(id) => onRatio(options[Number(id)][1])}
       />
+      <button
+        className="chip"
+        data-testid="crop-aspect-swap"
+        aria-label="Swap the ratio's sides"
+        disabled={!canSwap}
+        data-hint={canSwap ? `Swap: hold the crop to ${ratioLabel(1 / aspect!, saved)}, the same ratio on its other side` : "Swap: choose a ratio to turn it portrait or landscape"}
+        onClick={() => canSwap && onRatio(1 / aspect!)}
+        style={{ display: "inline-flex", alignItems: "center", padding: "2px 5px" }}
+      >
+        <SwapIcon />
+      </button>
       <span
         ref={pair}
         style={{ display: "flex", alignItems: "center", gap: 5 }}
@@ -191,6 +207,15 @@ export function CropFitControls({
         Stay inside
       </button>
     </span>
+  );
+}
+
+function SwapIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false">
+      <rect x="3" y="7" width="12" height="8" rx="1" />
+      <rect x="15" y="4" width="6" height="16" rx="1" strokeDasharray="2 2" />
+    </svg>
   );
 }
 

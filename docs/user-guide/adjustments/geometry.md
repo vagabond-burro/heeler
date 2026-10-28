@@ -11,6 +11,17 @@ Geometry controls image rotation, aspect transformation, and the nondestructive 
 
 Geometry starts off, and a photograph carries no geometry node until it is used: switching the section on or making the first crop or straighten drag in the viewport adds it. The viewport crop tool is the normal visual way to edit these values. Numeric rows are useful for matching crops or entering exact geometry. Pixels outside the crop are retained and can be restored.
 
+## Crop ratios
+
+The crop bar's menu, and **Photo > Crop / Straighten > Crop to Aspect Ratio**, hold the crop to a ratio while you drag it:
+
+- **Free** and **Original** (the photograph's own shape).
+- The common ratios: 1:1, 3:2, 4:3, 5:4, 16:9, and the upright 2:3, 3:4 and 9:16.
+- The film crops, in a group of their own and named by their decimals, each the width for a height of 1: **1.85** (widescreen theatrical), **2.00**, **2.35** and **2.39** (anamorphic scope: 2.39 is the current standard, 2.35 its traditional name), **2.40**, **2.50** and **2.76** (ultra-wide 65 mm).
+- Ratios you saved in the aspect ratio calculator, after a rule.
+
+The swap button beside the menu turns the held ratio on its side: 2.39 becomes 1:2.39 for an upright crop, and 3:2 becomes 2:3. While a ratio is held its name shows in the crop's top-left corner (2.39, 16:9, or a saved ratio's name). A ratio of your own can also be typed as width and height, decimals included (2.39 and 1).
+
 ## Crop to picture
 
 Straightening turns the photograph inside its frame, which leaves empty corners where the turned picture no longer reaches. **Stay inside picture** keeps the crop clear of them, and it is on by default:

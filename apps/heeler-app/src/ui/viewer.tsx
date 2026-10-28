@@ -11,11 +11,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Command, CurveChannel, NodeCard, State, Take } from "../state";
 import { activeStackMerge, inspectDocked, pickMaskNode, antsSources, artLayerName, artMaskNode, chainTerminalId, frameLook, renderedSource, mainConversion, previewTarget, shapeLineWidth, transformDragOf, isPlacedLayer, layerFlipBlocked, photoTurn } from "../state";
 import { XformIcon } from "./panelicons";
-import { maskBrushTarget, maskOverlayRgb, BRUSH_TIPS, MULTI_MAX, POLISH_MODES, SELECT_OPS, activeSelectionMask, applyPick, artFindLayer, artToolbarVisible, cropNode, cropToPicture, fitCropToAspect, layerQuad, multiGrid, transformBox, toolNode } from "../state";
+import { maskBrushTarget, maskOverlayRgb, BRUSH_TIPS, MULTI_MAX, POLISH_MODES, SELECT_OPS, activeSelectionMask, applyPick, artFindLayer, artToolbarVisible, cropNode, cropToPicture, fitCropToAspect, keepCropInside, layerQuad, multiGrid, transformBox, toolNode } from "../state";
 import { OpIcon } from "./selecticons";
 import { TrackSlider } from "./track";
 import { StackMergeCanceled, StackMergeProgress } from "./stackmerge";
 import { CropFitControls, CropRatioBar } from "./cropratio";
+import { ratioLabel } from "./cropratioparts";
+import { cropRectOf } from "../cropfit";
 import { SelectToolButton } from "./selecttool";
 import { DodgeToolButton } from "./dodgetool";
 import { ShapeToolButton } from "./shapetool";
@@ -987,7 +989,7 @@ export function Viewer({
     if (!dims) return;
     const crop = cropNode(state);
     const fit = fitCropToAspect(crop.params, state.cropAspect, dims);
-    if (fit) dispatch({ type: "set_params", id: crop.id, values: fit });
+    if (fit) dispatch({ type: "set_params", id: crop.id, values: keepCropInside(state, { ...cropRectOf(crop.params), ...fit }) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.tool, state.cropAspect, srcDims, turnedOdd, natural, state.activeImage]);
 
@@ -1537,7 +1539,7 @@ armed has settings to show.*/}
                 if (!ratio || !dims) return;
                 const crop = cropNode(state);
                 const fit = fitCropToAspect(crop.params, ratio, dims);
-                if (fit) dispatch({ type: "set_params", id: crop.id, values: fit });
+                if (fit) dispatch({ type: "set_params", id: crop.id, values: keepCropInside(state, { ...cropRectOf(crop.params), ...fit }) });
               }}
             />
           )}
@@ -1756,7 +1758,7 @@ existing stack").*/}
                 // A stand-in when the photo has no crop node yet: the
                 // first drag builds the real one (materializeMainTool).
                 const crop = cropNode(state);
-                return <CropOverlay node={crop} dispatch={dispatch} aspect={state.cropAspect} view={view} stayInside={state.prefs.cropStayInside} />;
+                return <CropOverlay node={crop} dispatch={dispatch} aspect={state.cropAspect} view={view} stayInside={state.prefs.cropStayInside} ratioName={ratioLabel(state.cropAspect, state.prefs.cropRatios)} />;
               })()}
             {/* Shape Warp: the same preview canvas and hold as Grid
                 Warp, with the shapes' overlay on top. Mounted while the
