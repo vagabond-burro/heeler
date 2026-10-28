@@ -318,15 +318,22 @@ impl PixelGains {
         self.ops.is_empty()
     }
 
-    /// The bytes the tables hold.
-    pub fn bytes(&self) -> usize {
-        self.ops
-            .iter()
+    /// The bytes `PixelGains::new` would hold for the same arguments,
+    /// worked out without building its tables: for a develop's admission,
+    /// before anything is held.
+    pub fn bytes(ops: &[Stage3], width: u32, height: u32, planes: usize) -> usize {
+        let (w, h) = (width as usize, height as usize);
+        ops.iter()
             .map(|op| match op {
-                Prepared::Gain { map, rows, cols, .. } => map.gains.len() * 4 + (rows.len() + cols.len()) * 24,
-                Prepared::Vignette { dx2, .. } => dx2.len() * 8,
+                Stage3::Gain(map) if (map.plane as usize) < (map.plane as usize + map.planes as usize).min(planes) => map.gains.len().saturating_mul(4).saturating_add(w.saturating_add(h).saturating_mul(24)),
+                Stage3::Gain(_) => 0,
+                Stage3::Vignette(v) => {
+                    let (cx, cy) = (v.cx * w as f64, v.cy * h as f64);
+                    let far = [(0.0, 0.0), (w as f64, 0.0), (0.0, h as f64), (w as f64, h as f64)].iter().map(|(x, y)| (x - cx).powi(2) + (y - cy).powi(2)).fold(0.0, f64::max);
+                    if far > 0.0 { w.saturating_mul(8) } else { 0 }
+                }
             })
-            .sum()
+            .fold(0usize, usize::saturating_add)
     }
 
     /// Scales pixel (row, col)'s color planes by each opcode's gain in
@@ -560,5 +567,29 @@ mod tests {
         let ops = parse_list3(&list(&[gain_map_opcode([0, 0, 1, 1], [1, 1], [1, 1], &[2.0])]));
         apply_rgb(&ops, &mut Rgb { data: &mut data, stride: 4, planes: 3, width: 1, height: 1 });
         assert_eq!(data, vec![65535, 60000, 60000, 60000]);
+    }
+
+    #[test]
+    fn the_admitted_bytes_are_what_the_built_tables_hold() {
+        // What PixelGains::new holds, measured from what it built.
+        let held = |g: &PixelGains| -> usize {
+            g.ops
+                .iter()
+                .map(|op| match op {
+                    Prepared::Gain { map, rows, cols, .. } => map.gains.len() * 4 + (rows.len() + cols.len()) * 24,
+                    Prepared::Vignette { dx2, .. } => dx2.len() * 8,
+                })
+                .sum()
+        };
+        let mut other_plane = gain_map_opcode([0, 0, 2, 3], [1, 1], [2, 2], &[1.5; 4]);
+        other_plane[16 + 16..16 + 20].copy_from_slice(&3u32.to_be_bytes());
+        let ops = parse_list3(&list(&[
+            vignette_opcode([1.0, 0.0, 0.0, 0.0, 0.0], 0.5, 0.5),
+            gain_map_opcode([0, 0, 4, 4], [1, 1], [2, 3], &[2.0; 6]),
+            other_plane,
+        ]));
+        for (w, h, planes) in [(640, 480, 3), (7, 5, 1), (0, 0, 3), (1, 1, 3)] {
+            assert_eq!(PixelGains::bytes(&ops, w, h, planes), held(&PixelGains::new(&ops, w, h, planes)), "{w} by {h}, {planes}");
+        }
     }
 }

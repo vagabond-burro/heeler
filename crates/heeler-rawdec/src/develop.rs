@@ -410,7 +410,7 @@ impl Plan {
         // A pixel shift file holds four samples a pixel to blend (three
         // to clip), beyond the one counted.
         let shifted = if matches!(self.dng.coding, Coding::SonyArq(_)) { memory::bytes(self.width, self.height, 3, 2)? } else { 0 };
-        memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES, self.pixel_gains(half).bytes(), frame, unstretched, unturned, shifted])
+        memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES, self.pixel_gains_bytes(half), frame, unstretched, unturned, shifted])
     }
 
     /// The image the stage 3 opcodes see: the active area, or at half size
@@ -434,6 +434,12 @@ impl Plan {
     pub fn pixel_gains(&self, half: bool) -> PixelGains {
         let (w, h) = self.stage3_size(half);
         PixelGains::new(&self.stage3, w as u32, h as u32, if self.mono() { 1 } else { 3 })
+    }
+
+    /// What pixel_gains holds, without building it.
+    fn pixel_gains_bytes(&self, half: bool) -> usize {
+        let (w, h) = self.stage3_size(half);
+        PixelGains::bytes(&self.stage3, w as u32, h as u32, if self.mono() { 1 } else { 3 })
     }
 
     /// Whether the unpack reads each piece's code stream across the cores
