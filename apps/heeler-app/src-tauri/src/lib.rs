@@ -6236,6 +6236,16 @@ fn model_normals_want(source_key: &str) -> u64 {
     )
 }
 
+/// Whether the Model normals on disk will plant: a file that is there
+/// but cut short or damaged would otherwise answer "cached" forever
+/// while the lights shade from the estimate, so it is read again.
+fn model_normals_cached(path: &Path) -> bool {
+    std::fs::read(path)
+        .ok()
+        .and_then(|bytes| heeler_io::decode_png_raw(&bytes).ok())
+        .is_some_and(|img| img.width > 0 && img.height > 0)
+}
+
 /// The model's normals packed as the raster Depth Lighting is fed, the
 /// file pass's packing: (n + 1) / 2 in RGB, alpha 1, mid gray where the
 /// model saw no surface.
@@ -7105,7 +7115,7 @@ async fn surface_normals(app: tauri::AppHandle, graph: UiGraph, image_id: String
         })?;
         let version = model_normals_want(&source_key);
         let path = smart_raster_path(&base, version);
-        if path.exists() {
+        if model_normals_cached(&path) {
             return Ok(DepthMapAnswer { version: format!("{version:016x}"), work: "cached" });
         }
         let source = preview_source(&app, &image_id, opts)?;
@@ -7128,8 +7138,7 @@ async fn surface_normals(app: tauri::AppHandle, graph: UiGraph, image_id: String
         })?;
         let (normals, nw, nh) = answer?;
         let bytes = heeler_io::encode_png16_raw(&pack_normals(&normals, nw, nh)).map_err(|e| e.to_string())?;
-        let _ = path.parent().map(std::fs::create_dir_all);
-        std::fs::write(&path, bytes).map_err(|e| format!("normals raster persist failed: {e}"))?;
+        write_denoise_cache_file(&path, &bytes).map_err(|e| format!("normals raster persist failed: {e}"))?;
         Ok(DepthMapAnswer { version: format!("{version:016x}"), work: "model" })
     })
     .await
@@ -36800,6 +36809,14 @@ mod file_depth_tests {
         let out = smart_raster_path(dir.path(), model_normals_want(&source_key));
         std::fs::create_dir_all(out.parent().unwrap()).unwrap();
         std::fs::write(&out, heeler_io::encode_png16_raw(&raster).unwrap()).unwrap();
+        assert!(model_normals_cached(&out));
+        // A file cut short is not a cache hit: the desktop reads the
+        // photograph again rather than answer "cached" forever.
+        let whole = std::fs::read(&out).unwrap();
+        std::fs::write(&out, &whole[..whole.len() / 2]).unwrap();
+        assert!(!model_normals_cached(&out));
+        assert!(plant(&mut session, "model").is_none(), "a damaged raster does not plant");
+        std::fs::write(&out, &whole).unwrap();
         let planted = plant(&mut session, "model").expect("the model's normals plant");
         assert_eq!((planted.image.width, planted.image.height), (2, 1));
         assert!(plant(&mut session, "off").is_none());
