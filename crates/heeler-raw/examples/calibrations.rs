@@ -1,7 +1,7 @@
 //! Builds heeler-rawdec's table of camera color calibrations
 //! (src/calibrations.rs) for the raw formats whose files carry none: for
 //! each camera folder of the corpora at HEELER_RAW_CORPUS (a list of
-//! folders, as PATH is), a DNG converter
+//! folders, as PATH is), a converter
 //! writes a small DNG from one of the camera's files, and the camera
 //! profile tags in it (the two calibration illuminants, ColorMatrix1/2,
 //! ForwardMatrix1/2, and whether the profile also carries hue and

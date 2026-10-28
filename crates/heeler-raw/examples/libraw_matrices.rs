@@ -1,6 +1,6 @@
 //! Builds heeler-rawdec's table of LibRaw's matrices (src/libraw_matrices.rs)
 //! for the cameras the calibration table (src/calibrations.rs) lacks
-//! because no DNG converter reads their files: for every raw file of the
+//! because no converter reads their files: for every raw file of the
 //! corpora at HEELER_RAW_CORPUS (a list of folders, as PATH is, and of
 //! any further folders given after OUT.rs) whose camera has no
 //! calibration, the develop matrix LibRaw opens
