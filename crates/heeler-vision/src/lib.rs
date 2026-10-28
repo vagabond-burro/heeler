@@ -33,7 +33,7 @@ pub use inpaint::{fill_crop, Inpaint};
 pub use matting::Matting;
 pub use models::{
     download_model, download_source, installed, installed_version, model_dir, model_paths, remove_model, verify_file, ArchiveKind,
-    ExtraFile, ExtraSource, InstallRecord, ModelSource, ModelSpec, BIREFNET_LITE, DEPTH_ANYTHING, FLORENCE_2, LAMA, MOBILE_SAM, SCUNET,
+    ExtraFile, ExtraSource, InstallRecord, ModelSource, ModelSpec, BIREFNET_DYNAMIC, BIREFNET_LITE, DEPTH_ANYTHING, FLORENCE_2, LAMA, MOBILE_SAM, SCUNET,
     VITMATTE,
 };
 pub use refine::{

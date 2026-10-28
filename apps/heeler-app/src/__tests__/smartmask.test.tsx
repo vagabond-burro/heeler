@@ -22,12 +22,12 @@ vi.mock("../bridge", async (importOriginal) => {
         bytes: 36_655_105,
       },
       matte: {
-        id: "birefnet_lite",
+        id: "birefnet_dynamic",
         installed: mockMatte,
-        label: "BiRefNet Lite (subject matte)",
+        label: "BiRefNet dynamic (subject matte)",
         license: "MIT",
         url: "https://example.test/matte.onnx",
-        bytes: 224_005_088,
+        bytes: 972_495_971,
       },
       fill: {
         id: "lama",
@@ -163,6 +163,20 @@ describe("the click overlay", () => {
     fireEvent.click(screen.getByTestId("smart-recompute"));
     const { smartClick } = await import("../bridge");
     expect(vi.mocked(smartClick)).toHaveBeenCalledWith(s.activeImage, maskId, prompts, "click");
+  });
+
+  it("RECOMPUTE on a Subject keeps the matte its recipe names", async () => {
+    mockCached = false;
+    let s = withSmart();
+    const maskId = s.activeLayer!.replace("_adj", "_mask");
+    s = run(s, { type: "set_text_param", id: maskId, param: "mode", value: "subject" });
+    s = run(s, { type: "set_text_param", id: maskId, param: "aim", value: '{"x":0.5,"y":0.5}' });
+    s = run(s, { type: "set_text_param", id: maskId, param: "model", value: "birefnet_lite" });
+    render(<SmartClickOverlay state={s} dispatch={() => {}} norm={norm} />);
+    await screen.findByTestId("smart-uncomputed");
+    fireEvent.click(screen.getByTestId("smart-recompute"));
+    const { smartClick } = await import("../bridge");
+    expect(vi.mocked(smartClick)).toHaveBeenCalledWith(s.activeImage, maskId, "[]", "subject", '{"x":0.5,"y":0.5}', "birefnet_lite");
   });
 
   it("the one-shot chips (in the PANEL, ) set the mode and compute", async () => {
@@ -306,16 +320,16 @@ describe("the click overlay", () => {
     render(<SmartClickOverlay state={s} dispatch={() => {}} norm={norm} />);
     const offer = await screen.findByTestId("smart-matte-offer");
     expect(offer.textContent).toContain("BiRefNet");
-    expect(offer.textContent).toContain("224 MB");
+    expect(offer.textContent).toContain("972 MB");
     expect(offer.textContent).toContain("MIT");
     const { smartModelDownload } = await import("../bridge");
     fireEvent.click(screen.getByTestId("smart-matte-download"));
-    expect(vi.mocked(smartModelDownload)).toHaveBeenCalledWith("birefnet_lite");
+    expect(vi.mocked(smartModelDownload)).toHaveBeenCalledWith("birefnet_dynamic");
   });
 
   it("the completion write records the model that answered", async () => {
     const { smartClick } = await import("../bridge");
-    vi.mocked(smartClick).mockResolvedValueOnce("birefnet_lite");
+    vi.mocked(smartClick).mockResolvedValueOnce("birefnet_dynamic");
     let s = withSmart();
     const maskId = s.activeLayer!.replace("_adj", "_mask");
     s = run(s, { type: "set_text_param", id: maskId, param: "mode", value: "subject" });
@@ -329,7 +343,7 @@ describe("the click overlay", () => {
         type: "set_text_param",
         id: maskId,
         param: "model",
-        value: "birefnet_lite",
+        value: "birefnet_dynamic",
       }),
     );
   });

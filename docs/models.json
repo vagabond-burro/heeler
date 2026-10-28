@@ -1,5 +1,23 @@
 {
   "models": {
+    "birefnet_dynamic": {
+      "archive_bytes": 972495971,
+      "archive_sha256": "aa3c17882a27f079fafa7655cf50e83b9e6e067d6c6fa4cbc3524ae441da0bd7",
+      "files": [
+        [
+          "model.onnx",
+          "aa3c17882a27f079fafa7655cf50e83b9e6e067d6c6fa4cbc3524ae441da0bd7"
+        ]
+      ],
+      "kind": "file",
+      "label": "BiRefNet dynamic (subject matte)",
+      "notes": "",
+      "urls": [
+        "https://huggingface.co/onnx-community/BiRefNet_dynamic-1024x1024-ONNX/resolve/6defd3a19cec21042b178108815c9c4508d09867/onnx/model.onnx",
+        "https://github.com/vagabond-burro/heeler/releases/download/models/birefnet_dynamic_1024.onnx"
+      ],
+      "version": "2025.03"
+    },
     "birefnet_lite": {
       "archive_bytes": 224005088,
       "archive_sha256": "5600024376f572a557870a5eb0afb1e5961636bef4e1e22132025467d0f03333",

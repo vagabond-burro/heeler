@@ -27,11 +27,12 @@ export function useSmartModels(ask: boolean, refresh: unknown = 0): SmartModels 
 }
 
 /** Whether the model a Smart mask's mode needs is missing here: SAM for
- * every mode, except Subject, which BiRefNet answers when it is
- * installed (lib.rs smart_compute). Not known yet is not missing. */
+ * every mode, except Subject, which BiRefNet (dynamic, or Lite where
+ * dynamic is not installed) answers when it is installed (lib.rs
+ * smart_compute). Not known yet is not missing. */
 export function smartModelMissing(models: SmartModels | null, mode: string): boolean {
   if (!models?.sam) return false;
-  if (mode === "subject" && models.matte?.installed) return false;
+  if (mode === "subject" && (models.matte?.installed || models.lite?.installed)) return false;
   return !models.sam.installed;
 }
 

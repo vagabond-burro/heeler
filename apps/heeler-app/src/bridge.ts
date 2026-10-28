@@ -1564,6 +1564,9 @@ export type SmartModelStatus = {
 export type SmartModels = {
   sam: SmartModelStatus;
   matte: SmartModelStatus;
+  /** BiRefNet Lite, the earlier subject matte: it still answers Subject
+   * where dynamic is not installed. Absent from an older desktop. */
+  lite?: SmartModelStatus;
   /** the inpainting model behind Remove and the Finish fill */
   fill: SmartModelStatus;
   /** ViTMatte, the P4 Selection Polish refinement */
@@ -1583,7 +1586,8 @@ function mockSmartModels(): SmartModels {
   });
   return {
     sam: m("mobile_sam", "Segment Anything (MobileSAM)", 36_655_105, "Apache-2.0", "https://huggingface.co/vietanhdev/segment-anything-onnx-models", "2023.06"),
-    matte: m("birefnet_lite", "BiRefNet Lite (subject matte)", 224_005_088, "MIT", "https://huggingface.co/onnx-community/BiRefNet_lite-ONNX", "2024.09"),
+    matte: m("birefnet_dynamic", "BiRefNet dynamic (subject matte)", 972_495_971, "MIT", "https://huggingface.co/onnx-community/BiRefNet_dynamic-1024x1024-ONNX", "2025.03"),
+    lite: m("birefnet_lite", "BiRefNet Lite (subject matte)", 224_005_088, "MIT", "https://huggingface.co/onnx-community/BiRefNet_lite-ONNX", "2024.09"),
     fill: m("lama", "LaMa (inpainting)", 208_044_816, "Apache-2.0", "https://huggingface.co/Carve/LaMa-ONNX", "2024.03"),
     refine: m("vitmatte", "ViTMatte (edge refinement)", 103_885_865, "Apache-2.0 weights, MIT code", "https://huggingface.co/Xenova/vitmatte-small-composition-1k", "2024.06"),
     depth: m("depth_anything_v2_small", "Depth Anything V2 Small (scene depth)", 99_060_839, "Apache-2.0", "https://huggingface.co/onnx-community/depth-anything-v2-small", "2024.06"),
@@ -1793,16 +1797,19 @@ export async function smartRasterStatus(
  * raster; writing that id into the node's `model` param is both
  * provenance and the render trigger. `aim` is Subject's ask for the
  * SAM fallback (smartpoints.ts subjectAim), on the photograph like the
- * clicks. */
+ * clicks. `keep` is the model a recompute keeps: the recipe's own, so a
+ * Subject matted with BiRefNet Lite is made again with Lite while it is
+ * installed. */
 export async function smartClick(
   imageId: string,
   nodeId: string,
   prompts: string,
   mode = "click",
   aim = "",
+  keep = "",
 ): Promise<string> {
   if (!isTauri()) return "mobile_sam";
-  return await call("smart_click", { imageId, nodeId, mode, prompts, aim });
+  return await call("smart_click", { imageId, nodeId, mode, prompts, aim, keep: keep || null });
 }
 
 /** Smart selection straight onto the document selection (Select >

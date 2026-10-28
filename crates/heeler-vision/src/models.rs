@@ -1,9 +1,9 @@
 //! The model registry: what can be downloaded, from where, and the
-//! checksums that make the download trustworthy. Seven entries: SAM
-//! (click selection), BiRefNet (subject matte), LaMa (inpaint fill),
-//! ViTMatte (edge refinement), Depth Anything V2 Small (scene depth),
-//! SCUNet (noise reduction) and Florence-2 (what is in the picture),
-//! each with its license caveat recorded on the entry.
+//! checksums that make the download trustworthy. Eight entries: SAM
+//! (click selection), BiRefNet dynamic and Lite (subject matte), LaMa
+//! (inpaint fill), ViTMatte (edge refinement), Depth Anything V2 Small
+//! (scene depth), SCUNet (noise reduction) and Florence-2 (what is in
+//! the picture), each with its license caveat recorded on the entry.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -131,6 +131,36 @@ pub const BIREFNET_LITE: ModelSpec = ModelSpec {
     files: &[(
         "model.onnx",
         "5600024376f572a557870a5eb0afb1e5961636bef4e1e22132025467d0f03333",
+    )],
+    extra: &[],
+};
+
+/// BiRefNet dynamic (MIT, weights by the author; ONNX packaging by the
+/// Hugging Face onnx-community, pinned to one revision): the subject
+/// matte since 2026.7. The full network (Swin-L), trained at dynamic
+/// resolutions, in place of Lite's tiny backbone: truer fur and fine
+/// edges at 3 to 4 s on CPU, inside the one-shot's 4 s budget, where
+/// the 2048 HR exports took 20 to 25 s and no execution provider
+/// brought them down (CoreML takes barely half the graph, in 83
+/// partitions). This export is traced at a fixed 1024x1024, the same
+/// diet and normalization as Lite, logits out. Lite stays in the
+/// registry: a document matted with Lite is recomputed with Lite. The
+/// layer-4 caveat is Lite's, stated on the open-source page.
+pub const BIREFNET_DYNAMIC: ModelSpec = ModelSpec {
+    id: "birefnet_dynamic",
+    version: "2025.03",
+    label: "BiRefNet dynamic (subject matte)",
+    license: "MIT (code and weights; academic training corpus, see the open-source page)",
+    urls: &[
+        "https://huggingface.co/onnx-community/BiRefNet_dynamic-1024x1024-ONNX/resolve/6defd3a19cec21042b178108815c9c4508d09867/onnx/model.onnx",
+        "https://github.com/vagabond-burro/heeler/releases/download/models/birefnet_dynamic_1024.onnx",
+    ],
+    archive_sha256: "aa3c17882a27f079fafa7655cf50e83b9e6e067d6c6fa4cbc3524ae441da0bd7",
+    archive_bytes: 972_495_971,
+    kind: ArchiveKind::File,
+    files: &[(
+        "model.onnx",
+        "aa3c17882a27f079fafa7655cf50e83b9e6e067d6c6fa4cbc3524ae441da0bd7",
     )],
     extra: &[],
 };
@@ -495,12 +525,31 @@ pub fn remove_model(base: &Path, spec: &ModelSpec) -> Result<(), VisionError> {
     Ok(())
 }
 
+/// Files this run has already hashed to their pin, by path, with the
+/// length and modification time they had then. `installed` is asked
+/// on every Subject one-shot and every status check, and hashing the
+/// 972 MB matte costs about 1.75 s each time; a file that has not been
+/// written since it verified is not hashed again. Any write, a
+/// replacement or a truncation moves the length or the time, and the
+/// file is hashed afresh.
+static VERIFIED: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<PathBuf, (u64, std::time::SystemTime, String)>>,
+> = std::sync::LazyLock::new(Default::default);
+
 /// Streams a file through SHA-256 and compares against the pinned hex.
 pub fn verify_file(path: &Path, sha256_hex: &str) -> Result<bool, VisionError> {
     let mut file = match std::fs::File::open(path) {
         Ok(f) => f,
         Err(_) => return Ok(false),
     };
+    let stamp = file.metadata().and_then(|m| Ok((m.len(), m.modified()?))).ok();
+    let pin = sha256_hex.to_ascii_lowercase();
+    if let Some((len, modified)) = stamp {
+        let seen = VERIFIED.lock().unwrap_or_else(|e| e.into_inner());
+        if seen.get(path).is_some_and(|(l, m, sha)| *l == len && *m == modified && *sha == pin) {
+            return Ok(true);
+        }
+    }
     let mut hasher = Sha256::new();
     let mut buf = [0u8; 65536];
     loop {
@@ -510,7 +559,11 @@ pub fn verify_file(path: &Path, sha256_hex: &str) -> Result<bool, VisionError> {
         }
         hasher.update(&buf[..n]);
     }
-    Ok(format!("{:x}", hasher.finalize()).eq_ignore_ascii_case(sha256_hex))
+    let matches = format!("{:x}", hasher.finalize()) == pin;
+    if let (true, Some((len, modified))) = (matches, stamp) {
+        VERIFIED.lock().unwrap_or_else(|e| e.into_inner()).insert(path.to_path_buf(), (len, modified, pin));
+    }
+    Ok(matches)
 }
 
 /// Downloads and installs one model: archive to a temp file, hash
@@ -803,7 +856,7 @@ mod tests {
 
     #[test]
     fn every_registry_source_validates_and_inconsistent_sources_fail_before_staging() {
-        for spec in [&MOBILE_SAM, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &SCUNET, &FLORENCE_2] {
+        for spec in [&MOBILE_SAM, &BIREFNET_DYNAMIC, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &SCUNET, &FLORENCE_2] {
             ModelSource::from(spec).validate().unwrap();
         }
         let base = tempdir();
@@ -956,7 +1009,7 @@ mod tests {
     #[test]
     fn every_model_carries_the_release_mirror_as_a_second_source() {
         let mirror = "https://github.com/vagabond-burro/heeler/releases/download/models/";
-        for spec in [&MOBILE_SAM, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &SCUNET, &FLORENCE_2] {
+        for spec in [&MOBILE_SAM, &BIREFNET_DYNAMIC, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &SCUNET, &FLORENCE_2] {
             assert!(spec.urls.len() >= 2, "{}: one source only", spec.id);
             assert!(spec.urls.iter().any(|u| u.starts_with(mirror)), "{}: no mirror", spec.id);
             assert!(spec.urls.iter().all(|u| u.starts_with("https://")), "{}: a plain http source", spec.id);
@@ -1032,6 +1085,32 @@ mod tests {
         assert!(verify_file(&p, &computed.to_uppercase()).unwrap());
         assert!(!verify_file(&p, sha).unwrap() || sha == computed);
         assert!(!verify_file(dir.path().join("absent").as_path(), &computed).unwrap());
+    }
+
+    /// A verified file is not hashed again while it is unchanged, but
+    /// the same bytes rewritten, a change of the same length with a new
+    /// time, or a different pin, are all checked afresh.
+    #[test]
+    fn a_verified_file_is_hashed_again_once_it_changes() {
+        use sha2::{Digest, Sha256};
+        let dir = tempdir();
+        let p = dir.path().join("weights");
+        std::fs::write(&p, b"first weights").unwrap();
+        let first = format!("{:x}", Sha256::digest(b"first weights"));
+        assert!(verify_file(&p, &first).unwrap());
+        assert!(verify_file(&p, &first).unwrap(), "unchanged, still verified");
+        assert!(!verify_file(&p, &"0".repeat(64)).unwrap(), "another pin is checked, not taken from the cache");
+        // Same length, other bytes, a later time: the cache must not
+        // answer for it.
+        std::fs::write(&p, b"other weights").unwrap();
+        let file = std::fs::File::options().write(true).open(&p).unwrap();
+        file.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(5)).unwrap();
+        drop(file);
+        assert!(!verify_file(&p, &first).unwrap(), "a rewritten file is hashed again");
+        assert!(verify_file(&p, &format!("{:x}", Sha256::digest(b"other weights"))).unwrap());
+        // A truncation changes the length.
+        std::fs::write(&p, b"first").unwrap();
+        assert!(!verify_file(&p, &first).unwrap());
     }
 
     fn tempdir() -> TempDir {

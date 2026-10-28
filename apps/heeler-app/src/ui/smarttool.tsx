@@ -843,8 +843,8 @@ export function SmartClickOverlay({
             style={{ marginTop: 3 }}
             onClick={() => {
               setDownloading(true);
-              void smartModelDownload("birefnet_lite")
-                .then(() => logMsg("info", "BiRefNet Lite installed"))
+              void smartModelDownload(models.matte.id)
+                .then(() => logMsg("info", `${models.matte.label} installed`))
                 .catch((err) => reportToolError("Download", err))
                 .finally(() => setDownloading(false));
             }}
@@ -926,7 +926,11 @@ export function SmartClickOverlay({
             onClick={() => {
               setBusy(true);
               publishBusy("SELECTING \u00b7 the model is computing the mask");
-              void (mode === "subject" ? smartClick(state.activeImage, mask.id, prompts, mode, aim) : smartClick(state.activeImage, mask.id, prompts, mode))
+              // From the recipe: the matte it names, not whichever is
+              // preferred now.
+              void (mode === "subject"
+                ? smartClick(state.activeImage, mask.id, prompts, mode, aim, mask.textParams?.model ?? "")
+                : smartClick(state.activeImage, mask.id, prompts, mode))
                 .then((used) => {
                   dispatch({ type: "set_text_param", id: mask.id, param: "model", value: used });
                 })

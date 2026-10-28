@@ -120,13 +120,38 @@ its pinned version, each with two sources, upstream first and the
 the pins). Florence-2 (`florence_2_base`, added 2026-09-28) has its
 five files (`florence_2_base_*`) on the same release, uploaded with the owner's
 approval the same day and each verified by download against its pin;
-Hugging Face, at a pinned revision, stays its first source. A check against this
+Hugging Face, at a pinned revision, stays its first source. BiRefNet
+dynamic (`birefnet_dynamic`, added for 2026.7, the subject matte in
+place of Lite) names `birefnet_dynamic_1024.onnx` on the same release
+as its mirror; that file is not uploaded yet (the owner uploads it: the
+export from its Hugging Face revision, unchanged, 972,495,971 bytes,
+SHA-256 `aa3c17882a27f079fafa7655cf50e83b9e6e067d6c6fa4cbc3524ae441da0bd7`),
+and until it is, the download has its first source only. Lite stays
+listed for the documents matted with it. A check against this
 file reads as current. The same text is kept as `docs/models.json`,
 ready to upload with the next app release.
 
 ```json
 {
   "models": {
+    "birefnet_dynamic": {
+      "archive_bytes": 972495971,
+      "archive_sha256": "aa3c17882a27f079fafa7655cf50e83b9e6e067d6c6fa4cbc3524ae441da0bd7",
+      "files": [
+        [
+          "model.onnx",
+          "aa3c17882a27f079fafa7655cf50e83b9e6e067d6c6fa4cbc3524ae441da0bd7"
+        ]
+      ],
+      "kind": "file",
+      "label": "BiRefNet dynamic (subject matte)",
+      "notes": "",
+      "urls": [
+        "https://huggingface.co/onnx-community/BiRefNet_dynamic-1024x1024-ONNX/resolve/6defd3a19cec21042b178108815c9c4508d09867/onnx/model.onnx",
+        "https://github.com/vagabond-burro/heeler/releases/download/models/birefnet_dynamic_1024.onnx"
+      ],
+      "version": "2025.03"
+    },
     "birefnet_lite": {
       "archive_bytes": 224005088,
       "archive_sha256": "5600024376f572a557870a5eb0afb1e5961636bef4e1e22132025467d0f03333",
