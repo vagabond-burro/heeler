@@ -549,6 +549,29 @@ mod tests {
     }
 
     #[test]
+    fn a_cancel_stops_the_reader_and_is_reported() {
+        // More rows than the channel holds, so a cancel finds the reader
+        // waiting on a full channel.
+        let (width, rows) = (16, 64);
+        let frame: Vec<Vec<u16>> = (0..rows).map(|r| (0..width).map(|c| (500 + 7 * r + 3 * c) as u16).collect()).collect();
+        let data = code(&frame);
+        let stop = AtomicBool::new(true);
+        let seen = std::cell::Cell::new(0);
+        assert!(matches!(decode(&data, 7, width, rows, Some(&stop), |_, _| seen.set(seen.get() + 1)), Err(Error::Canceled)));
+        assert_eq!(seen.get(), 0, "canceled before it began");
+        let stop = AtomicBool::new(false);
+        let r = decode(&data, 7, width, rows, Some(&stop), |r, _| {
+            seen.set(r + 1);
+            if r == 2 {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                stop.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+        });
+        assert!(matches!(r, Err(Error::Canceled)), "{r:?}");
+        assert!(seen.get() < rows, "canceled partway");
+    }
+
+    #[test]
     fn a_short_stream_is_refused() {
         let frame: Vec<Vec<u16>> = (0..8).map(|r| (0..16).map(|c| (900 + 61 * r + 29 * c) as u16).collect()).collect();
         let data = code(&frame);

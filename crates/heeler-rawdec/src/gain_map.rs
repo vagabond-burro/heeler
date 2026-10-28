@@ -600,8 +600,10 @@ mod tests {
             gain_map_opcode([0, 0, 4, 4], [1, 1], [2, 3], &[2.0; 6]),
             other_plane,
         ]));
-        for (w, h, planes) in [(640, 480, 3), (7, 5, 1), (0, 0, 3), (1, 1, 3)] {
+        for (w, h, planes) in [(640, 480, 3), (7, 5, 1), (0, 0, 3), (1, 1, 3), (9, 4, 4), (9, 4, 0)] {
             assert_eq!(PixelGains::bytes(&ops, w, h, planes), held(&PixelGains::new(&ops, w, h, planes)), "{w} by {h}, {planes}");
+            // A half-size develop's tables are its own size's.
+            assert_eq!(PixelGains::bytes(&ops, w, h, planes), held(&PixelGains::scaled(&ops, w, h, planes, 2, (2 * w + 1, 2 * h))), "{w} by {h}, {planes} at half size");
         }
     }
 

@@ -1120,6 +1120,35 @@ mod tests {
     }
 
     #[test]
+    fn a_canceled_decode_says_so_and_writes_nothing() {
+        use std::sync::atomic::Ordering;
+        let (w, h, comps) = (120usize, 40usize, 2usize);
+        let lines = pattern(w, comps, h, 14);
+        let plain = encode(&lines, w, comps, 14, 1, 0);
+        let stop = AtomicBool::new(true);
+        // The parallel decode's unread pieces read nothing, and none is placed.
+        for pieces in [1, 7, 64] {
+            let mut par = vec![7u16; w * comps * h];
+            assert!(matches!(decode_pieces(&plain, &mut par, pieces, 1, Some(&stop)), Err(Error::Canceled)), "{pieces} pieces");
+            assert!(par.iter().all(|&v| v == 7), "{pieces} pieces");
+        }
+        let mut out = vec![7u16; w * comps * h];
+        let intervals = encode(&lines, w, comps, 14, 1, w * 3);
+        assert!(matches!(decode_intervals_until(&intervals, &mut out, Some(&stop)), Err(Error::Canceled)));
+        // In order, stopped after its second line.
+        let flag = AtomicBool::new(false);
+        let mut seen = 0;
+        let r = decode_until(&plain, Some(&flag), |y, _| {
+            seen = y + 1;
+            if y == 1 {
+                flag.store(true, Ordering::Relaxed);
+            }
+        });
+        assert!(matches!(r, Err(Error::Canceled)));
+        assert_eq!(seen, 2);
+    }
+
+    #[test]
     fn a_truncated_stream_never_panics() {
         let lines = pattern(40, 2, 20, 14);
         let data = encode(&lines, 40, 2, 14, 1, 0);
