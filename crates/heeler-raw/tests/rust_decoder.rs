@@ -115,6 +115,17 @@ fn lens_shading_opcodes_develop_as_heeler_raw_applies_them_around_libraw() {
         let bytes = cfa_dng(&Spec { width: 76, height: 52, tile: Some((32, 16)), orientation, opcodes2: Some(list2.clone()), opcodes3: Some(list3.clone()), pixel: &px, ..Spec::default() });
         same_as_libraw(&format!("lens shading, orientation {orientation}"), &bytes);
     }
+    // An odd top and left edge, which the area moves in by one: the maps
+    // and the black pattern as LibRaw's area takes them, the moved one (no
+    // file in either corpus has an odd edge). The area moved is of even
+    // size: at half size LibRaw reads OpcodeList2's maps over an odd
+    // area less its last row and column, the Rust develop over the whole
+    // area as at full size (no file with these maps has an odd area).
+    let per_site = opcode_list(&[gain_map([0, 0, 50, 74], [0, 1], [2, 2], [2, 2], 1, &[1.4, 1.0, 1.2, 1.6]), gain_map([1, 1, 50, 74], [0, 1], [2, 2], [2, 2], 1, &[1.1, 1.3, 1.0, 1.2])]);
+    let black = ((2, 2), vec![250 * 256, 262 * 256, 259 * 256, 255 * 256]);
+    let px = |y: usize, x: usize| scene(y, x) / 2;
+    let bytes = cfa_dng(&Spec { width: 76, height: 52, tile: Some((32, 16)), active: Some([1, 1, 52, 76]), black, opcodes2: Some(per_site), opcodes3: Some(list3.clone()), pixel: &px, ..Spec::default() });
+    same_as_libraw("lens shading, odd area edges", &bytes);
     // An odd height: the half-size image the stage 3 maps are read over
     // counts the part block.
     let bytes = cfa_dng(&Spec { width: 71, height: 41, tile: None, opcodes3: Some(list3.clone()), pixel: &scene, ..Spec::default() });

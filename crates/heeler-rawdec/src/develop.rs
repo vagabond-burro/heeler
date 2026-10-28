@@ -430,10 +430,13 @@ impl Plan {
     }
 
     /// OpcodeList3 worked out for the develop's image: one plane for a
-    /// monochrome frame, three for the rest.
+    /// monochrome frame, three for the rest. At half size each pixel is a
+    /// 2 by 2 block of the active area, the maps' areas and pitches in the
+    /// active area's rows and columns.
     pub fn pixel_gains(&self, half: bool) -> PixelGains {
         let (w, h) = self.stage3_size(half);
-        PixelGains::new(&self.stage3, w as u32, h as u32, if self.mono() { 1 } else { 3 })
+        let (full, scale) = ((self.width as u32, self.height as u32), if half && (w, h) != (self.width, self.height) { 2 } else { 1 });
+        PixelGains::scaled(&self.stage3, w as u32, h as u32, if self.mono() { 1 } else { 3 }, scale, full)
     }
 
     /// What pixel_gains holds, without building it.
