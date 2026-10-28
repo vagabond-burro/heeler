@@ -148,6 +148,24 @@
       ],
       "version": "2023.06"
     },
+    "moge_2_vits_normal": {
+      "archive_bytes": 140852051,
+      "archive_sha256": "24eacb5dc7a2c54c7bc98f7de085ffbed79ad006ea5b664c2c2cdc02ff3a52f0",
+      "files": [
+        [
+          "model.onnx",
+          "24eacb5dc7a2c54c7bc98f7de085ffbed79ad006ea5b664c2c2cdc02ff3a52f0"
+        ]
+      ],
+      "kind": "file",
+      "label": "MoGe-2 ViT-S (surface normals)",
+      "notes": "",
+      "urls": [
+        "https://huggingface.co/Ruicheng/moge-2-vits-normal-onnx/resolve/e50ffda41565591092adea54c6ac83d6212e1e23/model.onnx",
+        "https://github.com/vagabond-burro/heeler/releases/download/models/moge_2_vits_normal.onnx"
+      ],
+      "version": "2025.07"
+    },
     "scunet_color_real_psnr": {
       "archive_bytes": 3798678,
       "archive_sha256": "231be201ab413dbc999d7951caa9844846b93a12a40a41e037d6b5888ed4e88c",

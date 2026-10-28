@@ -7,7 +7,7 @@
 // name, size, license, source, nothing fetched silently.
 
 import React, { useEffect, useRef, useState } from "react";
-import { depthMap, filePasses, smartModelDownload, smartModelStatus, type SmartModels } from "../bridge";
+import { depthMap, filePasses, smartModelDownload, smartModelStatus, surfaceNormals, type SmartModels } from "../bridge";
 import { logMsg } from "../log";
 import { reportToolError } from "./hints";
 import { ModelConsentCard } from "./modelconsent";
@@ -157,6 +157,74 @@ export function DepthRunner({ state, dispatch }: { state: State; dispatch: D }) 
         />
       )}
     </>
+  );
+}
+
+/** Depth Lighting's Model normals, read once per photograph the first
+ * time an enabled Depth Lighting asks for them, then a render poke so
+ * the planted raster shows. Until they land, and on a machine without
+ * the model, the lights shade from the depth map's estimate. Consent
+ * before the download, as for the depth model. */
+export function NormalsRunner({ state, dispatch }: { state: State; dispatch: D }) {
+  const wanted = !!state.activeImage && state.nodes.some((n) => n.type === "heeler.key_light" && n.enabled && n.textParams?.normals === "model");
+  const done = useRef<Record<string, boolean>>({});
+  const [busy, setBusy] = useState(false);
+  const [needModel, setNeedModel] = useState(false);
+  const [models, setModels] = useState<SmartModels | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  useEffect(() => {
+    if (!needModel) return;
+    let live = true;
+    void smartModelStatus().then((m) => {
+      if (live) setModels(m);
+    });
+    return () => {
+      live = false;
+    };
+  }, [needModel, downloading]);
+  useEffect(() => {
+    const image = state.activeImage;
+    if (!wanted || busy || needModel || done.current[image]) return;
+    setBusy(true);
+    publishBusy("NORMALS · reading the surfaces");
+    void surfaceNormals(state)
+      .then(() => {
+        done.current[image] = true;
+        dispatch({ type: "poke_render" });
+      })
+      .catch((err) => {
+        if (String(err).includes("model not installed")) {
+          setNeedModel(true);
+        } else {
+          done.current[image] = true; // no retry loop on a broken photo
+          reportToolError("Normals", err);
+        }
+      })
+      .finally(() => {
+        publishBusy(null);
+        setBusy(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted, state.activeImage, busy, needModel]);
+  if (!wanted || !needModel || !models?.normals) return null;
+  return (
+    <ModelConsentCard
+      title="MODEL NORMALS NEED THEIR MODEL"
+      model={models.normals}
+      testid="normals"
+      downloading={downloading}
+      place={{ position: "fixed", left: "50%", bottom: 76, transform: "translateX(-50%)", zIndex: 40 }}
+      onDownload={() => {
+        setDownloading(true);
+        void smartModelDownload("moge_2_vits_normal")
+          .then(() => {
+            logMsg("info", "MoGe-2 ViT-S installed");
+            setNeedModel(false);
+          })
+          .catch((err) => reportToolError("Download", err))
+          .finally(() => setDownloading(false));
+      }}
+    />
   );
 }
 
@@ -341,10 +409,26 @@ export function DepthProgressSheet() {
   );
 }
 
-/** One normals choice in Develop and the inspected Depth Lighting node. */
+/** One normals choice in Develop and the inspected Depth Lighting node.
+ * A file with a normals pass offers it (FILE, CAMERA) beside the model
+ * and the depth map; any other photograph chooses between the depth
+ * map's estimate (auto, which is all auto can mean without a pass) and
+ * the model's normals. */
 export function NormalsChoice({ state, node, dispatch }: { state?: State; node: NodeCard; dispatch: D }) {
   const passes = state ? passesOf(state) : null;
   const mode = node.textParams?.normals ?? "auto";
+  const model = ["model", "MODEL", "Shade with the surfaces a normals model reads in the photograph: flat walls stay flat and silhouettes draw no rim; the depth map's estimate stands in until it lands"] as const;
+  const choices = passes?.normals
+    ? ([
+        ["auto", "FILE", "Shade with the normals the render wrote into the file, when it also says which way its camera faces; else from the depth map"],
+        ["camera", "CAMERA", "Treat the file's normals as camera space already, the way a compositor's Vector Transform writes them"],
+        model,
+        ["off", "OFF", "Shade from the depth map alone, as for any photograph"],
+      ] as const)
+    : ([["auto", "DEPTH", "Shade with the surfaces estimated from the depth map's slopes"], model] as const);
+  // A file's own choices (camera, off) on a photograph without a pass
+  // shade from the depth map, as DEPTH does: it is shown as chosen.
+  const shown = passes?.normals || mode === "model" ? mode : "auto";
   return (
     <>
       <div
@@ -354,16 +438,12 @@ export function NormalsChoice({ state, node, dispatch }: { state?: State; node: 
         data-testid="keylight-normals"
         style={{ border: "1px solid var(--line-4)" }}
       >
-        {([
-          ["auto", "FILE", "Shade with the normals the render wrote into the file, when it also says which way its camera faces; else from the depth map"],
-          ["camera", "CAMERA", "Treat the file's normals as camera space already, the way a compositor's Vector Transform writes them"],
-          ["off", "OFF", "Shade from the depth map alone, as for any photograph"],
-        ] as const).map(([id, label, hint]) => (
+        {choices.map(([id, label, hint]) => (
           <button
             key={id}
             data-testid={`keylight-normals-${id}`}
-            data-active={mode === id}
-            aria-pressed={mode === id}
+            data-active={shown === id}
+            aria-pressed={shown === id}
             data-hint={hint}
             style={{ fontSize: 9, padding: "2px 7px" }}
             onClick={() => dispatch({ type: "set_text_param", id: node.id, param: "normals", value: id })}

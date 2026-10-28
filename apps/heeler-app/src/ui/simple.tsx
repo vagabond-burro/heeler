@@ -98,7 +98,7 @@ import { DepthPickButton, DepthShape } from "./depthband";
 import { SectionWidgets } from "./sectionface";
 import { SectionLooks } from "./sectionlooks";
 import { DepthProgressBar, NormalsChoice } from "./depthtool";
-import { depthFromFile, passesOf } from "./depthtoolparts";
+import { depthFromFile } from "./depthtoolparts";
 import { ObjectMattePanel } from "./mattetool";
 import { TetherTab } from "./tether";
 import { MaskEyeIcon, MaskOverlayIcon } from "./panelicons";
@@ -5700,7 +5700,7 @@ the one-seat rule.*/}
                         RECOMPUTE
                       </button>
                     )}
-                    {sec.depthTools === "keylight" && sec.node(state) && passesOf(state)?.normals && (
+                    {sec.depthTools === "keylight" && sec.node(state) && (
                       <NormalsChoice state={state} node={sec.node(state)!} dispatch={dispatch} />
                     )}
                     {(sec.depthTools === "keylight" || sec.depthTools === "flare") &&

@@ -19,6 +19,7 @@ mod florence;
 mod inpaint;
 mod matting;
 mod models;
+mod normals;
 mod pre;
 mod refine;
 mod sam;
@@ -33,9 +34,10 @@ pub use inpaint::{fill_crop, Inpaint};
 pub use matting::Matting;
 pub use models::{
     download_model, download_source, installed, installed_version, model_dir, model_paths, remove_model, verify_file, ArchiveKind,
-    ExtraFile, ExtraSource, InstallRecord, ModelSource, ModelSpec, BIREFNET_LITE, DEPTH_ANYTHING, FLORENCE_2, LAMA, MOBILE_SAM, SCUNET,
-    VITMATTE,
+    ExtraFile, ExtraSource, InstallRecord, ModelSource, ModelSpec, BIREFNET_LITE, DEPTH_ANYTHING, FLORENCE_2, LAMA, MOBILE_SAM, MOGE_2_VITS,
+    SCUNET, VITMATTE,
 };
+pub use normals::{NormalEstimator, NORMALS_WORK};
 pub use refine::{
     area_downsample, matte_tiles, refine_brushed_full, refine_guided_full, refine_selection, refine_selection_brushed, solve_tiled,
     trimap_from_coarse, FullOptions, MatteTile, Refiner, FULL_OVERLAP, FULL_TILE, HAZE_REACH,

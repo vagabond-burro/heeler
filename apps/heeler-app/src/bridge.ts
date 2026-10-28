@@ -1569,6 +1569,8 @@ export type SmartModels = {
   /** ViTMatte, the P4 Selection Polish refinement */
   refine: SmartModelStatus;
   depth: SmartModelStatus;
+  /** MoGe-2 ViT-S, Depth Lighting's Model normals */
+  normals: SmartModelStatus;
   /** SCUNet, Noise Reduction's Model method */
   denoise: SmartModelStatus;
   /** Florence-2, what is in the picture, for the assistant */
@@ -1587,6 +1589,7 @@ function mockSmartModels(): SmartModels {
     fill: m("lama", "LaMa (inpainting)", 208_044_816, "Apache-2.0", "https://huggingface.co/Carve/LaMa-ONNX", "2024.03"),
     refine: m("vitmatte", "ViTMatte (edge refinement)", 103_885_865, "Apache-2.0 weights, MIT code", "https://huggingface.co/Xenova/vitmatte-small-composition-1k", "2024.06"),
     depth: m("depth_anything_v2_small", "Depth Anything V2 Small (scene depth)", 99_060_839, "Apache-2.0", "https://huggingface.co/onnx-community/depth-anything-v2-small", "2024.06"),
+    normals: m("moge_2_vits_normal", "MoGe-2 ViT-S (surface normals)", 140_852_051, "MIT", "https://huggingface.co/Ruicheng/moge-2-vits-normal-onnx", "2025.07"),
     denoise: m("scunet_color_real_psnr", "SCUNet (noise reduction)", 76_936_854, "Apache-2.0", "https://huggingface.co/Heliosoph/scunet-onnx", "2026.06"),
     florence: m("florence_2_base", "Florence-2 base (what is in the picture)", 970_082_648, "MIT", "https://huggingface.co/onnx-community/Florence-2-base", "2025.05"),
   };
@@ -2305,6 +2308,17 @@ export function onDenoiseProgress(fn: (p: DenoiseProgress) => void): () => void 
   // Through the event hub (taurievents.ts): leaving while the operation
   // still reports cannot strand a Rust callback.
   return onTauriEvent<DenoiseProgress>(DENOISE_CHANNEL, fn);
+}
+
+/** Computes (or confirms) the photograph's surface normals for Depth
+ * Lighting's Model choice: one model pass the first time, a file stat
+ * after. "model not installed" when the model is not. */
+export async function surfaceNormals(state: State): Promise<DepthMapAnswer> {
+  if (!isTauri()) return { version: "mock-normals", work: "cached" };
+  return await call("surface_normals", {
+    graph: serializeGraph(state),
+    imageId: state.activeImage,
+  });
 }
 
 /** Computes (or confirms) the photograph's farness plane for the

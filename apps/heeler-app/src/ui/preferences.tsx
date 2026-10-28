@@ -558,6 +558,7 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
     { id: "lama", label: "LaMa (inpainting)" },
     { id: "vitmatte", label: "ViTMatte (edge refinement)" },
     { id: "depth_anything_v2_small", label: "Depth Anything V2 Small (scene depth)" },
+    { id: "moge_2_vits_normal", label: "MoGe-2 ViT-S (surface normals)" },
     { id: "scunet_color_real_psnr", label: "SCUNet (noise reduction)" },
     { id: "florence_2_base", label: "Florence-2 base (what is in the picture)" },
   ];
@@ -568,7 +569,7 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
   // A desktop older than Florence-2 (or a test's partial answer) has
   // no florence entry; the row is simply not there then.
   const listed = (m: SmartModels) =>
-    [m.sam, m.matte, m.fill, m.refine, m.depth, m.denoise, m.florence].filter((x): x is SmartModelStatus => !!x);
+    [m.sam, m.matte, m.fill, m.refine, m.depth, m.normals, m.denoise, m.florence].filter((x): x is SmartModelStatus => !!x);
   const rows = models
     ? listed(models)
     : known.map((item) => ({ ...item, installed: false, license: "", url: "", bytes: 0, version: "", pending: true }));

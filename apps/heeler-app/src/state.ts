@@ -787,6 +787,7 @@ export const PARAM_OPTIONS: Record<string, Record<string, { id: string; label: s
     normals: [
       { id: "auto", label: "File" },
       { id: "camera", label: "Camera" },
+      { id: "model", label: "Model" },
       { id: "off", label: "Off" },
     ],
   },

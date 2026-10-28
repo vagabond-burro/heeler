@@ -1,9 +1,10 @@
 //! The model registry: what can be downloaded, from where, and the
-//! checksums that make the download trustworthy. Seven entries: SAM
+//! checksums that make the download trustworthy. Eight entries: SAM
 //! (click selection), BiRefNet (subject matte), LaMa (inpaint fill),
 //! ViTMatte (edge refinement), Depth Anything V2 Small (scene depth),
-//! SCUNet (noise reduction) and Florence-2 (what is in the picture),
-//! each with its license caveat recorded on the entry.
+//! MoGe-2 ViT-S (surface normals), SCUNet (noise reduction) and
+//! Florence-2 (what is in the picture), each with its license caveat
+//! recorded on the entry.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -207,6 +208,34 @@ pub const DEPTH_ANYTHING: ModelSpec = ModelSpec {
     files: &[(
         "model.onnx",
         "afb6a5c28f3b6bf1618c6e43f02073ef9dfdc70e937502d51603e57b0a1df10c",
+    )],
+    extra: &[],
+};
+
+/// MoGe-2 ViT-S with normals (Microsoft, MIT, code and weights; the
+/// ONNX export is the author's own, from one pinned revision): surface
+/// normals for Depth Lighting's Model choice, beside the depth map
+/// rather than in place of it. Its DINOv2 backbone is Apache-2.0.
+/// Input `image` NCHW float 0..1 with any size and `num_tokens` the
+/// ViT grid it reads at; outputs the affine point map, the unit
+/// `normal` per pixel in camera space (x right, y down, z away from
+/// the camera), a validity `mask`, and a metric scale. normals.rs runs
+/// it.
+pub const MOGE_2_VITS: ModelSpec = ModelSpec {
+    id: "moge_2_vits_normal",
+    version: "2025.07",
+    label: "MoGe-2 ViT-S (surface normals)",
+    license: "MIT (code and weights; DINOv2 backbone Apache-2.0)",
+    urls: &[
+        "https://huggingface.co/Ruicheng/moge-2-vits-normal-onnx/resolve/e50ffda41565591092adea54c6ac83d6212e1e23/model.onnx",
+        "https://github.com/vagabond-burro/heeler/releases/download/models/moge_2_vits_normal.onnx",
+    ],
+    archive_sha256: "24eacb5dc7a2c54c7bc98f7de085ffbed79ad006ea5b664c2c2cdc02ff3a52f0",
+    archive_bytes: 140_852_051,
+    kind: ArchiveKind::File,
+    files: &[(
+        "model.onnx",
+        "24eacb5dc7a2c54c7bc98f7de085ffbed79ad006ea5b664c2c2cdc02ff3a52f0",
     )],
     extra: &[],
 };
@@ -803,7 +832,7 @@ mod tests {
 
     #[test]
     fn every_registry_source_validates_and_inconsistent_sources_fail_before_staging() {
-        for spec in [&MOBILE_SAM, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &SCUNET, &FLORENCE_2] {
+        for spec in [&MOBILE_SAM, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &MOGE_2_VITS, &SCUNET, &FLORENCE_2] {
             ModelSource::from(spec).validate().unwrap();
         }
         let base = tempdir();
@@ -956,7 +985,7 @@ mod tests {
     #[test]
     fn every_model_carries_the_release_mirror_as_a_second_source() {
         let mirror = "https://github.com/vagabond-burro/heeler/releases/download/models/";
-        for spec in [&MOBILE_SAM, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &SCUNET, &FLORENCE_2] {
+        for spec in [&MOBILE_SAM, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &MOGE_2_VITS, &SCUNET, &FLORENCE_2] {
             assert!(spec.urls.len() >= 2, "{}: one source only", spec.id);
             assert!(spec.urls.iter().any(|u| u.starts_with(mirror)), "{}: no mirror", spec.id);
             assert!(spec.urls.iter().all(|u| u.starts_with("https://")), "{}: a plain http source", spec.id);

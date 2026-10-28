@@ -33,8 +33,8 @@ it.each(["develop","inspector"])("Depth Lighting normals from %s serialize each 
   const dispatch=(c:Command)=>{s=reduce(s,c);};
   render(seat==="develop"?<SimplePanel state={s} dispatch={dispatch}/>:
     <NodeParams node={s.nodes.find(n=>n.id===id)!} appState={s} dispatch={dispatch}/>);
-  expect(PARAM_OPTIONS["heeler.key_light"].normals.map(o=>o.id)).toEqual(["auto","camera","off"]);
-  for(const mode of ["camera","off","auto"]){
+  expect(PARAM_OPTIONS["heeler.key_light"].normals.map(o=>o.id)).toEqual(["auto","camera","model","off"]);
+  for(const mode of ["camera","model","off","auto"]){
     fireEvent.click(screen.getByTestId(`keylight-normals-${mode}`));
     expect(serializeGraph(s).nodes.find(n=>n.id===id)?.params).toMatchObject({normals:mode});
   }
@@ -54,4 +54,18 @@ it.each(["appState", "depthState"] as const)("the inspector shares light-kind co
   expect(screen.getByRole("button", { name: "Point light" })).toHaveAttribute("aria-pressed", "true");
   expect(JSON.parse(s.nodes.find(n => n.id === "inspected_light")!.textParams!.lights)[0].kind).toBe("point");
   expect(s.nodes.find(n => n.id === "keylight")).toEqual(original);
+});
+
+it("a photograph without a normals pass chooses between the depth map and the model", () => {
+  let s = reduce(initialState(), { type: "set_param", id: "keylight", param: "strength", value: 50 });
+  s = { ...s, sectionsClosed: [], panelTab: "adjust" } as State;
+  const dispatch = (c: Command) => { s = reduce(s, c); };
+  const view = render(<SimplePanel state={s} dispatch={dispatch} />);
+  expect(screen.queryByTestId("keylight-normals-camera")).toBeNull();
+  expect(screen.getByTestId("keylight-normals-auto").textContent).toBe("DEPTH");
+  expect(screen.getByTestId("keylight-normals-auto")).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByTestId("keylight-normals-model"));
+  expect(serializeGraph(s).nodes.find(n => n.id === "keylight")?.params).toMatchObject({ normals: "model" });
+  view.rerender(<SimplePanel state={s} dispatch={dispatch} />);
+  expect(screen.getByTestId("keylight-normals-model")).toHaveAttribute("aria-pressed", "true");
 });

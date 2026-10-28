@@ -304,6 +304,15 @@ and can be installed, updated or removed from Preferences (see
   non-commercial (CC-BY-NC) license and are deliberately not offered.
   The plane is relative depth computed from your photograph, on your
   machine.
+- **MoGe-2 ViT-S** (the surface normals behind Depth Lighting's
+  Model choice), © Microsoft Corporation and the MoGe authors, under
+  the **MIT license**: code and weights alike, and the ONNX export is
+  the authors' own; its DINOv2 backbone is © Meta AI under the
+  **Apache License 2.0**. It was trained on public synthetic and
+  captured 3D datasets, academic in origin; the weights are published
+  under MIT and Heeler uses them as published. Only its normals are
+  used, read from your photograph on your machine; the depth map stays
+  Depth Anything's.
 
 - **SCUNet** (Noise Reduction's Model method), © Kai Zhang and the
   SCUNet authors, under the **Apache License 2.0**: code and weights
