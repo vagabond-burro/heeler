@@ -6394,6 +6394,15 @@ export const FLARE_PRESETS: { id: string; name: string; params: Record<string, n
   },
 ];
 
+/** Where a new flare starts: the Modern prime look over the registry's
+ * dials. A flare with no rays and no ghosts is a faint veil, which
+ * read as nothing at all. NEUTRAL_PARAMS keeps the registry's numbers,
+ * since Reset and loading a saved flare read it. */
+export const FLARE_START: { params: Record<string, number>; text: Record<string, string> } = (() => {
+  const prime = FLARE_PRESETS.find((f) => f.id === "prime")!;
+  return { params: { ...NEUTRAL_PARAMS["heeler.flare"], ...prime.params }, text: { preset: prime.id } };
+})();
+
 /** The preset a photograph suggests, from its metadata: a lens name
  * with a dash is a zoom, at or under 24 mm is wide, at or over 135 mm
  * is telephoto, else a prime. A suggestion for the menu, never
@@ -6905,11 +6914,15 @@ export const LAYER_TOOLS: Record<
   },
   // The lens flare, the Depth Lighting rig's lens signature: a section
   // tool and a layer tool like its neighbors.
+  // Its stand-in and a layer's copy start where the section's switch
+  // starts the main flare, so the dials a switched-off section shows
+  // are the ones switching it on gives.
   flare: {
     type: "heeler.flare",
     name: "Lens Flare",
     cat: "detail",
-    params: { intensity: 100, temp: 0, size: 6, softness: 50, rays: 0, ray_length: 30, ray_softness: 30, rotation: 0, ghosts: 0, ghost_spacing: 100, ghost_size: 6, blades: 7, dispersion: 30, ghost_opacity: 60, anamorphic: 0, streak_size: 1.5, streak_length: 60, streak_taper: 30, streak_angle: 0, streak_offset: 0, streak_shift: 0, streak_noise: 0, veil: 20, veil_radius: 40, veil_depth: 0, occlusion: 100, occlusion_soft: 30 },
+    params: FLARE_START.params,
+    textDefaults: FLARE_START.text,
   },
   // Halation: a section tool and a layer tool like the other optics.
   halation: {
@@ -6992,6 +7005,7 @@ function layerToolNode(
     y,
     enabled: true,
     params: { ...spec.params },
+    ...(spec.textDefaults ? { textParams: { ...spec.textDefaults } } : {}),
     ...(spec.curves ? { curves: {} } : {}),
     hasIn: true,
     hasOut: true,
@@ -19388,19 +19402,14 @@ function reduceInner(s: State, cmd: Command): State {
         // there when it does.
         if (p.id === "flare") {
           const rig = nodes.find((n) => n.id === "keylight")?.textParams?.lights;
-          // ...and wearing the Modern prime look: a flare with no rays and
-          // no ghosts is a faint veil, which read as nothing at all.
-          const prime = FLARE_PRESETS.find((f) => f.id === "prime");
+          // ...and wearing FLARE_START's look, the one its switched-off
+          // stand-in shows.
           nodes = nodes.map((n) =>
             n.id === "flare"
               ? {
                   ...n,
-                  params: { ...n.params, ...(prime?.params ?? {}) },
-                  textParams: {
-                    ...n.textParams,
-                    ...(rig ? { lights: rig } : {}),
-                    ...(prime ? { preset: prime.id } : {}),
-                  },
+                  params: { ...n.params, ...FLARE_START.params },
+                  textParams: { ...n.textParams, ...(rig ? { lights: rig } : {}), ...FLARE_START.text },
                 }
               : n,
           );

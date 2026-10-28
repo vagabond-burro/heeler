@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { initialState } from "../data";
 import { CATEGORY_PIECES, CHAIN_ORDER } from "../recipes";
-import { FLARE_PRESETS, LAYER_TOOLS, reduce, suggestFlarePreset, type Command, type State } from "../state";
+import { FLARE_PRESETS, FLARE_START, LAYER_TOOLS, NEUTRAL_PARAMS, reduce, suggestFlarePreset, toolNode, type Command, type State } from "../state";
 import { flareSourceOf, lightsOf } from "../ui/keylightgizmoparts";
 import { readStreakStops } from "../ui/flareparts";
 import { ribbonColorAt } from "../ui/ribbonparts";
@@ -18,6 +18,28 @@ describe("the lens flare", () => {
     expect(CHAIN_ORDER.indexOf("flare")).toBe(CHAIN_ORDER.indexOf("dof") + 1);
     expect(CHAIN_ORDER.indexOf("flare")).toBeLessThan(CHAIN_ORDER.indexOf("profile"));
     expect(CATEGORY_PIECES["Lens Flare"][0].type).toBe("heeler.flare");
+  });
+
+  it("shows, while switched off, the dials switching it on gives", () => {
+    // A switched-off flare showed the registry's faint veil (no rays, no
+    // ghosts) and jumped to Modern prime the moment it came on. The
+    // stand-in a layer shows and the copy the switch builds both start
+    // where the main flare does now.
+    const prime = FLARE_PRESETS.find((f) => f.id === "prime")!;
+    for (const [k, v] of Object.entries(prime.params)) expect(FLARE_START.params[k], k).toBe(v);
+    expect(FLARE_START.text.preset).toBe("prime");
+    let s = run(initialState(), { type: "add_layer", maskType: "brush" });
+    const off = toolNode(s, "flare")!;
+    expect(off.enabled).toBe(false);
+    expect(off.params).toEqual(FLARE_START.params);
+    expect(off.textParams?.preset).toBe("prime");
+    s = run(s, { type: "set_enabled", id: off.id, enabled: true });
+    const on = s.nodes.find((n) => n.id === off.id)!;
+    expect(on.enabled).toBe(true);
+    expect(on.params).toEqual(off.params);
+    expect(on.textParams?.preset).toBe("prime");
+    // Reset and loading a saved flare still read the registry's numbers.
+    expect(NEUTRAL_PARAMS["heeler.flare"].rays).toBe(0);
   });
 
   it("is born with Depth Lighting's rig, and a rig write lands on both nodes", () => {
