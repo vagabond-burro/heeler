@@ -94,6 +94,8 @@
 //! by iiq_quarters.rs's rules in step 2's place, found closely but not to
 //! the bit.
 
+use std::sync::atomic::AtomicBool;
+
 use heeler_engine::memory::{self, MemoryError};
 use rayon::prelude::*;
 
@@ -433,8 +435,9 @@ fn grid_row(g: &Grid, plane: usize, y: usize, x0: usize, out: &mut [f32]) {
 /// units: LibRaw's raw frame) in place: afterwards LibRaw's area of it is
 /// LibRaw's loaded image, black level 0. `colors` are the CFA colors (0
 /// red, 1 green, 2 blue) at frame (0, 0), (0, 1), (1, 0) and (1, 1). Across
-/// the cores but for the defects (a few thousand, in turn).
-pub fn apply(cal: &Calibration, frame: &mut [u16], width: usize, height: usize, colors: [u8; 4]) {
+/// the cores but for the defects (a few thousand, in turn). Canceled
+/// between defects and between rows once `stop` is set.
+pub fn apply(cal: &Calibration, frame: &mut [u16], width: usize, height: usize, colors: [u8; 4], stop: Option<&AtomicBool>) -> Result<(), crate::Error> {
     assert!(frame.len() >= width * height);
     let color = |x: usize, y: usize| colors[(y & 1) * 2 + (x & 1)];
     let green_on_red = |x: usize, y: usize| color(x, y) == 1 && colors[(y & 1) * 2 + ((x & 1) ^ 1)] == 0;
@@ -447,6 +450,7 @@ pub fn apply(cal: &Calibration, frame: &mut [u16], width: usize, height: usize, 
         const RING: [(i64, i64); 8] = [(-2, -2), (-2, 0), (-2, 2), (0, -2), (0, 2), (2, -2), (2, 0), (2, 2)];
         const GREEN: [(i64, i64); 8] = [(-1, -1), (-1, 1), (1, -1), (1, 1), (-2, 0), (0, -2), (0, 2), (2, 0)];
         for d in &cal.defects {
+            crate::stopped(stop)?;
             match *d {
                 Defect::Pixel(x, y) => {
                     if x < 2 || y < 2 || x + 2 >= width || y + 2 >= height {
@@ -473,7 +477,8 @@ pub fn apply(cal: &Calibration, frame: &mut [u16], width: usize, height: usize, 
     for (&(x, y), &v) in &fixed {
         by_row[y].push((x, v));
     }
-    frame[..width * height].par_chunks_mut(width).zip(by_row.par_iter()).enumerate().for_each(|(y, (row, fixes))| {
+    frame[..width * height].par_chunks_mut(width).zip(by_row.par_iter()).enumerate().try_for_each(|(y, (row, fixes))| {
+        crate::stopped(stop)?;
         let mut v: Vec<i32> = row.iter().enumerate().map(|(x, &a)| cal.value(a, x, y)).collect();
         for &(x, val) in fixes {
             v[x] = val;
@@ -482,7 +487,8 @@ pub fn apply(cal: &Calibration, frame: &mut [u16], width: usize, height: usize, 
         for (o, val) in row.iter_mut().zip(&v) {
             *o = (*val).clamp(0, 65535) as u16;
         }
-    });
+        Ok(())
+    })
 }
 
 /// Step 6 on frame row `y`: `v` (the whole row) times each grid's gains.

@@ -72,6 +72,8 @@
 //! frame. Every sample of every lossy and lossless frame of the corpora
 //! matches LibRaw's.
 
+use std::sync::atomic::AtomicBool;
+
 use rayon::prelude::*;
 
 use crate::Error;
@@ -453,7 +455,7 @@ const PAIRS: [(usize, usize, usize); 6] = [(R0 + 2, G0 + 2, 0), (G0 + 3, B0 + 2,
 
 /// One block's samples, `out` its columns of every row (`cols` wide,
 /// rows of `stride`).
-fn block(f: &Fuji, params: &[Params], q_bases: &[u8], data: &[u8], cols: usize, out: &mut [u16], stride: usize, rows: usize) -> Result<(), Error> {
+fn block(f: &Fuji, params: &[Params], q_bases: &[u8], data: &[u8], cols: usize, out: &mut [u16], stride: usize, rows: usize, stop: Option<&AtomicBool>) -> Result<(), Error> {
     let p = &params[0];
     let w = if f.xtrans { f.block * 2 / 3 } else { f.block / 2 };
     let mut l = Lines { w, v: vec![0u16; 18 * (w + 2)] };
@@ -468,6 +470,7 @@ fn block(f: &Fuji, params: &[Params], q_bases: &[u8], data: &[u8], cols: usize, 
     let mut bits = Bits { d: data, at: 0, buf: 0, n: 0 };
     let groups = rows.div_ceil(6).min(f.lines);
     for group in 0..groups {
+        crate::stopped(stop)?;
         let p = q_bases.get(group).map_or(p, |&q| &params[q as usize]);
         let t = Tables { main: p, small: &small };
         // A line group whose base differs from the one before starts its
@@ -546,8 +549,8 @@ fn block(f: &Fuji, params: &[Params], q_bases: &[u8], data: &[u8], cols: usize, 
 }
 
 /// The frame's first `rows` rows, every block across the cores, handed
-/// row by row to `put`.
-pub fn decode(bytes: &[u8], f: &Fuji, rows: usize, put: impl Fn(usize, &[u16]) + Sync) -> Result<(), Error> {
+/// row by row to `put`; Canceled between line groups once `stop` is set.
+pub fn decode(bytes: &[u8], f: &Fuji, rows: usize, stop: Option<&AtomicBool>, put: impl Fn(usize, &[u16]) + Sync) -> Result<(), Error> {
     // A table of parameters for each quantizer base the frame uses.
     let top = f.q_bases.iter().copied().max().unwrap_or(0) as i32;
     let params: Vec<Params> = (0..=top).map(|q| Params::new(f.bits, q)).collect();
@@ -565,7 +568,7 @@ pub fn decode(bytes: &[u8], f: &Fuji, rows: usize, put: impl Fn(usize, &[u16]) +
             let mut out = vec![0u16; cols * rows];
             if cols > 0 {
                 let q = f.q_bases.get(i * f.lines..(i + 1) * f.lines).unwrap_or(&[]);
-                block(f, &params, q, &bytes[at..at + len], cols, &mut out, cols, rows)?;
+                block(f, &params, q, &bytes[at..at + len], cols, &mut out, cols, rows, stop)?;
             }
             Ok(out)
         })

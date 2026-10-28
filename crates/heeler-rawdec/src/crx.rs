@@ -36,6 +36,8 @@
 //! Every C-RAW file of the corpus the Rust path takes decodes the same as
 //! LibRaw's reading.
 
+use std::sync::atomic::AtomicBool;
+
 use crate::Error;
 
 /// T.87's run-length orders (J), by run index.
@@ -148,14 +150,16 @@ enum Mode {
 }
 
 /// One plane, `width` by `height` samples of `bits` bits, line by line
-/// into `line` (the line's index, its samples).
-pub fn decode_plane(data: &[u8], width: usize, height: usize, bits: u32, mut line: impl FnMut(usize, &[u16])) -> Result<(), Error> {
+/// into `line` (the line's index, its samples); Canceled between lines
+/// once `stop` is set.
+pub fn decode_plane(data: &[u8], width: usize, height: usize, bits: u32, stop: Option<&AtomicBool>, mut line: impl FnMut(usize, &[u16])) -> Result<(), Error> {
     if width == 0 || !(1..=16).contains(&bits) {
         return Err(Error::Unsupported("a CRX plane of no width or of this depth"));
     }
     let max = (1i32 << bits) - 1;
     let mut out = vec![0u16; width];
     decode_lines(data, width, height, Mode::Lossless { half: 1 << (bits - 1) }, |y, samples| {
+        crate::stopped(stop)?;
         for (o, &v) in out.iter_mut().zip(samples) {
             if !(0..=max).contains(&v) {
                 return Err(Error::Corrupt("a CRX sample outside its depth"));
@@ -168,13 +172,15 @@ pub fn decode_plane(data: &[u8], width: usize, height: usize, bits: u32, mut lin
 }
 
 /// A C-RAW frame's lowest band (LL), coded as a lossless plane of `bits`
-/// bits is, its values as decoded.
-pub fn decode_low_band(data: &[u8], width: usize, height: usize, bits: u32) -> Result<Vec<i32>, Error> {
+/// bits is, its values as decoded; Canceled between lines once `stop` is
+/// set.
+pub fn decode_low_band(data: &[u8], width: usize, height: usize, bits: u32, stop: Option<&AtomicBool>) -> Result<Vec<i32>, Error> {
     if width == 0 || !(1..=16).contains(&bits) {
         return Err(Error::Unsupported("a CRX band of no width or of this depth"));
     }
     let mut out = Vec::with_capacity(width * height);
     decode_lines(data, width, height, Mode::Lossless { half: 1 << (bits - 1) }, |_, samples| {
+        crate::stopped(stop)?;
         out.extend_from_slice(samples);
         Ok(())
     })?;
@@ -192,13 +198,14 @@ pub fn decode_low_band(data: &[u8], width: usize, height: usize, bits: u32) -> R
 /// then, below the first line and before a line's last column, raised by
 /// 1 where a line's worth of K kept round a ring (each column's K once its
 /// sample is coded, 0 for a run's samples) holds a K more than 1 higher
-/// one column ahead.
-pub fn decode_band(data: &[u8], width: usize, height: usize) -> Result<Vec<i32>, Error> {
+/// one column ahead. Canceled between lines once `stop` is set.
+pub fn decode_band(data: &[u8], width: usize, height: usize, stop: Option<&AtomicBool>) -> Result<Vec<i32>, Error> {
     if width == 0 {
         return Err(Error::Unsupported("a CRX band of no width"));
     }
     let mut out = Vec::with_capacity(width * height);
     decode_lines(data, width, height, Mode::High, |_, samples| {
+        crate::stopped(stop)?;
         out.extend_from_slice(samples);
         Ok(())
     })?;
@@ -433,16 +440,17 @@ pub struct QuantMap {
 /// low down the columns and high along the rows, LH the other way). Each
 /// band is decoded, scaled by its step, and the tile rebuilt on its own,
 /// level by level, the rows first, then the columns.
-pub fn reconstruct_plane(tiles: &[[Band; 10]], width: usize, height: usize, tile: usize, bits: u32) -> Result<Vec<u16>, Error> {
+pub fn reconstruct_plane(tiles: &[[Band; 10]], width: usize, height: usize, tile: usize, bits: u32, stop: Option<&AtomicBool>) -> Result<Vec<u16>, Error> {
     for b in tiles.iter().flatten().skip(1) {
         quant_step(b.q).ok_or(Error::Unsupported("a C-RAW quantizer not read here"))?;
     }
-    reconstruct_plane_with(tiles, width, height, tile, bits, &|t, i, _, _| quant_step(tiles[t][i].q).unwrap_or(1))
+    reconstruct_plane_with(tiles, width, height, tile, bits, &|t, i, _, _| quant_step(tiles[t][i].q).unwrap_or(1), stop)
 }
 
 /// `reconstruct_plane`, each coefficient's step given by `step` (the tile,
-/// the band's index, the coefficient's row and column in the band).
-pub fn reconstruct_plane_with(tiles: &[[Band; 10]], width: usize, height: usize, tile: usize, bits: u32, step: &(dyn Fn(usize, usize, usize, usize) -> i32 + Sync)) -> Result<Vec<u16>, Error> {
+/// the band's index, the coefficient's row and column in the band);
+/// Canceled between tiles once `stop` is set.
+pub fn reconstruct_plane_with(tiles: &[[Band; 10]], width: usize, height: usize, tile: usize, bits: u32, step: &(dyn Fn(usize, usize, usize, usize) -> i32 + Sync), stop: Option<&AtomicBool>) -> Result<Vec<u16>, Error> {
     let max = (1i32 << bits) - 1;
     // Each level's rows, low then high.
     let mut rows = [(0usize, 0usize); LEVELS + 1];
@@ -453,6 +461,7 @@ pub fn reconstruct_plane_with(tiles: &[[Band; 10]], width: usize, height: usize,
     }
     let mut out = vec![0u16; width * height];
     for (t, bands) in tiles.iter().enumerate() {
+        crate::stopped(stop)?;
         let (x0, x1) = (t * tile, ((t + 1) * tile).min(width));
         if x0 >= x1 {
             return Err(Error::Corrupt("a C-RAW tile past the plane"));
@@ -461,9 +470,9 @@ pub fn reconstruct_plane_with(tiles: &[[Band; 10]], width: usize, height: usize,
         let decode = |i: usize, w: usize, h: usize| -> Result<Vec<i32>, Error> {
             let b = bands[i];
             if i == 0 {
-                return decode_low_band(b.data, w, h, bits);
+                return decode_low_band(b.data, w, h, bits, stop);
             }
-            let mut v = decode_band(b.data, w, h)?;
+            let mut v = decode_band(b.data, w, h, stop)?;
             for (r, line) in v.chunks_exact_mut(w).enumerate() {
                 for (c, coefficient) in line.iter_mut().enumerate() {
                     *coefficient *= step(t, i, r, c);
@@ -691,14 +700,14 @@ mod tests {
                 .collect();
             let data = encode(&plane, 14);
             let mut got = vec![vec![0i32; width]; height];
-            decode_plane(&data, width, height, 14, |y, line| got[y] = line.iter().map(|&v| v as i32).collect()).unwrap_or_else(|e| panic!("{width} by {height}: {e}"));
+            decode_plane(&data, width, height, 14, None, |y, line| got[y] = line.iter().map(|&v| v as i32).collect()).unwrap_or_else(|e| panic!("{width} by {height}: {e}"));
             assert!(got == plane, "{width} by {height}");
         }
         // Flat lines: runs to the line's end, high up the run orders.
         let plane: Vec<Vec<i32>> = (0..12).map(|y| (0..700).map(|x| if y == 5 && x % 97 == 3 { 900 } else { 512 }).collect()).collect();
         let data = encode(&plane, 14);
         let mut got = vec![vec![0i32; 700]; 12];
-        decode_plane(&data, 700, 12, 14, |y, line| got[y] = line.iter().map(|&v| v as i32).collect()).unwrap();
+        decode_plane(&data, 700, 12, 14, None, |y, line| got[y] = line.iter().map(|&v| v as i32).collect()).unwrap();
         assert!(got == plane, "flat lines");
     }
 
@@ -804,7 +813,7 @@ mod tests {
                         .collect()
                 })
                 .collect();
-            let got = decode_band(&encode_high(&band), width, height).unwrap_or_else(|e| panic!("{width} by {height}: {e}"));
+            let got = decode_band(&encode_high(&band), width, height, None).unwrap_or_else(|e| panic!("{width} by {height}: {e}"));
             assert!(got == band.concat(), "{width} by {height}");
         }
     }
@@ -890,7 +899,7 @@ mod tests {
                 coded.extend([encode_high(hl), encode_high(lh), encode_high(hh)]);
             }
             let bands: [Band; 10] = std::array::from_fn(|i| Band { data: &coded[i], q: 4 });
-            let got = reconstruct_plane(&[bands], width, height, width, bits).unwrap_or_else(|e| panic!("{width} by {height}: {e}"));
+            let got = reconstruct_plane(&[bands], width, height, width, bits, None).unwrap_or_else(|e| panic!("{width} by {height}: {e}"));
             assert!(got.iter().map(|&v| v as i32).eq(plane.iter().copied()), "{width} by {height}");
         }
     }

@@ -8,6 +8,8 @@
 //! (sampling factors of 1), which is what raw images use. Rows come out
 //! one at a time, the components interleaved, to a caller's closure.
 
+use std::sync::atomic::AtomicBool;
+
 use crate::Error;
 
 /// A frame header and scan header, read before the entropy-coded data.
@@ -516,7 +518,12 @@ pub fn decode_subsampled(data: &[u8], mut line: impl FnMut(usize, &[u16])) -> Re
 /// Decodes the scan, handing each line (width times components samples,
 /// the components interleaved) to `line` with its index. Samples are as
 /// coded: a point transform is not undone, and is declined unless 0.
-pub fn decode(data: &[u8], mut line: impl FnMut(usize, &[u16])) -> Result<Frame, Error> {
+pub fn decode(data: &[u8], line: impl FnMut(usize, &[u16])) -> Result<Frame, Error> {
+    decode_until(data, None, line)
+}
+
+/// `decode`, Canceled between lines once `stop` is set.
+pub fn decode_until(data: &[u8], stop: Option<&AtomicBool>, mut line: impl FnMut(usize, &[u16])) -> Result<Frame, Error> {
     let (f, tables) = headers(data)?;
     if f.point_transform != 0 {
         return Err(Error::Unsupported("a lossless point transform"));
@@ -525,13 +532,13 @@ pub fn decode(data: &[u8], mut line: impl FnMut(usize, &[u16])) -> Result<Frame,
         return Err(Error::Unsupported("a restart interval that is not whole lines"));
     }
     let huff: Vec<&Huffman> = f.table.iter().map(|&t| tables[t].as_ref().unwrap()).collect();
-    lines(&f, &huff, data, f.data, 0, f.height, &mut line)?;
+    lines(&f, &huff, data, f.data, 0, f.height, stop, &mut line)?;
     Ok(f)
 }
 
 /// Decodes `count` lines from byte `at` of `data`, the first of them
 /// line `y0`, which starts the scan or a restart interval.
-fn lines(f: &Frame, huff: &[&Huffman], data: &[u8], at: usize, y0: usize, count: usize, line: &mut impl FnMut(usize, &[u16])) -> Result<(), Error> {
+fn lines(f: &Frame, huff: &[&Huffman], data: &[u8], at: usize, y0: usize, count: usize, stop: Option<&AtomicBool>, line: &mut impl FnMut(usize, &[u16])) -> Result<(), Error> {
     let (w, n) = (f.width, f.components);
     let samples = w * n;
     let restart_lines = if f.restart == 0 { usize::MAX } else { f.restart / w };
@@ -541,6 +548,7 @@ fn lines(f: &Frame, huff: &[&Huffman], data: &[u8], at: usize, y0: usize, count:
     let initial = 1u16 << (f.precision - f.point_transform - 1);
     let mut since_restart = 0usize;
     for y in y0..y0 + count {
+        crate::stopped(stop)?;
         if since_restart == restart_lines {
             bits.restart()?;
             since_restart = 0;
@@ -603,6 +611,11 @@ fn lines(f: &Frame, huff: &[&Huffman], data: &[u8], at: usize, y0: usize, count:
 /// width times components samples), the same samples `decode` hands over.
 /// None when the scan has no restart markers, or not one an interval.
 pub fn decode_intervals(data: &[u8], out: &mut [u16]) -> Result<Option<Frame>, Error> {
+    decode_intervals_until(data, out, None)
+}
+
+/// `decode_intervals`, Canceled between lines once `stop` is set.
+pub fn decode_intervals_until(data: &[u8], out: &mut [u16], stop: Option<&AtomicBool>) -> Result<Option<Frame>, Error> {
     use rayon::prelude::*;
     let (f, tables) = headers(data)?;
     if f.point_transform != 0 || f.restart == 0 || f.restart % f.width != 0 {
@@ -635,7 +648,7 @@ pub fn decode_intervals(data: &[u8], out: &mut [u16]) -> Result<Option<Frame>, E
     out[..f.height * samples].par_chunks_mut(per * samples).zip(starts.par_iter()).enumerate().try_for_each(|(k, (chunk, &at))| {
         let y0 = k * per;
         let count = per.min(f.height - y0);
-        lines(&f, &huff, data, at, y0, count, &mut |y, l: &[u16]| chunk[(y - y0) * samples..][..samples].copy_from_slice(l))
+        lines(&f, &huff, data, at, y0, count, stop, &mut |y, l: &[u16]| chunk[(y - y0) * samples..][..samples].copy_from_slice(l))
     })?;
     Ok(Some(f))
 }
@@ -670,11 +683,16 @@ pub fn table_period(f: &Frame) -> usize {
 /// by side, once the first sample of each line (predicted from the line
 /// above) is known.
 pub fn decode_parallel(data: &[u8], out: &mut [u16]) -> Result<Option<Frame>, Error> {
-    decode_pieces(data, out, rayon::current_num_threads().max(1) * 4, 1 << 14)
+    decode_parallel_until(data, out, None)
+}
+
+/// `decode_parallel`, Canceled between pieces once `stop` is set.
+pub fn decode_parallel_until(data: &[u8], out: &mut [u16], stop: Option<&AtomicBool>) -> Result<Option<Frame>, Error> {
+    decode_pieces(data, out, rayon::current_num_threads().max(1) * 4, 1 << 14, stop)
 }
 
 /// decode_parallel cut into `pieces`, each at least `least` bits.
-fn decode_pieces(data: &[u8], out: &mut [u16], pieces: usize, least: usize) -> Result<Option<Frame>, Error> {
+fn decode_pieces(data: &[u8], out: &mut [u16], pieces: usize, least: usize, stop: Option<&AtomicBool>) -> Result<Option<Frame>, Error> {
     use rayon::prelude::*;
     let (f, tables) = headers(data)?;
     if f.point_transform != 0 || f.restart != 0 || f.predictor != 1 {
@@ -752,11 +770,13 @@ fn decode_pieces(data: &[u8], out: &mut [u16], pieces: usize, least: usize) -> R
         .par_iter()
         .enumerate()
         .map(|(i, &from)| {
-            let until = starts.get(i + 1).copied().unwrap_or(total_bits);
+            // Once canceled, a piece not yet read reads nothing.
+            let until = if crate::stopped(stop).is_err() { from } else { starts.get(i + 1).copied().unwrap_or(total_bits) };
             let readings = if i == 0 { vec![read(from, until, 0, 0)] } else { (0..period).into_par_iter().map(|q| read(from, until, q, SYNC)).collect() };
             Piece { head: Vec::new(), readings, kept: (0, 0) }
         })
         .collect();
+    crate::stopped(stop)?;
     // In order: each piece kept from where the one before it truly ended.
     if !read_pieces[0].readings[0].ok && read_pieces.len() > 1 {
         return Err(Error::Corrupt("an undefined Huffman code"));
@@ -765,6 +785,7 @@ fn decode_pieces(data: &[u8], out: &mut [u16], pieces: usize, least: usize) -> R
     let mut phase = read_pieces[0].readings[0].exit_phase(period);
     let count = read_pieces.len();
     for i in 1..count {
+        crate::stopped(stop)?;
         let until = starts.get(i + 1).copied().unwrap_or(total_bits);
         // Read from the true start until it meets a code boundary of one
         // of the piece's readings at the same place in the cycle. A reading
@@ -1092,7 +1113,7 @@ mod tests {
             decode(&data, |_, l| serial.extend_from_slice(l)).unwrap();
             for pieces in 1..400 {
                 let mut par = vec![0u16; w * comps * h];
-                assert!(decode_pieces(&data, &mut par, pieces, 1).unwrap().is_some(), "{pieces} pieces");
+                assert!(decode_pieces(&data, &mut par, pieces, 1, None).unwrap().is_some(), "{pieces} pieces");
                 assert!(par == serial, "{tables} tables, {pieces} pieces");
             }
         }

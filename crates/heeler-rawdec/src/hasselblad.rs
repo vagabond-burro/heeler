@@ -20,6 +20,8 @@
 //! -32768, its 16 bits read and dropped), each sample its predictor plus
 //! its difference and then its column parity's predictor.
 
+use std::sync::atomic::AtomicBool;
+
 use crate::dng::{Coding, Dng, Format, Pieces};
 use crate::tiff::{Ifd, Tiff};
 use crate::Error;
@@ -172,12 +174,14 @@ pub fn masked_black(frame: &[u16], width: usize, masked: &[[usize; 4]], top: usi
     n.iter().all(|&n| n > 0).then(|| [0, 1, 2, 3].map(|k| (sum[k] / n[k]) as u32))
 }
 
-/// Hasselblad's coded frame: `put(row, samples)` for each row.
-pub fn decode(data: &[u8], width: usize, height: usize, offset: u16, mut put: impl FnMut(usize, &[u16])) -> Result<(), Error> {
+/// Hasselblad's coded frame: `put(row, samples)` for each row, Canceled
+/// between rows once `stop` is set.
+pub fn decode(data: &[u8], width: usize, height: usize, offset: u16, stop: Option<&AtomicBool>, mut put: impl FnMut(usize, &[u16])) -> Result<(), Error> {
     let (table, start) = header(data, width, height)?;
     let mut bits = Words { data, at: start, buf: 0, n: 0 };
     let mut row = vec![0u16; width];
     for r in 0..height {
+        crate::stopped(stop)?;
         let mut pred = [0x8000u16; 2];
         for c in (0..width).step_by(2) {
             let l0 = table.symbol(&mut bits)?;

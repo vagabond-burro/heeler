@@ -29,6 +29,8 @@
 //! high band is coded (crx::decode_band) and scales it by its step, and
 //! no plane is held to the sample range until the four are combined.
 
+use std::sync::atomic::AtomicBool;
+
 use crate::crx::{self, Band, QuantMap};
 use crate::Error;
 
@@ -155,8 +157,9 @@ pub fn low_band_lossless(plane_word: u32) -> bool {
 /// index, the coefficient's row and column) and rebuilt level by level as
 /// crx::reconstruct_plane_with rebuilds a tile, but not held to the sample
 /// range: the lowest band is decoded as a lossless plane of `bits` bits
-/// where `low_lossless`, else as a high band.
-pub fn rebuild_plane(bands: &[Band; 10], width: usize, height: usize, bits: u32, low_lossless: bool, step: &(dyn Fn(usize, usize, usize, usize) -> i32 + Sync)) -> Result<Vec<i32>, Error> {
+/// where `low_lossless`, else as a high band. Canceled between the bands'
+/// lines once `stop` is set.
+pub fn rebuild_plane(bands: &[Band; 10], width: usize, height: usize, bits: u32, low_lossless: bool, step: &(dyn Fn(usize, usize, usize, usize) -> i32 + Sync), stop: Option<&AtomicBool>) -> Result<Vec<i32>, Error> {
     if width < 2 || height < 2 {
         return Err(Error::Unsupported("a C-RAW plane this small"));
     }
@@ -171,9 +174,9 @@ pub fn rebuild_plane(bands: &[Band; 10], width: usize, height: usize, bits: u32,
     }
     let decode = |i: usize, w: usize, h: usize| -> Result<Vec<i32>, Error> {
         if i == 0 && low_lossless {
-            return crx::decode_low_band(bands[0].data, w, h, bits);
+            return crx::decode_low_band(bands[0].data, w, h, bits, stop);
         }
-        let mut v = crx::decode_band(bands[i].data, w, h)?;
+        let mut v = crx::decode_band(bands[i].data, w, h, stop)?;
         for (r, line) in v.chunks_exact_mut(w).enumerate() {
             for (c, coefficient) in line.iter_mut().enumerate() {
                 *coefficient *= step(0, i, r, c);
