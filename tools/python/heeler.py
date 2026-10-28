@@ -398,10 +398,12 @@ def pano_configure(
     bands=None,
     members=None,
     lens_correction=None,
+    auto_crop=None,
 ):
     """Rewrites a panorama's recipe: surface is auto, cylindrical,
     spherical or planar; lens_correction undoes each frame's lens from
-    its profile. Pass only what changes; returns the updated info."""
+    its profile; auto_crop opens it cropped to the largest rectangle it
+    fills. Pass only what changes; returns the updated info."""
     params = {"id": image_id}
     if surface is not None:
         params["surface"] = surface
@@ -415,6 +417,8 @@ def pano_configure(
         params["members"] = list(members)
     if lens_correction is not None:
         params["lensCorrection"] = lens_correction
+    if auto_crop is not None:
+        params["autoCrop"] = auto_crop
     return rpc("pano.configure", _timeout=600, **params)
 
 

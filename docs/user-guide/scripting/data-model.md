@@ -149,6 +149,7 @@ Members are stored filenames in recipe order. `missing` lists members that canno
     "lens_correction": True,
     "lens_profile": "Olympus M.Zuiko Digital ED 9-18mm f/4.0-5.6",
     "lens_frames": 2,
+    "auto_crop": True,
 }
 ```
 

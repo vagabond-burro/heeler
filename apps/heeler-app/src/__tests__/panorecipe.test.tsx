@@ -21,7 +21,7 @@ function canceled(): State {
 }
 beforeEach(() => { backend.update.mockReset().mockResolvedValue(info); });
 
-it.each(["pano-surface-spherical", "pano-gain", "pano-straighten", "pano-lens"])("a successful %s change resumes the new recipe", async (control) => {
+it.each(["pano-surface-spherical", "pano-gain", "pano-straighten", "pano-lens", "pano-autocrop"])("a successful %s change resumes the new recipe", async (control) => {
   let s = canceled();
   const nonce = s.previewNonce;
   render(<PanoPanel state={s} dispatch={(c) => { s = reduce(s, c); }} />);

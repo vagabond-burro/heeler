@@ -12,6 +12,12 @@ A wide lens bows straight lines, and the bow is strongest at the edges of the fr
 
 The Pano panel says which profile was found, and for how many of the frames. When no profile is found, the frames stitch exactly as they would with the switch off. Turning **Lens correction** off stitches every frame uncorrected, as panoramas were stitched before.
 
+### Auto-crop
+
+A panorama's edges are ragged: each frame was pointed a little higher or lower than the last, and the surface bends them. With **Auto-crop** on (the default), a panorama nobody has edited opens with Crop & Rotate already set to the largest rectangle that has no empty area in it. It is an ordinary crop, not a cut: open the crop tool to widen it again, or press Undo, and the whole stitch is still there. If you change the panorama's surface or frames, a crop you have not touched follows the new edges; a crop you set yourself is left alone.
+
+Turn **Auto-crop** off and the panorama shows its whole canvas, empty edges included. Switching it off takes away a starting crop it gave this session, and switching it on or off never stitches again.
+
 ### Seams
 
 Where two frames overlap, each part of the overlap comes from one of them, and the join is blended so it does not show. The join runs where the two frames agree: through sky, grass or anything that stayed still, and around anything that moved between the shots. Someone walking through the overlap appears whole, in the place one frame caught them, or not at all; they are not cut in half or left as a faint double. When the frames agree everywhere the seam runs down the middle of the overlap, where each frame is at its sharpest.

@@ -43,6 +43,7 @@ import { ShapeWarpControls } from "./shapewarp";
 import { ColorCheckerControls } from "./colorchecker";
 import { FeatherFollowsToggle } from "./featherfollows";
 import { LinesRow, LineWidthRow } from "./linecolor";
+import { offerPanoCrop } from "../panocrop";
 import { depthForget, denoiseTileCount, imageMetadata, presetExport, presetImport, presetList, presetRead, presetSave, presetTrash, type PresetEntry } from "../bridge";
 import { LevelsEditor } from "./levels";
 import { DEPTH_LEVELS_HINT, DEPTH_LEVELS_KEYS, useDepthBins } from "./depthbins";
@@ -2922,6 +2923,8 @@ export function PanoPanel({ state, dispatch }: { state: State; dispatch: D }) {
   const [info, setInfo] = useState<PanoInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const image = state.activeImage;
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   useEffect(() => {
     let live = true;
@@ -2940,6 +2943,7 @@ export function PanoPanel({ state, dispatch }: { state: State; dispatch: D }) {
     gain_compensation?: boolean;
     straighten?: boolean;
     lens_correction?: boolean;
+    auto_crop?: boolean;
   }) => {
     setBusy(true);
     void updatePano(image, c)
@@ -2948,6 +2952,9 @@ export function PanoPanel({ state, dispatch }: { state: State; dispatch: D }) {
         // The pixels changed without the graph changing, so nudge the
         // preview: nothing else would know to re-render.
         dispatch({ type: "resume_pano_stitch", image });
+        // A new stitch has new edges; a starting crop nobody has
+        // touched since follows them, and one switched off goes.
+        void offerPanoCrop(image, () => stateRef.current, dispatch, false);
       })
       .catch((e) => logMsg("error", `Panorama update failed: ${String(e)}`))
       .finally(() => setBusy(false));
@@ -3087,6 +3094,13 @@ export function PanoPanel({ state, dispatch }: { state: State; dispatch: D }) {
             ? `Profile: ${info.lens_profile}${(info.lens_frames ?? 0) < info.members.length ? ` (${info.lens_frames} of ${info.members.length} frames)` : ""}`
             : "No lens profile found: frames stitch uncorrected"}
         </div>
+      )}
+      {toggle(
+        "Auto-crop",
+        info.auto_crop !== false,
+        "pano-autocrop",
+        "Open cropped to the largest rectangle the panorama fills, as a Crop & Rotate crop you can widen again",
+        () => change({ auto_crop: info.auto_crop === false }),
       )}
 
       {info.missing.length > 0 && (

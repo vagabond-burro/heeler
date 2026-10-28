@@ -726,6 +726,34 @@ mod tests {
         assert!(undistorted.radial.is_none_or(|k| k.abs() < 0.01), "a pinhole pan fits no lens: {:?}", undistorted.radial);
     }
 
+    /// A hand-held pan, every frame a little higher or lower and rolled
+    /// a little, stitched through the whole pipeline: its ragged edges
+    /// crop to a rectangle with no empty pixel in it that still holds
+    /// most of the panorama.
+    #[test]
+    fn a_hand_held_pan_crops_to_a_rectangle_it_fills() {
+        let tex = world_texture();
+        let cams: Vec<Camera> = [(-0.45, 0.04, 0.03), (-0.15, -0.05, -0.02), (0.15, 0.03, 0.04), (0.45, -0.04, -0.03)]
+            .iter()
+            .map(|&(yaw, pitch, roll)| cam(320.0, [pitch, yaw, roll]))
+            .collect();
+        let imgs: Vec<ImageBuf> = cams.iter().map(|c| view_of(&tex, c, 260, 200)).collect();
+        let out = stitch(&imgs.iter().collect::<Vec<_>>(), &StitchOpts::default()).expect("a panorama");
+        assert_eq!(out.used, vec![0, 1, 2, 3]);
+        let img = &out.image;
+        let empty = (0..img.width * img.height).filter(|&p| img.data[p * 4 + 3] < 0.5).count();
+        assert!(empty > 0, "the fixture needs ragged edges to crop");
+        let r = crate::crop::auto_crop(img).expect("a crop");
+        let (x0, y0) = ((r.x * img.width as f32) as usize, (r.y * img.height as f32) as usize);
+        let (x1, y1) = (((r.x + r.w) * img.width as f32).ceil() as usize, ((r.y + r.h) * img.height as f32).ceil() as usize);
+        for y in y0..y1.min(img.height) {
+            for x in x0..x1.min(img.width) {
+                assert!(img.pixel(x, y)[3] > 0.5, "an empty pixel at ({x}, {y}) inside {r:?}");
+            }
+        }
+        assert!(r.w > 0.8 && r.h > 0.6, "the crop keeps most of the panorama: {r:?}");
+    }
+
     /// The other half of automatic: a photograph that belongs to nothing
     /// must be left out rather than forced into the panorama.
     #[test]
