@@ -9277,6 +9277,11 @@ pub struct PanoManifest {
     #[serde(default = "four")]
     pub bands: u32,
     pub members: Vec<String>,
+    /// Undo each frame's lens distortion before matching and painting,
+    /// from the lens database where it knows the lens (stitch_lens).
+    /// Off stitches every frame as a pinhole, as panoramas always were.
+    #[serde(default = "yes")]
+    pub lens_correction: bool,
 }
 
 fn auto_surface_name() -> String {
@@ -9482,8 +9487,9 @@ macro_rules! debug_log {
 /// is one composited before a registered frame came back at each side's
 /// own scale (Frame::aspect, the latest review's R1), which placed its
 /// frames up to a few pixels off, nor one whose seams ran down the
-/// middle of each overlap instead of where the frames agree.
-const PANO_SOLVE: &str = "register2048-aspect-seams";
+/// middle of each overlap instead of where the frames agree, nor one
+/// painted as pinholes from a lens the database could have undone.
+const PANO_SOLVE: &str = "register2048-aspect-seams-lens";
 
 /// The proxy-cache tier of a full-size stitch.
 fn pano_full_tier(image_id: &str, opts: heeler_io::RawSourceOpts) -> String {
@@ -9531,6 +9537,22 @@ fn render_pano_at(
     on_warn: &dyn Fn(&str),
     preview_edge: Option<usize>,
     stop: &dyn Fn() -> bool,
+) -> Result<ImageBuf, String> {
+    render_pano_through(path, decode, max_dimension, on_progress, on_warn, preview_edge, stop, &|_| None)
+}
+
+/// The same, with each member's lens from `lens_for` (stitch_lens), which
+/// the recipe's lens_correction switches on.
+#[allow(clippy::too_many_arguments)]
+fn render_pano_through(
+    path: &Path,
+    decode: &dyn Fn(&Path) -> Result<ImageBuf, String>,
+    max_dimension: usize,
+    on_progress: &dyn Fn(f32, &str),
+    on_warn: &dyn Fn(&str),
+    preview_edge: Option<usize>,
+    stop: &dyn Fn() -> bool,
+    lens_for: &dyn Fn(&Path) -> Option<heeler_stitch::Lens>,
 ) -> Result<ImageBuf, String> {
     let manifest = read_pano(path)?;
     let folder = path.parent().unwrap_or(Path::new("."));
@@ -9596,6 +9618,12 @@ fn render_pano_at(
         straighten: manifest.straighten,
         memory_budget: usize::MAX, // legacy field; the shared budget admits the canvas
         seams: true,
+        lenses: if manifest.lens_correction {
+            read_names.iter().map(|name| lens_for(&folder.join(name))).collect()
+        } else {
+            Vec::new()
+        },
+        fit_lens: false,
     };
     let stitched = heeler_stitch::stitch_with_control(&refs, &opts, &|f, stage| {
         on_progress(DECODE_SHARE + (1.0 - DECODE_SHARE) * f, stage)
@@ -9857,7 +9885,7 @@ fn load_source(
                 }
                 let job = StitchJob::begin(app, image_id, members.len(), false);
                 let result = cached_render(app, &path, &members, &tier, || {
-                    render_pano_at(
+                    render_pano_through(
                         &path,
                         &|p| pano_member_preview(p, opts, edge),
                         edge,
@@ -9865,6 +9893,7 @@ fn load_source(
                         &|m| emit_log(app, "warn", m.to_string()),
                         Some(pano_member_edge(edge)),
                         &|| job.stopped(),
+                        &|m| stitch_lens(app, m).map(|(_, lens)| lens),
                     )
                 });
                 remember_stitch_outcome(&path, &members, &tier, &result);
@@ -10313,7 +10342,7 @@ fn full_source(
             }
             let job = StitchJob::begin(app, image_id, members.len(), true);
             let out = cached_render(app, &p, &members, &tier, || {
-                render_pano_at(
+                render_pano_through(
                     &p,
                     &|m| heeler_io::decode_any_with(m, opts).map_err(|e| e.to_string()),
                     PANO_FULL_MAX,
@@ -10321,6 +10350,7 @@ fn full_source(
                     &|m| emit_log(app, "warn", m.to_string()),
                     None,
                     &|| job.stopped(),
+                    &|m| stitch_lens(app, m).map(|(_, lens)| lens),
                 )
             });
             remember_stitch_outcome(&p, &members, &tier, &out);
@@ -13619,6 +13649,26 @@ fn lens_profile_for_in(app: &tauri::AppHandle, image_id: &str) -> Result<Option<
         }
         None => none,
     }))
+}
+
+/// A panorama member's lens as the stitcher undoes it, with the profile's
+/// name: the database profile its EXIF names, at its focal length, in
+/// its own crop (lens_profile_for's rules). None for a lens the database
+/// does not know or calibrated no distortion for, which stitches as a
+/// pinhole.
+fn stitch_lens(app: &tauri::AppHandle, path: &Path) -> Option<(String, heeler_stitch::Lens)> {
+    let head = read_head(path, EXIF_HEAD).ok()?;
+    let exif = heeler_io::read_exif(&head);
+    let name = exif.lens.filter(|n| !n.is_empty())?;
+    let hit = lens_db(app).match_lens(&name)?;
+    let focal = exif.focal_length.as_ref().filter(|r| r.den != 0 && r.num > 0).map(|r| r.num as f32 / r.den as f32);
+    let row = hit.distortion_at(focal)?;
+    let scale = match (focal, exif.focal_35) {
+        (Some(f), Some(f35)) if f > 1.0 => (hit.crop_factor / (f35 as f32 / f)).clamp(0.25, 4.0),
+        _ => 1.0,
+    };
+    let lens = heeler_stitch::Lens::Profile { model: row.model, a: row.a, b: row.b, c: row.c, scale };
+    lens.is_known().then(|| (format!("{} {}", hit.maker, hit.model), lens))
 }
 
 /// The lens correction a DNG or GPR carries for itself, upright, as the
@@ -19044,6 +19094,7 @@ async fn create_pano(
                     straighten: true,
                     bands: 4,
                     members,
+                    lens_correction: true,
                 },
             )?;
             let id = fresh_image_id(catalog, &target).map_err(|e| e.to_string())?;
@@ -21118,6 +21169,30 @@ pub struct PanoInfo {
     pub members: Vec<String>,
     /// Which members cannot currently be read.
     pub missing: Vec<String>,
+    pub lens_correction: bool,
+    /// The lens profile the members were matched to, when any was, and
+    /// how many of the members it covers; the panel says which, or that
+    /// none was found.
+    pub lens_profile: Option<String>,
+    pub lens_frames: usize,
+}
+
+/// A recipe as the panel reads it, with its members' lens profiles.
+fn pano_info_of(app: &tauri::AppHandle, path: &Path, manifest: PanoManifest) -> PanoInfo {
+    let folder = path.parent().unwrap_or(Path::new("."));
+    let missing = manifest.members.iter().filter(|m| !folder.join(m).exists()).cloned().collect();
+    let profiles: Vec<String> = manifest.members.iter().filter_map(|m| stitch_lens(app, &folder.join(m)).map(|(name, _)| name)).collect();
+    PanoInfo {
+        surface: manifest.surface,
+        gain_compensation: manifest.gain_compensation,
+        straighten: manifest.straighten,
+        bands: manifest.bands,
+        members: manifest.members,
+        missing,
+        lens_correction: manifest.lens_correction,
+        lens_profile: profiles.first().cloned(),
+        lens_frames: profiles.len(),
+    }
 }
 
 /// What a panorama is made of, for the panel. None for anything else.
@@ -21130,17 +21205,7 @@ async fn pano_info(app: tauri::AppHandle, image_id: String) -> Result<Option<Pan
             return Ok(None);
         }
         let manifest = read_pano(&path)?;
-        let folder = path.parent().unwrap_or(Path::new("."));
-        let missing =
-            manifest.members.iter().filter(|m| !folder.join(m).exists()).cloned().collect();
-        Ok(Some(PanoInfo {
-            surface: manifest.surface,
-            gain_compensation: manifest.gain_compensation,
-            straighten: manifest.straighten,
-            bands: manifest.bands,
-            members: manifest.members,
-            missing,
-        }))
+        Ok(Some(pano_info_of(&app, &path, manifest)))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -21156,6 +21221,7 @@ async fn update_pano(
     straighten: Option<bool>,
     bands: Option<u32>,
     members: Option<Vec<String>>,
+    lens_correction: Option<bool>,
 ) -> Result<PanoInfo, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let path = with_session(&app, |s| Ok(s.paths.get(&image_id).cloned()))?
@@ -21176,6 +21242,9 @@ async fn update_pano(
         if let Some(b) = bands {
             manifest.bands = b.clamp(1, 6);
         }
+        if let Some(l) = lens_correction {
+            manifest.lens_correction = l;
+        }
         if let Some(m) = members {
             if m.len() < 2 {
                 return Err("a panorama needs at least two frames".into());
@@ -21190,17 +21259,7 @@ async fn update_pano(
             *s.recipe_gen.entry(image_id.clone()).or_insert(0) += 1;
             Ok(())
         })?;
-        let folder = path.parent().unwrap_or(Path::new(".")).to_path_buf();
-        let missing =
-            manifest.members.iter().filter(|m| !folder.join(m).exists()).cloned().collect();
-        Ok(PanoInfo {
-            surface: manifest.surface,
-            gain_compensation: manifest.gain_compensation,
-            straighten: manifest.straighten,
-            bands: manifest.bands,
-            members: manifest.members,
-            missing,
-        })
+        Ok(pano_info_of(&app, &path, manifest))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -26049,7 +26108,7 @@ mod tests {
         write_stack(&stack, &StackManifest { version: 1, mode: "mean".into(), align: false, members: vec!["frames/frame.png".into()] }).unwrap();
         let pano = dir.path().join("wide.pano");
         write_pano(&pano, &PanoManifest { version: 1, surface: "cylindrical".into(), gain_compensation: true,
-            straighten: true, bands: 4, members: vec!["frames/frame.png".into()] }).unwrap();
+            straighten: true, bands: 4, members: vec!["frames/frame.png".into()], lens_correction: true }).unwrap();
         let source = Arc::new(ImageBuf::filled(64, 32, [2.0, 1.0, 0.5, 1.0]));
         let mut graph = ui_graph();
         graph.nodes[2].enabled = false;
@@ -29913,7 +29972,7 @@ mod tests {
             gain_compensation: true,
             straighten: true,
             bands: 4,
-            members: vec!["l.png".into(), "r.png".into()],
+            members: vec!["l.png".into(), "r.png".into()], lens_correction: true,
         };
         write_pano(&pano, &manifest).unwrap();
         let decode = |p: &Path| heeler_io::decode_any(p).map_err(|e| e.to_string());
@@ -29983,7 +30042,7 @@ mod tests {
                 gain_compensation: true,
                 straighten: true,
                 bands: 4,
-                members: vec!["l.png".into(), "r.png".into()],
+                members: vec!["l.png".into(), "r.png".into()], lens_correction: true,
             },
         )
         .unwrap();
@@ -30023,7 +30082,7 @@ mod tests {
                 gain_compensation: true,
                 straighten: true,
                 bands: 4,
-                members: vec!["a.png".into(), "gone.png".into()],
+                members: vec!["a.png".into(), "gone.png".into()], lens_correction: true,
             },
         )
         .unwrap();
@@ -30052,7 +30111,7 @@ mod tests {
                 gain_compensation: true,
                 straighten: true,
                 bands: 4,
-                members: vec!["l.png".into(), "r.png".into()],
+                members: vec!["l.png".into(), "r.png".into()], lens_correction: true,
             },
         )
         .unwrap();

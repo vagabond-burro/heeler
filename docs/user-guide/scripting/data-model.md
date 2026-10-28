@@ -146,6 +146,9 @@ Members are stored filenames in recipe order. `missing` lists members that canno
     "bands": 4,
     "members": ["left.CR3", "right.CR3"],
     "missing": [],
+    "lens_correction": True,
+    "lens_profile": "Olympus M.Zuiko Digital ED 9-18mm f/4.0-5.6",
+    "lens_frames": 2,
 }
 ```
 

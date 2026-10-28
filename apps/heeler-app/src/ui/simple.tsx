@@ -2939,6 +2939,7 @@ export function PanoPanel({ state, dispatch }: { state: State; dispatch: D }) {
     surface?: string;
     gain_compensation?: boolean;
     straighten?: boolean;
+    lens_correction?: boolean;
   }) => {
     setBusy(true);
     void updatePano(image, c)
@@ -3069,6 +3070,23 @@ export function PanoPanel({ state, dispatch }: { state: State; dispatch: D }) {
         "pano-straighten",
         "Level the horizon: nobody pans a camera level",
         () => change({ straighten: !info.straighten }),
+      )}
+      {toggle(
+        "Lens correction",
+        info.lens_correction !== false,
+        "pano-lens",
+        "Undo each frame's lens distortion from its profile before the frames are matched, so wide frames line up at their edges",
+        () => change({ lens_correction: info.lens_correction === false }),
+      )}
+      {info.lens_correction !== false && (
+        <div
+          style={{ fontSize: 9, color: "var(--text-faint)", lineHeight: 1.5, marginTop: -3, marginBottom: 7 }}
+          data-testid="pano-lens-profile"
+        >
+          {info.lens_profile
+            ? `Profile: ${info.lens_profile}${(info.lens_frames ?? 0) < info.members.length ? ` (${info.lens_frames} of ${info.members.length} frames)` : ""}`
+            : "No lens profile found: frames stitch uncorrected"}
+        </div>
       )}
 
       {info.missing.length > 0 && (

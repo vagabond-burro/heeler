@@ -361,11 +361,13 @@ export async function handleApiAsync(
         straighten?: boolean;
         bands?: number;
         members?: string[];
+        lens_correction?: boolean;
       } = {};
       if (typeof p.surface === "string") change.surface = p.surface;
       if (typeof p.gainCompensation === "boolean") change.gain_compensation = p.gainCompensation;
       if (typeof p.straighten === "boolean") change.straighten = p.straighten;
       if (typeof p.bands === "number") change.bands = p.bands;
+      if (typeof p.lensCorrection === "boolean") change.lens_correction = p.lensCorrection;
       if (Array.isArray(p.members)) change.members = p.members.map(String);
       const info = await updatePano(id, change);
       if (!info) return { error: `"${id}" is not a panorama` };

@@ -215,9 +215,9 @@ class ClientContract(unittest.TestCase):
         heeler.pano_create(["a", "b"])
         self.assertEqual(Stub.seen[-1]["body"]["method"], "pano.create")
         # The snake_case argument arrives as the bridge's camelCase.
-        heeler.pano_configure("p1", gain_compensation=False, bands=2)
+        heeler.pano_configure("p1", gain_compensation=False, bands=2, lens_correction=False)
         _, params = self.last_call()
-        self.assertEqual(params, {"id": "p1", "gainCompensation": False, "bands": 2})
+        self.assertEqual(params, {"id": "p1", "gainCompensation": False, "bands": 2, "lensCorrection": False})
 
     def test_export_resolution_omits_nonfinite_and_keeps_finite_numbers(self):
         for dpi in [float("nan"), float("inf"), float("-inf")]:

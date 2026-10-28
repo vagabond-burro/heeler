@@ -19,6 +19,7 @@
 //! Then the panorama is straightened, because a hand-held pan is never
 //! level and the result otherwise waves up and down.
 
+use crate::lens::Lens;
 use crate::geom::{
     cross3, dot3, inverse_rodrigues, normalise3, rodrigues, solve, symmetric_eigen, Mat3,
 };
@@ -219,9 +220,24 @@ fn project(from: &Camera, to: &Camera, p: (f64, f64)) -> Option<(f64, f64)> {
 /// projected point lands from where it was actually seen. Both
 /// directions, so neither image is privileged.
 fn residuals(cams: &[Camera], constraints: &[PairConstraint]) -> Vec<f64> {
+    residuals_through(cams, constraints, None)
+}
+
+/// The same, each correspondence first moved through one radial term
+/// `k` shared by every frame (Lens::Radial), measured in each camera's
+/// frame size from `dims`.
+fn residuals_through(cams: &[Camera], constraints: &[PairConstraint], radial: Option<(f64, &[(usize, usize)])>) -> Vec<f64> {
     let mut out = Vec::new();
+    let undo = |p: (f64, f64), k: usize| match radial {
+        Some((r, dims)) => {
+            let (w, h) = dims.get(k).copied().unwrap_or((1, 1));
+            Lens::Radial { k: r }.undistort(p.0, p.1, w, h)
+        }
+        None => p,
+    };
     for c in constraints {
         for (pi, pj) in &c.points {
+            let (pi, pj) = (&undo(*pi, c.i), &undo(*pj, c.j));
             match project(&cams[c.i], &cams[c.j], *pi) {
                 Some((x, y)) => {
                     out.push(x - pj.0);
@@ -250,7 +266,10 @@ fn residuals(cams: &[Camera], constraints: &[PairConstraint]) -> Vec<f64> {
 /// Root mean square reprojection error, in pixels. The number worth
 /// reporting: it is what "how well did this stitch" means.
 pub fn rms_error(cams: &[Camera], constraints: &[PairConstraint]) -> f64 {
-    let r = residuals(cams, constraints);
+    rms_of(&residuals(cams, constraints))
+}
+
+fn rms_of(r: &[f64]) -> f64 {
     if r.is_empty() {
         return 0.0;
     }
@@ -290,13 +309,59 @@ pub fn bundle_adjust(cams: &[Camera], constraints: &[PairConstraint]) -> Vec<Cam
     if n == 0 || constraints.is_empty() {
         return cams.to_vec();
     }
-    let mut params = pack(cams);
+    let params = pack(cams);
     // Every parameter except the reference camera's three rotation terms.
     let free: Vec<usize> = (0..params.len()).filter(|&i| !(1..=3).contains(&i)).collect();
-    let m = free.len();
+    unpack(&levenberg_marquardt(params, &free, &|p| residuals(&unpack(p), constraints)))
+}
 
+/// The largest radial term the solve may settle on. Past it the lens is
+/// a fisheye, which one term cannot describe, and a term that large is
+/// the solve trading the lens for the focal lengths rather than a lens.
+const RADIAL_LIMIT: f64 = 0.3;
+/// How much a radial term has to improve the fit to be believed. A term
+/// that buys less is fitting noise.
+const RADIAL_GAIN: f64 = 0.95;
+
+/// Refines every camera together with one radial distortion term shared
+/// by all of them, for a lens the database does not know. `dims` is each
+/// camera's frame size, which the term's radius is measured in.
+///
+/// One term and not a profile's three, and shared rather than per frame:
+/// a pan is shot through one lens at one zoom, and every extra
+/// parameter is one more way for the solve to explain a correspondence
+/// by bending the lens instead of turning the camera. Answers the
+/// cameras and the term, or None when the term did not earn its place
+/// (it ran past RADIAL_LIMIT or improved the error by less than
+/// RADIAL_GAIN), in which case `cams` stand as they are.
+pub fn bundle_adjust_radial(cams: &[Camera], constraints: &[PairConstraint], dims: &[(usize, usize)]) -> Option<(Vec<Camera>, f64)> {
+    let n = cams.len();
+    if n < 2 || constraints.is_empty() || dims.len() != n {
+        return None;
+    }
+    let mut params = pack(cams);
+    params.push(0.0);
+    let free: Vec<usize> = (0..params.len()).filter(|&i| !(1..=3).contains(&i)).collect();
+    let cost = |p: &[f64]| residuals_through(&unpack(&p[..4 * n]), constraints, Some((p[4 * n], dims)));
+    let before = rms_of(&cost(&params));
+    let solved = levenberg_marquardt(params, &free, &cost);
+    let k = solved[4 * n];
+    let after = rms_of(&cost(&solved));
+    (k.is_finite() && k.abs() < RADIAL_LIMIT && after < before * RADIAL_GAIN).then(|| (unpack(&solved[..4 * n]), k))
+}
+
+/// The root mean square error with every correspondence moved through a
+/// shared radial term first, as bundle_adjust_radial measures it.
+pub fn rms_error_radial(cams: &[Camera], constraints: &[PairConstraint], k: f64, dims: &[(usize, usize)]) -> f64 {
+    rms_of(&residuals_through(cams, constraints, Some((k, dims))))
+}
+
+/// The solve itself: Levenberg-Marquardt over `params`, moving only the
+/// indices in `free`, minimizing the squares of what `residual` answers.
+fn levenberg_marquardt(mut params: Vec<f64>, free: &[usize], residual: &dyn Fn(&[f64]) -> Vec<f64>) -> Vec<f64> {
+    let m = free.len();
     let mut lambda = 1e-3;
-    let mut best = residuals(&unpack(&params), constraints);
+    let mut best = residual(&params);
     let mut best_cost: f64 = best.iter().map(|v| v * v).sum();
 
     for _ in 0..40 {
@@ -311,8 +376,8 @@ pub fn bundle_adjust(cams: &[Camera], constraints: &[PairConstraint]) -> Vec<Cam
             up[pi] += step;
             let mut down = params.clone();
             down[pi] -= step;
-            let ru = residuals(&unpack(&up), constraints);
-            let rd = residuals(&unpack(&down), constraints);
+            let ru = residual(&up);
+            let rd = residual(&down);
             for row in 0..best.len() {
                 jac[row * m + col] = (ru[row] - rd[row]) / (2.0 * step);
             }
@@ -356,7 +421,7 @@ pub fn bundle_adjust(cams: &[Camera], constraints: &[PairConstraint]) -> Vec<Cam
             for (col, &pi) in free.iter().enumerate() {
                 trial[pi] += step[col];
             }
-            let r = residuals(&unpack(&trial), constraints);
+            let r = residual(&trial);
             let cost: f64 = r.iter().map(|v| v * v).sum();
             if cost < best_cost {
                 params = trial;
@@ -373,7 +438,7 @@ pub fn bundle_adjust(cams: &[Camera], constraints: &[PairConstraint]) -> Vec<Cam
         }
     }
 
-    unpack(&params)
+    params
 }
 
 /// Rotates the whole panorama so the horizon is level.

@@ -1244,6 +1244,12 @@ export interface PanoInfo {
   members: string[];
   /** members the folder no longer has */
   missing: string[];
+  /** undo each frame's lens from its database profile before stitching */
+  lens_correction?: boolean;
+  /** the profile the members matched, and how many of them it covers;
+   * absent from an older backend */
+  lens_profile?: string | null;
+  lens_frames?: number;
 }
 
 /** What a panorama is made of, or null for an ordinary photograph. */
@@ -1262,6 +1268,7 @@ export async function updatePano(
     straighten?: boolean;
     bands?: number;
     members?: string[];
+    lens_correction?: boolean;
   }
 ): Promise<PanoInfo | null> {
   if (!isTauri()) return null;
