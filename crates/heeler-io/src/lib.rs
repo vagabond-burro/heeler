@@ -1413,7 +1413,7 @@ fn decode_any_inner(path: &Path, opts: RawSourceOpts, pixels: Pixels) -> Result<
         // what follows would only misname the damage (a "JPEG SOF" or
         // "photometric" error for a cut file). Say what went wrong.
         if let (Err(e), true) = (&decoded, heeler_raw::is_gpr(&bytes)) {
-            return Err(IoError::Unsupported(e.to_string()));
+            return Err(gpr_error(e));
         }
         if let Ok((mut img, sensor_data)) = decoded {
             if sensor_data {
@@ -1636,6 +1636,17 @@ fn declined_raw(e: &heeler_raw::RawError) -> Option<IoError> {
     }
 }
 
+/// The error for a GoPro GPR the develop could not read, said as
+/// declined_raw says a RAW file's: the app takes either for a file that
+/// cannot be developed. A cancel stays what it was.
+#[cfg(feature = "raw")]
+fn gpr_error(e: &heeler_raw::RawError) -> IoError {
+    match e {
+        heeler_raw::RawError::Gpr(_) | heeler_raw::RawError::Unsupported(_) | heeler_raw::RawError::Damaged(_) => IoError::Unsupported(format!("{e}, so it cannot be developed")),
+        _ => IoError::Unsupported(e.to_string()),
+    }
+}
+
 /// Whether the develop turned `e`'s file away for its container: none it
 /// knows (declined_raw leaves these to the readers after it).
 #[cfg(feature = "raw")]
@@ -1837,7 +1848,7 @@ fn decode_preview_inner(path: &Path, opts: RawSourceOpts, edge: Option<usize>, p
         // what follows would only misname the damage (a "JPEG SOF" or
         // "photometric" error for a cut file). Say what went wrong.
         if let (Err(e), true) = (&decoded, heeler_raw::is_gpr(&bytes)) {
-            return Err(IoError::Unsupported(e.to_string()));
+            return Err(gpr_error(e));
         }
         if let Ok(sensor) = decoded {
             let sensor_data = sensor.sensor_data;
@@ -1983,7 +1994,7 @@ fn decode_thumbnail_inner(path: &Path) -> Result<ImageBuf, IoError> {
             return match heeler_raw::decode_sensor_half(&bytes) {
                 Ok(sensor) => Ok(unbake(as_the_file_renders(sensor_to_imagebuf(sensor), &bytes), &bytes)),
                 Err(heeler_raw::RawError::Memory(e)) => Err(e.into()),
-                Err(e) => Err(IoError::Unsupported(e.to_string())),
+                Err(e) => Err(gpr_error(&e)),
             };
         }
         // A raw saved as a .tif carries only a postage stamp of itself
@@ -2457,6 +2468,8 @@ mod tests {
         ] {
             let why = result.expect_err(what).to_string();
             assert!(why.contains("GoPro GPR"), "{what}: {why}");
+            // As the app's undevelopable test reads it.
+            assert!(why.contains("cannot be developed"), "{what}: {why}");
         }
     }
 

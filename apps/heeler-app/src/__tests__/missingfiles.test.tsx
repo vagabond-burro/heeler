@@ -140,6 +140,7 @@ describe("a render that cannot be retried into working", () => {
     const generic = "unsupported: this RAW file's format is not supported yet, so it cannot be developed: /photos/M001.MDC";
     expect(isUndevelopable(generic)).toBe(true);
     expect(isUndevelopable("unsupported: this RAW file is damaged (a raw strip past the end of the file), so it cannot be developed: /a/b.NEF")).toBe(true);
+    expect(isUndevelopable("unsupported: GoPro GPR: a VC-5 tile cut short, so it cannot be developed: /a/GOPR0001.GPR")).toBe(true);
     expect(isUndevelopable("unsupported: the photograph in this file is 756 x 504 but only its 96 x 64 thumbnail could be read; its main image uses an encoding this build cannot decode: /a/b.KDC")).toBe(true);
     const plain = undevelopableMessage(generic);
     expect(plain.status).toBe("M001.MDC: this RAW file's format is not supported yet, so it cannot be developed");
