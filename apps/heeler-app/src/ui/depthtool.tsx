@@ -7,7 +7,7 @@
 // name, size, license, source, nothing fetched silently.
 
 import React, { useEffect, useRef, useState } from "react";
-import { depthMap, filePasses, smartModelDownload, smartModelStatus, surfaceNormals, type SmartModels } from "../bridge";
+import { depthMap, filePasses, modelsEpoch, smartModelDownload, smartModelStatus, surfaceNormals, type SmartModels } from "../bridge";
 import { logMsg } from "../log";
 import { reportToolError } from "./hints";
 import { ModelConsentCard } from "./modelconsent";
@@ -160,14 +160,24 @@ export function DepthRunner({ state, dispatch }: { state: State; dispatch: D }) 
   );
 }
 
-/** Depth Lighting's Model normals, read once per photograph the first
- * time an enabled Depth Lighting asks for them, then a render poke so
- * the planted raster shows. Until they land, and on a machine without
- * the model, the lights shade from the depth map's estimate. Consent
- * before the download, as for the depth model. */
+/** Depth Lighting's Model normals, read once per photograph and develop
+ * the first time an enabled Depth Lighting asks for them, then a render
+ * poke so the planted raster shows. Until they land, and on a machine
+ * without the model, the lights shade from the depth map's estimate.
+ * Consent before the download, as for the depth model. */
 export function NormalsRunner({ state, dispatch }: { state: State; dispatch: D }) {
   const wanted = !!state.activeImage && state.nodes.some((n) => n.type === "heeler.key_light" && n.enabled && n.textParams?.normals === "model");
+  const source = state.nodes.find((n) => n.type === "heeler.image_source");
+  const sourceKey = JSON.stringify([
+    source?.params.camera_wb ?? 1,
+    source?.params.camera_matrix ?? 1,
+    source?.textParams?.highlights ?? "blend",
+    source?.textParams?.sharpening ?? "standard",
+  ]);
+  const base = `${state.activeImage}|${sourceKey}|${state.prefs.modelStoreDir ?? ""}|models${modelsEpoch()}`;
+  const mark = `${base}|preview${state.previewNonce}`;
   const done = useRef<Record<string, boolean>>({});
+  const ownPoke = useRef<{ base: string; nonce: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [needModel, setNeedModel] = useState(false);
   const [models, setModels] = useState<SmartModels | null>(null);
@@ -183,20 +193,28 @@ export function NormalsRunner({ state, dispatch }: { state: State; dispatch: D }
     };
   }, [needModel, downloading]);
   useEffect(() => {
-    const image = state.activeImage;
-    if (!wanted || busy || needModel || done.current[image]) return;
+    // Our own poke advances the preview nonce too. Accept only that
+    // exact next nonce; a recipe rewrite or another native refresh is
+    // a new source and must ask the desktop again.
+    const poke = ownPoke.current;
+    if (poke && poke.base === base && state.previewNonce === poke.nonce + 1) {
+      done.current[mark] = true;
+      ownPoke.current = null;
+    }
+    if (!wanted || busy || needModel || done.current[mark]) return;
     setBusy(true);
     publishBusy("NORMALS · reading the surfaces");
     void surfaceNormals(state)
       .then(() => {
-        done.current[image] = true;
+        done.current[mark] = true;
+        ownPoke.current = { base, nonce: state.previewNonce };
         dispatch({ type: "poke_render" });
       })
       .catch((err) => {
         if (String(err).includes("model not installed")) {
           setNeedModel(true);
         } else {
-          done.current[image] = true; // no retry loop on a broken photo
+          done.current[mark] = true; // no retry loop on a broken photo
           reportToolError("Normals", err);
         }
       })
@@ -205,7 +223,7 @@ export function NormalsRunner({ state, dispatch }: { state: State; dispatch: D }
         setBusy(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wanted, state.activeImage, busy, needModel]);
+  }, [wanted, mark, busy, needModel]);
   if (!wanted || !needModel || !models?.normals) return null;
   return (
     <ModelConsentCard

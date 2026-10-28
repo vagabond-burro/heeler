@@ -3046,7 +3046,9 @@ fn plant_smart_rasters_whole(
             // from the depth map's estimate meanwhile, as they do on a
             // machine without the model.
             if mode == "model" {
-                let want = model_normals_want(image_id);
+                let source_key =
+                    source_version_key_in_session(session, image_id, source_opts_of(graph));
+                let want = model_normals_want(&source_key);
                 if let Some((raster, version)) = session.smart_rasters.get(&key).cloned() {
                     if version == want {
                         sources.insert(slot, SourceImage { image: raster, version, measured: false });
@@ -6218,12 +6220,20 @@ fn normals_want(image_id: &str, path: &Path, mode: &str) -> u64 {
     fnv1a64(format!("normals|{image_id}|{mode}|{:016x}", file_stamp(path)).as_bytes())
 }
 
-/// The Model normals' version: one raster per photograph and model,
-/// read from the photograph the way the depth map's raw plane is, so
-/// like it the answer never goes stale and every crop is cut from it
-/// at planting.
-fn model_normals_want(image_id: &str) -> u64 {
-    fnv1a64(format!("normals|{image_id}|{}|model", heeler_vision::MOGE_2_VITS.id).as_bytes())
+/// The Model normals' version: one raster per source pixels and model
+/// revision. Develop options, a replaced file and a stack or panorama's
+/// recipe generation all change the photograph the model reads, so they
+/// all change this key. Every crop is still cut from that raster at
+/// planting.
+fn model_normals_want(source_key: &str) -> u64 {
+    fnv1a64(
+        format!(
+            "normals|{source_key}|{}|{}|model",
+            heeler_vision::MOGE_2_VITS.id,
+            heeler_vision::MOGE_2_VITS.version
+        )
+        .as_bytes(),
+    )
 }
 
 /// The model's normals packed as the raster Depth Lighting is fed, the
@@ -7089,12 +7099,16 @@ async fn surface_normals(app: tauri::AppHandle, graph: UiGraph, image_id: String
         return Err("model not installed".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let version = model_normals_want(&image_id);
+        let opts = source_opts_of(&graph);
+        let source_key = with_session(&app, |s| {
+            Ok(source_version_key_in_session(s, &image_id, opts))
+        })?;
+        let version = model_normals_want(&source_key);
         let path = smart_raster_path(&base, version);
         if path.exists() {
             return Ok(DepthMapAnswer { version: format!("{version:016x}"), work: "cached" });
         }
-        let source = preview_source(&app, &image_id, source_opts_of(&graph))?;
+        let source = preview_source(&app, &image_id, opts)?;
         let (w, h) = (source.width, source.height);
         let mut rgb = vec![0.0f32; w * h * 3];
         for (i, px) in source.data.chunks(4).enumerate() {
@@ -36781,13 +36795,36 @@ mod file_depth_tests {
         let raster = pack_normals(&[[0.0, 0.0, 1.0], [0.0; 3]], 2, 1);
         assert_eq!(raster.pixel(0, 0), [0.5, 0.5, 1.0, 1.0]);
         assert_eq!(raster.pixel(1, 0), [0.5, 0.5, 0.5, 1.0], "no surface packs to mid gray");
-        let out = smart_raster_path(dir.path(), model_normals_want("img"));
+        let source_key =
+            source_version_key_in_session(&session, "img", source_opts_of(&graph("model")));
+        let out = smart_raster_path(dir.path(), model_normals_want(&source_key));
         std::fs::create_dir_all(out.parent().unwrap()).unwrap();
         std::fs::write(&out, heeler_io::encode_png16_raw(&raster).unwrap()).unwrap();
         let planted = plant(&mut session, "model").expect("the model's normals plant");
         assert_eq!((planted.image.width, planted.image.height), (2, 1));
         assert!(plant(&mut session, "off").is_none());
         assert!(plant(&mut session, "auto").is_none(), "a photograph has no pass for auto to read");
+        // A develop change is another photograph to the model. The old
+        // raster stays on disk for a switch back, but cannot plant here.
+        let mut changed = graph("model");
+        changed.nodes[0]
+            .params
+            .insert("camera_wb".into(), serde_json::json!(0));
+        let mut sources = HashMap::new();
+        plant_smart_rasters_whole(
+            &mut session,
+            Some(dir.path()),
+            &changed,
+            "img",
+            &mut sources,
+            None,
+            fullmatte::MatteTier::Auto,
+            None,
+        );
+        assert!(!sources.contains_key("kl@normal"));
+        // So is a stack or panorama recipe rewrite at unchanged options.
+        *session.recipe_gen.entry("img".into()).or_insert(0) += 1;
+        assert!(plant(&mut session, "model").is_none());
     }
 
     #[test]

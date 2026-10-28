@@ -22,14 +22,28 @@ const withModel = (normals: string): State => {
 
 beforeEach(() => vi.clearAllMocks());
 
-it("reads the normals once and pokes a render", async () => {
+it("reads the normals once per source and develop and pokes a render", async () => {
   vi.mocked(bridge.surfaceNormals).mockResolvedValue({ version: "v", work: "model" });
   const got: Command[] = [];
   const s = withModel("model");
   const view = render(<NormalsRunner state={s} dispatch={(c) => got.push(c)} />);
   await waitFor(() => expect(got).toContainEqual({ type: "poke_render" }));
-  view.rerender(<NormalsRunner state={{ ...s }} dispatch={(c) => got.push(c)} />);
+  const settled = reduce(s, { type: "poke_render" });
+  view.rerender(<NormalsRunner state={settled} dispatch={(c) => got.push(c)} />);
   expect(bridge.surfaceNormals).toHaveBeenCalledTimes(1);
+  view.rerender(<NormalsRunner state={{ ...settled }} dispatch={(c) => got.push(c)} />);
+  expect(bridge.surfaceNormals).toHaveBeenCalledTimes(1);
+  const changed = reduce(settled, { type: "set_param", id: "src", param: "camera_wb", value: 0 });
+  view.rerender(<NormalsRunner state={changed} dispatch={(c) => got.push(c)} />);
+  await waitFor(() => expect(bridge.surfaceNormals).toHaveBeenCalledTimes(2));
+  expect(bridge.surfaceNormals).toHaveBeenLastCalledWith(changed);
+  const changedSettled = reduce(changed, { type: "poke_render" });
+  view.rerender(<NormalsRunner state={changedSettled} dispatch={(c) => got.push(c)} />);
+  expect(bridge.surfaceNormals).toHaveBeenCalledTimes(2);
+  const rewritten = reduce(changedSettled, { type: "resume_stack_merge", image: changedSettled.activeImage });
+  view.rerender(<NormalsRunner state={rewritten} dispatch={(c) => got.push(c)} />);
+  await waitFor(() => expect(bridge.surfaceNormals).toHaveBeenCalledTimes(3));
+  expect(bridge.surfaceNormals).toHaveBeenLastCalledWith(rewritten);
 });
 
 it("asks nothing when no Depth Lighting wants the model", () => {
