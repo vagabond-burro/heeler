@@ -63,7 +63,24 @@ fallback to LibRaw, all of which Phase 16 ended for the shipped app.
   of every corpus folder at both sizes under a counting allocator and
   fails if the develop holds more than `Plan::bytes` admits. Each
   coding's unpack term (`unpack_bytes`) is a quarter above the most any
-  corpus file held.
+  corpus file held. The plan itself (`Plan::new` and `Plan::bytes`), made
+  before anything is admitted, is counted too and held to 4 MiB and a
+  quarter of the file's size; the most any corpus plan holds is 5.2 MB,
+  a Phase One P25+ IIQ's calibration.
+- Cancellation: the `cancellatency` example develops each file whole,
+  then cancels it at a tenth, a third, a half and seven tenths of that
+  time and reports the slowest stop. Every decoder checks between rows,
+  tiles, segments or line groups; over the five largest files of each
+  extension the slowest stop is 35 ms (a CR3 raw burst, in C-RAW's
+  bands), most under 10 ms. The checks cost nothing measurable: over the
+  same 1875 files (`rawbench`, one a camera folder, three runs) the total
+  develop time was 0.994 of what it was without them, the median file
+  1.002.
+- The parallel Huffman decode (NEF, PEF) holds each piece's differences
+  for the samples it holds, frees each piece once placed, and keeps
+  Nikon's differences in 16 bits: its unpack peaks near 10 bytes a frame
+  pixel beyond the mosaic (27 before), and NEF's unpack is about 9%
+  faster.
 - The last full corpus run recorded here, on 85d1271 (2026-10-26),
   compared 4943 files from 1027 cameras with no mismatch. With every
   camera taken, 4987 of the 5108 files LibRaw opens develop in Rust; the
@@ -82,20 +99,27 @@ fallback to LibRaw, all of which Phase 16 ended for the shipped app.
 
 ### Open items
 
-- Develop: an odd ActiveArea's black and a GainMap's offset; half-size
-  stage 3 coordinates; cancellation is not checked inside a
-  single-stream decode; Leaf's records are found in quadratic time; a
-  NEF Huffman error is reported as unsupported, not damaged. OpcodeList2
-  is not applied on linear and monochrome plans, as 2026.6 did not apply
-  it either.
-- Memory: the parallel Huffman decode holds up to about 27 bytes a frame
-  pixel (each piece's differences once for each code); `Plan::bytes`
-  now counts it, but the decode itself could hold far less.
+- Develop: Leaf's records are found in quadratic time; a NEF Huffman
+  error is reported as unsupported, not damaged. OpcodeList2 is not
+  applied on linear and monochrome plans, as 2026.6 did not apply it
+  either.
+- An odd ActiveArea top or left edge (none in either corpus: all 323
+  DNGs that open start on an even row and column): the area moves in by
+  one, as LibRaw's does, and the black pattern and OpcodeList2's maps
+  are read from the moved area's corner, as LibRaw's develop reads them
+  (held to it to the bit, `rust_decoder.rs`). The DNG specification
+  places both at the stated corner, a row or column away; a map of one
+  CFA color (pitch 2) would then land on another color. Left as LibRaw
+  reads it, for the owner to decide.
+- At half size, OpcodeList2's maps over an area of odd height or width:
+  LibRaw's area is then a row or column shorter, so a map's place in it
+  differs by about a pixel and its gain by about 0.1%; the Rust develop
+  reads the whole area at both sizes. No corpus file with these maps
+  has an odd area (78 files, all even).
 - Formats: Nikon High Efficiency NEFs (parked; LibRaw cannot decode them
   either) and the rare formats Phase 16's survey lists.
-- Elsewhere: GPR errors are not matched by the app's undevelopable test;
-  `heeler-raw --no-default-features --all-targets` does not compile;
-  the tests run without overflow checks.
+- Elsewhere: `heeler-raw --no-default-features --all-targets` does not
+  compile; the tests run without overflow checks.
 
 ## The goal, in numbers (as planned, 2026-10-19)
 
@@ -176,7 +200,9 @@ levels, white balance, demosaic, color, the copy out). It writes one CSV
 row a file and prints per-format and per-camera totals; `--compare BASE
 NEW` gives the ratio per format and camera with the floor and target
 marked. A DNG is classed by its raw image's compression and photometric
-interpretation, since one extension hides several decoders.
+interpretation, since one extension hides several decoders. With no
+paths it walks every corpus folder in `HEELER_RAW_CORPUS`, joined as PATH
+joins them.
 
 ```
 cargo run --release -p heeler-raw --features rust-decoder --example rawbench -- \
@@ -718,7 +744,11 @@ the lens shading opcodes, and the linear DNG path.
   model's and is tested on its own. That alone lets several cameras
   join the verified list.
 - At half size the stage 3 opcodes are read over the half-size image's
-  own size (whole 2 by 2 blocks).
+  own size (whole 2 by 2 blocks), a map's area and pitch in the active
+  area's rows and columns: a half-size pixel takes a map where either of
+  the rows and either of the columns it stands for does (a map that
+  starts off the image's edge, as the Sigma fp's CinemaDNG frames' do,
+  or one on every second row).
 
 ### Verification
 
