@@ -11,11 +11,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Command, CurveChannel, NodeCard, State, Take } from "../state";
 import { activeStackMerge, inspectDocked, pickMaskNode, antsSources, artLayerName, artMaskNode, chainTerminalId, frameLook, renderedSource, mainConversion, previewTarget, shapeLineWidth, transformDragOf, isPlacedLayer, layerFlipBlocked, photoTurn } from "../state";
 import { XformIcon } from "./panelicons";
-import { maskBrushTarget, maskOverlayRgb, BRUSH_TIPS, MULTI_MAX, POLISH_MODES, SELECT_OPS, activeSelectionMask, applyPick, artFindLayer, artToolbarVisible, cropNode, fitCropToAspect, layerQuad, multiGrid, transformBox, toolNode } from "../state";
+import { maskBrushTarget, maskOverlayRgb, BRUSH_TIPS, MULTI_MAX, POLISH_MODES, SELECT_OPS, activeSelectionMask, applyPick, artFindLayer, artToolbarVisible, cropNode, cropToPicture, fitCropToAspect, layerQuad, multiGrid, transformBox, toolNode } from "../state";
 import { OpIcon } from "./selecticons";
 import { TrackSlider } from "./track";
 import { StackMergeCanceled, StackMergeProgress } from "./stackmerge";
-import { CropRatioBar } from "./cropratio";
+import { CropFitControls, CropRatioBar } from "./cropratio";
 import { SelectToolButton } from "./selecttool";
 import { DodgeToolButton } from "./dodgetool";
 import { ShapeToolButton } from "./shapetool";
@@ -1541,6 +1541,17 @@ armed has settings to show.*/}
               }}
             />
           )}
+          {state.tool === "crop" && (
+            <CropFitControls
+              stayInside={state.prefs.cropStayInside}
+              canFit={cropToPicture(state) !== null}
+              onFit={() => {
+                const fit = cropToPicture(state);
+                if (fit) dispatch({ type: "set_params", id: cropNode(state).id, values: fit });
+              }}
+              onStayInside={(on) => dispatch({ type: "set_prefs", prefs: { cropStayInside: on } })}
+            />
+          )}
           {state.tool === "crop" && state.splitOn && (
             <div style={{ width: 1, height: 14, background: "#1f2426" }} />
           )}
@@ -1745,7 +1756,7 @@ existing stack").*/}
                 // A stand-in when the photo has no crop node yet: the
                 // first drag builds the real one (materializeMainTool).
                 const crop = cropNode(state);
-                return <CropOverlay node={crop} dispatch={dispatch} aspect={state.cropAspect} view={view} />;
+                return <CropOverlay node={crop} dispatch={dispatch} aspect={state.cropAspect} view={view} stayInside={state.prefs.cropStayInside} />;
               })()}
             {/* Shape Warp: the same preview canvas and hold as Grid
                 Warp, with the shapes' overlay on top. Mounted while the

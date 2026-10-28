@@ -15,6 +15,7 @@ import { lineColorOver, lineEdgeOver, patchAverage, resolveLineColor, useAutoLin
 import { quadCenter } from "../state";
 import { quadFolds, reshapeByHandle, scaleByHandle, snapMove, type Guides, type Handle } from "../imagelayers";
 import { useDragFollow } from "./dragfollow";
+import { holdInside } from "../cropfit";
 
 /** The fields of a mouse event a drag reads, from the element or the
  * window (dragfollow.ts). */
@@ -635,12 +636,16 @@ export function CropOverlay({
   dispatch,
   aspect = null,
   view = IDENTITY_VIEW,
+  stayInside = false,
 }: {
   node: NodeCard;
   dispatch: D;
   /** target width/height PIXEL ratio to constrain corner drags, or null */
   aspect?: number | null;
   view?: ViewTransform;
+  /** Stay inside picture (Prefs.cropStayInside): a drag stops where the
+   * crop would take in an empty corner of the turned photograph */
+  stayInside?: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const drag = useRef<CropDrag | null>(null);
@@ -709,6 +714,18 @@ export function CropOverlay({
           if (top) next.crop_y = o.y + o.h - h2;
         }
       }
+    }
+    // Held at the turned photograph's edge: as far toward the pointer as
+    // stays all picture (holdInside, cropfit.ts). The overlay is the
+    // frame, so its sides give the frame's shape.
+    const el = root.current;
+    if (stayInside && el && el.offsetWidth > 0 && el.offsetHeight > 0) {
+      next = holdInside(
+        { crop_x: o.x, crop_y: o.y, crop_w: o.w, crop_h: o.h },
+        next,
+        el.offsetWidth / el.offsetHeight,
+        node.params.angle ?? 0,
+      );
     }
     dispatch({ type: "set_params", id: node.id, values: next });
   };

@@ -11,6 +11,7 @@ import { logMsg } from "./log";
 import { fileWarpValues } from "./lenspresets";
 import { cornersOf, mapPoint, solveHomography, type Pt } from "./quadmap";
 import { flipQuad, frameAspectFor, reframeQuad } from "./imagelayers";
+import { cropInside, cropRatio, cropRectOf, stayInside, type CropRect } from "./cropfit";
 import { cropGeomOf, flippedCropParams, sourceSizeFor, frameRemap, mirrorRemap, remapNode, remapNodes, sameCrop, sourceAspectFor, turnedCropParams, turnRemap, type CropGeom, type FrameRemap } from "./framemap";
 import type { NavState } from "./keynav";
 import {
@@ -159,6 +160,11 @@ export interface Prefs {
    * ratio calculator and offered after the shipped ones wherever a
    * ratio is offered (cropRatioList) */
   cropRatios: SavedCropRatio[];
+  /** Stay inside picture: a Straighten (the slider, the drawn line, the
+   * crop tool's ring) shrinks the crop to the turned photograph so no
+   * empty corner shows, and a crop drag stops at the picture's edge.
+   * Off, the crop stays where it is put. */
+  cropStayInside: boolean;
   /** wheel zoom sensitivity, expressed as the exponent rate per delta */
   viewerZoomRate: number;
   /** degrees applied by one wheel rotation step */
@@ -272,6 +278,7 @@ export const DEFAULT_PREFS: Prefs = {
   pinnedSections: [],
   hiddenSections: [],
   cropRatios: [],
+  cropStayInside: true,
   viewerZoomRate: 0.0015,
   viewerRotationStep: 2,
   previewEdge: 2048,
@@ -13794,6 +13801,44 @@ export function cropSourceAspect(s: State): number {
   return 1.5;
 }
 
+/** The frame the crop's rectangle is measured on, as width over height:
+ * the photograph turned as Photo > Rotate left it. */
+export function cropFrameAspect(s: State): number {
+  const shape = cropSourceAspect(s);
+  return photoTurn(s) % 2 ? 1 / shape : shape;
+}
+
+/** Stay inside picture (Prefs.cropStayInside): an angle written to the
+ * crop node brings its rectangle along, held to the turned photograph
+ * so no empty corner shows (stayInside, cropfit.ts). A write that
+ * carries the rectangle too has placed it already (the crop tool's
+ * ring), and with the setting off the angle goes alone, as it always
+ * did. Only an edit moves the crop: a document opens as it was saved. */
+function cropHeldInside(s: State, id: string, values: Record<string, number>): Record<string, number> {
+  if (!s.prefs.cropStayInside || values.angle === undefined) return values;
+  if (["crop_x", "crop_y", "crop_w", "crop_h"].some((k) => k in values)) return values;
+  const n = s.nodes.find((k) => k.id === id);
+  if (!n || n.type !== "heeler.crop_rotate") return values;
+  const from = n.params.angle ?? 0;
+  if (values.angle === from) return values;
+  const fit = stayInside(cropRectOf(n.params), cropFrameAspect(s), from, values.angle);
+  return fit ? { ...values, ...fit } : values;
+}
+
+/** Crop to picture: the largest crop that is all picture at the angle
+ * as it stands, centered on the frame, in the ratio the crop tool holds
+ * or else the crop's own (an untouched crop's is the photograph's). Null
+ * when the crop already is that. */
+export function cropToPicture(s: State): CropRect | null {
+  const n = cropNode(s);
+  const frame = cropFrameAspect(s);
+  const now = cropRectOf(n.params);
+  const ratio = (s.tool === "crop" ? s.cropAspect : null) ?? cropRatio(now, frame);
+  const fit = cropInside(frame, n.params.angle ?? 0, ratio);
+  const moved = Math.abs(fit.crop_x - now.crop_x) + Math.abs(fit.crop_y - now.crop_y) + Math.abs(fit.crop_w - now.crop_w) + Math.abs(fit.crop_h - now.crop_h);
+  return moved < 1e-6 ? null : fit;
+}
+
 /** A crop edit carries every stroke, region and placed mask shape onto
  * the new frame (2026-09-30: "yes, do the stroke remap for 26.4").
  * Only an edit of the photograph on screen: a landing brings its own
@@ -17649,15 +17694,14 @@ function reduceInner(s: State, cmd: Command): State {
         const deep = updateArtNodeDeep(s, cmd.id, (n) => ({ ...n, params: { ...n.params, [cmd.param]: clampParam(cmd.param, cmd.value, n.type) } }));
         if (deep) return withUndo({ nodes: deep.nodes, images: s.images.map((i) => i.id === s.activeImage ? { ...i, edited: true } : i) });
       }
-      const value = clampParam(
-        cmd.param,
-        cmd.value,
-        s.nodes.find((n) => n.id === cmd.id)?.type,
-      );
+      const nodeType = s.nodes.find((n) => n.id === cmd.id)?.type;
+      const value = clampParam(cmd.param, cmd.value, nodeType);
+      const values = cropHeldInside(s, cmd.id, { [cmd.param]: value });
+      for (const k of Object.keys(values)) values[k] = clampParam(k, values[k], nodeType);
       return withUndo({
         nodes: s.nodes.map((n) =>
           n.id === cmd.id
-            ? armedIn(s, { ...n, params: { ...n.params, [cmd.param]: value } })
+            ? armedIn(s, { ...n, params: { ...n.params, ...values } })
             : n,
         ),
         images: s.images.map((i) =>
@@ -17688,6 +17732,8 @@ function reduceInner(s: State, cmd: Command): State {
         if (Number.isNaN(bent)) continue;
         clamped[k] = clampParam(k, bent, nodeType);
       }
+      const held = cropHeldInside(s, cmd.id, clamped);
+      for (const k of Object.keys(held)) clamped[k] = clampParam(k, held[k], nodeType);
       return withUndo({
         nodes: s.nodes.map((n) =>
           n.id === cmd.id
@@ -20267,6 +20313,7 @@ function reduceInner(s: State, cmd: Command): State {
           ? merged.hiddenSections.map((t) => RENAMED_SECTIONS[t as string] ?? t).filter((t, i, a): t is string => typeof t === "string" && a.indexOf(t) === i)
           : DEFAULT_PREFS.hiddenSections,
         cropRatios: savedCropRatios(merged.cropRatios),
+        cropStayInside: typeof merged.cropStayInside === "boolean" ? merged.cropStayInside : true,
         maskOverlayColor: MASK_OVERLAY_COLORS.some((color) => color.id === merged.maskOverlayColor)
           ? merged.maskOverlayColor
           : DEFAULT_PREFS.maskOverlayColor,

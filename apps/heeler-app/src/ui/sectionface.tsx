@@ -25,7 +25,7 @@ import { CurveEditor, Wheel } from "./editors";
 import { BendBar, BendWheel } from "./bend";
 import { LevelsEditor } from "./levels";
 import { ZonesBlock } from "./zones";
-import { FlipPhotoRow } from "./flipphoto";
+import { CropToPictureRow, FlipPhotoRow } from "./flipphoto";
 import { PrintControls } from "./print";
 import { DETAIL_WEIGHT_PARAMS, sectionWidgetKinds, type SectionSpec, type SectionWidgetKind, type SectionWidgetSeats } from "./simpledata";
 import { WINDOWED_ROWS } from "./sectionfaceparts";
@@ -287,6 +287,7 @@ export function SectionWidgets({
           return state ? (
             <div key={kind} data-testid="section-widget-flipPhoto" data-node={node.id} data-params="flip_h flip_v turn">
               <FlipPhotoRow nodes={state.nodes} activeImage={state.activeImage} dispatch={dispatch} />
+              <CropToPictureRow state={state} dispatch={dispatch} />
             </div>
           ) : null;
         }

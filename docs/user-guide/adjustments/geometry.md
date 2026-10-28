@@ -11,6 +11,17 @@ Geometry controls image rotation, aspect transformation, and the nondestructive 
 
 Geometry starts off, and a photograph carries no geometry node until it is used: switching the section on or making the first crop or straighten drag in the viewport adds it. The viewport crop tool is the normal visual way to edit these values. Numeric rows are useful for matching crops or entering exact geometry. Pixels outside the crop are retained and can be restored.
 
+## Crop to picture
+
+Straightening turns the photograph inside its frame, which leaves empty corners where the turned picture no longer reaches. **Stay inside picture** keeps the crop clear of them, and it is on by default:
+
+- When **Straighten** changes (the row, the drawn line or the crop tool's rotation ring), the crop shrinks so no empty corner shows, keeping its center and its ratio. A crop that already filled the picture follows it back out, so straightening and then returning to level gives the whole frame again. A smaller crop is left alone until the picture's edge reaches it.
+- Dragging the crop or its corners outward stops at the picture's edge.
+
+Turn it off with **Stay inside** on the crop bar or on the **Crop** row at the foot of this section, and the crop stays wherever it is put. Flip and Rotate's quarter turns leave no empty corners and never change the crop. A document opens exactly as it was saved: the setting only acts on a new change of angle.
+
+**Crop to picture** (**Crop to picture** on the crop bar, **To picture** on the **Crop** row) sets the largest crop that is all picture at the current angle, centered, in the ratio the crop bar holds, or else in the crop's own ratio. It is one undo step, and grays when the crop already is that.
+
 ## Flip
 
 **Flip** (two buttons on the **Flip** row at the foot of the section: Flip Horizontal, a shape and its mirror across an upright dashed line, and Flip Vertical, across a level one) mirrors the photograph left for right or top for bottom, the same two switches as **Photo > Flip Horizontal** and **Flip Vertical**. A lit button is on; pressing it again puts the photograph back. Each press is one undo step. The same two buttons sit on the Crop & Rotate node in the graph inspector.

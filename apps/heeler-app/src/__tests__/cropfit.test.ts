@@ -1,0 +1,174 @@
+// Crop to picture and Stay inside picture: the crop held to the
+// turned photograph, so a Straighten leaves no empty corner. The
+// engine's twin (ops_geometry::crop_inside) renders the fit and counts
+// empty pixels; these check the app's copy against an independent
+// sampling of the same geometry, then the reducer and the drag hold.
+
+import { describe, expect, it } from "vitest";
+import { initialState, NEUTRAL_NODES, NEUTRAL_WIRES } from "../data";
+import { cropInside, cropIsInside, holdInside, stayInside, type CropRect } from "../cropfit";
+import { noteSourceSize } from "../framemap";
+import { cropNode, cropToPicture, reduce, type Command, type State } from "../state";
+
+const FRAME = 1.5; // a 3:2 photograph
+
+/** Whether every point of the crop lands on the photograph, sampled on
+ * a grid and turned back the way the engine samples (positive angle
+ * clockwise, about the frame's center): the check that the corners
+ * bound it, not the corners themselves. */
+function allPicture(c: CropRect, frame: number, angle: number): boolean {
+  const t = (-angle * Math.PI) / 180;
+  for (let i = 0; i <= 20; i++) {
+    for (let j = 0; j <= 20; j++) {
+      const fx = c.crop_x + (c.crop_w * i) / 20;
+      const fy = c.crop_y + (c.crop_h * j) / 20;
+      if (fx < -1e-9 || fy < -1e-9 || fx > 1 + 1e-9 || fy > 1 + 1e-9) return false;
+      const [dx, dy] = [(fx - 0.5) * frame, fy - 0.5];
+      const sx = dx * Math.cos(t) - dy * Math.sin(t);
+      const sy = dx * Math.sin(t) + dy * Math.cos(t);
+      if (Math.abs(sx) > frame / 2 + 1e-9 || Math.abs(sy) > 0.5 + 1e-9) return false;
+    }
+  }
+  return true;
+}
+
+const ANGLES = [-45, -30, -12.5, -3, 0.5, 7, 20, 33.3, 45];
+const RATIOS = [1.5, 1, 16 / 9, 2.39, 2 / 3, 9 / 16];
+
+describe("cropInside", () => {
+  it("is all picture at every angle Straighten reaches, in the ratio asked", () => {
+    for (const angle of ANGLES) {
+      for (const ratio of RATIOS) {
+        const c = cropInside(FRAME, angle, ratio);
+        expect(allPicture(c, FRAME, angle), `${angle}° at ${ratio}`).toBe(true);
+        expect(cropIsInside(c, FRAME, angle)).toBe(true);
+        expect((c.crop_w * FRAME) / c.crop_h).toBeCloseTo(ratio, 9);
+        expect(c.crop_x + c.crop_w / 2).toBeCloseTo(0.5, 9);
+      }
+    }
+  });
+
+  it("is the largest: a little bigger takes in an empty corner", () => {
+    for (const angle of ANGLES) {
+      for (const ratio of RATIOS) {
+        const c = cropInside(FRAME, angle, ratio);
+        const k = 1.01;
+        const bigger = { crop_x: 0.5 - (c.crop_w * k) / 2, crop_y: 0.5 - (c.crop_h * k) / 2, crop_w: c.crop_w * k, crop_h: c.crop_h * k };
+        expect(cropIsInside(bigger, FRAME, angle), `${angle}° at ${ratio}`).toBe(false);
+      }
+    }
+  });
+
+  it("is the whole frame at no angle in the photograph's own shape", () => {
+    const c = cropInside(FRAME, 0, FRAME);
+    expect([c.crop_x, c.crop_y, c.crop_w, c.crop_h].map((v) => Number(v.toFixed(9)))).toEqual([0, 0, 1, 1]);
+  });
+
+  it("keeps an off-center crop's center, and falls back to the middle off the picture", () => {
+    const c = cropInside(FRAME, 15, 1, [0.4, 0.6]);
+    expect(c.crop_x + c.crop_w / 2).toBeCloseTo(0.4, 9);
+    expect(c.crop_y + c.crop_h / 2).toBeCloseTo(0.6, 9);
+    expect(allPicture(c, FRAME, 15)).toBe(true);
+    const lost = cropInside(FRAME, 30, 1, [0, 0]);
+    expect(lost.crop_x + lost.crop_w / 2).toBeCloseTo(0.5, 9);
+  });
+});
+
+describe("stayInside", () => {
+  const full: CropRect = { crop_x: 0, crop_y: 0, crop_w: 1, crop_h: 1 };
+
+  it("follows the fit from an untouched frame, and gives the frame back at level", () => {
+    const turned = stayInside(full, FRAME, 0, 10)!;
+    expect(turned).not.toBeNull();
+    expect(allPicture(turned, FRAME, 10)).toBe(true);
+    expect((turned.crop_w * FRAME) / turned.crop_h).toBeCloseTo(FRAME, 9);
+    const back = stayInside(turned, FRAME, 10, 0)!;
+    expect(back.crop_w).toBeCloseTo(1, 9);
+    expect(back.crop_h).toBeCloseTo(1, 9);
+  });
+
+  it("leaves a small crop alone until the picture's edge reaches it", () => {
+    const small: CropRect = { crop_x: 0.4, crop_y: 0.4, crop_w: 0.2, crop_h: 0.2 };
+    expect(stayInside(small, FRAME, 0, 10)).toBeNull();
+    const corner: CropRect = { crop_x: 0.02, crop_y: 0.02, crop_w: 0.3, crop_h: 0.3 };
+    const held = stayInside(corner, FRAME, 0, 10)!;
+    expect(held.crop_w).toBeLessThan(0.3);
+    expect(allPicture(held, FRAME, 10)).toBe(true);
+  });
+});
+
+describe("holdInside", () => {
+  it("stops a crop corner dragged outward at the picture's edge", () => {
+    const from = cropInside(FRAME, 12, FRAME);
+    // The bottom-right corner pulled to the frame's corner, top-left anchored.
+    const to: CropRect = { ...from, crop_w: 1 - from.crop_x, crop_h: 1 - from.crop_y };
+    const held = holdInside(from, to, FRAME, 12);
+    expect(cropIsInside(held, FRAME, 12)).toBe(true);
+    expect(held.crop_x).toBeCloseTo(from.crop_x, 9);
+    expect(held.crop_y).toBeCloseTo(from.crop_y, 9);
+    expect(held.crop_w).toBeCloseTo(from.crop_w, 6); // already snug: nowhere to go
+  });
+
+  it("lets a drag inward through untouched, and moves a crop as far as the edge", () => {
+    const from: CropRect = { crop_x: 0.3, crop_y: 0.3, crop_w: 0.3, crop_h: 0.3 };
+    const inward = { ...from, crop_w: 0.2 };
+    expect(holdInside(from, inward, FRAME, 10)).toEqual(inward);
+    const moved = holdInside(from, { ...from, crop_x: 0.7 }, FRAME, 10);
+    expect(moved.crop_x).toBeGreaterThan(0.3);
+    expect(moved.crop_x).toBeLessThan(0.7);
+    expect(cropIsInside(moved, FRAME, 10)).toBe(true);
+    expect(allPicture(moved, FRAME, 10)).toBe(true);
+  });
+
+  it("does not hold a crop that was already past the edge", () => {
+    const from: CropRect = { crop_x: 0, crop_y: 0, crop_w: 1, crop_h: 1 };
+    const to = { ...from, crop_w: 0.9 };
+    expect(holdInside(from, to, FRAME, 10)).toEqual(to);
+  });
+});
+
+describe("Stay inside picture in the reducer", () => {
+  const ID = "cropfit_photo";
+  noteSourceSize(ID, 3000, 2000);
+  const fresh = (stay: boolean): State => {
+    const s = { ...initialState(), activeImage: ID, nodes: structuredClone(NEUTRAL_NODES), wires: structuredClone(NEUTRAL_WIRES) };
+    return { ...s, prefs: { ...s.prefs, cropStayInside: stay } };
+  };
+  const run = (s: State, ...cmds: Command[]): State => cmds.reduce(reduce, s);
+  const rect = (s: State): CropRect => {
+    const p = cropNode(s).params;
+    return { crop_x: p.crop_x ?? 0, crop_y: p.crop_y ?? 0, crop_w: p.crop_w ?? 1, crop_h: p.crop_h ?? 1 };
+  };
+
+  it("is on by default", () => {
+    expect(initialState().prefs.cropStayInside).toBe(true);
+  });
+
+  it("shrinks the crop as Straighten turns, at several angles", () => {
+    for (const angle of [-40, -8, 3, 25, 45]) {
+      const s = run(fresh(true), { type: "set_param", id: cropNode(fresh(true)).id, param: "angle", value: angle });
+      expect(cropNode(s).params.angle).toBe(angle);
+      expect(allPicture(rect(s), FRAME, angle), `${angle}°`).toBe(true);
+    }
+  });
+
+  it("leaves the crop where it is with the setting off", () => {
+    const s = run(fresh(false), { type: "set_param", id: cropNode(fresh(false)).id, param: "angle", value: 10 });
+    expect(rect(s)).toEqual({ crop_x: 0, crop_y: 0, crop_w: 1, crop_h: 1 });
+  });
+
+  it("does not move a crop the same write places", () => {
+    const placed = { angle: 10, crop_x: 0.1, crop_y: 0.1, crop_w: 0.5, crop_h: 0.5 };
+    const s = run(fresh(true), { type: "set_params", id: cropNode(fresh(true)).id, values: placed });
+    expect(rect(s)).toEqual({ crop_x: 0.1, crop_y: 0.1, crop_w: 0.5, crop_h: 0.5 });
+  });
+
+  it("Crop to picture fits a crop the setting did not", () => {
+    const s = run(fresh(false), { type: "set_param", id: cropNode(fresh(false)).id, param: "angle", value: 10 });
+    const fit = cropToPicture(s)!;
+    expect(fit).not.toBeNull();
+    const after = run(s, { type: "set_params", id: cropNode(s).id, values: { ...fit } });
+    expect(allPicture(rect(after), FRAME, 10)).toBe(true);
+    expect(cropToPicture(after)).toBeNull();
+  });
+});

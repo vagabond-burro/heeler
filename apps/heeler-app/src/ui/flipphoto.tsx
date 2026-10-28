@@ -7,8 +7,8 @@
 // photo."), and a second press puts it back.
 
 import React from "react";
-import type { Command, NodeCard } from "../state";
-import { photoFlipBlocked, photoFlips, photoTurn, photoTurnBlocked } from "../state";
+import type { Command, NodeCard, State } from "../state";
+import { cropNode, cropToPicture, photoFlipBlocked, photoFlips, photoTurn, photoTurnBlocked } from "../state";
 import { XformIcon } from "./panelicons";
 
 const ICON_CHIP: React.CSSProperties = {
@@ -103,6 +103,47 @@ function RotatePhotoRow({ nodes, activeImage, dispatch }: { nodes: NodeCard[]; a
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/** Crop to picture under Rotate, in the Geometry section: the largest
+ * crop with no empty corner at the Straighten angle as it stands, one
+ * undo step. Stay inside picture is beside it as a switch, the crop
+ * tool's own setting. */
+export function CropToPictureRow({ state, dispatch }: { state: State; dispatch: React.Dispatch<Command> }) {
+  const fit = cropToPicture(state);
+  const stay = state.prefs.cropStayInside;
+  return (
+    <div data-testid="crop-to-picture-row" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <span className="lbl" style={{ fontSize: 11, flex: 1 }}>
+        Crop
+      </span>
+      <button
+        className="chip"
+        data-testid="section-crop-to-picture"
+        disabled={!fit}
+        data-hint={fit ? "Crop to picture: the largest crop with no empty corner at this angle, in the crop's ratio" : "Crop to picture: the crop already is the largest with no empty corner"}
+        onClick={() => fit && dispatch({ type: "set_params", id: cropNode(state).id, values: fit })}
+        style={{ fontSize: 11, padding: "1px 6px" }}
+      >
+        To picture
+      </button>
+      <button
+        className="chip"
+        data-testid="section-crop-stay-inside"
+        aria-pressed={stay}
+        data-active={stay || undefined}
+        data-hint={
+          stay
+            ? "Stay inside picture: on, Straighten shrinks the crop so no empty corner shows; click to turn it off"
+            : "Stay inside picture: off, Straighten leaves the crop where it is; click to keep it to the picture"
+        }
+        onClick={() => dispatch({ type: "set_prefs", prefs: { cropStayInside: !stay } })}
+        style={{ fontSize: 11, padding: "1px 6px" }}
+      >
+        Stay inside
+      </button>
     </div>
   );
 }

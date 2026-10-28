@@ -727,6 +727,37 @@ pub fn crop_rotate_buf(src: &Arc<ImageBuf>, angle_deg: f32, aspect_dial: f32, cr
     Arc::new(out)
 }
 
+/// Crop to picture: the largest crop of `ratio` (width over height in
+/// pixels) centered on `center` (a point of the frame, 0..1 on each
+/// axis) that holds nothing but picture once the frame is turned by
+/// `angle_deg`, as x, y, w, h fractions of the frame. Closed form: the
+/// crop's corners, turned back into the photograph, sit a half width
+/// times |cos| plus a half height times |sin| (and the same crossed) from
+/// its center, which must stay inside the photograph's half sides; the
+/// frame's own edges bound it too. A center off the picture gets the
+/// centered fit. The app's twin is cropInside (src/cropfit.ts).
+pub fn crop_inside(frame_w: f32, frame_h: f32, angle_deg: f32, ratio: f32, center: [f32; 2]) -> [f32; 4] {
+    let (s, c) = angle_deg.to_radians().sin_cos();
+    let (s, c) = (s.abs(), c.abs());
+    let half = |center: [f32; 2]| {
+        let (dx, dy) = ((center[0] - 0.5) * frame_w, (center[1] - 0.5) * frame_h);
+        // The center as the photograph sees it, turned back by the angle.
+        let (sin, cos) = (-angle_deg.to_radians()).sin_cos();
+        let (px, py) = (dx * cos - dy * sin, dx * sin + dy * cos);
+        // Half the crop's height, the least of the four bounds.
+        ((frame_w / 2.0 - px.abs()) / (ratio * c + s))
+            .min((frame_h / 2.0 - py.abs()) / (ratio * s + c))
+            .min((frame_w / 2.0 - dx.abs()) / ratio)
+            .min(frame_h / 2.0 - dy.abs())
+    };
+    let (center, b) = match half(center) {
+        b if b > 0.0 => (center, b),
+        _ => ([0.5, 0.5], half([0.5, 0.5])),
+    };
+    let (w, h) = (2.0 * b * ratio / frame_w, 2.0 * b / frame_h);
+    [center[0] - w / 2.0, center[1] - h / 2.0, w, h]
+}
+
 #[cfg(test)]
 mod tests {
     use crate::buffers::ImageBuf;
@@ -1063,6 +1094,57 @@ mod tests {
         let got = out.as_image().unwrap();
         assert_close(got.pixel(8, 8)[0], 0.5);
         assert_close(got.pixel(0, 0)[3], 0.0);
+    }
+
+    /// The fraction of a render's pixels that are not wholly picture.
+    fn empty_share(img: &ImageBuf) -> f32 {
+        let empty = (0..img.height).flat_map(|y| (0..img.width).map(move |x| (x, y))).filter(|&(x, y)| img.pixel(x, y)[3] < 0.999).count();
+        empty as f32 / (img.width * img.height) as f32
+    }
+
+    /// Crop to picture leaves no empty pixel at any angle Straighten
+    /// reaches, for the picture's own shape and for ratios either side
+    /// of it, and it is the largest such crop: a few percent wider shows
+    /// the empty corners again.
+    #[test]
+    fn crop_to_picture_leaves_no_empty_corner_and_is_the_largest() {
+        let img = std::sync::Arc::new(ImageBuf::filled(300, 200, [0.5, 0.5, 0.5, 1.0]));
+        for angle in [-45.0f32, -30.0, -12.5, -3.0, 0.5, 7.0, 20.0, 33.3, 45.0] {
+            for ratio in [1.5f32, 1.0, 16.0 / 9.0, 2.39, 2.0 / 3.0, 0.5625] {
+                let crop = super::crop_inside(300.0, 200.0, angle, ratio, [0.5, 0.5]);
+                let out = super::crop_rotate_buf(&img, angle, 0.0, crop);
+                assert_eq!(empty_share(&out), 0.0, "angle {angle} ratio {ratio}: {crop:?}");
+                assert!(((out.width as f32 / out.height as f32) - ratio).abs() < 0.05, "angle {angle} ratio {ratio}: {}x{}", out.width, out.height);
+                let wider = [crop[0] - crop[2] * 0.03, crop[1] - crop[3] * 0.03, crop[2] * 1.06, crop[3] * 1.06];
+                if wider[0] >= 0.0 && wider[1] >= 0.0 && wider[0] + wider[2] <= 1.0 && wider[1] + wider[3] <= 1.0 {
+                    let out = super::crop_rotate_buf(&img, angle, 0.0, wider);
+                    assert!(empty_share(&out) > 0.0, "angle {angle} ratio {ratio}: a wider crop is still all picture");
+                }
+            }
+        }
+    }
+
+    /// Off center the fit keeps its center and still holds only picture;
+    /// a center off the picture altogether falls back to the middle.
+    #[test]
+    fn crop_to_picture_keeps_an_off_center_crop_where_it_is() {
+        let img = std::sync::Arc::new(ImageBuf::filled(300, 200, [0.5, 0.5, 0.5, 1.0]));
+        for (angle, center) in [(10.0f32, [0.4f32, 0.6f32]), (-25.0, [0.65, 0.45]), (40.0, [0.3, 0.3])] {
+            let crop = super::crop_inside(300.0, 200.0, angle, 1.5, center);
+            assert!((crop[0] + crop[2] / 2.0 - center[0]).abs() < 1e-5 && (crop[1] + crop[3] / 2.0 - center[1]).abs() < 1e-5);
+            assert_eq!(empty_share(&super::crop_rotate_buf(&img, angle, 0.0, crop)), 0.0, "angle {angle} at {center:?}");
+        }
+        let lost = super::crop_inside(300.0, 200.0, 30.0, 1.5, [0.0, 0.0]);
+        assert!((lost[0] + lost[2] / 2.0 - 0.5).abs() < 1e-5 && (lost[1] + lost[3] / 2.0 - 0.5).abs() < 1e-5);
+    }
+
+    /// Unturned, the picture's own shape fits the whole frame.
+    #[test]
+    fn crop_to_picture_at_no_angle_is_the_whole_frame() {
+        let crop = super::crop_inside(300.0, 200.0, 0.0, 1.5, [0.5, 0.5]);
+        for (got, want) in crop.iter().zip([0.0, 0.0, 1.0, 1.0]) {
+            assert!((got - want).abs() < 1e-5, "{crop:?}");
+        }
     }
 
     #[test]

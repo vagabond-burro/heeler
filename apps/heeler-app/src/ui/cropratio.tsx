@@ -147,6 +147,53 @@ export function CropRatioBar({
   );
 }
 
+/** Crop to picture and Stay inside picture, after the ratio: the
+ * largest crop with no empty corner at the angle as it stands, and
+ * whether a Straighten or a crop drag keeps to the picture by itself
+ * (Prefs.cropStayInside). */
+export function CropFitControls({
+  stayInside,
+  canFit,
+  onFit,
+  onStayInside,
+}: {
+  stayInside: boolean;
+  /** Whether Crop to picture would change the crop. */
+  canFit: boolean;
+  onFit: () => void;
+  onStayInside: (on: boolean) => void;
+}) {
+  return (
+    <span style={{ display: "flex", alignItems: "center", gap: 6 }} data-testid="crop-fit">
+      <button
+        className="chip"
+        data-testid="crop-to-picture"
+        disabled={!canFit}
+        data-hint={canFit ? "Crop to picture: the largest crop with no empty corner at this angle, in the crop's ratio" : "Crop to picture: the crop already is the largest with no empty corner"}
+        onClick={onFit}
+        style={{ fontSize: 11, padding: "2px 7px" }}
+      >
+        Crop to picture
+      </button>
+      <button
+        className="chip"
+        data-testid="crop-stay-inside"
+        aria-pressed={stayInside}
+        data-active={stayInside || undefined}
+        data-hint={
+          stayInside
+            ? "Stay inside picture: on, a Straighten shrinks the crop and a drag stops at the picture's edge, so no empty corner shows; click to let the crop go past it"
+            : "Stay inside picture: off, the crop goes wherever it is put; click to keep it to the picture"
+        }
+        onClick={() => onStayInside(!stayInside)}
+        style={{ fontSize: 11, padding: "2px 7px" }}
+      >
+        Stay inside
+      </button>
+    </span>
+  );
+}
+
 function CalculatorIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false">
