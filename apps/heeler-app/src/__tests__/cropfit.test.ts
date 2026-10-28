@@ -8,7 +8,8 @@ import { describe, expect, it } from "vitest";
 import { initialState, NEUTRAL_NODES, NEUTRAL_WIRES } from "../data";
 import { CROP_MIN, cropInside, cropIsInside, cropRepresentable, holdInside, stayInside, type CropRect } from "../cropfit";
 import { noteSourceSize } from "../framemap";
-import { cropNode, cropToPicture, keepCropInside, reduce, type Command, type State } from "../state";
+import { noteFrameAspect } from "../imagelayers";
+import { cropFrameAspect, cropNode, cropToPicture, keepCropInside, reduce, type Command, type State } from "../state";
 
 const FRAME = 1.5; // a 3:2 photograph
 
@@ -230,5 +231,51 @@ describe("Stay inside picture in the reducer", () => {
     const after = run(s, { type: "set_params", id: cropNode(s).id, values: { ...fit } });
     expect(allPicture(rect(after), FRAME, 10)).toBe(true);
     expect(cropToPicture(after)).toBeNull();
+  });
+});
+
+describe("the frame the fit is measured on", () => {
+  const open = (id: string): State => ({ ...initialState(), activeImage: id, nodes: structuredClone(NEUTRAL_NODES), wires: structuredClone(NEUTRAL_WIRES) });
+  const turned = (s: State, quarters: 1 | 2 | 3): State => reduce(s, { type: "turn_photo", quarters });
+
+  it("is the photograph's own shape, on its side after an odd quarter turn", () => {
+    const ID = "cropframe_noted";
+    noteSourceSize(ID, 3000, 2000);
+    const s = open(ID);
+    expect(cropFrameAspect(s)).toBeCloseTo(1.5, 9);
+    expect(cropFrameAspect(turned(s, 1))).toBeCloseTo(2 / 3, 9);
+    expect(cropFrameAspect(turned(s, 2))).toBeCloseTo(1.5, 9);
+    expect(cropFrameAspect(turned(s, 3))).toBeCloseTo(2 / 3, 9);
+    expect(cropFrameAspect(turned(turned(s, 1), 1))).toBeCloseTo(1.5, 9);
+  });
+
+  it("holds the crop to the picture on its side when Straighten turns it after a quarter turn", () => {
+    const ID = "cropframe_side";
+    noteSourceSize(ID, 3000, 2000);
+    const s0 = turned(open(ID), 1);
+    const s = reduce(s0, { type: "set_param", id: cropNode(s0).id, param: "angle", value: 12 });
+    const p = cropNode(s).params;
+    const c = { crop_x: p.crop_x ?? 0, crop_y: p.crop_y ?? 0, crop_w: p.crop_w ?? 1, crop_h: p.crop_h ?? 1 };
+    expect(allPicture(c, 2 / 3, 12)).toBe(true);
+    // Upright, so its ratio is the picture's on its side, not 3:2.
+    expect((c.crop_w * (2 / 3)) / c.crop_h).toBeCloseTo(2 / 3, 6);
+  });
+
+  it("reads the frame last shown when no size is noted, turned or not, in the crop tool or out", () => {
+    const ID = "cropframe_shown";
+    // A 3:2 photograph turned on its side shows a 2:3 frame.
+    noteFrameAspect(ID, 2 / 3);
+    const side = turned(open(ID), 1);
+    expect(cropFrameAspect({ ...side, tool: "crop" })).toBeCloseTo(2 / 3, 9);
+    // Out of the crop tool the frame shown is the crop: half the width.
+    const half = reduce(side, { type: "set_params", id: cropNode(side).id, values: { crop_w: 0.5 } });
+    noteFrameAspect(ID, 1 / 3);
+    expect(cropFrameAspect({ ...half, tool: "none" })).toBeCloseTo(2 / 3, 9);
+  });
+
+  it("falls back to 3:2 with nothing known, on its side after an odd turn", () => {
+    const s = open("cropframe_unknown");
+    expect(cropFrameAspect(s)).toBeCloseTo(1.5, 9);
+    expect(cropFrameAspect(turned(s, 3))).toBeCloseTo(2 / 3, 9);
   });
 });

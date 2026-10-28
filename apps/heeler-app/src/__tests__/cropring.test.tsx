@@ -121,6 +121,45 @@ describe("the rotation ring", () => {
     expect(angleOf(view.state)).toBe(0);
   });
 
+  it("makes one undo step a drag, and none for a click on the ring that does not move", () => {
+    const view = mount(false);
+    const ring = screen.getByTestId("crop-ring");
+    const steps = () => view.state.undoStack.length;
+    const before = steps();
+    fireEvent.mouseDown(ring, { button: 0, buttons: 1, clientX: 300, clientY: 150 });
+    fireEvent.mouseUp(window);
+    expect(steps()).toBe(before);
+    expect(angleOf(view.state)).toBe(0);
+    expect(view.state.gesture).toBeNull();
+    turn(8);
+    fireEvent.mouseUp(window);
+    const dragged = steps();
+    expect(dragged).toBeGreaterThan(before);
+    turn(5);
+    fireEvent.mouseUp(window);
+    expect(steps()).toBe(dragged + 1);
+    expect(angleOf(reduce(view.state, { type: "undo" }))).toBeCloseTo(angleOf(view.state) - 5, 1);
+  });
+
+  it("levels in one undo step on a double-click, and adds none when already level", () => {
+    const view = mount(false);
+    turn(9);
+    fireEvent.mouseUp(window);
+    const steps = view.state.undoStack.length;
+    const ring = screen.getByTestId("crop-ring");
+    // A double-click is two presses and releases on the spot, then the dblclick.
+    for (let i = 0; i < 2; i++) {
+      fireEvent.mouseDown(ring, { button: 0, buttons: 1, clientX: 300, clientY: 150 });
+      fireEvent.mouseUp(window);
+    }
+    fireEvent.doubleClick(ring);
+    expect(angleOf(view.state)).toBe(0);
+    expect(view.state.undoStack.length).toBe(steps + 1);
+    expect(angleOf(reduce(view.state, { type: "undo" }))).toBeCloseTo(9, 1);
+    fireEvent.doubleClick(ring);
+    expect(view.state.undoStack.length).toBe(steps + 1);
+  });
+
   it("keeps the crop on the turned picture with Stay inside, and gives the frame back at level", () => {
     const view = mount(true);
     turn(15);
