@@ -320,7 +320,8 @@ and can be installed, updated or removed from Preferences (see
   The model reads only your photograph, on your machine.
 
 - **Florence-2 base** (what the assistant knows is in a photograph:
-  captions, objects and where a phrase is), © Microsoft Corporation,
+  captions, objects and where a phrase is; and where the phrase typed
+  into Select by text is), © Microsoft Corporation,
   under the **MIT license**: code and weights alike; ONNX packaging by
   the Hugging Face onnx-community, also MIT. It was trained on FLD-5B,
   Microsoft's own dataset of 126 million images with 5.4 billion

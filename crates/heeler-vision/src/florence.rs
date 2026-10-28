@@ -980,6 +980,46 @@ mod tests {
         assert!(model.run(&image, &FlorenceTask::Caption, &stop).is_err(), "a raised stop flag must end the run");
     }
 
+    /// Select by text end to end on the same big cat: the phrase is
+    /// grounded to a box, and SAM 2.1, prompted with that box, selects
+    /// a good part of it and little outside it. Run by hand with both
+    /// models installed, like the test above.
+    #[test]
+    #[ignore]
+    fn real_model_phrase_selects_the_cat() {
+        let Ok(base) = std::env::var("HEELER_VISION_BASE") else { return };
+        let base = Path::new(&base);
+        let sam_spec = &crate::models::SAM2_1_TINY;
+        assert!(crate::models::installed(base, &crate::models::FLORENCE_2) && crate::models::installed(base, sam_spec));
+        let (rgb, w, h) = demo_photo("demo-09.jpg");
+        let stop = AtomicBool::new(false);
+        let mut model = Florence::load(base, &crate::models::FLORENCE_2).unwrap();
+        let t = std::time::Instant::now();
+        let answer = model.describe(&rgb, w, h, &[FlorenceTask::Grounding { phrase: "the big cat".into() }], &stop).unwrap().remove(0);
+        let ground_ms = t.elapsed().as_millis();
+        let cat = answer.regions.first().unwrap_or_else(|| panic!("the phrase found nothing: {answer:?}")).clone();
+        let mut sam = crate::Sam::load(base, sam_spec).unwrap();
+        let rgbf: Vec<f32> = rgb.iter().map(|v| *v as f32).collect();
+        let emb = sam.embed(&rgbf, w, h).unwrap();
+        let rect = [cat.x0 * w as f32, cat.y0 * h as f32, cat.x1 * w as f32, cat.y1 * h as f32];
+        let t = std::time::Instant::now();
+        let mask = sam.box_mask(&emb, rect, &[]).unwrap();
+        let box_ms = t.elapsed().as_millis();
+        let (mut inside, mut outside, mut area) = (0usize, 0usize, 0usize);
+        for y in 0..h {
+            for x in 0..w {
+                let within = (x as f32) >= rect[0] && (x as f32) <= rect[2] && (y as f32) >= rect[1] && (y as f32) <= rect[3];
+                area += within as usize;
+                if mask[y * w + x] > 0.5 {
+                    if within { inside += 1 } else { outside += 1 }
+                }
+            }
+        }
+        println!("grounding {ground_ms}ms, box decode {box_ms}ms, {cat:?}, {inside} px inside the box, {outside} outside");
+        assert!(inside as f32 > 0.2 * area as f32, "the box's subject is selected: {inside} of {area}");
+        assert!((outside as f32) < 0.1 * inside as f32, "little beyond the box: {outside} against {inside}");
+    }
+
     /// Any precision variant of onnx-community's export, from a folder
     /// holding its onnx/ directory and tokenizer.json, timed on four
     /// demo photographs; how the shipped variant was chosen. Run by

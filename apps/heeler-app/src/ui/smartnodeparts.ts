@@ -26,6 +26,16 @@ export function useSmartModels(ask: boolean, refresh: unknown = 0): SmartModels 
   return models;
 }
 
+/** A Smart mask's ask beside its clicks, what its compute and its
+ * recipe take as `aim` (lib.rs smart_ask): Subject's aim point, or
+ * Text's boxes, the phrase's matches. Empty for the other modes. */
+export function smartAsk(textParams: Record<string, string> | undefined): string {
+  const mode = textParams?.mode || "click";
+  if (mode === "subject") return textParams?.aim ?? "";
+  if (mode === "text") return textParams?.boxes ?? "";
+  return "";
+}
+
 /** The SAM a Smart mask's next compute runs on, from the model its
  * recipe records (lib.rs smart_sam_spec): MobileSAM for a selection
  * made with it while MobileSAM is installed, SAM 2.1 otherwise. */
@@ -54,6 +64,7 @@ export function smartCardNote(n: NodeCard, models: SmartModels | null): string {
   if (smartModelMissing(models, mode, n.textParams?.model ?? "")) return "Model not installed: mask empty";
   if ((n.textParams?.model ?? "") !== "") return "";
   if (mode === "subject" || mode === "sky") return "Not detected yet: Detect in the Inspector";
+  if (mode === "text" && (n.textParams?.boxes || "[]") === "[]") return "No phrase found yet: mask empty";
   if ((n.textParams?.prompts || "[]") === "[]") return "No clicks yet: mask empty";
   return "";
 }

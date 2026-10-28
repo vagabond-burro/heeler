@@ -1749,8 +1749,39 @@ fn smart_recipe_prompts(mode: &str, prompts: &str, aim: &str) -> String {
     match mode {
         "subject" if smart_aim(aim).is_some() => format!("[]|aim {aim}"),
         "subject" | "sky" => "[]".to_string(),
+        "text" => format!("{prompts}|boxes {aim}"),
         _ => prompts.to_string(),
     }
+}
+
+/// A Smart mask's ask beside its clicks, the `aim` its compute and its
+/// recipe take: Subject's aim point, or Text's boxes (the phrase's
+/// matches Florence-2 found, as the node's `boxes` param stores them,
+/// so the selection is made again without Florence-2). Empty for the
+/// other modes. The frontend's smartAsk reads the node the same way.
+fn smart_ask<'a>(params: &'a HashMap<String, serde_json::Value>, mode: &str) -> &'a str {
+    let key = match mode {
+        "subject" => "aim",
+        "text" => "boxes",
+        _ => return "",
+    };
+    params.get(key).and_then(|v| v.as_str()).unwrap_or("")
+}
+
+/// Text's boxes as the node stores them: x0, y0, x1, y1, fractions of
+/// the photograph, upright and uncropped like the clicks. Each is
+/// ordered and clamped; an unreadable list is no boxes.
+fn smart_boxes(text: &str) -> Vec<[f32; 4]> {
+    serde_json::from_str::<Vec<[f32; 4]>>(text)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|b| b.iter().all(|v| v.is_finite()))
+        .map(|[x0, y0, x1, y1]| {
+            let c = |v: f32| v.clamp(0.0, 1.0);
+            [c(x0.min(x1)), c(y0.min(y1)), c(x0.max(x1)), c(y0.max(y1))]
+        })
+        .filter(|[x0, y0, x1, y1]| x1 > x0 && y1 > y0)
+        .collect()
 }
 
 /// smart_version over the recipe as the mode reads it
@@ -1995,8 +2026,7 @@ fn smart_want(image_id: &str, n: &UiNode, depth: DepthRecipe, depth_input: Optio
         .and_then(|v| v.as_str())
         .filter(|m| !m.is_empty())
         .unwrap_or(heeler_vision::SAM2_1_TINY.id);
-    let aim = n.params.get("aim").and_then(|v| v.as_str()).unwrap_or("");
-    smart_recipe_version(image_id, &n.id, mode, prompts, aim, model)
+    smart_recipe_version(image_id, &n.id, mode, prompts, smart_ask(&n.params, mode), model)
 }
 
 /// The matte recipe's prompt half: the geometry and the strokes, as
@@ -3567,8 +3597,20 @@ pub(crate) fn florence_describe_at(
         .map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
         .collect();
     drop(image);
+    florence_run_rgb(base, &rgb, w, h, tasks, stop)
+}
+
+/// The run itself, on display-encoded 8-bit RGB: loaded, run, dropped.
+fn florence_run_rgb(
+    base: &Path,
+    rgb: &[u8],
+    w: usize,
+    h: usize,
+    tasks: &[heeler_vision::FlorenceTask],
+    stop: &std::sync::atomic::AtomicBool,
+) -> Result<Vec<heeler_vision::FlorenceAnswer>, String> {
     let mut model = heeler_vision::Florence::load(base, &heeler_vision::FLORENCE_2).map_err(|e| e.to_string())?;
-    model.describe(&rgb, w, h, tasks, stop).map_err(|e| match e {
+    model.describe(rgb, w, h, tasks, stop).map_err(|e| match e {
         heeler_vision::VisionError::Inference(m) if m == "canceled" => "Canceled.".to_string(),
         other => other.to_string(),
     })
@@ -3627,6 +3669,61 @@ async fn florence_describe(
             Ok(())
         })?;
         Ok(answers.into_iter().flatten().collect())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Select by text's first half: where a phrase is in the photograph.
+/// Florence-2 grounds it on the same preview, upright and uncropped,
+/// that the Smart masks embed, so the boxes come back as fractions of
+/// the photograph, the frame the clicks are stored in, and SAM answers
+/// them as box prompts (smart_mode_mask, mode "text"). An empty list
+/// is an honest "nothing matches"; the panel says so. Answers for a
+/// photograph and phrase already asked come from the session's cache.
+#[tauri::command]
+async fn smart_find(app: tauri::AppHandle, image_id: String, phrase: String) -> Result<Vec<heeler_vision::FlorenceRegion>, String> {
+    let base = vision_base(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let task = heeler_vision::FlorenceTask::Grounding { phrase: phrase.trim().to_string() };
+        let key = florence_answer_key(&format!("photograph {image_id}"), &task);
+        let (cached, verified) = with_session(&app, |s| {
+            Ok((s.florence_answers.iter().find(|(k, _)| *k == key).map(|(_, a)| a.clone()), s.florence_verified))
+        })?;
+        let answer = match cached {
+            Some(a) => a,
+            None => {
+                if !verified && !heeler_vision::installed(&base, &heeler_vision::FLORENCE_2) {
+                    return Err(FLORENCE_NOT_INSTALLED.to_string());
+                }
+                let words = phrase.trim().chars().count();
+                if words == 0 || words > 200 {
+                    return Err("A phrase to find needs one to two hundred characters.".to_string());
+                }
+                let source = preview_source(&app, &image_id, heeler_io::RawSourceOpts::default())?;
+                let (w, h) = (source.width, source.height);
+                let rgb: Vec<u8> = source
+                    .data
+                    .chunks_exact(4)
+                    .flat_map(|px| [px[0], px[1], px[2]])
+                    .map(|v| (heeler_engine::ops::to_display(v.max(0.0)).min(1.0) * 255.0).round() as u8)
+                    .collect();
+                let _one = FLORENCE_RUN.lock().unwrap_or_else(|e| e.into_inner());
+                FLORENCE_STOP.store(false, std::sync::atomic::Ordering::Relaxed);
+                let a = florence_run_rgb(&base, &rgb, w, h, std::slice::from_ref(&task), &FLORENCE_STOP)?
+                    .pop()
+                    .ok_or_else(|| "Florence-2 gave no answer.".to_string())?;
+                with_session(&app, |s| {
+                    s.florence_verified = true;
+                    s.florence_answers.push((key.clone(), a.clone()));
+                    let over = s.florence_answers.len().saturating_sub(FLORENCE_ANSWERS_KEPT);
+                    s.florence_answers.drain(..over);
+                    Ok(())
+                })?;
+                a
+            }
+        };
+        Ok(answer.regions)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -3836,7 +3933,7 @@ pub(crate) fn smart_sources_offline(
         }
         let prompts_json = n.params.get("prompts").and_then(|v| v.as_str()).unwrap_or("[]");
         let mode = n.params.get("mode").and_then(|v| v.as_str()).unwrap_or("click").to_string();
-        let aim = n.params.get("aim").and_then(|v| v.as_str()).unwrap_or("");
+        let aim = smart_ask(&n.params, &mode);
         let Ok(points) = serde_json::from_str::<Vec<SmartPrompt>>(prompts_json) else { continue };
         // Subject prefers the matte here exactly as it does in the app,
         // so a batch render reproduces the session's model choice.
@@ -3947,7 +4044,9 @@ pub(crate) fn smart_sources_offline(
 /// recipe asks for. click = the user's prompts; subject = one ask at
 /// the node's aim (subject_prompt_points), resolved by the model's own
 /// ambiguity estimate; sky = a fan of asks across the top band, keeping
-/// only what touches the top edge and merging what survives (SAM-prompted sky: zero new licenses, quality follows SAM).
+/// only what touches the top edge and merging what survives (SAM-prompted sky: zero new licenses, quality follows SAM);
+/// text = one ask per box the phrase matched (the `aim` is the boxes,
+/// smart_ask), with the clicks inside each box refining it, merged.
 fn smart_mode_mask(
     sam: &mut heeler_vision::Sam,
     emb: &heeler_vision::Embedding,
@@ -3988,6 +4087,34 @@ fn smart_mode_mask(
             }
             if !any {
                 merged.fill(0.0);
+            }
+            Ok(merged)
+        }
+        "text" => {
+            let clicks = sam_prompt_points(points, w, h);
+            let rects: Vec<[f32; 4]> = smart_boxes(aim)
+                .into_iter()
+                .map(|[x0, y0, x1, y1]| [x0 * w as f32, y0 * h as f32, x1 * w as f32, y1 * h as f32])
+                .collect();
+            let inside = |p: &heeler_vision::SamPoint, r: &[f32; 4]| p.x >= r[0] && p.x <= r[2] && p.y >= r[1] && p.y <= r[3];
+            let mut merged = vec![0.0f32; w * h];
+            let mut add = |mask: Vec<f32>| {
+                for (m, v) in merged.iter_mut().zip(mask) {
+                    *m = m.max(v);
+                }
+            };
+            // Each box with the clicks that land in it: an add or a
+            // subtract on the matched thing refines that thing alone.
+            for r in &rects {
+                let own: Vec<heeler_vision::SamPoint> = clicks.iter().copied().filter(|p| inside(p, r)).collect();
+                add(sam.box_mask(emb, *r, &own).map_err(|e| e.to_string())?);
+            }
+            // An add outside every box reaches past what the phrase
+            // found, asked as Click asks it, with the subtracts beside it.
+            let outside: Vec<heeler_vision::SamPoint> =
+                clicks.iter().copied().filter(|p| !rects.iter().any(|r| inside(p, r))).collect();
+            if outside.iter().any(|p| p.positive) {
+                add(sam.click_mask(emb, &outside).map_err(|e| e.to_string())?);
             }
             Ok(merged)
         }
@@ -22759,6 +22886,7 @@ pub fn run() {
             models_move,
             smart_raster_status,
             smart_click,
+            smart_find,
             smart_select,
             smart_matte,
             bake_mask_raster,
@@ -31817,6 +31945,81 @@ mod tests {
             / (w * (h * 2 / 5)) as f32;
         assert!(top > 0.8, "{}: the sky band should be selected: {top}", spec.id);
         assert!(bottom < 0.15, "{}: the ground should not: {bottom}", spec.id);
+    }
+
+    /// Select by text (2026.7): a Text mask's recipe is its clicks and
+    /// its boxes, read from the node's `boxes` param, so a new phrase's
+    /// boxes are a new mask and the same boxes on another computer ask
+    /// for the same raster; the phrase alone keys nothing. The boxes
+    /// read ordered and clamped, and unreadable ones read as none.
+    #[test]
+    fn a_text_selection_is_keyed_by_its_boxes() {
+        let boxes = "[[0.1,0.2,0.4,0.9]]";
+        let mut node = UiNode {
+            id: "smart_mask_text".into(),
+            node_type: "heeler.smart_mask".into(),
+            enabled: true,
+            params: HashMap::from([
+                ("mode".to_string(), serde_json::json!("text")),
+                ("prompts".to_string(), serde_json::json!("[]")),
+                ("phrase".to_string(), serde_json::json!("the dog")),
+                ("boxes".to_string(), serde_json::json!(boxes)),
+                ("model".to_string(), serde_json::json!("sam2_1_hiera_tiny")),
+            ]),
+        };
+        let want = smart_want("img", &node, DepthRecipe::default(), None);
+        assert_eq!(want, smart_recipe_version("img", &node.id, "text", "[]", boxes, "sam2_1_hiera_tiny"));
+        node.params.insert("phrase".into(), serde_json::json!("a dog"));
+        assert_eq!(smart_want("img", &node, DepthRecipe::default(), None), want, "the phrase is not the recipe");
+        node.params.insert("boxes".into(), serde_json::json!("[[0.5,0.2,0.9,0.9]]"));
+        assert_ne!(smart_want("img", &node, DepthRecipe::default(), None), want, "new boxes, new mask");
+        assert_eq!(smart_ask(&node.params, "text"), "[[0.5,0.2,0.9,0.9]]");
+        assert_eq!(smart_ask(&node.params, "click"), "");
+
+        assert_eq!(smart_boxes("[[0.9,0.8,0.1,1.4]]"), vec![[0.1, 0.8, 0.9, 1.0]]);
+        assert!(smart_boxes("[[0.2,0.2,0.2,0.5]]").is_empty(), "a box with no width is no box");
+        assert!(smart_boxes("not boxes").is_empty());
+    }
+
+    /// Select by text against the real model, gated: two bright discs
+    /// on a dark ground, the left one's box asked as a phrase's match
+    /// would hand it over, with a subtract click inside it on the
+    /// disc's right half and an add on the right disc outside every
+    /// box. The left disc's left half and the right disc are selected,
+    /// and the ground is not.
+    #[test]
+    fn gated_text_mode_selects_inside_its_boxes() {
+        let Ok(base) = std::env::var("HEELER_VISION_MODELS") else {
+            eprintln!("skipped: HEELER_VISION_MODELS not set");
+            return;
+        };
+        let base = PathBuf::from(base);
+        let spec = &heeler_vision::SAM2_1_TINY;
+        if !heeler_vision::installed(&base, spec) {
+            eprintln!("skipped: {} not installed", spec.id);
+            return;
+        }
+        let (w, h) = (800usize, 400usize);
+        let discs = [(200.0f32, 200.0f32), (600.0f32, 200.0f32)];
+        let mut rgb = vec![0.0f32; w * h * 3];
+        for y in 0..h {
+            for x in 0..w {
+                let on = discs.iter().any(|(cx, cy)| (x as f32 - cx).hypot(y as f32 - cy) < 110.0);
+                rgb[(y * w + x) * 3..(y * w + x) * 3 + 3].copy_from_slice(if on { &[235.0, 170.0, 60.0] } else { &[25.0, 28.0, 32.0] });
+            }
+        }
+        let mut sam = heeler_vision::Sam::load(&base, spec).unwrap();
+        let emb = sam.embed(&rgb, w, h).unwrap();
+        let boxes = "[[0.1,0.15,0.4,0.85]]";
+        let only_box = smart_mode_mask(&mut sam, &emb, "text", &[], boxes).unwrap();
+        let at = |m: &[f32], x: usize, y: usize| m[y * w + x];
+        assert!(at(&only_box, 200, 200) > 0.5 && at(&only_box, 600, 200) < 0.5, "the box's disc alone");
+        assert!(at(&only_box, 20, 20) < 0.5, "not the ground");
+        let reach = [SmartPrompt { x: 0.75, y: 0.5, positive: true }];
+        let both = smart_mode_mask(&mut sam, &emb, "text", &reach, boxes).unwrap();
+        assert!(at(&both, 200, 200) > 0.5 && at(&both, 600, 200) > 0.5, "an add outside the box reaches the other disc");
+        assert!(at(&both, 400, 20) < 0.5, "not the ground between");
+        assert!(smart_mode_mask(&mut sam, &emb, "text", &[], "[]").unwrap().iter().all(|v| *v == 0.0), "no boxes, no mask");
     }
 
     /// A selection keeps the SAM it was made with (2026.7, SAM 2.1 in

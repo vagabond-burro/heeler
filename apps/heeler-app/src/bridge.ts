@@ -1816,6 +1816,16 @@ export async function smartClick(
 /** SAM 2.1's model id: what every new selection is made with. */
 export const SAM_MODEL = "sam2_1_hiera_tiny";
 
+/** Select by text's first half: Florence-2's boxes for a phrase, in
+ * fractions of the photograph (upright and uncropped, the frame the
+ * Smart clicks are stored in), each with the phrase's label. Empty
+ * when nothing matches. Rejects with FLORENCE_NOT_INSTALLED when the
+ * model is not here. The browser build finds one box in the middle. */
+export async function smartFind(imageId: string, phrase: string): Promise<FlorenceRegion[]> {
+  if (!isTauri()) return [{ label: phrase, x0: 0.3, y0: 0.3, x1: 0.7, y1: 0.7 }];
+  return await call<FlorenceRegion[]>("smart_find", { imageId, phrase });
+}
+
 /** Smart selection straight onto the document selection (Select >
  * Selection Tools > Click / Subject / Sky): same compute as
  * smartClick, but resolves with the raster's version hex, which the

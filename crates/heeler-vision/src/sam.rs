@@ -141,26 +141,48 @@ impl Sam {
         emb: &Embedding,
         points: &[SamPoint],
     ) -> Result<Vec<f32>, VisionError> {
+        self.prompt_mask(emb, points, None)
+    }
+
+    /// One decode with a box prompt, (x0, y0, x1, y1) in the original
+    /// frame's pixels, and any clicks that refine it: what a phrase's
+    /// box from Florence-2 asks for. Same answer shape as click_mask.
+    pub fn box_mask(
+        &mut self,
+        emb: &Embedding,
+        rect: [f32; 4],
+        points: &[SamPoint],
+    ) -> Result<Vec<f32>, VisionError> {
+        self.prompt_mask(emb, points, Some(rect))
+    }
+
+    fn prompt_mask(
+        &mut self,
+        emb: &Embedding,
+        points: &[SamPoint],
+        rect: Option<[f32; 4]>,
+    ) -> Result<Vec<f32>, VisionError> {
         if emb.model != self.model {
             return Err(VisionError::Inference(format!(
                 "an embedding made by {} cannot be decoded by {}",
                 emb.model, self.model
             )));
         }
-        if points.is_empty() {
+        if points.is_empty() && rect.is_none() {
             return Ok(vec![0.0; emb.orig_w * emb.orig_h]);
         }
         if self.two() {
-            self.click_mask_two(emb, points)
+            self.mask_two(emb, points, rect)
         } else {
-            self.click_mask_mobile(emb, points)
+            self.mask_mobile(emb, points, rect)
         }
     }
 
     /// SAM 2.1's decoder: clicks on its square, labels as integers, no
-    /// padding point and no box (an empty box list); it answers three
-    /// low-resolution candidates and its own estimate of each.
-    fn click_mask_two(&mut self, emb: &Embedding, points: &[SamPoint]) -> Result<Vec<f32>, VisionError> {
+    /// padding point, the box (when there is one) in its own input, an
+    /// empty list otherwise; it answers three low-resolution candidates
+    /// and its own estimate of each.
+    fn mask_two(&mut self, emb: &Embedding, points: &[SamPoint], rect: Option<[f32; 4]>) -> Result<Vec<f32>, VisionError> {
         let n = points.len();
         let mut coords = Vec::with_capacity(n * 2);
         let mut labels = Vec::with_capacity(n);
@@ -171,7 +193,14 @@ impl Sam {
         }
         let point_coords = Tensor::from_array(([1usize, 1, n, 2], coords)).map_err(inference)?;
         let point_labels = Tensor::from_array(([1usize, 1, n], labels)).map_err(inference)?;
-        let boxes = Tensor::from_array(([1usize, 0, 4], Vec::<f32>::new())).map_err(inference)?;
+        let corners: Vec<f32> = rect
+            .map(|[x0, y0, x1, y1]| {
+                let (ax, ay) = sam2_point(x0, y0, emb.orig_w, emb.orig_h);
+                let (bx, by) = sam2_point(x1, y1, emb.orig_w, emb.orig_h);
+                vec![ax, ay, bx, by]
+            })
+            .unwrap_or_default();
+        let boxes = Tensor::from_array(([1usize, corners.len() / 4, 4], corners)).map_err(inference)?;
         let [e0, e1, e2] = [0, 1, 2].map(|i| TensorRef::from_array_view((emb.planes[i].0.clone(), &emb.planes[i].1[..])));
         let outputs = self
             .decoder
@@ -192,10 +221,11 @@ impl Sam {
         Ok(sam2_mask(&logits[best * plane..(best + 1) * plane], lw, lh, emb.orig_w, emb.orig_h))
     }
 
-    fn click_mask_mobile(&mut self, emb: &Embedding, points: &[SamPoint]) -> Result<Vec<f32>, VisionError> {
-        // The exported decoder wants one padding point with label -1
-        // when there is no box prompt: Meta's own export convention.
-        let n = points.len() + 1;
+    fn mask_mobile(&mut self, emb: &Embedding, points: &[SamPoint], rect: Option<[f32; 4]>) -> Result<Vec<f32>, VisionError> {
+        // The exported decoder takes a box as its two corners, labeled
+        // 2 and 3, and wants one padding point with label -1 when there
+        // is no box: Meta's own export convention.
+        let n = points.len() + if rect.is_some() { 2 } else { 1 };
         let mut coords = Vec::with_capacity(n * 2);
         let mut labels = Vec::with_capacity(n);
         for p in points {
@@ -203,8 +233,18 @@ impl Sam {
             coords.extend_from_slice(&[x, y]);
             labels.push(if p.positive { 1.0f32 } else { 0.0 });
         }
-        coords.extend_from_slice(&[0.0, 0.0]);
-        labels.push(-1.0);
+        match rect {
+            Some([x0, y0, x1, y1]) => {
+                let (ax, ay) = transform_point(x0, y0, emb.orig_w, emb.orig_h);
+                let (bx, by) = transform_point(x1, y1, emb.orig_w, emb.orig_h);
+                coords.extend_from_slice(&[ax, ay, bx, by]);
+                labels.extend_from_slice(&[2.0, 3.0]);
+            }
+            None => {
+                coords.extend_from_slice(&[0.0, 0.0]);
+                labels.push(-1.0);
+            }
+        }
 
         let (shape, data) = &emb.planes[0];
         let embeddings = TensorRef::from_array_view((shape.clone(), &data[..])).map_err(inference)?;
@@ -361,5 +401,22 @@ mod tests {
         }
         let iou = inter / uni.max(1.0);
         assert!(iou > 0.85, "{}: IoU {iou} on the easiest possible subject", spec.id);
+        // A box round the disc, as a phrase's grounding hands it over,
+        // a little loose: the same disc.
+        let t3 = std::time::Instant::now();
+        let boxed = sam.box_mask(&emb, [cx - r - 40.0, cy - r - 30.0, cx + r + 40.0, cy + r + 30.0], &[]).unwrap();
+        let box_ms = t3.elapsed().as_millis();
+        let (mut inter, mut uni) = (0f64, 0f64);
+        for y in 0..h {
+            for x in 0..w {
+                let truth = ((x as f32 - cx).powi(2) + (y as f32 - cy).powi(2)).sqrt() < r;
+                let got = boxed[y * w + x] > 0.5;
+                inter += (truth && got) as u8 as f64;
+                uni += (truth || got) as u8 as f64;
+            }
+        }
+        let iou = inter / uni.max(1.0);
+        eprintln!("{} box prompt {box_ms}ms, IoU {iou:.3}", spec.id);
+        assert!(iou > 0.85, "{}: IoU {iou} from a box round the disc", spec.id);
     }
 }

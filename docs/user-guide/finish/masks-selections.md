@@ -40,6 +40,18 @@ A Smart selection, whether it is a Smart layer's, a mask made with **Add Smart M
 
 A Smart selection is kept as its clicks, mode and the name of the model that made it, and is made again from them when it is needed (on another computer, in a batch export, after the caches are cleared). A selection made with MobileSAM in an earlier version therefore keeps MobileSAM: the document opens with the selection it was saved with, and clicks added to it are answered by MobileSAM too, so its shape does not jump. While such a selection is the active Smart mask, a **SAM 2.1** button sits beside the mode buttons: it makes the selection again from its own clicks with SAM 2.1, in one undo step, and the shape may change. If MobileSAM has been removed from Preferences, a click on one of these selections makes it again with SAM 2.1, and an export of a document whose old selection was never computed on this computer leaves that selection empty rather than drawing a different one.
 
+## Select by text
+
+Under the Smart tool's buttons, on a Smart layer or a mask made with **Add Smart Mask**, a text field selects by description: type what to select ("the red car", "the dog on the left") and press `Return`. Florence-2, the picture reader the assistant uses, finds the phrase in the photograph, and Segment Anything selects what it found, as if you had drawn a box round each match. A new phrase starts the selection over, its clicks included.
+
+- **One match** becomes the selection straight away.
+- **Several matches** are offered as numbered buttons, counted from the left of the photograph, with **ALL** to select every one of them together.
+- **No match** says so under the field, and the selection stays as it was.
+
+Clicks refine it afterwards as in Click: a click adds and an Option-click (Alt-click on Windows and Linux) takes away. A click inside a match refines that match; an added click outside every match reaches past them. The phrase and the boxes Florence-2 found are kept with the selection beside the clicks, so another computer, a batch export or a recomputed cache makes the same selection from them without running Florence-2 again; only typing a new phrase asks it again.
+
+Florence-2 is a 970 MB download (see [Downloaded models](../models.md)); the first time you select by text without it, a line under the field names it, its size, license and source, with a **DOWNLOAD** button. It reads the photograph on your computer and sends nothing anywhere. It can miss what you mean or find something that is not there: when the boxes are loose, refine with clicks, or select with Click instead.
+
 ## Shapes on a Smart selection
 
 A shape drawn with the selection tools combines with the selection on screen. With **Subtract** (Option-drag, Alt-drag on Windows and Linux), **Add** (Shift-drag) or **Intersect** (Shift and Option), it acts on:

@@ -13,11 +13,11 @@ The smart selection tools, the depth tools, Noise Reduction's Model method and t
 | ViTMatte | Selection Polish | 104 MB |
 | Depth Anything V2 Small | Fog, Depth Lighting, Depth of Field, depth masks and depth-range selections | 99 MB |
 | SCUNet | Noise Reduction's Model method | 77 MB |
-| Florence-2 base | The assistant: what is in the photograph and where (optional) | 970 MB |
+| Florence-2 base | Select by text, and the assistant: what is in the photograph and where (optional) | 970 MB |
 
 Their licenses and origins are on the [open-source page](legal/open-source.md).
 
-Florence-2 is Microsoft's, under the MIT license, packaged for ONNX by the Hugging Face onnx-community and trained on FLD-5B, Microsoft's own dataset. It is the one model no tool asks for: the assistant works without it, and you download it from Preferences, **Assistant** or **Models** if you want the assistant to know what is in the picture.
+Florence-2 is Microsoft's, under the MIT license, packaged for ONNX by the Hugging Face onnx-community and trained on FLD-5B, Microsoft's own dataset. The assistant works without it, and you download it from Preferences, **Assistant** or **Models** if you want the assistant to know what is in the picture; the Smart tool's **Select by text** field asks for it the first time you use it (see [Select by text](finish/masks-selections.md#select-by-text)).
 
 ## Installing
 
