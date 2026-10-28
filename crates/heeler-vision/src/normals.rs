@@ -28,6 +28,24 @@ use crate::VisionError;
 /// measured no different in Depth Lighting.
 pub const NORMALS_WORK: usize = 588;
 
+/// The transient working set of one normals run, by the tokens the
+/// model reads (the input is resized to NORMALS_WORK first). Metered
+/// 2026-10-28 with the depth model's reserve, the same way: 727 MB at
+/// 1176 tokens (a 3:2 photograph at 1024 or 2048 pixels) and 934 at
+/// 1764 (a square one), within 3 MB across three runs. Linear in the
+/// tokens, 316 MiB + 359 KiB a token, and the reserve carries a
+/// quarter margin over that.
+pub const NORMALS_RUN_FIXED_BYTES: u64 = 316 << 20;
+pub const NORMALS_RUN_BYTES_PER_TOKEN: u64 = 359 << 10;
+
+/// The reserve for one normals run over a (w, h) photograph,
+/// saturating rather than wrapping.
+pub fn normals_run_reserve(w: usize, h: usize) -> u64 {
+    let (rw, rh) = work_size(w, h);
+    let tokens = ((rw / 14) * (rh / 14)) as u64;
+    NORMALS_RUN_FIXED_BYTES.saturating_add(tokens.saturating_mul(NORMALS_RUN_BYTES_PER_TOKEN)).saturating_mul(5) / 4
+}
+
 pub struct NormalEstimator {
     session: Session,
 }

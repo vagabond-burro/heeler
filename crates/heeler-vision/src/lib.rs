@@ -25,7 +25,10 @@ mod refine;
 mod sam;
 
 pub use denoise::{denoise_run_reserve, denoise_tiled, tile_plan, Denoiser, DENOISE_GRAIN, DENOISE_OVERLAP, DENOISE_RUN_ARENA_BYTES, DENOISE_RUN_BYTES_PER_PIXEL, DENOISE_TILE};
-pub use depth::{clip_range, refine_depth, DepthEstimator};
+pub use depth::{
+    clip_range, depth_run_reserve, refine_depth, DepthEstimator, DEPTH_REFINE_BYTES_PER_PIXEL, DEPTH_RUN_BYTES_PER_TOKEN,
+    DEPTH_RUN_BYTES_PER_TOKEN_SQUARED, DEPTH_RUN_FIXED_BYTES,
+};
 pub use florence::{
     answer_from, clean_caption, florence_pixels, parse_regions, resize_bicubic_rgb8, Florence, FlorenceAnswer, FlorenceImage,
     FlorenceRegion, FlorenceTask, Tokenizer, FLORENCE_FILES, FLORENCE_SIDE,
@@ -37,7 +40,7 @@ pub use models::{
     ExtraFile, ExtraSource, InstallRecord, ModelSource, ModelSpec, BIREFNET_LITE, DEPTH_ANYTHING, FLORENCE_2, LAMA, MOBILE_SAM, MOGE_2_VITS,
     SCUNET, VITMATTE,
 };
-pub use normals::{NormalEstimator, NORMALS_WORK};
+pub use normals::{normals_run_reserve, NormalEstimator, NORMALS_RUN_BYTES_PER_TOKEN, NORMALS_RUN_FIXED_BYTES, NORMALS_WORK};
 pub use refine::{
     area_downsample, matte_tiles, refine_brushed_full, refine_guided_full, refine_selection, refine_selection_brushed, solve_tiled,
     trimap_from_coarse, FullOptions, MatteTile, Refiner, FULL_OVERLAP, FULL_TILE, HAZE_REACH,

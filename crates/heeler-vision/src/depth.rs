@@ -27,6 +27,49 @@ use crate::VisionError;
 /// costs attention quadratically.
 const WORK: usize = 518;
 
+/// The transient working set of one depth run, as a function of the
+/// tokens the model reads ((rw/14)*(rh/14) at the working size), not of
+/// the photograph's pixels: the input is resized before the model sees
+/// it. Metered 2026-10-28 on a Mac16,5 (48 GiB, release build, real
+/// weights) by the ignored metering test below, one case per process,
+/// a fresh session loaded, run and dropped (the desktop's policy):
+/// 324 MB at 925 tokens, 433 at 1369, 545 at 1700, 1273 at 3700 and
+/// 2252 at 5476 (Detail 1036 on a square photograph), the same within
+/// a megabyte across three runs and across input sizes. Attention makes
+/// it quadratic; the fit is 165 MiB + 140 KiB a token + 47 bytes a
+/// token squared, within 20 MB of every point, and the reserve carries
+/// a quarter margin over it. A held session keeps all of it, which is
+/// why the desktop drops the session after each run.
+pub const DEPTH_RUN_FIXED_BYTES: u64 = 165 << 20;
+pub const DEPTH_RUN_BYTES_PER_TOKEN: u64 = 140 << 10;
+pub const DEPTH_RUN_BYTES_PER_TOKEN_SQUARED: u64 = 47;
+
+/// What refine_depth draws a pixel: the guide, its moments and the
+/// filter's planes. Metered with the run above, full Edges and Flatten:
+/// 158 to 160 bytes a pixel at 0.7, 2.8 and 4.2 megapixels, no fixed
+/// term; a quarter margin over 160.
+pub const DEPTH_REFINE_BYTES_PER_PIXEL: u64 = 200;
+
+/// The working size depth_at reads (w, h) at for a Detail of `work`.
+fn depth_work_size(w: usize, h: usize, work: usize) -> (usize, usize) {
+    let work = work.clamp(WORK, 1036);
+    let scale = work as f32 / w.max(h).max(1) as f32;
+    let snap = |v: f32| (((v * scale).round() as usize).div_ceil(14) * 14).max(14);
+    (snap(w as f32), snap(h as f32))
+}
+
+/// The reserve for one depth run over a (w, h) photograph at Detail
+/// `work`, saturating rather than wrapping.
+pub fn depth_run_reserve(w: usize, h: usize, work: usize) -> u64 {
+    let (rw, rh) = depth_work_size(w, h, work);
+    let tokens = ((rw / 14) * (rh / 14)) as u64;
+    DEPTH_RUN_FIXED_BYTES
+        .saturating_add(tokens.saturating_mul(DEPTH_RUN_BYTES_PER_TOKEN))
+        .saturating_add(tokens.saturating_mul(tokens).saturating_mul(DEPTH_RUN_BYTES_PER_TOKEN_SQUARED))
+        .saturating_mul(5)
+        / 4
+}
+
 pub struct DepthEstimator {
     session: Session,
 }
@@ -57,10 +100,7 @@ impl DepthEstimator {
     /// 1036 buy finer edges at attention's quadratic price.
     pub fn depth_at(&mut self, rgb: &[f32], w: usize, h: usize, work: usize) -> Result<Vec<f32>, VisionError> {
         assert_eq!(rgb.len(), w * h * 3, "HWC RGB expected");
-        let work = work.clamp(WORK, 1036);
-        let scale = work as f32 / w.max(h) as f32;
-        let snap = |v: f32| (((v * scale).round() as usize).div_ceil(14) * 14).max(14);
-        let (rw, rh) = (snap(w as f32), snap(h as f32));
+        let (rw, rh) = depth_work_size(w, h, work);
         let small = resize_exact_rgb(rgb, w, h, rw, rh);
         // ImageNet normalization, CHW: the export's own preprocessing.
         const MEAN: [f32; 3] = [0.485, 0.456, 0.406];
@@ -797,5 +837,91 @@ mod tests {
         // An absurdity guard only, forty times the hardware this was
         // written on needed; the number that matters is printed.
         assert!(elapsed.as_secs() < 120, "export refine took {elapsed:?}");
+    }
+
+    /// Meters Depth Lighting's two models, Depth Anything V2 Small and
+    /// MoGe-2 ViT-S, the way the noise model's reserve was metered:
+    /// resident size sampled by `ps` every 20 ms around a run, asserted
+    /// under its reserve ("refine:W:H" meters refine_depth). One case
+    /// per process (HEELER_METER_CASE, "depth:W:H:WORK" or
+    /// "normals:W:H"), since a process's freed heap is slack the next
+    /// run reuses and would hide it: a fresh session loaded, run and
+    /// dropped, the desktop's policy. Prints the run's peak over the
+    /// baseline. Run with `HEELER_VISION_BASE=... HEELER_METER_CASE=...
+    /// cargo test -p heeler-vision --release -- --ignored real_models_meter --nocapture`.
+    #[test]
+    #[ignore]
+    fn real_models_meter_depth_and_normals() {
+        let (Ok(base), Ok(case)) = (std::env::var("HEELER_VISION_BASE"), std::env::var("HEELER_METER_CASE")) else { return };
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        use std::sync::Arc;
+        let rss = || -> usize {
+            let out = std::process::Command::new("ps").args(["-o", "rss=", "-p"]).arg(std::process::id().to_string()).output().expect("ps");
+            String::from_utf8_lossy(&out.stdout).trim().parse::<usize>().unwrap_or(0) * 1024
+        };
+        let parts: Vec<&str> = case.split(':').collect();
+        let num = |i: usize| parts[i].parse::<usize>().expect("case");
+        let (w, h) = (num(1), num(2));
+        let input: Vec<f32> = (0..w * h * 3).map(|i| ((i * 7919) % 251) as f32).collect();
+        let base = std::path::PathBuf::from(base);
+        let peak = Arc::new(AtomicUsize::new(0));
+        let stop = Arc::new(AtomicBool::new(false));
+        let before = rss();
+        peak.store(before, Ordering::Relaxed);
+        let sampler = {
+            let (peak, stop) = (peak.clone(), stop.clone());
+            std::thread::spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    peak.fetch_max(rss(), Ordering::Relaxed);
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+            })
+        };
+        let t = std::time::Instant::now();
+        let far: Vec<f32> = (0..w * h).map(|i| (i % 97) as f32 / 97.0).collect();
+        let reserve = match parts[0] {
+            "refine" => (w * h) as u64 * DEPTH_REFINE_BYTES_PER_PIXEL,
+            "depth" => depth_run_reserve(w, h, num(3)),
+            _ => crate::normals_run_reserve(w, h),
+        };
+        let held = match parts[0] {
+            "refine" => {
+                let out = refine_depth(&far, &input, w, h, 1.0, 1.0);
+                let held = rss();
+                drop(out);
+                held
+            }
+            "depth" => {
+                let mut est = DepthEstimator::load(&base, &crate::models::DEPTH_ANYTHING).expect("load");
+                let out = est.depth_at(&input, w, h, num(3)).expect("run");
+                let held = rss();
+                drop(out);
+                drop(est);
+                held
+            }
+            _ => {
+                let mut est = crate::NormalEstimator::load(&base, &crate::models::MOGE_2_VITS).expect("load");
+                let out = est.normals(&input, w, h).expect("run");
+                let held = rss();
+                drop(out);
+                drop(est);
+                held
+            }
+        };
+        let wall = t.elapsed();
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        stop.store(true, Ordering::Relaxed);
+        sampler.join().unwrap();
+        let mb = |b: usize| b as f64 / (1 << 20) as f64;
+        let drawn = peak.load(Ordering::Relaxed).saturating_sub(before);
+        eprintln!(
+            "METER {case}: peak {:.1} MB, with the session held {:.1} MB, reserve {:.1} MB, wall {wall:?}",
+            mb(drawn),
+            mb(held.saturating_sub(before)),
+            mb(reserve as usize)
+        );
+        // A model export that changes the footprint fails here, not in
+        // the user's session.
+        assert!(drawn as u64 <= reserve, "{case} drew {drawn} over its reserve {reserve}");
     }
 }
