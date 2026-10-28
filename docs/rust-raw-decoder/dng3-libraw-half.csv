@@ -53,7 +53,7 @@ Canon/EOS 5D Mark III/hdrmerge-bayer-fp32-uncompressed.dng,Canon,EOS 5D Mark III
 Canon/EOS 5D Mark III/hdrmerge-bayer-fp32-w-pred-deflate.dng,Canon,EOS 5D Mark III,DNG-Deflate-CFA,5.61,libraw,1,5,ok,476.20,0.06,411.89,64.18,2898,1935
 Canon/EOS 60D/M14-1451_000085_cDNG_compressed.dng,Canon,EOS 60D,DNG-LJ92-CFA,0.13,libraw,1,5,ok,6.43,0.02,4.88,1.53,480,270
 Canon/EOS 7D Mark II/0P9A0410-Enhanced-NR.dng,Canon,EOS 7D Mark II,DNG-LJ92-CFA,5.04,libraw,1,5,ok,273.17,0.06,214.94,57.98,2748,1835
-Canon/EOS-1D X/CROPGX2R4019-topaz-denoiseraw.dng,Canon,EOS-1D X,DNG-Uncompressed-Linear,0.41,libraw,1,5,ok,2.95,0.03,0.72,2.15,644,644
+Canon/EOS-1D X/CROPGX2R4019-denoised.dng,Canon,EOS-1D X,DNG-Uncompressed-Linear,0.41,libraw,1,5,ok,2.95,0.03,0.72,2.15,644,644
 Canon/IXY 220F/canon_ixy_220f.DNG,Canon,IXY 220F,DNG-Uncompressed-CFA,4.09,libraw,1,5,ok,141.53,0.05,94.40,47.00,2340,1749
 Canon/PowerShot A3200 IS/RAW_CANON_POWERSHOT_A3200IS_CHDK.DNG,Canon,PowerShot A3200 IS,DNG-Uncompressed-CFA,3.50,libraw,1,5,ok,117.78,0.04,77.43,40.38,2160,1620
 Canon/PowerShot A720 IS/IMG_8329.DNG,Canon,PowerShot A720 IS,DNG-Uncompressed-CFA,2.03,libraw,1,5,ok,65.75,0.04,42.28,23.38,1646,1233

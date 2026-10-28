@@ -53,7 +53,7 @@ Canon/EOS 5D Mark III/hdrmerge-bayer-fp32-uncompressed.dng,Canon,EOS 5D Mark III
 Canon/EOS 5D Mark III/hdrmerge-bayer-fp32-w-pred-deflate.dng,Canon,EOS 5D Mark III,DNG-Deflate-CFA,5.61,rust,1,5,ok,31.63,0.01,27.44,4.14,2898,1935
 Canon/EOS 60D/M14-1451_000085_cDNG_compressed.dng,Canon,EOS 60D,DNG-LJ92-CFA,0.13,rust,1,5,ok,2.46,0.01,1.93,0.48,480,270
 Canon/EOS 7D Mark II/0P9A0410-Enhanced-NR.dng,Canon,EOS 7D Mark II,DNG-LJ92-CFA,5.04,rust,1,5,ok,11.08,0.02,7.32,3.72,2748,1835
-Canon/EOS-1D X/CROPGX2R4019-topaz-denoiseraw.dng,Canon,EOS-1D X,DNG-Uncompressed-Linear,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
+Canon/EOS-1D X/CROPGX2R4019-denoised.dng,Canon,EOS-1D X,DNG-Uncompressed-Linear,0.00,rust,1,5,error: declined by the Rust path,0.00,0.00,0.00,0.00,0,0
 Canon/IXY 220F/canon_ixy_220f.DNG,Canon,IXY 220F,DNG-Uncompressed-CFA,4.09,rust,1,5,ok,4.92,0.00,1.72,3.09,2340,1749
 Canon/PowerShot A3200 IS/RAW_CANON_POWERSHOT_A3200IS_CHDK.DNG,Canon,PowerShot A3200 IS,DNG-Uncompressed-CFA,3.50,rust,1,5,ok,4.10,0.00,1.42,2.66,2160,1620
 Canon/PowerShot A720 IS/IMG_8329.DNG,Canon,PowerShot A720 IS,DNG-Uncompressed-CFA,2.03,rust,1,5,ok,2.51,0.00,0.79,1.68,1646,1233
