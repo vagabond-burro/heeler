@@ -166,9 +166,14 @@ describe("a Smart Mask card", () => {
     expect(smartCardNote(card({ mode: "sky", model: "mobile_sam" }), models(true, false))).toBe("");
     expect(smartCardNote(card({ mode: "click" }), models(true, false))).toBe("No clicks yet: mask empty");
     expect(smartCardNote(card({ mode: "sky" }), models(false, false))).toBe("Model not installed: mask empty");
-    // Subject runs on the matte model alone when SAM is missing.
+    // Subject runs on the matte model alone when SAM is missing, but a
+    // recipe that names SAM still needs it.
     expect(smartModelMissing(models(false, true), "subject")).toBe(false);
     expect(smartModelMissing(models(false, true), "sky")).toBe(true);
+    expect(smartCardNote(card({ mode: "subject", model: "birefnet_dynamic" }), models(false, true))).toBe("");
+    expect(smartCardNote(card({ mode: "subject", model: "mobile_sam" }), models(false, true))).toBe(
+      "Model not installed: mask empty",
+    );
     // Not known yet is not missing.
     expect(smartModelMissing(null, "sky")).toBe(false);
   });

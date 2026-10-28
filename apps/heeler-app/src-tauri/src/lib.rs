@@ -3472,6 +3472,9 @@ async fn smart_model_remove(app: tauri::AppHandle, model: Option<String>) -> Res
 /// nothing keeps serving from files about to be removed, moved or
 /// replaced.
 pub(crate) fn drop_model_sessions(app: &tauri::AppHandle) -> Result<(), String> {
+    // An in-flight matte owns its session outside the session lock. Wait
+    // for it to come back before removal or relocation drops the store.
+    let _matting = MATTING_RUN.lock().unwrap_or_else(|e| e.into_inner());
     with_session(app, |s| {
         s.sam = None;
         s.matting = None;
@@ -3842,7 +3845,7 @@ pub(crate) fn smart_sources_offline(
         // the named matte gone it plants nothing rather than another
         // model's pixels under its name.
         let recorded = n.params.get("model").and_then(|v| v.as_str()).unwrap_or("");
-        let matte_spec = if mode != "subject" {
+        let matte_spec = if mode != "subject" || recorded == heeler_vision::MOBILE_SAM.id {
             None
         } else if let Some(spec) =
             [&heeler_vision::BIREFNET_DYNAMIC, &heeler_vision::BIREFNET_LITE].into_iter().find(|s| s.id == recorded)
@@ -3863,6 +3866,9 @@ pub(crate) fn smart_sources_offline(
                 source.clone()
             };
             let (w, h) = (small.width, small.height);
+            let _run = MATTING_RUN.lock().unwrap_or_else(|e| e.into_inner());
+            let loading = matting.as_ref().is_none_or(|m| m.model() != matte_spec.id);
+            let Ok(_paid) = admit_matting_run(matte_spec, loading, w, h) else { continue };
             let mut rgb = vec![0.0f32; w * h * 3];
             for (i, px) in small.data.chunks(4).enumerate() {
                 for c in 0..3 {
@@ -3870,7 +3876,7 @@ pub(crate) fn smart_sources_offline(
                         heeler_engine::ops::to_display(px[c].max(0.0)).min(1.0) * 255.0;
                 }
             }
-            if matting.as_ref().is_none_or(|m| m.model() != matte_spec.id) {
+            if loading {
                 match heeler_vision::Matting::load(vision_base, matte_spec) {
                     Ok(m) => matting = Some(m),
                     Err(_) => continue,
@@ -4062,13 +4068,49 @@ async fn smart_raster_status(
 /// error a compute asked anyway returns.
 const SMART_MODEL_MISSING: &str = "model not installed";
 
-/// The matte a Subject one-shot runs on: BiRefNet dynamic when it is
-/// installed, else Lite (a store that only has Lite keeps its matte),
-/// else none, and SAM answers.
-fn subject_matte(base: &Path) -> Option<&'static heeler_vision::ModelSpec> {
+/// Only one BiRefNet session may be taken, loaded or run at once. The
+/// session lock itself stays short-held so the render pump remains free.
+static MATTING_RUN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// The model a Subject recipe runs on. SAM is a real recorded answer,
+/// not an absent matte: installing BiRefNet later must not change it.
+/// A missing recorded matte still takes the preferred one in the app.
+fn subject_matte_for(
+    recorded: &str,
+    mut installed: impl FnMut(&heeler_vision::ModelSpec) -> bool,
+) -> Option<&'static heeler_vision::ModelSpec> {
+    let recorded = recorded.strip_suffix("+vitmatte").unwrap_or(recorded);
+    if recorded == heeler_vision::MOBILE_SAM.id {
+        return None;
+    }
     [&heeler_vision::BIREFNET_DYNAMIC, &heeler_vision::BIREFNET_LITE]
         .into_iter()
-        .find(|spec| heeler_vision::installed(base, spec))
+        .find(|spec| spec.id == recorded && installed(spec))
+        .or_else(|| {
+            [&heeler_vision::BIREFNET_DYNAMIC, &heeler_vision::BIREFNET_LITE]
+                .into_iter()
+                .find(|spec| installed(spec))
+        })
+}
+
+/// The matte a fresh Subject one-shot runs on: BiRefNet dynamic when it
+/// is installed, else Lite, else none, and SAM answers.
+fn subject_matte(base: &Path) -> Option<&'static heeler_vision::ModelSpec> {
+    subject_matte_for("", |spec| heeler_vision::installed(base, spec))
+}
+
+/// Admit the model allocation when a load is needed, plus the RGB and
+/// matte working buffers. A resident session pays only for its work.
+fn admit_matting_run(
+    spec: &heeler_vision::ModelSpec,
+    loading: bool,
+    w: usize,
+    h: usize,
+) -> Result<Job, String> {
+    let model = if loading { usize::try_from(spec.total_bytes()).map_err(|e| e.to_string())? } else { 0 };
+    let working = memory::bytes(w, h, 4, 4).map_err(|e| e.to_string())?;
+    let needed = memory::sum([model, working]).map_err(|e| e.to_string())?;
+    Job::admit(needed, "subject matte model and working buffers").map_err(|e| e.to_string())
 }
 
 /// Whether the model a Smart mask's mode runs on is missing from the
@@ -4115,15 +4157,20 @@ async fn smart_compute(
     let base = vision_base(&app)?;
     let mode = mode.unwrap_or_else(|| "click".into());
     let aim = aim.unwrap_or_default();
-    if smart_model_missing(&base, &mode) {
+    if mode != "subject" && smart_model_missing(&base, &mode) {
         return Err(SMART_MODEL_MISSING.into());
     }
-    // Subject prefers the dedicated matte when it is installed; every
-    // other path (and the fallback) is SAM.
-    let kept = [&heeler_vision::BIREFNET_DYNAMIC, &heeler_vision::BIREFNET_LITE]
-        .into_iter()
-        .find(|spec| keep.as_deref() == Some(spec.id) && heeler_vision::installed(&base, spec));
-    let matte = if mode == "subject" { kept.or_else(|| subject_matte(&base)) } else { None };
+    // Subject keeps the model its recipe names, including SAM. Every
+    // other path, a fresh Subject, and a missing recorded matte use the
+    // preferred matte when one is installed, then SAM.
+    let matte = if mode == "subject" {
+        subject_matte_for(keep.as_deref().unwrap_or(""), |spec| heeler_vision::installed(&base, spec))
+    } else {
+        None
+    };
+    if mode == "subject" && matte.is_none() && !heeler_vision::installed(&base, &heeler_vision::MOBILE_SAM) {
+        return Err(SMART_MODEL_MISSING.into());
+    }
     let points: Vec<SmartPrompt> =
         serde_json::from_str(&prompts).map_err(|e| format!("bad prompts: {e}"))?;
 
@@ -4147,10 +4194,14 @@ async fn smart_compute(
         };
 
         let (mask, model_id): (Vec<f32>, &str) = if let Some(spec) = matte {
+            let _run = MATTING_RUN.lock().unwrap_or_else(|e| e.into_inner());
             // A session of the other matte (Lite, used until dynamic
-            // was installed) is dropped for this one.
+            // was installed) is dropped for this one. A second request
+            // waits here, then reuses the session the first one loaded.
             let mut matting = with_session(&app, |s| Ok(s.matting.take()))?.filter(|m| m.model() == spec.id);
-            if matting.is_none() {
+            let loading = matting.is_none();
+            let _paid = admit_matting_run(spec, loading, w, h)?;
+            if loading {
                 matting = Some(heeler_vision::Matting::load(&base, spec).map_err(|e| e.to_string())?);
             }
             let mut matting = matting.expect("just loaded");
@@ -31910,6 +31961,31 @@ mod tests {
         std::fs::write(&path, heeler_io::encode_png_raw(&raster).unwrap()).unwrap();
         let out = smart_sources_offline(dir.path(), &ui, "img", &ExportPhoto::decoded(source.clone()), None);
         assert_eq!(out.get("sm").map(|s| s.version), Some(want));
+    }
+
+    #[test]
+    fn a_subject_recipe_keeps_sam_and_the_base_of_a_refined_matte() {
+        assert!(subject_matte_for(heeler_vision::MOBILE_SAM.id, |_| true).is_none());
+        assert!(subject_matte_for("mobile_sam+vitmatte", |_| true).is_none());
+        assert_eq!(
+            subject_matte_for("", |_| true).map(|s| s.id),
+            Some(heeler_vision::BIREFNET_DYNAMIC.id)
+        );
+        assert_eq!(
+            subject_matte_for(heeler_vision::BIREFNET_DYNAMIC.id, |_| true).map(|s| s.id),
+            Some(heeler_vision::BIREFNET_DYNAMIC.id)
+        );
+        assert_eq!(
+            subject_matte_for("birefnet_lite+vitmatte", |_| true).map(|s| s.id),
+            Some(heeler_vision::BIREFNET_LITE.id)
+        );
+        assert_eq!(
+            subject_matte_for(heeler_vision::BIREFNET_LITE.id, |s| s.id == heeler_vision::BIREFNET_DYNAMIC.id)
+                .map(|s| s.id),
+            Some(heeler_vision::BIREFNET_DYNAMIC.id),
+            "the app's deliberate fallback when the recorded matte is gone"
+        );
+        assert!(subject_matte_for("", |_| false).is_none());
     }
 
     /// A Subject mask keeps the matte its recipe names (2026.7, BiRefNet

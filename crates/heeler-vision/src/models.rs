@@ -526,15 +526,35 @@ pub fn remove_model(base: &Path, spec: &ModelSpec) -> Result<(), VisionError> {
 }
 
 /// Files this run has already hashed to their pin, by path, with the
-/// length and modification time they had then. `installed` is asked
-/// on every Subject one-shot and every status check, and hashing the
-/// 972 MB matte costs about 1.75 s each time; a file that has not been
-/// written since it verified is not hashed again. Any write, a
-/// replacement or a truncation moves the length or the time, and the
-/// file is hashed afresh.
-static VERIFIED: std::sync::LazyLock<
-    std::sync::Mutex<std::collections::HashMap<PathBuf, (u64, std::time::SystemTime, String)>>,
-> = std::sync::LazyLock::new(Default::default);
+/// stamp they had then. `installed` is asked on every Subject one-shot
+/// and every status check, and hashing the 972 MB matte costs about
+/// 1.75 s each time; a file that has not been written since it verified
+/// is not hashed again. The modification time alone can be set back, or
+/// be too coarse to move, so on Unix the stamp also carries the device,
+/// the inode and the status-change time, which no write, replacement or
+/// timestamp reset leaves as it was.
+static VERIFIED: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<PathBuf, (Stamp, String)>>> =
+    std::sync::LazyLock::new(Default::default);
+
+/// What a verified file must still match to skip the hash.
+#[derive(PartialEq)]
+struct Stamp {
+    len: u64,
+    modified: std::time::SystemTime,
+    #[cfg(unix)]
+    node: (u64, u64, i64, i64),
+}
+
+fn stamp(meta: &std::fs::Metadata) -> Option<Stamp> {
+    #[cfg(unix)]
+    use std::os::unix::fs::MetadataExt;
+    Some(Stamp {
+        len: meta.len(),
+        modified: meta.modified().ok()?,
+        #[cfg(unix)]
+        node: (meta.dev(), meta.ino(), meta.ctime(), meta.ctime_nsec()),
+    })
+}
 
 /// Streams a file through SHA-256 and compares against the pinned hex.
 pub fn verify_file(path: &Path, sha256_hex: &str) -> Result<bool, VisionError> {
@@ -542,11 +562,11 @@ pub fn verify_file(path: &Path, sha256_hex: &str) -> Result<bool, VisionError> {
         Ok(f) => f,
         Err(_) => return Ok(false),
     };
-    let stamp = file.metadata().and_then(|m| Ok((m.len(), m.modified()?))).ok();
+    let stamp = file.metadata().ok().as_ref().and_then(stamp);
     let pin = sha256_hex.to_ascii_lowercase();
-    if let Some((len, modified)) = stamp {
+    if let Some(now) = &stamp {
         let seen = VERIFIED.lock().unwrap_or_else(|e| e.into_inner());
-        if seen.get(path).is_some_and(|(l, m, sha)| *l == len && *m == modified && *sha == pin) {
+        if seen.get(path).is_some_and(|(was, sha)| was == now && *sha == pin) {
             return Ok(true);
         }
     }
@@ -560,8 +580,8 @@ pub fn verify_file(path: &Path, sha256_hex: &str) -> Result<bool, VisionError> {
         hasher.update(&buf[..n]);
     }
     let matches = format!("{:x}", hasher.finalize()) == pin;
-    if let (true, Some((len, modified))) = (matches, stamp) {
-        VERIFIED.lock().unwrap_or_else(|e| e.into_inner()).insert(path.to_path_buf(), (len, modified, pin));
+    if let (true, Some(stamp)) = (matches, stamp) {
+        VERIFIED.lock().unwrap_or_else(|e| e.into_inner()).insert(path.to_path_buf(), (stamp, pin));
     }
     Ok(matches)
 }
@@ -1089,7 +1109,7 @@ mod tests {
 
     /// A verified file is not hashed again while it is unchanged, but
     /// the same bytes rewritten, a change of the same length with a new
-    /// time, or a different pin, are all checked afresh.
+    /// or a reset time, or a different pin, are all checked afresh.
     #[test]
     fn a_verified_file_is_hashed_again_once_it_changes() {
         use sha2::{Digest, Sha256};
@@ -1111,6 +1131,22 @@ mod tests {
         // A truncation changes the length.
         std::fs::write(&p, b"first").unwrap();
         assert!(!verify_file(&p, &first).unwrap());
+        // Same length, other bytes, and the modification time set back
+        // to what it was when it verified: what a coarse-timestamp
+        // filesystem can leave. The status-change time still moves.
+        #[cfg(unix)]
+        {
+            std::fs::write(&p, b"first weights").unwrap();
+            let modified = std::fs::metadata(&p).unwrap().modified().unwrap();
+            assert!(verify_file(&p, &first).unwrap());
+            std::fs::write(&p, b"third weights").unwrap();
+            let file = std::fs::File::options().write(true).open(&p).unwrap();
+            file.set_modified(modified).unwrap();
+            drop(file);
+            let meta = std::fs::metadata(&p).unwrap();
+            assert_eq!((meta.len(), meta.modified().unwrap()), (13, modified));
+            assert!(!verify_file(&p, &first).unwrap(), "a rewrite with its old time is hashed again");
+        }
     }
 
     fn tempdir() -> TempDir {

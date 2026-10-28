@@ -84,7 +84,7 @@ export function SmartNodeStatus({
       live = false;
     };
   }, [state.activeImage, node.id, mode, prompts, model, aim, asked, busy]);
-  const missing = smartModelMissing(models, mode);
+  const missing = smartModelMissing(models, mode, model);
   const detect = () => {
     const request = generation.current;
     detecting.current = true;

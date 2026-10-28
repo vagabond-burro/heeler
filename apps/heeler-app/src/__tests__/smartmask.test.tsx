@@ -363,6 +363,20 @@ describe("the click overlay", () => {
     fireEvent.click(screen.getByTestId("smart-not-now"));
     expect(got).toContainEqual({ type: "set_tool", tool: "none" });
   });
+
+  it("Subject asks for the model its recipe will actually use", async () => {
+    mockInstalled = false;
+    mockCached = false;
+    let s = withSmart();
+    const maskId = s.activeLayer!.replace("_adj", "_mask");
+    s = run(s, { type: "set_text_param", id: maskId, param: "mode", value: "subject" });
+    const { rerender } = render(<SmartClickOverlay state={s} dispatch={() => {}} norm={norm} />);
+    await screen.findByTestId("smart-uncomputed");
+    expect(screen.queryByTestId("smart-consent")).toBeNull();
+    s = run(s, { type: "set_text_param", id: maskId, param: "model", value: "mobile_sam" });
+    rerender(<SmartClickOverlay state={s} dispatch={() => {}} norm={norm} />);
+    await screen.findByTestId("smart-consent");
+  });
 });
 
 describe("REMOVE: the fill through the selection", () => {

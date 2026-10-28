@@ -36,6 +36,7 @@ import { activeSelectionMask, artLayers, artMaskNode, removalPending, maskViewOv
 import { publishBusy } from "./statusbarparts";
 import { parseSmartPoints, smartMarkersOn, smartPromptAt, subjectAim } from "../smartpoints";
 import { SMART_ICON_BUTTON, activeSmartMask, depthEyeHint, depthEyeModifier } from "./smarttoolparts";
+import { smartModelMissing } from "./smartnodeparts";
 
 type D = React.Dispatch<Command>;
 
@@ -775,10 +776,10 @@ export function SmartClickOverlay({
   if (!mask) return null;
 
   const models = status !== "loading" ? status : null;
-  const needsModel = models !== null && !models.sam.installed;
+  const needsModel = models !== null && smartModelMissing(models, mode, mask.textParams?.model ?? "");
   // The matte upgrade offer: subject mode works via SAM regardless,
   // but BiRefNet's soft edges are the real thing.
-  const offerMatte = models !== null && models.sam.installed && !models.matte.installed;
+  const offerMatte = models !== null && !models.matte.installed;
 
   return (
     <div

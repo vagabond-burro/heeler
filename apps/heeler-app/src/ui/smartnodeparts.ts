@@ -29,10 +29,12 @@ export function useSmartModels(ask: boolean, refresh: unknown = 0): SmartModels 
 /** Whether the model a Smart mask's mode needs is missing here: SAM for
  * every mode, except Subject, which BiRefNet (dynamic, or Lite where
  * dynamic is not installed) answers when it is installed (lib.rs
- * smart_compute). Not known yet is not missing. */
-export function smartModelMissing(models: SmartModels | null, mode: string): boolean {
+ * smart_compute). A recipe that names SAM keeps needing SAM. Not known
+ * yet is not missing. */
+export function smartModelMissing(models: SmartModels | null, mode: string, model = ""): boolean {
   if (!models?.sam) return false;
-  if (mode === "subject" && (models.matte?.installed || models.lite?.installed)) return false;
+  const recorded = model.endsWith("+vitmatte") ? model.slice(0, -"+vitmatte".length) : model;
+  if (mode === "subject" && recorded !== "mobile_sam" && (models.matte?.installed || models.lite?.installed)) return false;
   return !models.sam.installed;
 }
 
@@ -43,7 +45,7 @@ export function smartModelMissing(models: SmartModels | null, mode: string): boo
 export function smartCardNote(n: NodeCard, models: SmartModels | null): string {
   if (n.type !== "heeler.smart_mask" || !n.enabled) return "";
   const mode = n.textParams?.mode || "click";
-  if (smartModelMissing(models, mode)) return "Model not installed: mask empty";
+  if (smartModelMissing(models, mode, n.textParams?.model ?? "")) return "Model not installed: mask empty";
   if ((n.textParams?.model ?? "") !== "") return "";
   if (mode === "subject" || mode === "sky") return "Not detected yet: Detect in the Inspector";
   if ((n.textParams?.prompts || "[]") === "[]") return "No clicks yet: mask empty";

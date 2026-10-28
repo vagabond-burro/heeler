@@ -72,6 +72,9 @@ describe("the Subject mode's model", () => {
     liteInstalled = false;
     dynamicInstalled = true;
     expect(smartModelMissing(status(), "subject")).toBe(false);
+    expect(smartModelMissing(status(), "subject", "mobile_sam")).toBe(true);
+    expect(smartModelMissing(status(), "subject", "mobile_sam+vitmatte")).toBe(true);
+    expect(smartModelMissing(status(), "subject", "birefnet_lite+vitmatte")).toBe(false);
     // A desktop older than dynamic answers without a lite entry.
     const older = { ...status(), lite: undefined, matte: model("birefnet_lite", false) };
     expect(smartModelMissing(older, "subject")).toBe(true);
