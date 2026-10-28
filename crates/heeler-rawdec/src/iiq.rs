@@ -156,8 +156,10 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         Some(1) => 6,
         _ => return Err(Error::Unsupported("a Phase One orientation not read here")),
     };
-    let cal = crate::iiq_cal::read(bytes).ok_or(Error::Unsupported("a Phase One calibration not read here"))?;
+    // The camera's own frame size first, so the calibration's tables are
+    // held for a frame it has.
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
+    let cal = crate::iiq_cal::read(bytes)?.ok_or(Error::Unsupported("a Phase One calibration not read here"))?;
     // LibRaw's white level once the calibration has taken the black off:
     // 65532 less it, or the back's own where that is lower (a Leaf Credo
     // 40's samples are 14 bits: 16383, where 64508 developed it two stops
