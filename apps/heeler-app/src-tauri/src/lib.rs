@@ -9449,14 +9449,27 @@ fn stitch_recipe(text: &str) -> Option<String> {
 }
 
 /// Notes a stitched panorama's starting crop, for whoever is waiting on
-/// it. Either tier will do: the crop is in fractions and holds at both
+/// it. The recipe is the one captured before the stitch, not the manifest
+/// on disk now, which may already describe the next stitch. Either tier
+/// will do: the crop is in fractions and holds at both
 /// (heeler_stitch::auto_crop draws its inner sides in by a cell).
-fn note_pano_crop(image_id: &str, path: &Path, stitched: &Result<ImageBuf, String>) {
-    let Ok(img) = stitched else { return };
-    let Some(recipe) = std::fs::read_to_string(path).ok().as_deref().and_then(stitch_recipe) else { return };
-    let crop = heeler_stitch::auto_crop(img);
+///
+/// A stitch the recipe has since moved past is not noted: finishing
+/// after its successor, it would otherwise displace the answer a waiter
+/// for the current recipe needs. A failed stitch is noted as having no
+/// crop, so its waiters stop waiting; a canceled one is not, since
+/// resuming it stitches the same recipe again.
+fn note_pano_crop(image_id: &str, path: &Path, recipe: &str, stitched: &Result<ImageBuf, String>) {
+    let crop = match stitched {
+        Ok(img) => heeler_stitch::auto_crop(img),
+        Err(e) if e == PANO_CANCELED => return,
+        Err(_) => None,
+    };
+    if std::fs::read_to_string(path).ok().as_deref().and_then(stitch_recipe).as_deref() != Some(recipe) {
+        return;
+    }
     let (map, ready) = pano_crops();
-    map.lock().unwrap_or_else(|e| e.into_inner()).insert(image_id.to_string(), (recipe, crop));
+    map.lock().unwrap_or_else(|e| e.into_inner()).insert(image_id.to_string(), (recipe.to_string(), crop));
     ready.notify_all();
 }
 
@@ -9960,6 +9973,7 @@ fn load_source(
                     return Err(PANO_CANCELED.into());
                 }
                 let job = StitchJob::begin(app, image_id, members.len(), false);
+                let crop_recipe = std::fs::read_to_string(&path).ok().as_deref().and_then(stitch_recipe);
                 let result = cached_render(app, &path, &members, &tier, || {
                     render_pano_through(
                         &path,
@@ -9973,7 +9987,9 @@ fn load_source(
                     )
                 });
                 remember_stitch_outcome(&path, &members, &tier, &result);
-                note_pano_crop(image_id, &path, &result);
+                if let Some(recipe) = crop_recipe {
+                    note_pano_crop(image_id, &path, &recipe, &result);
+                }
                 job.finish(&result);
                 return result;
             }
@@ -10418,6 +10434,7 @@ fn full_source(
                 return Err(PANO_CANCELED.into());
             }
             let job = StitchJob::begin(app, image_id, members.len(), true);
+            let crop_recipe = std::fs::read_to_string(&p).ok().as_deref().and_then(stitch_recipe);
             let out = cached_render(app, &p, &members, &tier, || {
                 render_pano_through(
                     &p,
@@ -10431,7 +10448,9 @@ fn full_source(
                 )
             });
             remember_stitch_outcome(&p, &members, &tier, &out);
-            note_pano_crop(image_id, &p, &out);
+            if let Some(recipe) = crop_recipe {
+                note_pano_crop(image_id, &p, &recipe, &out);
+            }
             job.finish(&out);
             Arc::new(out?)
         }
@@ -30141,11 +30160,12 @@ mod tests {
             auto_crop: true,
         };
         write_pano(&pano, &manifest).unwrap();
+        let on = std::fs::read_to_string(&pano).unwrap();
+        let recipe = stitch_recipe(&on).unwrap();
         let decode = |p: &Path| heeler_io::decode_any(p).map_err(|e| e.to_string());
         let out = render_pano(&pano, &decode, 2000, &|_, _| {});
-        note_pano_crop("pano-crop-test", &pano, &out);
+        note_pano_crop("pano-crop-test", &pano, &recipe, &out);
         let img = out.unwrap();
-        let on = std::fs::read_to_string(&pano).unwrap();
         manifest.auto_crop = false;
         write_pano(&pano, &manifest).unwrap();
         let off = std::fs::read_to_string(&pano).unwrap();
@@ -30153,7 +30173,20 @@ mod tests {
         assert_eq!(stitch_recipe(&on), stitch_recipe(&off), "the crop switch is not part of what is stitched");
 
         let held = pano_crops().0.lock().unwrap().get("pano-crop-test").cloned().expect("the crop was noted");
-        assert_eq!(Some(held.0), stitch_recipe(&on));
+        // A later manifest on disk must not relabel the completed stitch.
+        manifest.surface = "planar".into();
+        write_pano(&pano, &manifest).unwrap();
+        let next = std::fs::read_to_string(&pano).unwrap();
+        assert_ne!(stitch_recipe(&next), stitch_recipe(&on));
+        assert_eq!(Some(held.0.clone()), stitch_recipe(&on));
+        // The next recipe's stitch fails, which answers its waiters with
+        // no crop; the older stitch finishing late, or a cancel, changes
+        // nothing.
+        let newer = stitch_recipe(&next).unwrap();
+        note_pano_crop("pano-crop-test", &pano, &newer, &Err("no overlap".into()));
+        note_pano_crop("pano-crop-test", &pano, &held.0, &Ok(img.clone()));
+        note_pano_crop("pano-crop-test", &pano, &newer, &Err(PANO_CANCELED.into()));
+        assert_eq!(pano_crops().0.lock().unwrap().get("pano-crop-test").cloned(), Some((newer, None)));
         let r = held.1.expect("a two-frame pan has edges to crop");
         let (x0, y0) = ((r.x * img.width as f32) as usize, (r.y * img.height as f32) as usize);
         let (x1, y1) = (((r.x + r.w) * img.width as f32).ceil() as usize, ((r.y + r.h) * img.height as f32).ceil() as usize);

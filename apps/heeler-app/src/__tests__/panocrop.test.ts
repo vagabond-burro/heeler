@@ -34,6 +34,8 @@ it("a panorama nobody has edited opens on the rectangle it fills, as an ordinary
   expect(doc.get().nodes.some((n) => n.type === "heeler.crop_rotate")).toBe(true);
   doc.dispatch({ type: "undo" });
   expect(crop(doc.get())).toEqual([0, 0, 1, 1]);
+  await offerPanoCrop("pan", doc.get, doc.dispatch, false);
+  expect(crop(doc.get())).toEqual([0, 0, 1, 1]);
 });
 
 it("an edited panorama keeps the crop it has", async () => {
@@ -66,5 +68,30 @@ it("switching the option off takes the starting crop back out", async () => {
 it("an answer for a photograph no longer open changes nothing", async () => {
   const doc = opened();
   await offerPanoCrop("pan", () => ({ ...doc.get(), activeImage: "other" }), doc.dispatch, true);
+  expect(crop(doc.get())).toEqual([0, 0, 1, 1]);
+});
+
+it("an answer from before auto-crop was switched off does not put the crop back", async () => {
+  // The opening request can outlive the switch by minutes on a slow stitch.
+  const doc = opened();
+  let answer!: (crop: [number, number, number, number]) => void;
+  backend.crop.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; })).mockResolvedValueOnce(null);
+  const opening = offerPanoCrop("pan", doc.get, doc.dispatch, true);
+  await offerPanoCrop("pan", doc.get, doc.dispatch, false);
+  answer(CROP);
+  await opening;
+  expect(crop(doc.get())).toEqual([0, 0, 1, 1]);
+});
+
+it("an edit made while the stitch was still running keeps the panorama uncropped", async () => {
+  const doc = opened();
+  let answer!: (crop: [number, number, number, number]) => void;
+  backend.crop.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
+  let edited = false;
+  const current = () => ({ ...doc.get(), images: [{ ...doc.get().images[0], id: "pan", edited }] }) as State;
+  const opening = offerPanoCrop("pan", current, doc.dispatch, true);
+  edited = true;
+  answer(CROP);
+  await opening;
   expect(crop(doc.get())).toEqual([0, 0, 1, 1]);
 });

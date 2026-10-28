@@ -40,8 +40,52 @@ impl Lens {
     /// composite can use.
     pub fn is_known(&self) -> bool {
         match self {
-            Lens::Profile { model, a, b, c, .. } => profile_factor(model, *a, *b, *c, 0.5).is_some(),
+            Lens::Profile { model, a, b, c, scale } => {
+                a.is_finite()
+                    && b.is_finite()
+                    && c.is_finite()
+                    && scale.is_finite()
+                    && *scale > 0.0
+                    && profile_factor(model, *a, *b, *c, 0.5).is_some_and(|f| f.is_finite() && f > 0.0)
+            }
             Lens::Radial { k } => k.is_finite(),
+        }
+    }
+
+    /// Whether the lens maps a frame `w` by `h` one to one: the distorted
+    /// radius has to keep rising out to the frame's corners, or undoing
+    /// it has two answers and distort and undistort stop being inverses.
+    /// A profile that folds back inside the frame is a calibration taken
+    /// past its range, and a fitted term that does is the solve bending
+    /// the lens to explain bad matches; either is better left unused.
+    pub fn holds_over(&self, w: usize, h: usize) -> bool {
+        if !self.is_known() {
+            return false;
+        }
+        let reach = (w as f64).hypot(h as f64) * 0.5 / half_short(w, h);
+        match self {
+            // The undistortion is the closed form here; its slope is
+            // 1 + 3 k r², lowest at the corner when k is negative.
+            Lens::Radial { k } => 1.0 + 3.0 * k.min(0.0) * reach * reach > 0.0,
+            // Walk the undistorted radius out until the distorted one
+            // reaches the corner, which it must do while rising.
+            Lens::Profile { .. } => {
+                const STEP: f64 = 1.0 / 256.0;
+                let mut last = 0.0;
+                let mut ru = STEP;
+                while ru < 4.0 * reach {
+                    let rd = ru * self.forward(ru);
+                    if !(rd > last) {
+                        return false;
+                    }
+                    if rd >= reach {
+                        return true;
+                    }
+                    last = rd;
+                    ru += STEP;
+                }
+                false
+            }
         }
     }
 
@@ -181,8 +225,28 @@ mod tests {
     }
 
     #[test]
-    fn an_unknown_model_is_not_a_lens() {
+    fn an_unknown_or_non_finite_model_is_not_a_lens() {
         assert!(!Lens::Profile { model: "fisheye".into(), a: 0.1, b: 0.0, c: 0.0, scale: 1.0 }.is_known());
+        for (a, b, c, scale) in [(f32::NAN, 0.0, 0.0, 1.0), (0.0, f32::INFINITY, 0.0, 1.0), (0.0, 0.0, 0.0, f32::NAN), (0.0, 0.0, 0.0, 0.0)] {
+            assert!(!Lens::Profile { model: "poly3".into(), a, b, c, scale }.is_known());
+        }
         assert!(Lens::Radial { k: 0.0 }.is_known());
+    }
+
+    #[test]
+    fn a_lens_that_folds_back_inside_the_frame_is_not_used() {
+        let (w, h) = (6000, 4000);
+        for lens in profiles() {
+            assert!(lens.holds_over(w, h), "{lens:?}");
+        }
+        // Strong enough that the corner of a 3:2 frame lands inside its
+        // own edge.
+        assert!(!Lens::Profile { model: "poly3".into(), a: -0.4, b: 0.0, c: 0.0, scale: 1.0 }.holds_over(w, h));
+        assert!(!Lens::Radial { k: -0.2 }.holds_over(w, h));
+        // A milder term folds past a 3:2 frame's corner but not a square
+        // one's, which is nearer the center.
+        assert!(!Lens::Radial { k: -0.12 }.holds_over(w, h));
+        assert!(Lens::Radial { k: -0.12 }.holds_over(4000, 4000));
+        assert!(!Lens::Profile { model: "poly3".into(), a: f32::NAN, b: 0.0, c: 0.0, scale: 1.0 }.holds_over(w, h));
     }
 }

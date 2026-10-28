@@ -215,7 +215,7 @@ pub fn stitch_with_control(
         let mut found = detect(&gray, FEATURE_LIMIT);
         // Where a pinhole would have seen each point: the homographies,
         // the solve and the composite all assume one.
-        if let Some(lens) = lens_of(opts, i) {
+        if let Some(lens) = lens_of(opts, images, i) {
             let (w, h) = (gray.width, gray.height);
             for f in found.iter_mut() {
                 let (x, y) = lens.undistort(f.kp.x as f64 - w as f64 * 0.5, f.kp.y as f64 - h as f64 * 0.5, w, h);
@@ -309,7 +309,7 @@ pub fn stitch_with_control(
     let mut rms = rms_error(&cams, &constraints);
     // A lens nobody described: one shared radial term, if it earns it.
     let mut radial = None;
-    if opts.fit_lens && used.iter().all(|&g| lens_of(opts, g).is_none()) {
+    if opts.fit_lens && used.iter().all(|&g| lens_of(opts, images, g).is_none()) {
         if let Some((fitted, k)) = bundle_adjust_radial(&cams, &constraints, &dims) {
             rms = rms_error_radial(&fitted, &constraints, k, &dims);
             cams = fitted;
@@ -328,7 +328,7 @@ pub fn stitch_with_control(
         .iter()
         .zip(&cams)
         .map(|(&idx, cam)| {
-            let lens = radial.map(|k| Lens::Radial { k }).or_else(|| lens_of(opts, idx).cloned());
+            let lens = radial.map(|k| Lens::Radial { k }).or_else(|| lens_of(opts, images, idx).cloned());
             Frame { lens, ..frame_at_full_size(images[idx], cam, reg[idx]) }
         })
         .collect();
@@ -367,9 +367,11 @@ pub(crate) fn frame_at_full_size<'a>(image: &'a ImageBuf, cam: &Camera, reg: (us
     Frame { image, camera: Camera { f: cam.f * sx, r: cam.r }, aspect: sy / sx, lens: None }
 }
 
-/// Input `i`'s lens, when the caller described one the composite can use.
-fn lens_of(opts: &StitchOpts, i: usize) -> Option<&Lens> {
-    opts.lenses.get(i).and_then(Option::as_ref).filter(|l| l.is_known())
+/// Input `i`'s lens, when the caller described one the composite can use
+/// on that frame.
+fn lens_of<'a>(opts: &'a StitchOpts, images: &[&ImageBuf], i: usize) -> Option<&'a Lens> {
+    let img = images.get(i)?;
+    opts.lenses.get(i).and_then(Option::as_ref).filter(|l| l.holds_over(img.width, img.height))
 }
 
 /// The long edge a frame is registered at, or None when the frame is

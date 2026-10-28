@@ -47,9 +47,9 @@ fn coverage(img: &ImageBuf) -> (Vec<bool>, usize, usize, usize) {
 
 /// The largest all-true rectangle in a grid, as (x, y, w, h) in cells.
 fn largest_rectangle(cells: &[bool], gw: usize, gh: usize) -> Option<(usize, usize, usize, usize)> {
-    let mut height = vec![0usize; gw];
+    let mut height = heeler_engine::memory::or_unwind(heeler_engine::memory::vector(gw, 0usize, "panorama crop histogram"));
     let mut best: Option<(usize, (usize, usize, usize, usize))> = None;
-    let mut stack: Vec<usize> = Vec::with_capacity(gw + 1);
+    let mut stack = heeler_engine::memory::or_unwind(heeler_engine::memory::vector(gw + 1, 0usize, "panorama crop histogram"));
     for y in 0..gh {
         for x in 0..gw {
             height[x] = if cells[y * gw + x] { height[x] + 1 } else { 0 };
@@ -81,7 +81,8 @@ fn largest_rectangle(cells: &[bool], gw: usize, gh: usize) -> Option<(usize, usi
 /// shape fits wherever a shorter one of that shape does, and a summed
 /// area table answers each try in one pass.
 fn largest_at_ratio(cells: &[bool], gw: usize, gh: usize, ratio: f64) -> Option<(usize, usize, usize, usize)> {
-    let mut sum = vec![0u32; (gw + 1) * (gh + 1)];
+    let count = heeler_engine::memory::or_unwind(heeler_engine::memory::bytes(gw + 1, gh + 1, 1, 4)) / 4;
+    let mut sum = heeler_engine::memory::or_unwind(heeler_engine::memory::vector(count, 0u32, "panorama crop coverage sums"));
     for y in 0..gh {
         for x in 0..gw {
             let i = (y + 1) * (gw + 1) + x + 1;

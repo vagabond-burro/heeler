@@ -17,6 +17,9 @@ const FULL: Crop = [0, 0, 1, 1];
 
 /** The crop this session gave each panorama, by photograph. */
 const given = new Map<string, Crop>();
+/** The newest crop request for each panorama. A slow answer from before a
+ * recipe change or an Auto-crop switch must not overwrite its successor. */
+const requested = new Map<string, number>();
 
 function cropOf(s: State): Crop {
   const p = cropNode(s).params;
@@ -41,7 +44,10 @@ export async function offerPanoCrop(
   dispatch: (c: Command) => void,
   fresh: boolean,
 ): Promise<void> {
+  const request = (requested.get(image) ?? 0) + 1;
+  requested.set(image, request);
   const rect = await panoAutoCrop(image);
+  if (requested.get(image) !== request) return;
   const s = current();
   if (s.activeImage !== image) return;
   const p = cropNode(s).params;
@@ -57,7 +63,10 @@ export async function offerPanoCrop(
     }
     return;
   }
-  if (!(ours || (fresh && same(now, FULL)))) return;
+  // Fresh at opening is not enough: the answer can take minutes, and an
+  // edit made meanwhile means somebody has edited it after all.
+  const untouched = fresh && !(s.images.find((i) => i.id === image)?.edited ?? false);
+  if (!(ours || (untouched && same(now, FULL)))) return;
   given.set(image, rect);
   if (!same(now, rect)) dispatch(setCrop(s, rect));
 }
@@ -65,4 +74,5 @@ export async function offerPanoCrop(
 /** Forgets what this session gave, for tests. */
 export function forgetPanoCrops(): void {
   given.clear();
+  requested.clear();
 }

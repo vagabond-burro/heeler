@@ -332,7 +332,7 @@ const RADIAL_GAIN: f64 = 0.95;
 /// parameter is one more way for the solve to explain a correspondence
 /// by bending the lens instead of turning the camera. Answers the
 /// cameras and the term, or None when the term did not earn its place
-/// (it ran past RADIAL_LIMIT or improved the error by less than
+/// (it ran past RADIAL_LIMIT, folded back inside a frame, or improved the error by less than
 /// RADIAL_GAIN), in which case `cams` stand as they are.
 pub fn bundle_adjust_radial(cams: &[Camera], constraints: &[PairConstraint], dims: &[(usize, usize)]) -> Option<(Vec<Camera>, f64)> {
     let n = cams.len();
@@ -347,7 +347,8 @@ pub fn bundle_adjust_radial(cams: &[Camera], constraints: &[PairConstraint], dim
     let solved = levenberg_marquardt(params, &free, &cost);
     let k = solved[4 * n];
     let after = rms_of(&cost(&solved));
-    (k.is_finite() && k.abs() < RADIAL_LIMIT && after < before * RADIAL_GAIN).then(|| (unpack(&solved[..4 * n]), k))
+    let holds = dims.iter().all(|&(w, h)| Lens::Radial { k }.holds_over(w, h));
+    (k.is_finite() && k.abs() < RADIAL_LIMIT && holds && after < before * RADIAL_GAIN).then(|| (unpack(&solved[..4 * n]), k))
 }
 
 /// The root mean square error with every correspondence moved through a

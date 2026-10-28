@@ -29,9 +29,10 @@ use crate::composite::Warped;
 /// a per-pixel one.
 pub(crate) const SEAM_CELLS: usize = 1 << 19;
 /// Working memory per reduced cell, besides the frames' own reduced
-/// copies: the graph's four links and two terminals, its index, level
-/// and edge pointer, the queue, and the reduced ownership.
-const CELL_BYTES: usize = 48;
+/// copies: the overlap index and clearance passes, the graph's four links
+/// and two terminals, its index, level and edge pointer, the flow's queue
+/// and path, and the reduced ownership.
+const CELL_BYTES: usize = 88;
 /// Fixed-point scale for link costs, which the flow keeps as integers
 /// so it terminates exactly.
 const QUANT: f32 = 256.0;
@@ -67,7 +68,13 @@ pub(crate) fn seam_bytes(frames: usize, width: usize, height: usize) -> usize {
 /// The side, in canvas pixels, of the cells the seam is found on.
 fn cell_size(width: usize, height: usize) -> usize {
     let area = width.saturating_mul(height) as f64;
-    ((area / SEAM_CELLS as f64).sqrt().ceil() as usize).max(1)
+    let mut s = ((area / SEAM_CELLS as f64).sqrt().ceil() as usize).max(1);
+    // Rounding each side up separately can exceed the cap on a skinny
+    // canvas even when the square-root estimate is exact for its area.
+    while width.div_ceil(s).saturating_mul(height.div_ceil(s)) > SEAM_CELLS {
+        s += 1;
+    }
+    s
 }
 
 /// One frame at the seam's resolution. A cell counts as covered only
@@ -171,8 +178,9 @@ impl Graph {
             self.snk[i] -= m;
             flow += m as i64;
         }
-        let mut queue: Vec<u32> = heeler_engine::memory::or_unwind(heeler_engine::memory::vector(0, 0u32, "panorama seam graph"));
-        let mut path: Vec<(u32, u8)> = Vec::new();
+        let mut queue = heeler_engine::memory::or_unwind(heeler_engine::memory::vector(n, 0u32, "panorama seam graph"));
+        queue.clear();
+        let mut path = heeler_engine::memory::or_unwind(heeler_engine::memory::vector(n, (0u32, 0u8), "panorama seam graph"));
         loop {
             if stop() {
                 return None;
@@ -280,9 +288,13 @@ impl Graph {
     pub(crate) fn source_side(&self) -> Vec<bool> {
         let n = self.src.len();
         let mut seen = heeler_engine::memory::or_unwind(heeler_engine::memory::vector(n, false, "panorama seam graph"));
-        let mut queue: Vec<u32> = (0..n as u32).filter(|&i| self.src[i as usize] > 0).collect();
-        for &i in &queue {
-            seen[i as usize] = true;
+        let mut queue = heeler_engine::memory::or_unwind(heeler_engine::memory::vector(n, 0u32, "panorama seam graph"));
+        queue.clear();
+        for i in 0..n {
+            if self.src[i] > 0 {
+                seen[i] = true;
+                queue.push(i as u32);
+            }
         }
         let mut head = 0;
         while head < queue.len() {
@@ -316,8 +328,12 @@ fn neighbors(c: usize, rw: usize, rh: usize) -> [Option<usize>; 4] {
 /// `radius` cells of it: a max filter, across then down, over the
 /// overlap's own cells.
 fn clearance(overlap: &[usize], index: &[u32], rw: usize, rh: usize, radius: usize, differ: impl Fn(usize) -> f32) -> Vec<f32> {
-    let own: Vec<f32> = overlap.iter().map(|&c| differ(c)).collect();
-    let mut across = own.clone();
+    let mut own = heeler_engine::memory::or_unwind(heeler_engine::memory::vector(overlap.len(), 0.0f32, "panorama seam clearance"));
+    for (v, &c) in own.iter_mut().zip(overlap) {
+        *v = differ(c);
+    }
+    let mut across = heeler_engine::memory::or_unwind(heeler_engine::memory::vector(overlap.len(), 0.0f32, "panorama seam clearance"));
+    across.copy_from_slice(&own);
     let at = |x: usize, y: usize| index[y * rw + x];
     for (i, &c) in overlap.iter().enumerate() {
         let (x, y) = (c % rw, c / rw);
@@ -328,7 +344,8 @@ fn clearance(overlap: &[usize], index: &[u32], rw: usize, rh: usize, radius: usi
             }
         }
     }
-    let mut out = across.clone();
+    let mut out = heeler_engine::memory::or_unwind(heeler_engine::memory::vector(overlap.len(), 0.0f32, "panorama seam clearance"));
+    out.copy_from_slice(&across);
     for (i, &c) in overlap.iter().enumerate() {
         let (x, y) = (c % rw, c / rw);
         for yy in y.saturating_sub(radius)..(y + radius + 1).min(rh) {
@@ -365,7 +382,9 @@ pub(crate) fn seam_ownership(warps: &[Warped], width: usize, height: usize, stop
         }
         // The overlap: cells this frame sees that an earlier one already
         // holds. Cells only this frame sees are simply its own.
-        let overlap: Vec<usize> = (0..count).filter(|&c| frame.weight[c] > 0.0 && owner[c] >= 0).collect();
+        let mut overlap = heeler_engine::memory::or_unwind(heeler_engine::memory::vector(count, 0usize, "panorama seam overlap"));
+        overlap.clear();
+        overlap.extend((0..count).filter(|&c| frame.weight[c] > 0.0 && owner[c] >= 0));
         if !overlap.is_empty() {
             for (i, &c) in overlap.iter().enumerate() {
                 index[c] = i as u32;
@@ -589,5 +608,9 @@ mod tests {
         assert!(cell_size(8000, 2000) > 1);
         assert_eq!(seam_bytes(4, 20_000, 10_000), seam_bytes(4, 40_000, 10_000));
         assert!(seam_bytes(4, 100, 100) < seam_bytes(4, 1000, 1000));
+        for (width, height) in [(100_000_000, 1), (1, 100_000_000)] {
+            let s = cell_size(width, height);
+            assert!(width.div_ceil(s).saturating_mul(height.div_ceil(s)) <= SEAM_CELLS);
+        }
     }
 }
