@@ -794,7 +794,8 @@ export function CropOverlay({
   };
 
   // A crop edge dragged past the picture holds at its edge, and the
-  // drag carries on (dragfollow.ts).
+  // drag carries on (dragfollow.ts). A drag the window loses to a blur,
+  // or the overlay to an unmount, ends here too, closing its gesture.
   const endDrag = () => {
     if (drag.current || turning.current) dispatch({ type: "end_gesture" });
     drag.current = null;
@@ -806,7 +807,7 @@ export function CropOverlay({
     e.stopPropagation();
     if (angle !== 0) dispatch({ type: "set_param", id: node.id, param: "angle", value: 0 });
   };
-  const followed = useDragFollow<MouseEvent>({ move: onMove, up: endDrag });
+  const followed = useDragFollow<MouseEvent>({ move: onMove, up: endDrag, lost: endDrag });
 
   const pct = (v: number) => `${v * 100}%`;
   const handle = (mode: CropDrag["mode"], left: number, top: number) => (

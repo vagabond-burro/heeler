@@ -18,6 +18,21 @@ export function cropRectOf(params: Record<string, number>): CropRect {
   };
 }
 
+/** The least a crop side can be, as a fraction of the frame: the crop
+ * node's own minimum, which the engine holds every crop to. */
+export const CROP_MIN = 0.05;
+
+/** Whether the crop node can hold this rectangle as it is: finite, no
+ * side under the minimum and none past the frame. The fit for a ratio
+ * the turned picture is too narrow for (1000:1 at 45°) comes out under
+ * the minimum, and the engine would widen it, off its ratio and past
+ * the picture's edge, so a fit that fails this is not a fit. */
+export function cropRepresentable(c: CropRect): boolean {
+  const v = [c.crop_x, c.crop_y, c.crop_w, c.crop_h];
+  if (!v.every(Number.isFinite)) return false;
+  return c.crop_w >= CROP_MIN - 1e-9 && c.crop_h >= CROP_MIN - 1e-9 && c.crop_w <= 1 + 1e-9 && c.crop_h <= 1 + 1e-9;
+}
+
 /** A crop's own ratio in pixels, on a frame of this shape. */
 export function cropRatio(c: CropRect, frame: number): number {
   return (c.crop_w * frame) / c.crop_h;
@@ -84,16 +99,18 @@ export function cropIsInside(c: CropRect, frame: number, angle: number): boolean
  * the fit at the old angle (an untouched frame does) follows the fit up
  * and down, so straightening and coming back to level gives the whole
  * frame again; a smaller crop only shrinks when the picture's edge
- * reaches it. Null when nothing has to change. */
+ * reaches it. Null when nothing has to change, or when no crop of that
+ * ratio fits the turned picture (cropRepresentable): the crop stays as
+ * it is, as with the setting off. */
 export function stayInside(c: CropRect, frame: number, from: number, to: number): CropRect | null {
-  if (!(frame > 0)) return null;
+  if (!(frame > 0) || !Number.isFinite(frame)) return null;
   const ratio = cropRatio(c, frame);
   const center: [number, number] = [c.crop_x + c.crop_w / 2, c.crop_y + c.crop_h / 2];
   const before = cropInside(frame, from, ratio, center);
   const after = cropInside(frame, to, ratio, center);
   const snug = c.crop_h >= before.crop_h - 1e-4;
   const next = snug || after.crop_h < c.crop_h ? after : null;
-  if (!next) return null;
+  if (!next || !cropRepresentable(next)) return null;
   const same = Math.abs(next.crop_x - c.crop_x) + Math.abs(next.crop_y - c.crop_y) + Math.abs(next.crop_w - c.crop_w) + Math.abs(next.crop_h - c.crop_h) < 1e-9;
   return same ? null : next;
 }

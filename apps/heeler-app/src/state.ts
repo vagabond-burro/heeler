@@ -11,7 +11,7 @@ import { logMsg } from "./log";
 import { fileWarpValues } from "./lenspresets";
 import { cornersOf, mapPoint, solveHomography, type Pt } from "./quadmap";
 import { flipQuad, frameAspectFor, reframeQuad } from "./imagelayers";
-import { cropInside, cropIsInside, cropRatio, cropRectOf, stayInside, type CropRect } from "./cropfit";
+import { cropInside, cropIsInside, cropRatio, cropRectOf, cropRepresentable, stayInside, type CropRect } from "./cropfit";
 import { cropGeomOf, flippedCropParams, sourceSizeFor, frameRemap, mirrorRemap, remapNode, remapNodes, sameCrop, sourceAspectFor, turnedCropParams, turnRemap, type CropGeom, type FrameRemap } from "./framemap";
 import type { NavState } from "./keynav";
 import {
@@ -13849,25 +13849,29 @@ function cropHeldInside(s: State, id: string, values: Record<string, number>): R
 /** A crop the crop bar sets from a ratio, held to the turned picture
  * while Stay inside picture is on: a ratio that would carry it past the
  * picture's edge (an upright 1:2.39 on a straightened landscape) gets
- * the largest of that ratio about the same center instead. */
+ * the largest of that ratio about the same center instead. A ratio no
+ * crop the node can hold fits (cropRepresentable) is set as asked. */
 export function keepCropInside(s: State, next: CropRect): CropRect {
   if (!s.prefs.cropStayInside) return next;
   const frame = cropFrameAspect(s);
   const angle = cropNode(s).params.angle ?? 0;
   if (cropIsInside(next, frame, angle)) return next;
-  return cropInside(frame, angle, cropRatio(next, frame), [next.crop_x + next.crop_w / 2, next.crop_y + next.crop_h / 2]);
+  const fit = cropInside(frame, angle, cropRatio(next, frame), [next.crop_x + next.crop_w / 2, next.crop_y + next.crop_h / 2]);
+  return cropRepresentable(fit) ? fit : next;
 }
 
 /** Crop to picture: the largest crop that is all picture at the angle
  * as it stands, centered on the frame, in the ratio the crop tool holds
  * or else the crop's own (an untouched crop's is the photograph's). Null
- * when the crop already is that. */
+ * when the crop already is that, or when no crop of that ratio the node
+ * can hold fits the turned picture. */
 export function cropToPicture(s: State): CropRect | null {
   const n = cropNode(s);
   const frame = cropFrameAspect(s);
   const now = cropRectOf(n.params);
   const ratio = (s.tool === "crop" ? s.cropAspect : null) ?? cropRatio(now, frame);
   const fit = cropInside(frame, n.params.angle ?? 0, ratio);
+  if (!cropRepresentable(fit)) return null;
   const moved = Math.abs(fit.crop_x - now.crop_x) + Math.abs(fit.crop_y - now.crop_y) + Math.abs(fit.crop_w - now.crop_w) + Math.abs(fit.crop_h - now.crop_h);
   return moved < 1e-6 ? null : fit;
 }

@@ -6,9 +6,9 @@
 
 import { describe, expect, it } from "vitest";
 import { initialState, NEUTRAL_NODES, NEUTRAL_WIRES } from "../data";
-import { cropInside, cropIsInside, holdInside, stayInside, type CropRect } from "../cropfit";
+import { CROP_MIN, cropInside, cropIsInside, cropRepresentable, holdInside, stayInside, type CropRect } from "../cropfit";
 import { noteSourceSize } from "../framemap";
-import { cropNode, cropToPicture, reduce, type Command, type State } from "../state";
+import { cropNode, cropToPicture, keepCropInside, reduce, type Command, type State } from "../state";
 
 const FRAME = 1.5; // a 3:2 photograph
 
@@ -97,6 +97,45 @@ describe("stayInside", () => {
   });
 });
 
+describe("a ratio too long for the turned picture", () => {
+  // At the crop bar's limits, 1000:1 and 1:1000, the largest fit has a
+  // side under the node's minimum, which the engine would widen.
+  const LIMITS = [1000, 0.001];
+
+  it("has no fit the crop node can hold, at any angle", () => {
+    for (const angle of [0, 5, 20, 45]) {
+      for (const ratio of LIMITS) {
+        const c = cropInside(FRAME, angle, ratio);
+        expect(Math.min(c.crop_w, c.crop_h), `${angle}° at ${ratio}`).toBeLessThan(CROP_MIN);
+        expect(cropRepresentable(c)).toBe(false);
+      }
+    }
+  });
+
+  it("is left as it is by Stay inside rather than set to a fit the engine would change", () => {
+    // 28:1 is full width at level and fits; at 45° its fit is too thin.
+    const thin: CropRect = { crop_x: 0, crop_y: 0.5 - FRAME / 56, crop_w: 1, crop_h: FRAME / 28 };
+    expect(cropRepresentable(thin)).toBe(true);
+    for (const angle of [45, -45]) {
+      expect(cropInside(FRAME, angle, 28).crop_h, `${angle}°`).toBeLessThan(CROP_MIN);
+      expect(stayInside(thin, FRAME, 0, angle), `${angle}°`).toBeNull();
+    }
+    // A ratio that fits still follows the turn.
+    const wide = cropInside(FRAME, 0, 2.39);
+    expect(stayInside(wide, FRAME, 0, 10)).not.toBeNull();
+  });
+
+  it("knows a crop the node cannot hold", () => {
+    expect(cropRepresentable({ crop_x: 0, crop_y: 0, crop_w: 1, crop_h: 1 })).toBe(true);
+    expect(cropRepresentable({ crop_x: 0, crop_y: 0, crop_w: CROP_MIN, crop_h: CROP_MIN })).toBe(true);
+    expect(cropRepresentable({ crop_x: 0, crop_y: 0, crop_w: 1, crop_h: 0.01 })).toBe(false);
+    expect(cropRepresentable({ crop_x: 0, crop_y: 0, crop_w: NaN, crop_h: 1 })).toBe(false);
+    expect(cropRepresentable({ crop_x: 0, crop_y: 0, crop_w: 1, crop_h: Infinity })).toBe(false);
+    expect(stayInside({ crop_x: 0, crop_y: 0, crop_w: 1, crop_h: 1 }, Infinity, 0, 10)).toBeNull();
+    expect(stayInside({ crop_x: 0, crop_y: 0, crop_w: 1, crop_h: 1 }, NaN, 0, 10)).toBeNull();
+  });
+});
+
 describe("holdInside", () => {
   it("stops a crop corner dragged outward at the picture's edge", () => {
     const from = cropInside(FRAME, 12, FRAME);
@@ -161,6 +200,27 @@ describe("Stay inside picture in the reducer", () => {
     const placed = { angle: 10, crop_x: 0.1, crop_y: 0.1, crop_w: 0.5, crop_h: 0.5 };
     const s = run(fresh(true), { type: "set_params", id: cropNode(fresh(true)).id, values: placed });
     expect(rect(s)).toEqual({ crop_x: 0.1, crop_y: 0.1, crop_w: 0.5, crop_h: 0.5 });
+  });
+
+  it("does not turn a crop too long for the turned picture into one the engine would change", () => {
+    const thin = { crop_x: 0, crop_y: 0.5 - FRAME / 56, crop_w: 1, crop_h: FRAME / 28 };
+    const placed = run(fresh(true), { type: "set_params", id: cropNode(fresh(true)).id, values: thin });
+    const s = run(placed, { type: "set_param", id: cropNode(placed).id, param: "angle", value: 45 });
+    expect(cropNode(s).params.angle).toBe(45);
+    expect(rect(s)).toEqual(thin);
+  });
+
+  it("grays Crop to picture and sets a ratio as asked at the crop bar's limits", () => {
+    for (const ratio of [1000, 0.001]) {
+      for (const angle of [0, 12, 45]) {
+        const turned = run(fresh(true), { type: "set_param", id: cropNode(fresh(true)).id, param: "angle", value: angle });
+        const s: State = { ...turned, tool: "crop", cropAspect: ratio };
+        expect(cropToPicture(s), `${angle}° at ${ratio}`).toBeNull();
+      }
+    }
+    const turned = run(fresh(true), { type: "set_param", id: cropNode(fresh(true)).id, param: "angle", value: 20 });
+    const asked = { crop_x: 0, crop_y: 0.4995, crop_w: 1, crop_h: FRAME / 1000 };
+    expect(keepCropInside(turned, asked)).toEqual(asked);
   });
 
   it("Crop to picture fits a crop the setting did not", () => {

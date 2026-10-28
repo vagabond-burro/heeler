@@ -10,7 +10,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { initialState, NEUTRAL_NODES, NEUTRAL_WIRES } from "../data";
 import { cropIsInside } from "../cropfit";
 import { noteSourceSize } from "../framemap";
-import { cropNode, reduce, type State } from "../state";
+import { cropNode, reduce, type Command, type State } from "../state";
 import { CropOverlay } from "../ui/overlays";
 import { ringAngle, ringStep } from "../ui/overlaysparts";
 
@@ -43,11 +43,15 @@ noteSourceSize(ID, 400, 300);
 function mount(stay: boolean) {
   const base = initialState();
   let s: State = { ...base, activeImage: ID, nodes: structuredClone(NEUTRAL_NODES), wires: structuredClone(NEUTRAL_WIRES), prefs: { ...base.prefs, cropStayInside: stay } };
-  const view: { state: State } = { state: s };
+  const view: { state: State; sent: Command[] } = { state: s, sent: [] };
   function Harness() {
     const [state, dispatch] = useReducer(reduce, s);
     view.state = state;
-    return <CropOverlay node={cropNode(state)} dispatch={dispatch} stayInside={state.prefs.cropStayInside} />;
+    const send = (cmd: Command) => {
+      view.sent.push(cmd);
+      dispatch(cmd);
+    };
+    return <CropOverlay node={cropNode(state)} dispatch={send} stayInside={state.prefs.cropStayInside} />;
   }
   render(<Harness />);
   const overlay = screen.getByTestId("crop-overlay");
@@ -126,6 +130,29 @@ describe("the rotation ring", () => {
     fireEvent.mouseUp(window);
     expect(angleOf(view.state)).toBeCloseTo(0, 1);
     expect(rect(view.state).crop_w).toBeCloseTo(1, 1);
+  });
+
+  it("ends the drag when the window loses focus, closing its undo step", () => {
+    const view = mount(false);
+    turn(10);
+    expect(screen.getByTestId("crop-angle-readout")).not.toBeNull();
+    fireEvent.blur(window);
+    expect(view.state.gesture).toBeNull();
+    expect(screen.queryByTestId("crop-angle-readout")).toBeNull();
+    const held = angleOf(view.state);
+    fireEvent.mouseMove(window, { buttons: 1, clientX: 200, clientY: 250 });
+    expect(angleOf(view.state)).toBe(held);
+  });
+
+  it("closes the undo step when the overlay goes away mid-drag", () => {
+    const view = mount(false);
+    turn(10);
+    expect(view.state.gesture).not.toBeNull();
+    // The reducer goes with the overlay, so read what it was sent.
+    const ends = () => view.sent.filter((c) => c.type === "end_gesture").length;
+    expect(ends()).toBe(0);
+    cleanup();
+    expect(ends()).toBe(1);
   });
 
   it("leaves the crop alone with the setting off", () => {

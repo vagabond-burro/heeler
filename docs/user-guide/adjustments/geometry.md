@@ -43,6 +43,8 @@ Turn it off with **Stay inside** on the crop bar or on the **Crop** row at the f
 
 **Crop to picture** (**Crop to picture** on the crop bar, **To picture** on the **Crop** row) sets the largest crop that is all picture at the current angle, centered, in the ratio the crop bar holds, or else in the crop's own ratio. It is one undo step, and grays when the crop already is that.
 
+A crop's sides go no smaller than a twentieth of the frame, so a very long, thin ratio (far past the film crops, such as 30:1) may have no crop that is all picture at a steep angle. Then **Stay inside picture** leaves the crop as it is, a ratio chosen on the crop bar is set without the hold, and **Crop to picture** grays.
+
 ## Flip
 
 **Flip** (two buttons on the **Flip** row at the foot of the section: Flip Horizontal, a shape and its mirror across an upright dashed line, and Flip Vertical, across a level one) mirrors the photograph left for right or top for bottom, the same two switches as **Photo > Flip Horizontal** and **Flip Vertical**. A lit button is on; pressing it again puts the photograph back. Each press is one undo step. The same two buttons sit on the Crop & Rotate node in the graph inspector.
