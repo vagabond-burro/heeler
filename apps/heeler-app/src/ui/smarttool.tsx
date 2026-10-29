@@ -44,6 +44,11 @@ import { samFor, smartAsk, smartModelMissing } from "./smartnodeparts";
 
 type D = React.Dispatch<Command>;
 
+/** The subject matte offer, put away with NOT NOW for the rest of the
+ * session: Subject works without it, and asking at every visit would
+ * nag. */
+let mattePutAway = false;
+
 /** CLEAR on its own, so the Layers panel can seat it where the owner
  * asked: between RESET and Show mask. Forgets every click and the
  * computed mask in one undoable step.*/
@@ -908,6 +913,11 @@ export function SmartClickOverlay({
   const [downloading, setDownloading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [cached, setCached] = useState(true);
+  const [matteDeclined, setMatteDeclined] = useState(mattePutAway);
+  const declineMatte = () => {
+    mattePutAway = true;
+    setMatteDeclined(true);
+  };
   useEffect(() => {
     let live = true;
     void smartModelStatus().then((s) => {
@@ -998,38 +1008,28 @@ export function SmartClickOverlay({
       }}
     >
       {/* The matte upgrade offer, only when subject is the mode and
-          only the soft-matte model is missing: consent in place, with
-          the name, size, license and source right here. */}
-      {mode === "subject" && offerMatte && models !== null && (
-        <div
-          data-testid="smart-matte-offer"
-          style={{
-            position: "absolute", left: 8, top: 34, maxWidth: 340,
-            background: "rgba(0,0,0,.6)", padding: "5px 8px",
-            fontSize: 9, color: "#c2c7cb", lineHeight: 1.5,
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          Better mattes: {models.matte.label} · {Math.round(models.matte.bytes / 1e6)} MB ·{" "}
-          {models.matte.license}
-          <div style={{ overflowWrap: "anywhere", color: "var(--text-faint)" }}>
-            From {models.matte.url}
-          </div>
-          <button
-            className="chip small"
-            data-testid="smart-matte-download"
-            disabled={downloading}
-            style={{ marginTop: 3 }}
-            onClick={() => {
+          only the soft-matte model is missing: the consent card every
+          model asks with, name, size, license and source, at the foot
+          of the photograph (2026-10-29: the offer was its own small
+          text in the corner, "not the same as other models"). Subject
+          works without it, so it can be put away for the session. */}
+      {mode === "subject" && offerMatte && models !== null && !matteDeclined && (
+        <div onMouseDown={(e) => e.stopPropagation()}>
+          <ModelConsentCard
+            title="BETTER SUBJECT MATTES"
+            model={models.matte}
+            testid="smart-subject-matte"
+            downloading={downloading}
+            place={{ position: "absolute", left: "50%", bottom: 16, transform: "translateX(-50%)", zIndex: 40 }}
+            onDownload={() => {
               setDownloading(true);
               void smartModelDownload(models.matte.id)
                 .then(() => logMsg("info", `${models.matte.label} installed`))
                 .catch((err) => reportToolError("Download", err))
                 .finally(() => setDownloading(false));
             }}
-          >
-            {downloading ? "DOWNLOADING…" : "DOWNLOAD"}
-          </button>
+            secondary={{ label: "NOT NOW", testid: "smart-subject-matte-later", onClick: () => declineMatte() }}
+          />
         </div>
       )}
       {/* Click markers: where the mask has been told, and told not.

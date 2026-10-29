@@ -335,19 +335,32 @@ describe("the click overlay", () => {
     expect(screen.queryByTestId("smart-uncomputed")).toBeNull();
   });
 
-  it("subject mode without the matte model offers the upgrade, consented", async () => {
+  it("subject mode without the matte model offers the upgrade on the consent card every model uses", async () => {
+    // 2026-10-29: the offer was small text in the photograph's corner,
+    // "not the same as other models".
     mockMatte = false;
     let s = withSmart();
     const maskId = s.activeLayer!.replace("_adj", "_mask");
     s = run(s, { type: "set_text_param", id: maskId, param: "mode", value: "subject" });
-    render(<SmartClickOverlay state={s} dispatch={() => {}} norm={norm} />);
-    const offer = await screen.findByTestId("smart-matte-offer");
+    const view = render(<SmartClickOverlay state={s} dispatch={() => {}} norm={norm} />);
+    const offer = await screen.findByTestId("smart-subject-matte-consent");
+    expect(offer.textContent).toContain("BETTER SUBJECT MATTES");
     expect(offer.textContent).toContain("BiRefNet");
     expect(offer.textContent).toContain("972 MB");
     expect(offer.textContent).toContain("MIT");
+    // At the foot of the photograph, centered, like the others.
+    expect(offer.style.bottom).toBe("16px");
+    expect(offer.style.left).toBe("50%");
     const { smartModelDownload } = await import("../bridge");
-    fireEvent.click(screen.getByTestId("smart-matte-download"));
+    fireEvent.click(screen.getByTestId("smart-subject-matte-download"));
     expect(vi.mocked(smartModelDownload)).toHaveBeenCalledWith("birefnet_dynamic");
+    // NOT NOW puts it away, and it stays away for the session.
+    fireEvent.click(screen.getByTestId("smart-subject-matte-later"));
+    expect(screen.queryByTestId("smart-subject-matte-consent")).toBeNull();
+    view.unmount();
+    render(<SmartClickOverlay state={s} dispatch={() => {}} norm={norm} />);
+    await screen.findByTestId("smart-overlay");
+    expect(screen.queryByTestId("smart-subject-matte-consent")).toBeNull();
   });
 
   it("the completion write records the model that answered", async () => {
