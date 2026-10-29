@@ -104,6 +104,64 @@ describe("the Navigator's corner", () => {
   });
 });
 
+describe("the Navigator's right-click menu", () => {
+  // "There was a pop up menu on the Navigator button on the canvas
+  // header for changing its location. Let's add that pop up menu when
+  // the Navigator is right-clicked."
+  const open = (corner: "tl" | "br" = "br") => {
+    const dispatch = vi.fn();
+    render(<Navigator view={zoomed()} src="frame" corner={corner} size={25} dispatch={dispatch} />);
+    const nav = screen.getByTestId("navigator");
+    nav.getBoundingClientRect = () => ({ left: 500, top: 400, width: 200, height: 100, right: 700, bottom: 500, x: 500, y: 400, toJSON: () => ({}) });
+    const shown = fireEvent.contextMenu(nav, { clientX: 560, clientY: 430 });
+    return { dispatch, nav, shown };
+  };
+
+  it("opens at the press with the four corners, the current one checked and focused", () => {
+    const { shown } = open();
+    expect(shown).toBe(false); // the browser's own menu is held back
+    const menu = screen.getByTestId("navigator-corner-menu");
+    const rows = ["tl", "tr", "bl", "br"].map((c) => screen.getByTestId(`navigator-corner-${c}`));
+    expect(rows.map((r) => r.textContent)).toEqual(["Top Left", "Top Right", "Bottom Left", "Bottom Right"]);
+    expect(rows.map((r) => r.getAttribute("aria-checked"))).toEqual(["false", "false", "false", "true"]);
+    expect(document.activeElement).toBe(rows[3]);
+    // In the bottom right corner it opens up and to the left of the press,
+    // onto the canvas.
+    expect(menu.style.bottom).toBe("70px");
+    expect(menu.style.right).toBe("140px");
+  });
+
+  it("opens down and to the right from a top-left map", () => {
+    open("tl");
+    const menu = screen.getByTestId("navigator-corner-menu");
+    expect(menu.style.top).toBe("30px");
+    expect(menu.style.left).toBe("60px");
+  });
+
+  it("a corner picked moves the map and closes the menu, without panning the view", () => {
+    const { dispatch } = open();
+    const tl = screen.getByTestId("navigator-corner-tl");
+    fireEvent.pointerDown(tl, { button: 0, buttons: 1, clientX: 520, clientY: 410 });
+    fireEvent.click(tl);
+    expect(dispatch.mock.calls.map((c) => c[0])).toEqual([{ type: "set_prefs", prefs: { navigatorCorner: "tl" } }]);
+    expect(screen.queryByTestId("navigator-corner-menu")).toBeNull();
+  });
+
+  it("the arrow keys move through it, and Escape or a press elsewhere closes it", () => {
+    const { dispatch } = open();
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(screen.getByTestId("navigator-corner-bl"));
+    fireEvent.keyDown(document.activeElement!, { key: "Home" });
+    expect(document.activeElement).toBe(screen.getByTestId("navigator-corner-tl"));
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByTestId("navigator-corner-menu")).toBeNull();
+    fireEvent.contextMenu(screen.getByTestId("navigator"), { clientX: 560, clientY: 430 });
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByTestId("navigator-corner-menu")).toBeNull();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+});
+
 describe("the Navigator's rectangle", () => {
   it("is the canvas on the frame", () => {
     // 2000 x 1000 on screen, centered: the 800 x 600 canvas sees the

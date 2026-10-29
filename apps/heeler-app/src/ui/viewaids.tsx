@@ -2,11 +2,14 @@
 // and the Loupe put over the canvas. The math is in
 // viewaidsparts.ts.
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { Command, State } from "../state";
+import { useDismiss } from "./hooks";
 import { isPrimaryPress } from "./pointerguard";
+import { MENU_LIST_SURFACE } from "./menufieldparts";
 import { modLabel } from "../platform";
 import {
+  NAVIGATOR_CORNERS,
   insideQuad,
   loupeLabel,
   loupeSliceRect,
@@ -73,11 +76,44 @@ export function Navigator({
   latest.current = view;
   const endDrag = useRef<(() => void) | null>(null);
   const shown = overflowsStage(view);
+  // The corner menu, at the press that opened it, in the map's own
+  // pixels (2026-10-29: the header button's right-click menu, back on
+  // the map now that the button is gone: "right click does not seem to
+  // do anything in the Navigator view").
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const root = useDismiss<HTMLDivElement>(menu !== null, () => setMenu(null));
+  const menuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!shown) endDrag.current?.();
     return () => endDrag.current?.();
   }, [shown, src]);
+  useEffect(() => {
+    if (!shown) setMenu(null);
+  }, [shown]);
+  useEffect(() => {
+    if (!menu) return;
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("[role=menuitemradio]") ?? []);
+    (items.find((item) => item.dataset.active) ?? items[0])?.focus();
+  }, [menu !== null]);
   if (!shown) return null;
+  const menuKeys = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("[role=menuitemradio]") ?? []);
+    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    const go = (i: number) => {
+      e.preventDefault();
+      items[Math.max(0, Math.min(items.length - 1, i))]?.focus();
+    };
+    if (e.key === "ArrowDown") go(at + 1);
+    else if (e.key === "ArrowUp") go(at - 1);
+    else if (e.key === "Home") go(0);
+    else if (e.key === "End") go(items.length - 1);
+    else if (e.key === "Escape") {
+      // The menu alone: the canvas's own Escape is for the tool.
+      e.preventDefault();
+      e.stopPropagation();
+      setMenu(null);
+    } else if (e.key === "Tab") setMenu(null);
+  };
   const box = navigatorBox(view.stage, view.base.w / view.base.h, size);
   const quad = viewQuad(view);
   const at = (e: { clientX: number; clientY: number }, el: Element): [number, number] => {
@@ -126,16 +162,23 @@ export function Navigator({
   };
   return (
     <div
+      ref={root}
       data-testid="navigator"
       data-corner={corner}
       onPointerDown={onPointerDown}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const r = e.currentTarget.getBoundingClientRect();
+        setMenu({ x: e.clientX - r.left, y: e.clientY - r.top });
+      }}
       // The canvas's own wheel and middle drag stay the canvas's; the map
       // is for the left button.
       onMouseDown={(e) => {
         if (isPrimaryPress(e)) e.stopPropagation();
       }}
       onClick={(e) => e.stopPropagation()}
-      data-hint="Drag the rectangle to move the view, or click to center it there"
+      data-hint="Drag the rectangle to move the view, or click to center it there. Right-click to choose its corner"
       style={{
         position: "absolute",
         ...place,
@@ -166,6 +209,61 @@ export function Navigator({
           vectorEffect="non-scaling-stroke"
         />
       </svg>
+      {menu && (
+        <div
+          ref={menuRef}
+          data-testid="navigator-corner-menu"
+          role="menu"
+          aria-label="Navigator position"
+          onKeyDown={menuKeys}
+          // The map pans on a press; a press in its menu is the menu's.
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          style={{
+            position: "absolute",
+            // Opened from the press toward the canvas's middle, so a map
+            // in a bottom or right corner keeps its menu on the canvas.
+            ...(corner[0] === "b" ? { bottom: box.h - menu.y } : { top: menu.y }),
+            ...(corner[1] === "r" ? { right: box.w - menu.x } : { left: menu.x }),
+            zIndex: 80,
+            cursor: "default",
+            ...MENU_LIST_SURFACE,
+            maxHeight: undefined,
+            minWidth: 128,
+          }}
+        >
+          {NAVIGATOR_CORNERS.map((c) => (
+            <button
+              key={c.id}
+              role="menuitemradio"
+              aria-checked={c.id === corner}
+              tabIndex={-1}
+              data-testid={`navigator-corner-${c.id}`}
+              data-active={c.id === corner || undefined}
+              onClick={(e) => {
+                e.stopPropagation();
+                dispatch({ type: "set_prefs", prefs: { navigatorCorner: c.id } });
+                setMenu(null);
+              }}
+              style={{
+                all: "unset",
+                cursor: "pointer",
+                fontSize: 11.5,
+                padding: "4px 8px",
+                whiteSpace: "nowrap",
+                display: "block",
+                color: c.id === corner ? "var(--accent)" : "var(--text-body)",
+              }}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
