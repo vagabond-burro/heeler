@@ -90,7 +90,9 @@ describe("Depth map detail", () => {
     const field = screen.getByTestId("prefs-depth-size");
     looksLike(field, look);
     expect(field.dataset.value).toBe("700");
-    expect(fitOf(field)).toEqual(["518", "700", "1036"]);
+    // Fitted to both models' sizes, so the field keeps its width when
+    // the default model changes.
+    expect(fitOf(field)).toEqual(["518", "700", "1036", "504", "1008"]);
     expect(field.getAttribute("data-hint")).toMatch(/^New photographs read the scene at 700 px/);
     expect(screen.queryByTestId("prefs-depth-size-1036")).toBeNull();
     fireEvent.click(field);

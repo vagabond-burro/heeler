@@ -1790,7 +1790,7 @@ impl Registry {
         });
 
         // The three depth tools. Each reads the photograph's computed
-        // FARNESS plane (0 near, 1 far; Depth Anything V2 Small,
+        // FARNESS plane (0 near, 1 far; the Depth Map's model,
         // desktop-cached, executor-injected like the smart-mask
         // rasters). No raster, no depth: every one of them is a
         // perfect passthrough at neutral params AND without its
@@ -1816,9 +1816,15 @@ impl Registry {
                 num("near_clip", 0.0, 0.0, 40.0),
                 num("far_clip", 0.0, 0.0, 40.0),
                 // The model's working size on the long edge: 518 is
-                // its own; 700 and 1036 buy finer edges at attention's
-                // quadratic price. Snapped to those three.
-                num("size", 518.0, 518.0, 1036.0),
+                // V2's own; 700 and 1036 buy finer edges at attention's
+                // quadratic price. DA3 reads at 504 and 1008. Snapped to
+                // the model's own sizes.
+                num("size", 518.0, 504.0, 1036.0),
+                // The depth model (2026-10-28): V2 Small, small and fast,
+                // or DA3 Mono Large, for relief inside a subject. A word
+                // this version does not know reads as V2, and iOS reads
+                // every word as V2 while keeping it.
+                choice("model", "v2_small", &["v2_small", "da3_mono_large"]),
                 // The map's own Levels (2026-09-13): applied desktop-side to the
                 // plane every depth reader is handed, ahead of each reader's own.
                 num("depth_black", 0.0, 0.0, 0.99),

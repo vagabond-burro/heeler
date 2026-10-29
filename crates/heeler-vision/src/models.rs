@@ -1,11 +1,11 @@
 //! The model registry: what can be downloaded, from where, and the
-//! checksums that make the download trustworthy. Ten entries: SAM
+//! checksums that make the download trustworthy. Eleven entries: SAM
 //! 2.1 (click selection) and MobileSAM (the selections made before
 //! it), BiRefNet dynamic and Lite (subject matte), LaMa (inpaint fill),
-//! ViTMatte (edge refinement), Depth Anything V2 Small (scene depth),
-//! MoGe-2 ViT-S (surface normals), SCUNet (noise reduction) and
-//! Florence-2 (what is in the picture), each with its license caveat
-//! recorded on the entry.
+//! ViTMatte (edge refinement), Depth Anything V2 Small and 3 Mono
+//! Large (scene depth), MoGe-2 ViT-S (surface normals), SCUNet (noise
+//! reduction) and Florence-2 (what is in the picture), each with its
+//! license caveat recorded on the entry.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -299,6 +299,34 @@ pub const DEPTH_ANYTHING: ModelSpec = ModelSpec {
     files: &[(
         "model.onnx",
         "afb6a5c28f3b6bf1618c6e43f02073ef9dfdc70e937502d51603e57b0a1df10c",
+    )],
+    extra: &[],
+};
+
+/// Depth Anything 3 Mono Large (ByteDance, Apache-2.0, code and the
+/// DA3MONO-LARGE weights; the Large and Giant multi-view models are
+/// CC-BY-NC and must never be swapped in here): the larger depth model
+/// on desktop, for relief inside a subject. No ONNX build is published,
+/// so this one is Heeler's own export from the published weights
+/// (depth-anything/DA3MONO-LARGE, model.safetensors): the transformer's
+/// MatMul weights int8, the convolutions fp32. A fully quantized export
+/// (348 MB) turned a subject's relief to speckle; fp16 (671 MB) agrees
+/// as well but runs half again slower on the CPU. Input and outputs as
+/// DEPTH_ANYTHING's (`pixel_values` in, `predicted_depth` as disparity
+/// out), plus a `sky` plane depth.rs uses to send the sky far. Its home
+/// is the release mirror, so the mirror is its only source.
+pub const DEPTH_ANYTHING_3_MONO: ModelSpec = ModelSpec {
+    id: "depth_anything_3_mono_large",
+    version: "2026.10",
+    label: "Depth Anything 3 Mono Large (scene depth, detail)",
+    license: "Apache-2.0 (code and the DA3MONO-LARGE weights)",
+    urls: &["https://github.com/vagabond-burro/heeler/releases/download/models/depth_anything_3_mono_large_int8.onnx"],
+    archive_sha256: "998988420b574c2ff38cca84ebdc3d54715d54957e8ba2450e15b449c04e6ed3",
+    archive_bytes: 433_346_946,
+    kind: ArchiveKind::File,
+    files: &[(
+        "model.onnx",
+        "998988420b574c2ff38cca84ebdc3d54715d54957e8ba2450e15b449c04e6ed3",
     )],
     extra: &[],
 };
@@ -966,7 +994,7 @@ mod tests {
 
     #[test]
     fn every_registry_source_validates_and_inconsistent_sources_fail_before_staging() {
-        for spec in [&SAM2_1_TINY, &MOBILE_SAM, &BIREFNET_DYNAMIC, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &MOGE_2_VITS, &SCUNET, &FLORENCE_2] {
+        for spec in [&SAM2_1_TINY, &MOBILE_SAM, &BIREFNET_DYNAMIC, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &DEPTH_ANYTHING_3_MONO, &MOGE_2_VITS, &SCUNET, &FLORENCE_2] {
             ModelSource::from(spec).validate().unwrap();
         }
         let base = tempdir();
@@ -1115,11 +1143,19 @@ mod tests {
 
     /// Every model has the release mirror as a second source
     /// (2026-09-09), the archive and every extra file alike, so a
-    /// renamed or deleted Hugging Face repository costs nothing.
+    /// renamed or deleted Hugging Face repository costs nothing. A
+    /// model Heeler exported itself (no upstream file exists) has the
+    /// mirror as its home and only source.
     #[test]
     fn every_model_carries_the_release_mirror_as_a_second_source() {
         let mirror = "https://github.com/vagabond-burro/heeler/releases/download/models/";
-        for spec in [&SAM2_1_TINY, &MOBILE_SAM, &BIREFNET_DYNAMIC, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &MOGE_2_VITS, &SCUNET, &FLORENCE_2] {
+        let heeler_made = [DEPTH_ANYTHING_3_MONO.id];
+        for spec in [&SAM2_1_TINY, &MOBILE_SAM, &BIREFNET_DYNAMIC, &BIREFNET_LITE, &LAMA, &VITMATTE, &DEPTH_ANYTHING, &DEPTH_ANYTHING_3_MONO, &MOGE_2_VITS, &SCUNET, &FLORENCE_2] {
+            if heeler_made.contains(&spec.id) {
+                assert_eq!(spec.urls.len(), 1, "{}: a Heeler export has one home", spec.id);
+                assert!(spec.urls[0].starts_with(mirror), "{}: a Heeler export lives on the mirror", spec.id);
+                continue;
+            }
             assert!(spec.urls.len() >= 2, "{}: one source only", spec.id);
             assert!(spec.urls.iter().any(|u| u.starts_with(mirror)), "{}: no mirror", spec.id);
             assert!(spec.urls.iter().all(|u| u.starts_with("https://")), "{}: a plain http source", spec.id);

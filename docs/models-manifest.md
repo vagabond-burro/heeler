@@ -130,7 +130,13 @@ place of Lite) names `birefnet_dynamic_1024.onnx` on the same release
 as its mirror; that file is not uploaded yet (the owner uploads it: the
 export from its Hugging Face revision, unchanged, 972,495,971 bytes,
 SHA-256 `aa3c17882a27f079fafa7655cf50e83b9e6e067d6c6fa4cbc3524ae441da0bd7`),
-and until it is, the download has its first source only. Lite stays
+and until it is, the download has its first source only. Depth
+Anything 3 Mono Large (`depth_anything_3_mono_large`, added 2026-10-28
+for 2026.7) has one source on purpose: no ONNX build is published
+upstream, so the file is Heeler's own export of the DA3MONO-LARGE
+weights, uploaded to the `models` release as
+`depth_anything_3_mono_large_int8.onnx` and verified by download
+against its pin, and the release is its home. Lite stays
 listed for the documents matted with it. A check against this
 file reads as current. The same text is kept as `docs/models.json`,
 ready to upload with the next app release.
@@ -173,6 +179,23 @@ ready to upload with the next app release.
         "https://github.com/vagabond-burro/heeler/releases/download/models/birefnet_lite.onnx"
       ],
       "version": "2024.09"
+    },
+    "depth_anything_3_mono_large": {
+      "archive_bytes": 433346946,
+      "archive_sha256": "998988420b574c2ff38cca84ebdc3d54715d54957e8ba2450e15b449c04e6ed3",
+      "files": [
+        [
+          "model.onnx",
+          "998988420b574c2ff38cca84ebdc3d54715d54957e8ba2450e15b449c04e6ed3"
+        ]
+      ],
+      "kind": "file",
+      "label": "Depth Anything 3 Mono Large (scene depth, detail)",
+      "notes": "",
+      "urls": [
+        "https://github.com/vagabond-burro/heeler/releases/download/models/depth_anything_3_mono_large_int8.onnx"
+      ],
+      "version": "2026.10"
     },
     "depth_anything_v2_small": {
       "archive_bytes": 99060839,
@@ -303,6 +326,24 @@ ready to upload with the next app release.
         "https://github.com/vagabond-burro/heeler/releases/download/models/mobile_sam_20230629.zip"
       ],
       "version": "2023.06"
+    },
+    "moge_2_vits_normal": {
+      "archive_bytes": 140852051,
+      "archive_sha256": "24eacb5dc7a2c54c7bc98f7de085ffbed79ad006ea5b664c2c2cdc02ff3a52f0",
+      "files": [
+        [
+          "model.onnx",
+          "24eacb5dc7a2c54c7bc98f7de085ffbed79ad006ea5b664c2c2cdc02ff3a52f0"
+        ]
+      ],
+      "kind": "file",
+      "label": "MoGe-2 ViT-S (surface normals)",
+      "notes": "",
+      "urls": [
+        "https://huggingface.co/Ruicheng/moge-2-vits-normal-onnx/resolve/e50ffda41565591092adea54c6ac83d6212e1e23/model.onnx",
+        "https://github.com/vagabond-burro/heeler/releases/download/models/moge_2_vits_normal.onnx"
+      ],
+      "version": "2025.07"
     },
     "sam2_1_hiera_tiny": {
       "archive_bytes": 354238,

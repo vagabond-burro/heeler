@@ -104,8 +104,13 @@ export interface Prefs {
    * test) so a graph made without the preference reads the same. */
   depthEdges: number;
   depthFlatten: number;
-  /** the model's working size on the long edge: 518, 700 or 1036 */
+  /** the model's working size on the long edge: 518, 700 or 1036 for
+   * V2, 504 or 1008 for DA3 (a size snaps to the photograph's model) */
   depthSize: number;
+  /** the depth model a new photograph's Depth Map reads with. A
+   * photograph keeps the model it was born with: changing this later
+   * touches none that already has the section. */
+  depthModel: DepthModelId;
   /** command id to key binding, overriding that command's default */
   hotkeys: Record<string, string>;
   /** how often to back the catalog up automatically, in days. 0 is off.
@@ -270,6 +275,7 @@ export const DEFAULT_PREFS: Prefs = {
   depthEdges: 50,
   depthFlatten: 25,
   depthSize: 518,
+  depthModel: "v2_small",
   hotkeys: {},
   backupEveryDays: 0,
   backupFolder: "",
@@ -362,14 +368,55 @@ function finitePreference(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-/** The depth model's working sizes: its own 518, and two steps up
- * that buy edge detail at attention's quadratic price. */
+/** The Depth Map's models: Depth Anything V2 Small, small and fast
+ * (and the only one on iOS), and Depth Anything 3 Mono Large, which
+ * spends about four times the time on relief inside a subject. The id
+ * is what the section's `model` text parameter stores. */
+export type DepthModelId = "v2_small" | "da3_mono_large";
+
+export const DEPTH_MODELS: readonly {
+  id: DepthModelId;
+  /** the chip's word */
+  short: string;
+  label: string;
+  /** its row in SmartModels, and the id smart_model_download takes */
+  status: "depth" | "depthDa3";
+  download: string;
+}[] = [
+  { id: "v2_small", short: "V2 SMALL", label: "Depth Anything V2 Small", status: "depth", download: "depth_anything_v2_small" },
+  { id: "da3_mono_large", short: "DA3 LARGE", label: "Depth Anything 3 Mono Large", status: "depthDa3", download: "depth_anything_3_mono_large" },
+];
+
+export function isDepthModelId(value: unknown): value is DepthModelId {
+  return DEPTH_MODELS.some((m) => m.id === value);
+}
+
+/** A Depth Map's model: V2 when the parameter is missing (every
+ * photograph from before the choice) or names a model this version
+ * does not know. */
+export function depthModelOf(node: { textParams?: Record<string, string> } | undefined | null): DepthModelId {
+  const m = node?.textParams?.model;
+  return isDepthModelId(m) ? m : "v2_small";
+}
+
+/** V2's working sizes: its own 518, and two steps up that buy edge
+ * detail at attention's quadratic price. */
 export const DEPTH_SIZES = [518, 700, 1036] as const;
 
-/** A working size, snapped to the nearest of the three. */
-export function snapDepthSize(value: unknown): number {
-  const v = finitePreference(value, 518);
-  return DEPTH_SIZES.reduce((best, s) => (Math.abs(s - v) < Math.abs(best - v) ? s : best), 518 as number);
+/** DA3's: its own 504 and twice that, both multiples of its 14 px
+ * patch. */
+export const DA3_DEPTH_SIZES = [504, 1008] as const;
+
+export function depthSizesFor(model: DepthModelId): readonly number[] {
+  return model === "da3_mono_large" ? DA3_DEPTH_SIZES : DEPTH_SIZES;
+}
+
+/** A working size, snapped to the nearest of the model's own (V2's
+ * when no model is named). */
+export function snapDepthSize(value: unknown, model: DepthModelId = "v2_small"): number {
+  const sizes = depthSizesFor(model);
+  const v = finitePreference(value, sizes[0]);
+  return sizes.reduce((best, s) => (Math.abs(s - v) < Math.abs(best - v) ? s : best), sizes[0]);
 }
 
 /** A Depth Map default: a whole percent, 0 to 100. */
@@ -758,6 +805,8 @@ export const PARAM_TEXT_DEFAULT: Record<string, Record<string, string>> = {
   "heeler.smart_mask": { mode: "click" },
   "heeler.matte_mask": { layer: "", names: "[]" },
   "heeler.key_light": { normals: "auto" },
+  // The Depth Map's model; a photograph without the parameter is V2.
+  "heeler.depth_map": { model: "v2_small" },
   // The chart the panel fits against; the quad, the per-patch overrides
   // and the fit report are JSON the chart tool and panel write.
   "heeler.color_checker": { chart: "colorchecker-classic", quad: "", patches: "", fit: "" },
@@ -1217,6 +1266,13 @@ function freshNodes(s: State, name: string, rendered = false): NodeCard[] {
     // node at birth (see UiSettings.rawSharpening).
     if (n.type === "heeler.image_source" && sharpensAtBirth(name, rendered)) {
       n.textParams = { ...n.textParams, sharpening: s.rawSharpening };
+    }
+    // A default graph that carries a Depth Map without a model gives a
+    // new photograph the preference's model, at that model's Detail.
+    if (n.type === "heeler.depth_map" && !isDepthModelId(n.textParams?.model)) {
+      const model = depthModelAtBirth(n, s.prefs);
+      n.textParams = { ...n.textParams, model };
+      n.params = { ...n.params, size: snapDepthSize(n.params.size, model) };
     }
     if (n.type !== "heeler.tone_profile") continue;
     if (rendered || isRenderedSource(name)) {
@@ -7350,13 +7406,41 @@ function undoReset(base: State, r: ResetUndo): State {
  * edit, and the click vanished ("I try to click and add
  * one and it doesn't work").*/
 /** The Depth Map section's params for a photograph that has none yet:
- * the preference, clamped the way set_prefs clamps it. */
-export function depthMapParams(prefs: Prefs): { edges: number; flatten: number; size: number } {
+ * the preference, clamped the way set_prefs clamps it, Detail snapped to
+ * `model`'s own sizes (the preference's model unless the photograph has
+ * one already). Edges and Flatten are the same for both models: their
+ * radii follow the stretched ramp, which is one model pixel wide for
+ * either at its own size (measured on the owl, 9.5 and 10 px at the
+ * 3004 px decode), and Flatten at 25 took about 1% of DA3's facial
+ * relief, as of V2's. */
+export function depthMapParams(prefs: Prefs, model: DepthModelId = isDepthModelId(prefs.depthModel) ? prefs.depthModel : "v2_small"): { edges: number; flatten: number; size: number } {
   return {
     edges: clampDepthSetting(prefs.depthEdges, DEFAULT_PREFS.depthEdges),
     flatten: clampDepthSetting(prefs.depthFlatten, DEFAULT_PREFS.depthFlatten),
-    size: snapDepthSize(prefs.depthSize),
+    size: snapDepthSize(prefs.depthSize, model),
   };
+}
+
+/** The model a Depth Map is born with: the one the node already names
+ * (a section switched off and on keeps its own), else the preference. */
+function depthModelAtBirth(node: { textParams?: Record<string, string> } | undefined, prefs: Prefs): DepthModelId {
+  if (isDepthModelId(node?.textParams?.model)) return node!.textParams!.model as DepthModelId;
+  return isDepthModelId(prefs.depthModel) ? prefs.depthModel : "v2_small";
+}
+
+/** Whether anything on the photograph is set against where its depth
+ * map puts things: Levels moved off identity on the map or on a depth
+ * reader, or a mask limited by depth. Switching the model moves all of
+ * them, and the Depth Map section says so when it does. */
+export function depthTuned(s: { nodes: NodeCard[] }): boolean {
+  return s.nodes.some((n) => {
+    if (!n.enabled) return false;
+    const p = n.params;
+    const num = (k: string, d: number) => (typeof p[k] === "number" ? (p[k] as number) : d);
+    if (DEPTH_MASK_TYPES.has(n.type) && num("depth_on", 0) !== 0) return true;
+    if (!("depth_black" in p || "depth_white" in p || "depth_gamma" in p)) return false;
+    return num("depth_black", 0) !== 0 || num("depth_white", 1) !== 1 || num("depth_gamma", 1) !== 1;
+  });
 }
 
 /** Mask nodes whose Depth block drinks the farness plane. */
@@ -7525,9 +7609,11 @@ function wireDepthTransitions(before: State, after: State): State {
     ({ nodes, wires } = buildCategoryPiece(nodes, wires, piece));
     // Born with the preference's defaults, the same birth the Depth Map
     // section's own switch gives it.
-    nodes = nodes.map((n) =>
-      n.id === piece.id ? { ...n, enabled: true, params: { ...n.params, ...depthMapParams(after.prefs) } } : n,
-    );
+    nodes = nodes.map((n) => {
+      if (n.id !== piece.id) return n;
+      const model = depthModelAtBirth(undefined, after.prefs);
+      return { ...n, enabled: true, params: { ...n.params, ...depthMapParams(after.prefs, model) }, textParams: { ...n.textParams, model } };
+    });
     dm = nodes.find((n) => n.id === piece.id);
   }
   if (!dm) return after;
@@ -12599,7 +12685,7 @@ const PARAM_RANGE_BY_TYPE: Record<string, Record<string, [number, number]>> = {
   "heeler.displacement_map": { strength: [0, 200] },
   "heeler.fog": { density: [0, 100], start: [0, 100], falloff: [0, 100], texture: [0, 100], texture_size: [0, 100], texture_shift: [0, 100], fog_level: [0, 100], fog_hue: [0, 360], fog_sat: [0, 100], desat: [0, 100], depth_black: [0, 0.99], depth_white: [0.01, 1], depth_gamma: [0.1, 10], depth_black_soft: [0, 100], depth_white_soft: [0, 100] },
   "heeler.key_light": { strength: [-200, 200], azimuth: [-180, 180], elevation: [5, 90], ambient: [0, 100], relief: [1, 100], invert: [0, 1], depth_black: [0, 0.99], depth_white: [0.01, 1], depth_gamma: [0.1, 10], depth_black_soft: [0, 100], depth_white_soft: [0, 100] },
-  "heeler.depth_map": { edges: [0, 100], flatten: [0, 100], near_clip: [0, 40], far_clip: [0, 40], size: [518, 1036], depth_black: [0, 0.99], depth_white: [0.01, 1], depth_gamma: [0.1, 10], depth_black_soft: [0, 100], depth_white_soft: [0, 100] },
+  "heeler.depth_map": { edges: [0, 100], flatten: [0, 100], near_clip: [0, 40], far_clip: [0, 40], size: [504, 1036], depth_black: [0, 0.99], depth_white: [0.01, 1], depth_gamma: [0.1, 10], depth_black_soft: [0, 100], depth_white_soft: [0, 100] },
   "heeler.dof": { aperture: [0, 100], focus: [0, 100], blades: [3, 9], blade_curve: [0, 100], fringe: [0, 100], field_curve: [-100, 100], glow: [0, 100], bubble: [0, 100], squeeze: [-100, 100], swirl: [0, 100] },
   "heeler.halation": { threshold: [0, 100], background: [0, 100], by_depth: [-100, 100], radius: [0.5, 30], diffusion: [0, 100], hue: [0, 360], saturation: [0, 100], blue_comp: [0, 100], amount: [0, 300], mix: [0, 100], bloom: [0, 100], bloom_radius: [5, 60] },
   "heeler.sharpening": { radius: [0, 200], intensity: [0, 100] },
@@ -17703,16 +17789,21 @@ function reduceInner(s: State, cmd: Command): State {
           // RAW's fresh graph takes it from the preference, so its
           // reset does too.
           const activeImage = s.images.find((i) => i.id === s.activeImage);
+          // The Depth Map keeps its Model through a reset: the dials go
+          // back, but switching the model moves its Levels and depth
+          // masks, so that is only ever done by hand.
           const textValues =
             n.type === "heeler.tone_profile" && cmd.textValues.mode === undefined
               ? { ...cmd.textValues, mode: s.rawProfile }
               : n.type === "heeler.image_source" && activeImage && sharpensAtBirth(activeImage.name, bornRendered(activeImage))
                 ? { ...cmd.textValues, sharpening: s.rawSharpening }
-                : cmd.textValues;
+                : n.type === "heeler.depth_map"
+                  ? { ...cmd.textValues, model: n.textParams?.model ?? "v2_small" }
+                  : cmd.textValues;
           // The Depth Map resets to the preference, the same numbers it
           // was born with, rather than to the registry's.
           const values =
-            n.type === "heeler.depth_map" ? { ...cmd.values, ...depthMapParams(s.prefs) } : cmd.values;
+            n.type === "heeler.depth_map" ? { ...cmd.values, ...depthMapParams(s.prefs, depthModelOf(n)) } : cmd.values;
           return {
             ...n,
             params: { ...n.params, ...values },
@@ -19522,9 +19613,11 @@ function reduceInner(s: State, cmd: Command): State {
         // registry's: the preference IS "what a new photograph starts with"
         // (2026-09-05).
         if (p.type === "heeler.depth_map") {
-          nodes = nodes.map((n) =>
-            n.id === p.id ? { ...n, params: { ...n.params, ...depthMapParams(s.prefs) } } : n,
-          );
+          nodes = nodes.map((n) => {
+            if (n.id !== p.id) return n;
+            const model = depthModelAtBirth(undefined, s.prefs);
+            return { ...n, params: { ...n.params, ...depthMapParams(s.prefs, model) }, textParams: { ...n.textParams, model } };
+          });
         }
         // The flare is born with the rig Depth Lighting already holds,
         // so a light switched to flare before the section existed is
@@ -19774,6 +19867,11 @@ function reduceInner(s: State, cmd: Command): State {
           const next = {
             ...n,
             textParams: { ...n.textParams, [cmd.param]: cmd.value },
+            // A switched depth model reads at its own Detail sizes: the
+            // nearest of them, in the same undo step.
+            ...(n.type === "heeler.depth_map" && cmd.param === "model" && isDepthModelId(cmd.value)
+              ? { params: { ...n.params, size: snapDepthSize(n.params.size, cmd.value) } }
+              : {}),
           };
           // The Color Tune's bands and Recolor's curves are the whole
           // statement those nodes make, and both arrive as text, which
@@ -20448,7 +20546,8 @@ function reduceInner(s: State, cmd: Command): State {
         shapeLineWidth: migrateShapeLineWidth(merged.shapeLineWidth),
         depthEdges: clampDepthSetting(merged.depthEdges, DEFAULT_PREFS.depthEdges),
         depthFlatten: clampDepthSetting(merged.depthFlatten, DEFAULT_PREFS.depthFlatten),
-        depthSize: snapDepthSize(merged.depthSize),
+        depthModel: isDepthModelId(merged.depthModel) ? merged.depthModel : "v2_small",
+        depthSize: snapDepthSize(merged.depthSize, isDepthModelId(merged.depthModel) ? merged.depthModel : "v2_small"),
       };
       return {
         ...s,

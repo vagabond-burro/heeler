@@ -5,7 +5,7 @@ import { EyeOffIcon, MaskEyeIcon, PinIcon } from "./panelicons";
 import { SECTIONS, hiddenSectionCount, sectionHidden } from "./simpledata";
 import React, { useEffect, useMemo, useState } from "react";
 import type { Command, State } from "../state";
-import { BACKUP_CADENCES, RAW_SHARPENING, tetherShown, DEFAULT_PREFS, MASK_OVERLAY_COLORS, clampMaskOverlayOpacity, SHAPE_LINE_WIDTH_RANGE, clampAutosaveDelay, clampGesturePreviewEdge, clampGrainStep, clampPreviewEdge, clampShapeLineWidth, clampTetherPoll, clampThumbnailEdge, clampViewerRotationStep, clampViewerZoomRate, ribbonBounds, clampDepthSetting, DEPTH_SIZES, snapDepthSize } from "../state";
+import { BACKUP_CADENCES, RAW_SHARPENING, tetherShown, DEFAULT_PREFS, MASK_OVERLAY_COLORS, clampMaskOverlayOpacity, SHAPE_LINE_WIDTH_RANGE, clampAutosaveDelay, clampGesturePreviewEdge, clampGrainStep, clampPreviewEdge, clampShapeLineWidth, clampTetherPoll, clampThumbnailEdge, clampViewerRotationStep, clampViewerZoomRate, ribbonBounds, clampDepthSetting, DEPTH_SIZES, DA3_DEPTH_SIZES, DEPTH_MODELS, depthSizesFor, isDepthModelId, snapDepthSize } from "../state";
 import {
   catalogUpgradeAlwaysBackup,
   setCatalogUpgradeAlwaysBackup,
@@ -560,6 +560,7 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
     { id: "lama", label: "LaMa (inpainting)" },
     { id: "vitmatte", label: "ViTMatte (edge refinement)" },
     { id: "depth_anything_v2_small", label: "Depth Anything V2 Small (scene depth)" },
+    { id: "depth_anything_3_mono_large", label: "Depth Anything 3 Mono Large (scene depth, detail)" },
     { id: "moge_2_vits_normal", label: "MoGe-2 ViT-S (surface normals)" },
     { id: "scunet_color_real_psnr", label: "SCUNet (noise reduction)" },
     { id: "florence_2_base", label: "Florence-2 base (what is in the picture)" },
@@ -573,7 +574,7 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
   // the earlier subject matte, is listed only while it is on disk, so it
   // can be removed but is never offered.
   const listed = (m: SmartModels) =>
-    [m.sam, m.samLegacy, m.matte, m.lite?.installed ? m.lite : undefined, m.fill, m.refine, m.depth, m.normals, m.denoise, m.florence].filter(
+    [m.sam, m.samLegacy, m.matte, m.lite?.installed ? m.lite : undefined, m.fill, m.refine, m.depth, m.depthDa3, m.normals, m.denoise, m.florence].filter(
       (x): x is SmartModelStatus => !!x,
     );
   const rows = models
@@ -991,6 +992,7 @@ function SettingsCategory({
   landing: SettingId | null;
 }) {
   const setPref = (prefs: Partial<State["prefs"]>) => dispatch({ type: "set_prefs", prefs });
+  const defaultDepthModel = isDepthModelId(state.prefs.depthModel) ? state.prefs.depthModel : "v2_small";
   const recents = clampRecents(state.prefs.paletteRecents);
   const customBands = Math.min(8, Math.max(1, state.prefs.consoleCustomMax));
   const [ribbonMin, ribbonMax] = ribbonBounds(state.prefs);
@@ -1797,6 +1799,32 @@ should be a dropdown option menu".*/
             }
           />
           <SettingBlock
+            id="depth-model"
+            landing={landing}
+            control={
+              <MenuField
+                testid="prefs-depth-model"
+                label="Default depth model"
+                size="regular"
+                fitLabels={DEPTH_MODELS.map((m) => m.short)}
+                value={defaultDepthModel}
+                options={DEPTH_MODELS.map((m) => ({
+                  id: m.id,
+                  label: m.short,
+                  hint:
+                    m.id === "v2_small"
+                      ? "New photographs read depth with Depth Anything V2 Small: small and fast"
+                      : "New photographs read depth with Depth Anything 3 Mono Large: relief inside a subject, about four times the time",
+                }))}
+                onChange={(id) => {
+                  if (!isDepthModelId(id)) return;
+                  // Detail follows to the new model's own sizes.
+                  setPref({ depthModel: id, depthSize: snapDepthSize(state.prefs.depthSize, id) });
+                }}
+              />
+            }
+          />
+          <SettingBlock
             id="depth-size"
             landing={landing}
             control={
@@ -1806,9 +1834,9 @@ be a dropdown option menu".*/
                 testid="prefs-depth-size"
                 label="Depth map detail"
                 size="regular"
-                fitLabels={DEPTH_SIZES.map(String)}
-                value={String(snapDepthSize(state.prefs.depthSize))}
-                options={DEPTH_SIZES.map((size) => ({
+                fitLabels={[...DEPTH_SIZES, ...DA3_DEPTH_SIZES].map(String)}
+                value={String(snapDepthSize(state.prefs.depthSize, defaultDepthModel))}
+                options={depthSizesFor(defaultDepthModel).map((size) => ({
                   id: String(size),
                   label: String(size),
                   hint:
@@ -1816,9 +1844,13 @@ be a dropdown option menu".*/
                       ? "New photographs read the scene at the model's own 518 px: fastest"
                       : size === 700
                         ? "New photographs read the scene at 700 px: finer edges, about twice the time"
-                        : "New photographs read the scene at 1036 px: the finest edges, about four times the time and memory",
+                        : size === 1036
+                          ? "New photographs read the scene at 1036 px: the finest edges, about four times the time and memory"
+                          : size === 504
+                            ? "New photographs read the scene at the model's own 504 px"
+                            : "New photographs read the scene at 1008 px: the finest relief, about four times the time and several GB of memory",
                 }))}
-                onChange={(id) => setPref({ depthSize: snapDepthSize(Number(id)) })}
+                onChange={(id) => setPref({ depthSize: snapDepthSize(Number(id), defaultDepthModel) })}
               />
             }
           />

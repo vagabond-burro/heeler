@@ -1190,8 +1190,8 @@ export const SECTIONS: SectionSpec[] = [
       { label: "Blue grain", param: "blue_gain", centered: false },
     ],
   },
-  // The depth tools: shaped by the photograph's computed depth (Depth
-  // Anything V2 Small, downloaded on consent like every model). Each
+  // The depth tools: shaped by the photograph's computed depth (the
+  // Depth Map's model, downloaded on consent like every model). Each
   // is an identity at zero and an identity without depth, so the
   // sections are safe to show everywhere; the DepthRunner computes
   // the depth plane the first time any of these dials moves.
@@ -1200,7 +1200,7 @@ export const SECTIONS: SectionSpec[] = [
     // that reads the map, so the map is made before it is used.
     title: "Depth Map",
     depthTools: "depthmap",
-    note: "This photograph's own depth settings. They start at the defaults in Preferences and Reset returns to them; switched off, every depth tool reads the raw map.",
+    note: "This photograph's own depth settings. They start at the defaults in Preferences and Reset returns to them (the Model stays as chosen); switched off, every depth tool reads the raw map.",
     node: (s) => s.nodes.find((n) => n.type === "heeler.depth_map"),
     rows: [
       { label: "Edges", param: "edges", centered: false },

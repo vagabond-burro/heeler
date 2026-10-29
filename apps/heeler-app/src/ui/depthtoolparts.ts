@@ -2,7 +2,7 @@
 // depthtool.tsx exports components alone and Vite can refresh it in place as
 // it is edited instead of reloading the window.
 import type { FilePasses, State, NodeCard } from "../state";
-import { cropPreviewGraph, nodeWantsDepth, snapDepthSize } from "../state";
+import { cropPreviewGraph, depthModelOf, nodeWantsDepth, snapDepthSize } from "../state";
 
 // --- what the Depth Map section shows while the plane is computed ----
 //
@@ -70,6 +70,16 @@ export function dismissDepthFailure(): void {
   publishFailure(null);
 }
 
+/** How many Depth Map sections are showing their own model download
+ * card: the runner's floating card stands down while one is, so a
+ * download is asked for in one place. */
+export let inlineConsent = 0;
+
+export function shiftInlineConsent(by: number): void {
+  inlineConsent += by;
+  progressSubs.forEach((f) => f());
+}
+
 /** How many inline bars are on screen now. */
 export function depthInlineShown(): number {
   return inlineShown;
@@ -101,15 +111,18 @@ export function depthRecipeKey(s: State): string {
   if (!n) return "raw";
   const pct = (v: unknown) =>
     Math.round(Math.min(100, Math.max(0, typeof v === "number" && Number.isFinite(v) ? v : 0)));
-  const size = snapDepthSize(n.params.size);
+  const model = depthModelOf(n);
+  const size = snapDepthSize(n.params.size, model);
   const near = pct(n.params.near_clip);
   const far = pct(n.params.far_clip);
   // The raw plane's key, whatever the section says, when it asks for
   // nothing: the desktop keys it the same way.
-  if (pct(n.params.edges) === 0 && pct(n.params.flatten) === 0 && near === 0 && far === 0 && size === 518) {
+  if (model === "v2_small" && pct(n.params.edges) === 0 && pct(n.params.flatten) === 0 && near === 0 && far === 0 && size === 518) {
     return "raw";
   }
-  return `e${pct(n.params.edges)}f${pct(n.params.flatten)}n${near}x${far}s${size}`;
+  // DA3's planes are their own; V2's keep the key they always had.
+  const prefix = model === "v2_small" ? "" : `${model}|`;
+  return `${prefix}e${pct(n.params.edges)}f${pct(n.params.flatten)}n${near}x${far}s${size}`;
 }
 
 /** What the preview's depth plane is read through: the nodes ahead of

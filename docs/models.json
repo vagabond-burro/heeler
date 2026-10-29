@@ -36,6 +36,23 @@
       ],
       "version": "2024.09"
     },
+    "depth_anything_3_mono_large": {
+      "archive_bytes": 433346946,
+      "archive_sha256": "998988420b574c2ff38cca84ebdc3d54715d54957e8ba2450e15b449c04e6ed3",
+      "files": [
+        [
+          "model.onnx",
+          "998988420b574c2ff38cca84ebdc3d54715d54957e8ba2450e15b449c04e6ed3"
+        ]
+      ],
+      "kind": "file",
+      "label": "Depth Anything 3 Mono Large (scene depth, detail)",
+      "notes": "",
+      "urls": [
+        "https://github.com/vagabond-burro/heeler/releases/download/models/depth_anything_3_mono_large_int8.onnx"
+      ],
+      "version": "2026.10"
+    },
     "depth_anything_v2_small": {
       "archive_bytes": 99060839,
       "archive_sha256": "afb6a5c28f3b6bf1618c6e43f02073ef9dfdc70e937502d51603e57b0a1df10c",
