@@ -25,7 +25,8 @@ const MASK_CHIP: React.CSSProperties = {
 };
 
 import { SourceMenuRow } from "./sourcemenus";
-import { PROFILE_CHOICES, SOURCE_MENU_ROWS } from "./sourcemenusparts";
+import { SOURCE_MENU_ROWS } from "./sourcemenusparts";
+import { ProfileMenuRow, ToneCurveBlock } from "./tonecurve";
 import { capturePreset, maskBrushTarget, maskOverlayRgb, DEPTH_SIZES, snapDepthSize, MODEL_DENOISE_ID, denoiseMethodIsModel, denoiseSectionOn, depthMapMissing, maskViewOverriddenBy, maskPreviewNode, depthMaskShown, maskOverlayWanted, DEPTH_EXPORT_CONVENTION } from "../state";
 import { useDenoiseStatus, useFullDenoiseStatus, requestFullDenoise, retryDenoise, denoiseMark } from "./denoisetoolparts";
 import { TrackSlider, ValueField } from "./track";
@@ -5400,16 +5401,12 @@ menu"). The graph inspector's Source node draws the same rows.*/}
                         )}
                         {profile && profile.enabled !== false && (
                           <>
-                            <SourceMenuRow
-                              label="Profile"
-                              name="Tone profile"
-                              value={profile.textParams?.mode ?? "standard"}
-                              choices={PROFILE_CHOICES}
-                              testid="tone-profile"
-                              onChange={(value) =>
-                                dispatch({ type: "set_text_param", id: profile.id, param: "mode", value })
-                              }
-                            />
+                            {/* The built-in modes and the saved tone profiles,
+                                one menu; Custom draws its curve under it. */}
+                            <ProfileMenuRow node={profile} dispatch={dispatch} testid="tone-profile" />
+                            {profile.textParams?.mode === "custom" && (
+                              <ToneCurveBlock node={profile} dispatch={dispatch} width={Math.max(220, (width ?? 320) - 24)} />
+                            )}
                             {/* Applies in every mode: the lift is about
                                 where the meter put the scene, not about
                                 the curve drawn over it. */}
@@ -5436,29 +5433,36 @@ menu"). The graph inspector's Source node draws the same rows.*/}
                                 live={liveSource === "contrast"}
                               />
                             )}
-                            <Slider
-                              label="Toe"
-                              param="shadow_toe"
-                              node={profile}
-                              dispatch={dispatch}
-                              centered={false}
-                              hint={sourceHints[2]}
-                              tip={ROW_TIPS["Source|Toe"]}
-                              live={liveSource === "shadow_toe"}
-                            />
+                            {/* A custom curve is its own toe and shoulder:
+                                the two stand down in the engine, so the
+                                rows step aside. */}
+                            {profile.textParams?.mode !== "custom" && (
+                              <Slider
+                                label="Toe"
+                                param="shadow_toe"
+                                node={profile}
+                                dispatch={dispatch}
+                                centered={false}
+                                hint={sourceHints[2]}
+                                tip={ROW_TIPS["Source|Toe"]}
+                                live={liveSource === "shadow_toe"}
+                              />
+                            )}
                             {/* Applies in every mode, linear included:
                                 it is about what fits on the screen, not
                                 about the look. */}
-                            <Slider
-                              label="Highlight roll"
-                              param="highlight_rolloff"
-                              node={profile}
-                              dispatch={dispatch}
-                              centered={false}
-                              hint={sourceHints[3]}
-                              tip={ROW_TIPS["Source|Highlight roll"]}
-                              live={liveSource === "highlight_rolloff"}
-                            />
+                            {profile.textParams?.mode !== "custom" && (
+                              <Slider
+                                label="Highlight roll"
+                                param="highlight_rolloff"
+                                node={profile}
+                                dispatch={dispatch}
+                                centered={false}
+                                hint={sourceHints[3]}
+                                tip={ROW_TIPS["Source|Highlight roll"]}
+                                live={liveSource === "highlight_rolloff"}
+                              />
+                            )}
                             {/* SOURCE_ROWS always declared this row, so
                                 the keyboard offered a control the panel
                                 never drew; the graph inspector had the

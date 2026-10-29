@@ -1560,8 +1560,13 @@ impl Registry {
             version: 1,
             label: "Tone Profile".into(),
             params: vec![
-                // linear | standard | film
+                // linear | standard | film | custom
                 text("mode", "standard"),
+                // Custom's curve, from scene stops around middle gray to
+                // display, as JSON with every point in it (the engine's
+                // tone_curve.rs), so a document renders without the
+                // profile file it was picked from.
+                text("curve", ""),
                 num("contrast", 100.0, 0.0, 200.0),
                 // Development: a stock key (hp5, fp4, trix, tmax400, ortho) renders the
                 // profile through that film's characteristic curve; empty is the modes

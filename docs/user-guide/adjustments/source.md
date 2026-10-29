@@ -18,10 +18,58 @@ The **Tone profile** switch shows whether the profile is on. A RAW opens with it
 - **Linear** is a scene-referred raw development without a display-style contrast profile.
 - **Standard** applies a conventional camera/editor starting profile.
 - **Film** applies a more film-like base contrast.
+- **Custom** applies your own curve: see [Custom profiles](#custom-profiles). Profiles you have saved are listed under it, by name.
 - **Baseline** sets the quiet exposure lift applied before later edits.
-- **Profile amt** controls profile contrast in Standard and Film and is hidden in Linear.
+- **Profile amt** controls profile contrast in Standard, Film and Custom and is hidden in Linear.
 - **Toe** keeps blacks dense under the baseline lift.
 - **Highlight roll** compresses bright values into the display range.
+
+### Custom profiles
+
+Custom draws its own base curve instead of Standard's or Film's. Choosing **Custom** starts from the Standard curve, so nothing changes until you move a point, and shows the curve editor under the menu.
+
+The curve runs from scene light, left to right, to the display value, bottom to top. The scene axis is in stops around middle gray: 0 is middle gray, +1 twice its light, -1 half, and the dashed line near +2.5 is scene white, where the Linear profile clips. A curve can reach past scene white and bring those highlights back under it, which is how a curve can carry its own shoulder. The faint line is Linear, for reference. Past the first and last points the curve holds their values.
+
+- **Drag** a point to move it; **click** an empty place to add a point there; **double-click** a point to remove it (a curve keeps two at least).
+- **Shape**: **Smooth** bends through the points the way the Curves section does, never overshooting them; **Linear** joins them with straight lines.
+- **Profile amt** mixes your curve with Linear: 100 is the curve as drawn, 0 is Linear, and above 100 goes further than the curve. **Baseline** moves the scene along the curve before it applies, and **Colorfulness** applies after it, as in the other profiles. **Toe** and **Highlight roll** step aside while Custom is chosen: the curve is its own toe and shoulder.
+
+The curve is saved in the photograph's edit, every point of it, so the photograph renders the same on another computer that has never seen the profile file.
+
+**Save** keeps the curve as a profile under the name in the field beside it, and the profile is then listed in the Profile menu, in every photograph. Saving under a name already used replaces that profile. Choosing a saved profile copies its curve into the photograph; changing a point afterwards changes this photograph only, and the menu then shows Custom.
+
+**Import…** reads a curve from:
+
+- a tone profile file (`.heelerprofile`, or `.yaml`), which is also added to your profiles;
+- a 1D `.cube` LUT, read as display values in and out, the way the LUT node reads a 3D one; the three channels are averaged into one curve, and a 3D `.cube` is refused (use the LUT node for it);
+- a plain text file (`.txt` or `.csv`) of two columns, stops then display value, one point a line, separated by spaces, tabs or a comma, with `#` starting a comment;
+- the tone curve (the ProfileToneCurve tag) of a DNG or a DNG camera profile (`.dcp`).
+
+A curve read from a LUT, a long text file or a DNG is sampled every half stop from 8 stops under middle gray to the top of its range. It is set on the photograph; use **Save** to keep it as a profile. **Export…** writes the curve to a `.heelerprofile` file wherever you choose, to share.
+
+#### Profile files
+
+Your profiles live in a `profiles` folder in Heeler's app data, beside `presets` and `recipes`, one file per profile. A profile file is YAML you can read and edit in any text editor; Heeler reads the folder again when the Profile menu opens:
+
+```yaml
+# Heeler tone profile: a curve for the Tone Profile's Custom mode, from
+# scene light in stops around middle gray to a display value from 0 to 1.
+heeler_profile: 1
+name: Soft Fade
+interp: smooth
+points:
+  - [-8, 0.03]
+  - [-2, 0.2]
+  - [0, 0.44]
+  - [2.4739, 0.98]
+```
+
+- `heeler_profile` is the format's version. A profile from a newer Heeler is refused with a message.
+- `name` is the name the menu shows.
+- `interp` is `smooth` or `linear`.
+- `points` are `[stops, display]` pairs: stops around middle gray (within 24 of it), display from 0 to 1. Two at least, no two at the same stop; their order does not matter.
+
+A file that cannot be read is left out of the menu.
 
 A phone's DNG, such as an iPhone ProRAW, opens with the Tone Profile off. The file carries its own rendering (an exposure shift, a local tone map and a contrast curve), Heeler follows it while decoding, and the photograph opens close to the picture its thumbnail shows; brightness and color can still differ a little from the phone's own preview, most in very saturated scenes. The newer DNG 1.7 form of the tone map is not read yet: a file carrying only that develops as an ordinary RAW, and one carrying both uses the older map.
 
@@ -33,7 +81,7 @@ Earlier versions also offered **Highlights: Rebuild** and a **Demosaic** menu (F
 
 Choose the tone profile before building the rest of the look, because it changes the starting contrast under every later section.
 
-Use the [Metadata tab](../metadata.md) for file and camera facts. Graph's source and tone-profile inspectors expose the same operations in node context.
+Use the [Metadata tab](../metadata.md) for file and camera facts. Graph's source and tone-profile inspectors expose the same operations in node context, the Custom curve editor included. A Custom profile renders on the CPU, as a film stock does, so its previews can take a little longer than the built-in profiles'.
 
 ![Source section](../assets/screenshots/section-source.png)
 

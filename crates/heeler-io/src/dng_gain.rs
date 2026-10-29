@@ -172,6 +172,27 @@ pub fn file_rendering(bytes: &[u8]) -> Option<FileRendering> {
     Some(FileRendering { baseline_exposure, map, tone_curve, orientation })
 }
 
+/// The ProfileToneCurve in a DNG's first directory, or in a camera
+/// profile file (the same TIFF layout under its own magic number, RC in
+/// place of 42), for the Tone Profile's Custom mode to import. None when
+/// the file is neither or names no curve that is one.
+pub fn profile_tone_curve(bytes: &[u8]) -> Option<Vec<(f32, f32)>> {
+    let little = match bytes.get(0..2)? {
+        b"II" => true,
+        b"MM" => false,
+        _ => return None,
+    };
+    let magic = bytes.get(2..4)?;
+    let magic = if little { u16::from_le_bytes([magic[0], magic[1]]) } else { u16::from_be_bytes([magic[0], magic[1]]) };
+    if !matches!(magic, 42 | 0x4352) {
+        return None;
+    }
+    let t = Tiff { bytes, little };
+    let (ifd0, _) = t.read_ifd(t.u32_at(4)? as usize)?;
+    let curve = tone_curve(&t, get(&ifd0, TAG_PROFILE_TONE_CURVE)?);
+    (!curve.is_empty()).then_some(curve)
+}
+
 /// The gain table map's entry: the main image's own (subfile type 0)
 /// when several directories carry one, the first found otherwise.
 fn gain_map_entry(t: &Tiff, ifd0: &[(u16, Entry)], subs: &[usize]) -> Option<Entry> {
@@ -191,6 +212,11 @@ fn gain_map_entry(t: &Tiff, ifd0: &[(u16, Entry)], subs: &[usize]) -> Option<Ent
 /// ProfileToneCurve's pairs, kept only when they are a curve: finite,
 /// at least two, inputs never stepping back.
 fn tone_curve(t: &Tiff, e: &Entry) -> Vec<(f32, f32)> {
+    // The tag is FLOAT pairs. Do not drop an odd trailing value or
+    // reinterpret another numeric type as a different curve.
+    if e.kind != 11 || e.count < 4 || e.count % 2 != 0 {
+        return Vec::new();
+    }
     let values = t.numbers(e);
     let pairs: Vec<(f32, f32)> = values.chunks_exact(2).map(|p| (p[0] as f32, p[1] as f32)).collect();
     let sound = pairs.len() >= 2
@@ -709,6 +735,31 @@ mod tests {
         let mut same = flat(2, 2, 0.5);
         render(&mut same, &bare);
         assert_eq!(same.data[0], 0.5);
+    }
+
+    /// The Tone Profile's import reads the curve from a DNG with no gain
+    /// map at all, and from a camera profile file, whose magic number is
+    /// RC rather than 42, in either byte order.
+    #[test]
+    fn a_profile_tone_curve_reads_from_a_dng_or_a_camera_profile() {
+        let curve = [(0.0, 0.0), (0.5, 0.25), (1.0, 1.0)];
+        for little in [true, false] {
+            let dng = tiff(little, &[curve_field(little, &curve)], None);
+            assert_eq!(profile_tone_curve(&dng).unwrap(), curve.to_vec());
+            let mut profile = dng.clone();
+            profile[2..4].copy_from_slice(&put16(little, 0x4352));
+            assert_eq!(&profile[0..4], if little { b"IIRC" } else { b"MMCR" });
+            assert_eq!(profile_tone_curve(&profile).unwrap(), curve.to_vec());
+        }
+        assert!(profile_tone_curve(&tiff(true, &[baseline(true, 1.0)], None)).is_none());
+        assert!(profile_tone_curve(&tiff(true, &[curve_field(true, &[(0.5, 0.0), (0.2, 1.0)])], None)).is_none());
+        let mut wrong_type = curve_field(true, &curve);
+        wrong_type.1 = 3;
+        assert!(profile_tone_curve(&tiff(true, &[wrong_type], None)).is_none());
+        let mut odd_count = curve_field(true, &curve);
+        odd_count.2 = 5;
+        assert!(profile_tone_curve(&tiff(true, &[odd_count], None)).is_none());
+        assert!(profile_tone_curve(b"not a tiff").is_none());
     }
 
     #[test]

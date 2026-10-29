@@ -4658,6 +4658,8 @@ function describe(cmd: Command, s: State): string {
       return `Reset curves`;
     case "set_curve_interp":
       return `Curves: ${cmd.interp}`;
+    case "set_tone_curve":
+      return `${name(cmd.id)}: custom curve`;
     case "set_text_param":
       if (cmd.param === "rgb_mode") return `${name(cmd.id)}: ${cmd.value === "hue" ? "hue stable" : "classic"}`;
       return `${name(cmd.id)}: ${cmd.param.replace(/_/g, " ")}`;
@@ -4897,6 +4899,9 @@ export type Command =
   | { type: "reset_curves"; id: string }
   | { type: "set_curve_interp"; id: string; interp: "smooth" | "linear" | "tangent" }
   | { type: "set_text_param"; id: string; param: string; value: string }
+  /** The Tone Profile's Custom curve (toneprofile.ts): the mode and the
+   * curve's JSON in one step, so picking a saved profile is one undo. */
+  | { type: "set_tone_curve"; id: string; curve: string }
   | { type: "toggle_mask_view" }
   | { type: "set_folders"; folders: FolderEntry[] }
   | { type: "set_folder_tree"; root: TreeNode | null }
@@ -13298,6 +13303,7 @@ const UNDOABLE = new Set([
   "reset_curves",
   "set_curve_interp",
   "set_text_param",
+  "set_tone_curve",
   "add_stroke",
   "clear_strokes",
   "add_region",
@@ -13485,6 +13491,9 @@ function gestureKey(cmd: Command): string | null {
     // pushed its own history entry.
     case "set_text_param":
       return `${cmd.id}.${cmd.param}`;
+    // A curve point's drag streams like an EQ point's.
+    case "set_tone_curve":
+      return `${cmd.id}.tone_curve`;
     case "set_params":
       return `${cmd.id}.batch`;
     // Dragging a vertex fires on every mouse move. Without a key the
@@ -19748,6 +19757,14 @@ function reduceInner(s: State, cmd: Command): State {
         ),
       });
     }
+    case "set_tone_curve":
+      if (!s.nodes.some((n) => n.id === cmd.id && n.type === "heeler.tone_profile")) return s;
+      return withUndo({
+        nodes: s.nodes.map((n) =>
+          n.id === cmd.id ? { ...n, textParams: { ...n.textParams, mode: "custom", curve: cmd.curve } } : n,
+        ),
+        images: s.images.map((i) => (i.id === s.activeImage ? { ...i, edited: true } : i)),
+      });
     case "toggle_brush_swap":
       return { ...s, brushSwap: !s.brushSwap };
     case "toggle_mask_view":

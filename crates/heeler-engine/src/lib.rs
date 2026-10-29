@@ -37,6 +37,7 @@ mod separation;
 pub mod zones;
 pub mod influence;
 pub mod film;
+pub mod tone_curve;
 pub mod paper;
 pub mod spectral;
 pub mod ops_console;
