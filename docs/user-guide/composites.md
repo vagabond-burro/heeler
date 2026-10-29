@@ -22,6 +22,23 @@ Turn **Auto-crop** off and the panorama shows its whole canvas, empty edges incl
 
 Where two frames overlap, each part of the overlap comes from one of them, and the join is blended so it does not show. The join runs where the two frames agree: through sky, grass or anything that stayed still, and around anything that moved between the shots. Someone walking through the overlap appears whole, in the place one frame caught them, or not at all; they are not cut in half or left as a faint double. When the frames agree everywhere the seam runs down the middle of the overlap, where each frame is at its sharpest.
 
+## The recipe file
+
+A merge is a `.stack` file and a panorama a `.pano` file, saved beside the frames. Each is a short YAML text file you can read and edit in any text editor: the frames are file names in the same folder, so the folder can be moved or renamed. A three-frame HDR merge looks like this:
+
+```yaml
+# Heeler stack: the frames beside it, merged when it opens. Edit it in
+# any text editor; members are file names in this folder.
+version: 1
+mode: hdr
+align: true
+members: [IMG_6991.CR3, IMG_6992.CR3, IMG_6993.CR3]
+```
+
+A panorama's file also holds its surface (`auto`, `cylindrical`, `spherical` or `planar`), `gain_compensation` (Match exposure), `straighten`, `bands`, `lens_correction` and `auto_crop`. A field left out takes its default. A file Heeler cannot read is refused with the line at fault.
+
+Merges and panoramas made by earlier versions are JSON files, and they still open exactly as before. Heeler saves one as YAML the next time you change that merge or panorama, never just by opening it, so a folder shared with an earlier version keeps working until it is edited. Older `.heelerstack` merges open too.
+
 ## Bake to Image
 
 Select one or more photographs, then choose **Photo > Bake to Image…** or use the thumbnail context menu. Bake works on ordinary photographs as well as merges and panoramas.

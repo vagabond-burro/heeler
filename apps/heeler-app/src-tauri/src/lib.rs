@@ -10018,14 +10018,23 @@ fn four() -> u32 {
     4
 }
 
+const PANO_HEADER: &str = "\
+# Heeler panorama: the frames beside it, stitched when it opens. Edit it
+# in any text editor; members are file names in this folder.
+";
+
+/// A panorama manifest's text, YAML or the JSON it was written as before.
+fn parse_pano(text: &str) -> Result<PanoManifest, String> {
+    stack_render::parse_manifest(text, &stack_render::PANO_YAML)
+}
+
 pub fn read_pano(path: &Path) -> Result<PanoManifest, String> {
     let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    serde_json::from_str(&text).map_err(|e| format!("bad panorama manifest: {e}"))
+    parse_pano(&text)
 }
 
 pub fn write_pano(path: &Path, manifest: &PanoManifest) -> Result<(), String> {
-    let text = serde_json::to_string_pretty(manifest).map_err(|e| e.to_string())?;
-    std::fs::write(path, text).map_err(|e| e.to_string())
+    std::fs::write(path, stack_render::manifest_yaml(PANO_HEADER, manifest)?).map_err(|e| e.to_string())
 }
 
 fn surface_from_name(name: &str) -> Option<heeler_stitch::Surface> {
@@ -10166,7 +10175,7 @@ fn pano_crops() -> &'static PanoCrops {
 /// aside, since cropping or not is decided after the stitch and changes
 /// none of its pixels.
 fn stitch_recipe(text: &str) -> Option<String> {
-    let manifest: PanoManifest = serde_json::from_str(text).ok()?;
+    let manifest = parse_pano(text).ok()?;
     serde_json::to_string(&PanoManifest { auto_crop: true, ..manifest }).ok()
 }
 
@@ -31340,6 +31349,69 @@ mod tests {
         let again = read_pano(&path).unwrap();
         assert_eq!(again.members, m.members);
         assert_eq!(again.surface, m.surface);
+    }
+
+    /// Stack and panorama manifests are written as YAML a person can read
+    /// with a header, fields before members, and read back as
+    /// the same manifest. A JSON manifest from an earlier build still
+    /// reads, and becomes YAML when it is next written.
+    #[test]
+    fn manifests_are_written_as_yaml_and_old_json_ones_still_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let stack = dir.path().join("HDR.stack");
+        let s = StackManifest { version: 1, mode: "hdr".into(), align: true, members: vec!["a.cr3".into(), "b.cr3".into(), "c d.cr3".into()] };
+        write_stack(&stack, &s).unwrap();
+        let text = std::fs::read_to_string(&stack).unwrap();
+        assert!(text.starts_with("# Heeler stack"), "{text}");
+        assert!(!text.trim_start().starts_with('{'), "written as YAML, not JSON: {text}");
+        assert!(text.find("mode:").unwrap() < text.find("members:").unwrap(), "{text}");
+        let back = read_stack(&stack).unwrap();
+        assert_eq!((back.version, back.mode.as_str(), back.align, &back.members), (1, "hdr", true, &s.members));
+
+        let pano = dir.path().join("P.pano");
+        let p = PanoManifest { version: 1, surface: "spherical".into(), gain_compensation: false, straighten: true, bands: 6, members: vec!["l.jpg".into(), "r.jpg".into()], lens_correction: false, auto_crop: false };
+        write_pano(&pano, &p).unwrap();
+        let text = std::fs::read_to_string(&pano).unwrap();
+        assert!(text.starts_with("# Heeler panorama"), "{text}");
+        let back = read_pano(&pano).unwrap();
+        assert_eq!(serde_json::to_value(&back).unwrap(), serde_json::to_value(&p).unwrap());
+
+        // Legacy JSON, pretty or not, reads; written again it is YAML.
+        std::fs::write(&stack, "\n  {\"version\": 1, \"mode\": \"median\", \"align\": false, \"members\": [\"x.png\"]}").unwrap();
+        let old = read_stack(&stack).unwrap();
+        assert_eq!((old.mode.as_str(), old.align, old.members.as_slice()), ("median", false, &["x.png".to_string()][..]));
+        write_stack(&stack, &old).unwrap();
+        assert!(std::fs::read_to_string(&stack).unwrap().starts_with('#'));
+        assert_eq!(read_stack(&stack).unwrap().mode, "median");
+    }
+
+    /// A hand-edited manifest that is not a manifest is refused with the
+    /// line and the manifest's kind, YAML's strict rules included.
+    #[test]
+    fn a_broken_yaml_manifest_is_refused_with_its_line() {
+        let dir = tempfile::tempdir().unwrap();
+        let stack = dir.path().join("bad.stack");
+        std::fs::write(&stack, "mode: hdr\nmode: mean\nmembers: [a.png]\n").unwrap();
+        let e = read_stack(&stack).unwrap_err();
+        assert!(e.starts_with("bad stack manifest:") && e.contains("line 2"), "{e}");
+        std::fs::write(&stack, "align: true\nmembers: [a.png]\n").unwrap();
+        let e = read_stack(&stack).unwrap_err();
+        assert!(e.contains("mode"), "a missing mode is named: {e}");
+        let pano = dir.path().join("bad.pano");
+        std::fs::write(&pano, "members: &m [a.png]\n").unwrap();
+        assert!(read_pano(&pano).unwrap_err().starts_with("bad panorama manifest:"));
+    }
+
+    /// The stitch key is the manifest, not its spelling: a JSON panorama
+    /// and the YAML it becomes stitch the same, so the rewrite on the next
+    /// edit does not throw away a stitch for that reason alone.
+    #[test]
+    fn a_json_and_a_yaml_panorama_have_one_stitch_recipe() {
+        let json = r#"{"version":1,"surface":"cylindrical","gain_compensation":true,"straighten":true,"bands":4,"members":["l.png","r.png"],"lens_correction":true,"auto_crop":true}"#;
+        let m: PanoManifest = serde_json::from_str(json).unwrap();
+        let yaml = stack_render::manifest_yaml(PANO_HEADER, &m).unwrap();
+        assert!(stitch_recipe(json).is_some());
+        assert_eq!(stitch_recipe(json), stitch_recipe(&yaml));
     }
 
     /// A world of aperiodic blobs, and perspective views of it. Sinusoids

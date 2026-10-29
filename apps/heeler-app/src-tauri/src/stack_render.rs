@@ -27,14 +27,48 @@ pub struct StackManifest {
     pub members: Vec<String>,
 }
 
+/// A manifest's limits as YAML. A manifest is a few hundred bytes; a
+/// megabyte leaves room for thousands of members.
+pub(crate) const STACK_YAML: crate::recipe_files::Limits = crate::recipe_files::Limits { what: "stack manifest", max_bytes: 1 << 20, max_text: 64 << 10 };
+pub(crate) const PANO_YAML: crate::recipe_files::Limits = crate::recipe_files::Limits { what: "panorama manifest", max_bytes: 1 << 20, max_text: 64 << 10 };
+
+/// The order a manifest's fields are written in: what it is and how it
+/// is made, then the members, which are the long part.
+const MANIFEST_ORDER: &[&str] = &["version", "mode", "align", "surface", "gain_compensation", "straighten", "bands", "lens_correction", "auto_crop", "members"];
+
+/// A stack or panorama manifest's text as its manifest: YAML, or JSON for
+/// one written before manifests were YAML (its first character is `{`).
+/// The error names the manifest by `limits.what` and, for YAML, the line.
+pub(crate) fn parse_manifest<T: serde::de::DeserializeOwned>(text: &str, limits: &crate::recipe_files::Limits) -> Result<T, String> {
+    let bad = |e: String| format!("bad {}: {e}", limits.what);
+    if text.trim_start().starts_with('{') {
+        serde_json::from_str(text).map_err(|e| bad(e.to_string()))
+    } else {
+        let v = crate::recipe_files::parse_yaml_value(text, limits).map_err(|e| bad(e.to_string()))?;
+        serde_json::from_value(v).map_err(|e| bad(e.to_string()))
+    }
+}
+
+/// A manifest as the YAML it is written as, `header` first. A JSON
+/// manifest becomes YAML the next time it is written, which is only ever
+/// when it is made or changed: opening one leaves it as it was.
+pub(crate) fn manifest_yaml<T: Serialize>(header: &str, manifest: &T) -> Result<String, String> {
+    let v = serde_json::to_value(manifest).map_err(|e| e.to_string())?;
+    Ok(crate::recipe_files::write_yaml_value(header, &v, MANIFEST_ORDER))
+}
+
+const STACK_HEADER: &str = "\
+# Heeler stack: the frames beside it, merged when it opens. Edit it in
+# any text editor; members are file names in this folder.
+";
+
 pub fn read_stack(path: &Path) -> Result<StackManifest, String> {
     let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    serde_json::from_str(&text).map_err(|e| format!("bad stack manifest: {e}"))
+    parse_manifest(&text, &STACK_YAML)
 }
 
 pub fn write_stack(path: &Path, manifest: &StackManifest) -> Result<(), String> {
-    let text = serde_json::to_string_pretty(manifest).map_err(|e| e.to_string())?;
-    std::fs::write(path, text).map_err(|e| e.to_string())
+    std::fs::write(path, manifest_yaml(STACK_HEADER, manifest)?).map_err(|e| e.to_string())
 }
 
 /// One member of a stack, decoded for the merge at full size. A merge
