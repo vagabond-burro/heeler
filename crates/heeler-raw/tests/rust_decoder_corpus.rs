@@ -17,16 +17,23 @@
 //! archive's mirror), separated as PATH's are; the test passes, saying so, when that is
 //! unset.
 //! A few minutes in release on a recent Mac.
+// The tests run on Apple Silicon only, where LibRaw's develop is the
+// reference build; their helpers go with them.
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
 use heeler_raw::DevelopOpts;
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
 use heeler_rawdec::Opts;
 
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
 fn opts(o: DevelopOpts) -> Opts {
     Opts { half_size: o.half_size, fixed_white: o.fixed_white, camera_wb: o.camera_wb, camera_matrix: o.camera_matrix, highlight: o.highlight, demosaic: o.demosaic, libraw_color: true }
 }
 
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
 /// Held for a whole test: each turns heeler-raw's process-wide routing.
 static ROUTING: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
 /// The files with one of `exts` (upper case) in the corpus folders
 /// `roots` names, each with the name it is reported by.
 fn files(roots: &std::ffi::OsStr, exts: &[&str]) -> Vec<(std::path::PathBuf, String)> {
@@ -40,6 +47,7 @@ fn files(roots: &std::ffi::OsStr, exts: &[&str]) -> Vec<(std::path::PathBuf, Str
     out
 }
 
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
 fn files_in(root: &std::path::Path, exts: &[&str]) -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];

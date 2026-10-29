@@ -26,6 +26,7 @@ fn opts(o: DevelopOpts) -> Opts {
 static ROUTING: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// LibRaw's develop, whatever the build's features.
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
 fn libraw(bytes: &[u8], o: DevelopOpts) -> heeler_raw::SensorImage {
     let _routing = ROUTING.lock().unwrap_or_else(|e| e.into_inner());
     #[cfg(feature = "rust-decoder")]
@@ -37,6 +38,7 @@ fn libraw(bytes: &[u8], o: DevelopOpts) -> heeler_raw::SensorImage {
 }
 
 /// Every develop the app asks of a Bayer file, Rust against LibRaw.
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
 fn same_as_libraw(what: &str, bytes: &[u8]) {
     let (w, h, theirs) = heeler_raw::libraw_mosaic(bytes).unwrap();
     let plan = heeler_rawdec::Plan::new(bytes, &opts(DevelopOpts::default())).unwrap_or_else(|e| panic!("{what}: declined: {e}"));

@@ -27,7 +27,6 @@ fn main() {
             let (tw, th, across) = dng.tile_size();
             let (mut bad_scale, mut bad_blend, mut bad_final, mut bad_final_fused) = (0usize, 0usize, 0usize, 0usize);
             let (w, h) = (st.width, st.height);
-            let flip = dng.flip();
             for t in 0..dng.tiles_count() {
                 let tile = dng.tile(t).unwrap();
                 let (r0, c0) = ((t / across) * th, (t % across) * tw);

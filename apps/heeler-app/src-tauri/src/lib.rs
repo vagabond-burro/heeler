@@ -33241,14 +33241,13 @@ mod tests {
         assert_eq!(subject_matte(&store).map(|s| s.id), Some(heeler_vision::BIREFNET_DYNAMIC.id));
         // The models read in place; the rasters go to a temp folder that
         // sees the store's models through a link.
-        let base = tempfile::tempdir().unwrap();
-        #[cfg(unix)]
-        std::os::unix::fs::symlink(store.join("models"), base.path().join("models")).unwrap();
-        #[cfg(not(unix))]
-        {
+        if cfg!(not(unix)) {
             eprintln!("skipped the model half: needs a symlink");
             return;
         }
+        let base = tempfile::tempdir().unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(store.join("models"), base.path().join("models")).unwrap();
         let fresh = subject("new", None);
         let ui = UiGraph { graph_id: "g".into(), nodes: vec![lite_node, fresh], connections: vec![] };
         let out = smart_sources_offline(base.path(), &ui, "img", &photo, None);
