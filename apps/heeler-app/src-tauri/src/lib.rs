@@ -3407,6 +3407,10 @@ pub struct SmartModels {
     #[serde(rename = "samLegacy")]
     pub sam_legacy: SmartModelStatus,
     pub matte: SmartModelStatus,
+    /// BiRefNet Lite, the earlier subject matte: it still answers
+    /// Subject where dynamic is not installed, and Preferences lists it
+    /// while it is on disk.
+    pub lite: SmartModelStatus,
     pub fill: SmartModelStatus,
     /// ViTMatte, the P4 Selection Polish refinement.
     pub refine: SmartModelStatus,
@@ -3425,7 +3429,8 @@ async fn smart_model_status(app: tauri::AppHandle) -> Result<SmartModels, String
     Ok(SmartModels {
         sam: model_status_of(&base, &heeler_vision::SAM2_1_TINY),
         sam_legacy: model_status_of(&base, &heeler_vision::MOBILE_SAM),
-        matte: model_status_of(&base, &heeler_vision::BIREFNET_LITE),
+        matte: model_status_of(&base, &heeler_vision::BIREFNET_DYNAMIC),
+        lite: model_status_of(&base, &heeler_vision::BIREFNET_LITE),
         fill: model_status_of(&base, &heeler_vision::LAMA),
         refine: model_status_of(&base, &heeler_vision::VITMATTE),
         depth: model_status_of(&base, &heeler_vision::DEPTH_ANYTHING),
@@ -3441,6 +3446,7 @@ async fn smart_model_status(app: tauri::AppHandle) -> Result<SmartModels, String
 async fn smart_model_download(app: tauri::AppHandle, model: Option<String>) -> Result<(), String> {
     let base = vision_base(&app)?;
     let spec = match model.as_deref() {
+        Some("birefnet_dynamic") => &heeler_vision::BIREFNET_DYNAMIC,
         Some("birefnet_lite") => &heeler_vision::BIREFNET_LITE,
         Some("lama") => &heeler_vision::LAMA,
         Some("vitmatte") => &heeler_vision::VITMATTE,
@@ -3473,6 +3479,8 @@ async fn smart_model_remove(app: tauri::AppHandle, model: Option<String>) -> Res
         Some("mobile_sam") => {
             heeler_vision::remove_model(&base, &heeler_vision::MOBILE_SAM).map_err(|e| e.to_string())
         }
+        Some("birefnet_dynamic") => heeler_vision::remove_model(&base, &heeler_vision::BIREFNET_DYNAMIC)
+            .map_err(|e| e.to_string()),
         Some("birefnet_lite") => heeler_vision::remove_model(&base, &heeler_vision::BIREFNET_LITE)
             .map_err(|e| e.to_string()),
         Some("lama") => {
@@ -3494,6 +3502,8 @@ async fn smart_model_remove(app: tauri::AppHandle, model: Option<String>) -> Res
                 .map_err(|e| e.to_string())?;
             heeler_vision::remove_model(&base, &heeler_vision::MOBILE_SAM)
                 .map_err(|e| e.to_string())?;
+            heeler_vision::remove_model(&base, &heeler_vision::BIREFNET_DYNAMIC)
+                .map_err(|e| e.to_string())?;
             heeler_vision::remove_model(&base, &heeler_vision::BIREFNET_LITE)
                 .map_err(|e| e.to_string())?;
             heeler_vision::remove_model(&base, &heeler_vision::LAMA).map_err(|e| e.to_string())?;
@@ -3509,6 +3519,9 @@ async fn smart_model_remove(app: tauri::AppHandle, model: Option<String>) -> Res
 /// nothing keeps serving from files about to be removed, moved or
 /// replaced.
 pub(crate) fn drop_model_sessions(app: &tauri::AppHandle) -> Result<(), String> {
+    // An in-flight matte owns its session outside the session lock. Wait
+    // for it to come back before removal or relocation drops the store.
+    let _matting = MATTING_RUN.lock().unwrap_or_else(|e| e.into_inner());
     with_session(app, |s| {
         s.sam = None;
         s.matting = None;
@@ -3740,12 +3753,13 @@ async fn florence_cancel() -> Result<(), String> {
     Ok(())
 }
 
-/// The eight models Preferences can relocate, in one list so status,
+/// The nine models Preferences can relocate, in one list so status,
 /// removal, moving and the update check can never disagree about what
 /// exists.
-pub(crate) const RELOCATABLE_MODELS: [&heeler_vision::ModelSpec; 8] = [
+pub(crate) const RELOCATABLE_MODELS: [&heeler_vision::ModelSpec; 9] = [
     &heeler_vision::SAM2_1_TINY,
     &heeler_vision::MOBILE_SAM,
+    &heeler_vision::BIREFNET_DYNAMIC,
     &heeler_vision::BIREFNET_LITE,
     &heeler_vision::LAMA,
     &heeler_vision::VITMATTE,
@@ -3940,10 +3954,25 @@ pub(crate) fn smart_sources_offline(
         let aim = smart_ask(&n.params, &mode);
         let Ok(points) = serde_json::from_str::<Vec<SmartPrompt>>(prompts_json) else { continue };
         // Subject prefers the matte here exactly as it does in the app,
-        // so a batch render reproduces the session's model choice.
-        let use_matte = mode == "subject"
-            && heeler_vision::installed(vision_base, &heeler_vision::BIREFNET_LITE);
-        if use_matte {
+        // so a batch render reproduces the session's model choice. A
+        // matte the recipe names is the one recomputed: a document
+        // matted with Lite stays Lite once dynamic is installed, and with
+        // the named matte gone it plants nothing rather than another
+        // model's pixels under its name.
+        let recorded = n.params.get("model").and_then(|v| v.as_str()).unwrap_or("");
+        let matte_spec = if mode != "subject" || names_sam(recorded) {
+            None
+        } else if let Some(spec) =
+            [&heeler_vision::BIREFNET_DYNAMIC, &heeler_vision::BIREFNET_LITE].into_iter().find(|s| s.id == recorded)
+        {
+            if !heeler_vision::installed(vision_base, spec) {
+                continue;
+            }
+            Some(spec)
+        } else {
+            subject_matte(vision_base)
+        };
+        if let Some(matte_spec) = matte_spec {
             // The photograph's pixels, made now if it was kept as samples.
             let Ok(source) = photo.pixels() else { return out };
             let small = if source.width.max(source.height) > 1600 {
@@ -3952,6 +3981,9 @@ pub(crate) fn smart_sources_offline(
                 source.clone()
             };
             let (w, h) = (small.width, small.height);
+            let _run = MATTING_RUN.lock().unwrap_or_else(|e| e.into_inner());
+            let loading = matting.as_ref().is_none_or(|m| m.model() != matte_spec.id);
+            let Ok(_paid) = admit_matting_run(matte_spec, loading, w, h) else { continue };
             let mut rgb = vec![0.0f32; w * h * 3];
             for (i, px) in small.data.chunks(4).enumerate() {
                 for c in 0..3 {
@@ -3959,8 +3991,8 @@ pub(crate) fn smart_sources_offline(
                         heeler_engine::ops::to_display(px[c].max(0.0)).min(1.0) * 255.0;
                 }
             }
-            if matting.is_none() {
-                match heeler_vision::Matting::load(vision_base, &heeler_vision::BIREFNET_LITE) {
+            if loading {
+                match heeler_vision::Matting::load(vision_base, matte_spec) {
                     Ok(m) => matting = Some(m),
                     Err(_) => continue,
                 }
@@ -3969,7 +4001,7 @@ pub(crate) fn smart_sources_offline(
                 continue;
             };
             let matte_want =
-                smart_recipe_version(image_id, &n.id, &mode, prompts_json, aim, heeler_vision::BIREFNET_LITE.id);
+                smart_recipe_version(image_id, &n.id, &mode, prompts_json, aim, matte_spec.id);
             let mut raster = ImageBuf::new(w, h);
             for (i, v) in mask.iter().enumerate() {
                 raster.data[i * 4] = *v;
@@ -3991,7 +4023,10 @@ pub(crate) fn smart_sources_offline(
         // record names no SAM, and its fallback was never the recorded
         // mask, so whichever generation is here serves it.
         let recorded = n.params.get("model").and_then(|v| v.as_str()).unwrap_or("");
-        let spec = if recorded.split('+').next() == Some(heeler_vision::BIREFNET_LITE.id) {
+        let matte_record = recorded.split('+').next().is_some_and(|base| {
+            base == heeler_vision::BIREFNET_DYNAMIC.id || base == heeler_vision::BIREFNET_LITE.id
+        });
+        let spec = if matte_record {
             smart_sam_spec(vision_base, recorded)
         } else {
             recorded_sam(recorded)
@@ -4194,14 +4229,66 @@ async fn smart_raster_status(
 /// error a compute asked anyway returns.
 const SMART_MODEL_MISSING: &str = "model not installed";
 
+/// Only one BiRefNet session may be taken, loaded or run at once. The
+/// session lock itself stays short-held so the render pump remains free.
+static MATTING_RUN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// The model a Subject recipe runs on. SAM is a real recorded answer,
+/// not an absent matte: installing BiRefNet later must not change it.
+/// A missing recorded matte still takes the preferred one in the app.
+fn subject_matte_for(
+    recorded: &str,
+    mut installed: impl FnMut(&heeler_vision::ModelSpec) -> bool,
+) -> Option<&'static heeler_vision::ModelSpec> {
+    let recorded = recorded.strip_suffix("+vitmatte").unwrap_or(recorded);
+    if names_sam(recorded) {
+        return None;
+    }
+    [&heeler_vision::BIREFNET_DYNAMIC, &heeler_vision::BIREFNET_LITE]
+        .into_iter()
+        .find(|spec| spec.id == recorded && installed(spec))
+        .or_else(|| {
+            [&heeler_vision::BIREFNET_DYNAMIC, &heeler_vision::BIREFNET_LITE]
+                .into_iter()
+                .find(|spec| installed(spec))
+        })
+}
+
+/// The matte a fresh Subject one-shot runs on: BiRefNet dynamic when it
+/// is installed, else Lite, else none, and SAM answers.
+fn subject_matte(base: &Path) -> Option<&'static heeler_vision::ModelSpec> {
+    subject_matte_for("", |spec| heeler_vision::installed(base, spec))
+}
+
+/// Admit the model allocation when a load is needed, plus the RGB and
+/// matte working buffers. A resident session pays only for its work.
+fn admit_matting_run(
+    spec: &heeler_vision::ModelSpec,
+    loading: bool,
+    w: usize,
+    h: usize,
+) -> Result<Job, String> {
+    let model = if loading { usize::try_from(spec.total_bytes()).map_err(|e| e.to_string())? } else { 0 };
+    let working = memory::bytes(w, h, 4, 4).map_err(|e| e.to_string())?;
+    let needed = memory::sum([model, working]).map_err(|e| e.to_string())?;
+    Job::admit(needed, "subject matte model and working buffers").map_err(|e| e.to_string())
+}
+
 /// Whether the model a Smart mask's mode runs on is missing from the
 /// store: SAM for every mode (the generation smart_sam_spec picks for
-/// the node), except Subject, which BiRefNet answers when it is
-/// installed. The graph face's missing-model line asks the same
-/// question of the status (smartnode.tsx smartModelMissing).
+/// the node), except Subject, which BiRefNet answers when one is
+/// installed and the recipe names no SAM (subject_matte_for). The graph
+/// face's missing-model line asks the same question of the status
+/// (smartnode.tsx smartModelMissing).
 fn smart_model_missing(base: &Path, mode: &str, recorded: &str) -> bool {
-    let matte = mode == "subject" && heeler_vision::installed(base, &heeler_vision::BIREFNET_LITE);
+    let matte = mode == "subject" && subject_matte_for(recorded, |spec| heeler_vision::installed(base, spec)).is_some();
     !matte && !heeler_vision::installed(base, smart_sam_spec(base, recorded))
+}
+
+/// Whether a recorded model id (refined or not) names a SAM generation.
+fn names_sam(recorded: &str) -> bool {
+    let base = recorded.split('+').next().unwrap_or("");
+    base == heeler_vision::MOBILE_SAM.id || base == heeler_vision::SAM2_1_TINY.id
 }
 
 /// The SAM generation a recipe's recorded model names. SAM 2.1 and an
@@ -4256,6 +4343,10 @@ fn smart_mask_raster(mask: &[f32], w: usize, h: usize) -> ImageBuf {
 /// carries the encoder cost and every refinement is decoder-only.
 /// Returns the producing model's id and the raster's version, and the
 /// two commands below each hand their caller the half it needs.
+/// `keep` is the matte a recompute was asked to keep (the model the
+/// recipe names): it answers Subject when it is installed, so a
+/// RECOMPUTE after a cleared cache gives the matte the document was
+/// saved with; a fresh Subject runs the preferred one.
 async fn smart_compute(
     app: tauri::AppHandle,
     image_id: String,
@@ -4272,11 +4363,15 @@ async fn smart_compute(
     if smart_model_missing(&base, &mode, &model) {
         return Err(SMART_MODEL_MISSING.into());
     }
+    // Subject keeps the model its recipe names, including SAM. A fresh
+    // Subject and a missing recorded matte use the preferred matte when
+    // one is installed, then SAM; every other mode is SAM.
+    let matte = if mode == "subject" {
+        subject_matte_for(&model, |spec| heeler_vision::installed(&base, spec))
+    } else {
+        None
+    };
     let spec = smart_sam_spec(&base, &model);
-    // Subject prefers the dedicated matte when it is installed; every
-    // other path (and the fallback) is SAM.
-    let use_matte =
-        mode == "subject" && heeler_vision::installed(&base, &heeler_vision::BIREFNET_LITE);
     let points: Vec<SmartPrompt> =
         serde_json::from_str(&prompts).map_err(|e| format!("bad prompts: {e}"))?;
 
@@ -4299,13 +4394,16 @@ async fn smart_compute(
             rgb
         };
 
-        let (mask, model_id): (Vec<f32>, &str) = if use_matte {
-            let mut matting = with_session(&app, |s| Ok(s.matting.take()))?;
-            if matting.is_none() {
-                matting = Some(
-                    heeler_vision::Matting::load(&base, &heeler_vision::BIREFNET_LITE)
-                        .map_err(|e| e.to_string())?,
-                );
+        let (mask, model_id): (Vec<f32>, &str) = if let Some(spec) = matte {
+            let _run = MATTING_RUN.lock().unwrap_or_else(|e| e.into_inner());
+            // A session of the other matte (Lite, used until dynamic
+            // was installed) is dropped for this one. A second request
+            // waits here, then reuses the session the first one loaded.
+            let mut matting = with_session(&app, |s| Ok(s.matting.take()))?.filter(|m| m.model() == spec.id);
+            let loading = matting.is_none();
+            let _paid = admit_matting_run(spec, loading, w, h)?;
+            if loading {
+                matting = Some(heeler_vision::Matting::load(&base, spec).map_err(|e| e.to_string())?);
             }
             let mut matting = matting.expect("just loaded");
             let mask = matting.matte(&to_rgb(&source), w, h).map_err(|e| e.to_string())?;
@@ -4313,7 +4411,7 @@ async fn smart_compute(
                 s.matting = Some(matting);
                 Ok(())
             })?;
-            (mask, heeler_vision::BIREFNET_LITE.id)
+            (mask, spec.id)
         } else {
             // Take the session pieces out, work unlocked, put them
             // back: the encoder can take a moment, and the render pump
@@ -4381,7 +4479,8 @@ async fn smart_compute(
 
 /// The smart-mask flavor: the caller writes the returned model id into
 /// the node's `model` param - provenance, the cache key, and the
-/// render trigger in one value.
+/// render trigger in one value. `keep` names the matte a recompute
+/// keeps (smart_compute).
 #[tauri::command]
 async fn smart_click(
     app: tauri::AppHandle,
@@ -32430,6 +32529,111 @@ mod tests {
         std::fs::write(&path, heeler_io::encode_png_raw(&raster).unwrap()).unwrap();
         let out = smart_sources_offline(dir.path(), &ui, "img", &ExportPhoto::decoded(source.clone()), None);
         assert_eq!(out.get("sm").map(|s| s.version), Some(want));
+    }
+
+    #[test]
+    fn a_subject_recipe_keeps_sam_and_the_base_of_a_refined_matte() {
+        assert!(subject_matte_for(heeler_vision::MOBILE_SAM.id, |_| true).is_none());
+        assert!(subject_matte_for("mobile_sam+vitmatte", |_| true).is_none());
+        // SAM 2.1 is a recorded SAM answer too: installing a matte later
+        // leaves a Subject made with it on SAM 2.1.
+        assert!(subject_matte_for(heeler_vision::SAM2_1_TINY.id, |_| true).is_none());
+        assert!(subject_matte_for("sam2_1_hiera_tiny+vitmatte", |_| true).is_none());
+        assert_eq!(
+            subject_matte_for("", |_| true).map(|s| s.id),
+            Some(heeler_vision::BIREFNET_DYNAMIC.id)
+        );
+        assert_eq!(
+            subject_matte_for(heeler_vision::BIREFNET_DYNAMIC.id, |_| true).map(|s| s.id),
+            Some(heeler_vision::BIREFNET_DYNAMIC.id)
+        );
+        assert_eq!(
+            subject_matte_for("birefnet_lite+vitmatte", |_| true).map(|s| s.id),
+            Some(heeler_vision::BIREFNET_LITE.id)
+        );
+        assert_eq!(
+            subject_matte_for(heeler_vision::BIREFNET_LITE.id, |s| s.id == heeler_vision::BIREFNET_DYNAMIC.id)
+                .map(|s| s.id),
+            Some(heeler_vision::BIREFNET_DYNAMIC.id),
+            "the app's deliberate fallback when the recorded matte is gone"
+        );
+        assert!(subject_matte_for("", |_| false).is_none());
+    }
+
+    /// A Subject mask keeps the matte its recipe names (2026.7, BiRefNet
+    /// dynamic in place of Lite). A document matted with Lite plants its
+    /// Lite raster from the cache with no model installed; with the
+    /// cache cleared and Lite gone it plants nothing, rather than
+    /// dynamic's or SAM's pixels under Lite's name. Gated on
+    /// HEELER_VISION_MODELS with both mattes installed: the Lite node is
+    /// recomputed with Lite, a Subject node that names no matte gets
+    /// dynamic, and each raster is filed under its own model's version.
+    #[test]
+    fn a_subject_mask_keeps_the_matte_its_recipe_names() {
+        let subject = |id: &str, model: Option<&str>| {
+            let mut params = HashMap::from([("mode".to_string(), serde_json::json!("subject"))]);
+            if let Some(m) = model {
+                params.insert("model".into(), serde_json::json!(m));
+            }
+            UiNode { id: id.into(), node_type: "heeler.smart_mask".into(), enabled: true, params }
+        };
+        let lite_node = subject("old", Some(heeler_vision::BIREFNET_LITE.id));
+        let ui = UiGraph { graph_id: "g".into(), nodes: vec![lite_node.clone()], connections: vec![] };
+        // A warm blob on a cool ground, so a matte has a subject to find.
+        let (w, h) = (96usize, 72usize);
+        let mut img = ImageBuf::filled(w, h, [0.05, 0.12, 0.35, 1.0]);
+        for y in 0..h {
+            for x in 0..w {
+                let (dx, dy) = ((x as f32 - 48.0) / 20.0, (y as f32 - 40.0) / 26.0);
+                if dx * dx + dy * dy < 1.0 {
+                    img.data[(y * w + x) * 4..(y * w + x) * 4 + 3].copy_from_slice(&[0.6, 0.25, 0.1]);
+                }
+            }
+        }
+        let photo = ExportPhoto::decoded(Arc::new(img));
+        let lite_want = smart_recipe_version("img", "old", "subject", "[]", "", heeler_vision::BIREFNET_LITE.id);
+        assert_eq!(smart_want("img", &lite_node, DepthRecipe::default(), None), lite_want);
+
+        // No model at all: the cached Lite raster plants as it was saved.
+        let empty = tempfile::tempdir().unwrap();
+        assert!(subject_matte(empty.path()).is_none());
+        assert!(smart_sources_offline(empty.path(), &ui, "img", &photo, None).is_empty(), "no cache, no Lite: nothing");
+        let path = smart_raster_path(empty.path(), lite_want);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, heeler_io::encode_png_raw(&ImageBuf::filled(2, 2, [0.7, 0.7, 0.7, 1.0])).unwrap()).unwrap();
+        let out = smart_sources_offline(empty.path(), &ui, "img", &photo, None);
+        assert_eq!(out.get("old").map(|s| s.version), Some(lite_want), "the old document's matte, unchanged");
+
+        let Ok(store) = std::env::var("HEELER_VISION_MODELS") else {
+            eprintln!("skipped the model half: HEELER_VISION_MODELS not set");
+            return;
+        };
+        let store = PathBuf::from(store);
+        let both = [&heeler_vision::BIREFNET_DYNAMIC, &heeler_vision::BIREFNET_LITE];
+        if !both.iter().all(|spec| heeler_vision::installed(&store, spec)) {
+            eprintln!("skipped the model half: birefnet_dynamic and birefnet_lite are not both installed");
+            return;
+        }
+        assert_eq!(subject_matte(&store).map(|s| s.id), Some(heeler_vision::BIREFNET_DYNAMIC.id));
+        // The models read in place; the rasters go to a temp folder that
+        // sees the store's models through a link.
+        let base = tempfile::tempdir().unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(store.join("models"), base.path().join("models")).unwrap();
+        #[cfg(not(unix))]
+        {
+            eprintln!("skipped the model half: needs a symlink");
+            return;
+        }
+        let fresh = subject("new", None);
+        let ui = UiGraph { graph_id: "g".into(), nodes: vec![lite_node, fresh], connections: vec![] };
+        let out = smart_sources_offline(base.path(), &ui, "img", &photo, None);
+        assert_eq!(out.get("old").map(|s| s.version), Some(lite_want), "Lite's recipe is recomputed with Lite");
+        let dynamic_want = smart_recipe_version("img", "new", "subject", "[]", "", heeler_vision::BIREFNET_DYNAMIC.id);
+        let fresh = out.get("new").expect("a Subject node with no matte named gets one");
+        assert_eq!(fresh.version, dynamic_want, "and it is dynamic");
+        let at = |x: usize, y: usize| fresh.image.data[(y * fresh.image.width + x) * 4];
+        assert!(at(48, 40) > 0.6 && at(4, 4) < 0.3, "the blob is the subject: {} {}", at(48, 40), at(4, 4));
     }
 
     /// The tether watch: arrivals only, size-stability before import, and

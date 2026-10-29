@@ -52,6 +52,12 @@ Clicks refine it afterwards as in Click: a click adds and an Option-click (Alt-c
 
 Florence-2 is a 970 MB download (see [Downloaded models](../models.md)); the first time you select by text without it, a line under the field names it, its size, license and source, with a **DOWNLOAD** button. It reads the photograph on your computer and sends nothing anywhere. It can miss what you mean or find something that is not there: when the boxes are loose, refine with clicks, or select with Click instead.
 
+## The Subject matte
+
+**Subject** (Select > Subject, a Smart layer's or Smart mask's Subject button) is answered by BiRefNet dynamic, a matting model that separates the main subject with soft edges in one shot, no clicks. It reads fur and fine edges better than BiRefNet Lite, the model Subject used before, and takes three to four seconds on a computer's processor. It is a 972 MB download, offered on a card in Subject mode and from Preferences, **Models** (see [Downloaded models](../models.md)). Without it, Subject uses BiRefNet Lite if that is installed, and the Segment Anything model otherwise.
+
+A Subject selection keeps the model it was made with. A photograph matted with BiRefNet Lite shows the same matte after BiRefNet dynamic is installed. When the matte has to be computed again (after Preferences, **Storage** clears the caches), **RECOMPUTE** and exports make it with BiRefNet Lite while Lite is installed. With Lite removed, an export leaves that selection empty rather than changing it, and **RECOMPUTE** makes it with the model installed now. Pressing **Subject** or **Detect again** always runs the model installed now, and from then on the selection keeps that one. For hair, Polish's **Refine edge** (below) still reads single strands past what either model draws.
+
 ## Shapes on a Smart selection
 
 A shape drawn with the selection tools combines with the selection on screen. With **Subtract** (Option-drag, Alt-drag on Windows and Linux), **Add** (Shift-drag) or **Intersect** (Shift and Option), it acts on:

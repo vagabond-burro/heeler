@@ -440,7 +440,18 @@ about ML.
   embedding cache is counted in bytes (72 MB) rather than entries.
 - Per-click decode: <= 150ms end-to-end including upsample.
 - BiRefNet one-shot: <= 4s CPU at 1024, async with progress; cached
-  thereafter.
+  thereafter. Measured for 2026.7 (issue 83, M4 Max, CPU, a busy
+  machine, 1600 px working image): Lite 2.1 s; dynamic (Swin-L,
+  exported at 1024) 3.0 to 4.3 s; HR and HR-matting (exported at 2048)
+  20 to 25 s. Dynamic replaced Lite as the subject matte (972 MB);
+  Lite stays for documents matted with it. The execution provider
+  deferred above was tried for HR and does not help: CoreML's
+  MLProgram format rejects every BiRefNet export (20 deformable-conv
+  Conv nodes carry no `pads` attribute), the NeuralNetwork format did
+  not finish compiling Lite in ten minutes, and with the pads made
+  explicit CoreML took 2,381 of 3,848 nodes in 83 partitions and ran
+  slower than CPU. So no provider is wired; HR waits for an export
+  CoreML can take whole, or a budget the owner agrees to.
 - Memory: sessions lazy-loaded, dropped on idle; embeddings in the
   session cache under the existing budget accounting.
 

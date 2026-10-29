@@ -13,12 +13,18 @@ use crate::models::{model_paths, ModelSpec};
 use crate::pre::{resize_exact_rgb, resize_plane, sigmoid_mask};
 use crate::VisionError;
 
+/// The side an export that does not state its own is fed at.
 const SIDE: usize = 1024;
 const MEAN: [f32; 3] = [0.485, 0.456, 0.406];
 const STD: [f32; 3] = [0.229, 0.224, 0.225];
 
 pub struct Matting {
     session: Session,
+    /// The square the export was traced at, read from its input: 1024
+    /// for Lite and dynamic, 2048 for the HR exports.
+    side: usize,
+    /// The registry id of the model loaded, the name a recipe records.
+    model: &'static str,
 }
 
 fn inference(e: ort::Error) -> VisionError {
@@ -32,23 +38,41 @@ impl Matting {
             .map_err(inference)?
             .commit_from_file(&paths[0])
             .map_err(inference)?;
-        Ok(Matting { session })
+        let side = session
+            .inputs()
+            .first()
+            .and_then(|i| i.dtype().tensor_shape().map(|s| s.to_vec()))
+            .and_then(|s| (s.len() == 4 && s[2] > 0 && s[2] == s[3]).then_some(s[2] as usize))
+            .unwrap_or(SIDE);
+        Ok(Matting { session, side, model: spec.id })
+    }
+
+    /// The square the model sees.
+    pub fn side(&self) -> usize {
+        self.side
+    }
+
+    /// Which model this session runs, by registry id.
+    pub fn model(&self) -> &'static str {
+        self.model
     }
 
     /// RGB HWC f32 0..255 in, a 0..1 soft matte at the same (w, h)
-    /// out. The model sees a squashed 1024x1024 (its own training
-    /// diet); the matte is stretched back, which soft edges forgive.
+    /// out. The model sees a squashed square at its own side (its
+    /// training diet); the matte is stretched back, which soft edges
+    /// forgive.
     pub fn matte(&mut self, rgb: &[f32], w: usize, h: usize) -> Result<Vec<f32>, VisionError> {
-        let squashed = resize_exact_rgb(rgb, w, h, SIDE, SIDE);
+        let side = self.side;
+        let squashed = resize_exact_rgb(rgb, w, h, side, side);
         // HWC 0..255 -> CHW normalized.
-        let mut chw = vec![0.0f32; 3 * SIDE * SIDE];
+        let mut chw = vec![0.0f32; 3 * side * side];
         for c in 0..3 {
-            for px in 0..SIDE * SIDE {
-                chw[c * SIDE * SIDE + px] = (squashed[px * 3 + c] / 255.0 - MEAN[c]) / STD[c];
+            for px in 0..side * side {
+                chw[c * side * side + px] = (squashed[px * 3 + c] / 255.0 - MEAN[c]) / STD[c];
             }
         }
         let input =
-            Tensor::from_array(([1usize, 3, SIDE, SIDE], chw)).map_err(inference)?;
+            Tensor::from_array(([1usize, 3, side, side], chw)).map_err(inference)?;
         let outputs = self
             .session
             .run(ort::inputs!["input_image" => input])
@@ -65,11 +89,13 @@ impl Matting {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{installed, BIREFNET_LITE};
+    use crate::models::{installed, BIREFNET_DYNAMIC, BIREFNET_LITE};
 
-    /// Gated like the SAM test: with the model installed under
+    /// Gated like the SAM test: with a matte installed under
     /// HEELER_VISION_MODELS, a warm blob on a graded ground mattes as
-    /// the subject.
+    /// the subject. Each BiRefNet installed there is run, dynamic (the
+    /// subject matte) and Lite (kept for documents matted with it),
+    /// and each reports the square it read from its own export.
     #[test]
     fn gated_the_matte_finds_the_subject() {
         let Ok(base) = std::env::var("HEELER_VISION_MODELS") else {
@@ -77,8 +103,10 @@ mod tests {
             return;
         };
         let base = std::path::PathBuf::from(base);
-        if !installed(&base, &BIREFNET_LITE) {
-            eprintln!("skipped: birefnet_lite not installed under {base:?}");
+        let specs: Vec<&ModelSpec> =
+            [&BIREFNET_DYNAMIC, &BIREFNET_LITE].into_iter().filter(|s| installed(&base, s)).collect();
+        if specs.is_empty() {
+            eprintln!("skipped: no BiRefNet installed under {base:?}");
             return;
         }
         // Something photograph-like rather than a flat disc: a graded
@@ -103,13 +131,18 @@ mod tests {
                 }
             }
         }
-        let mut m = Matting::load(&base, &BIREFNET_LITE).unwrap();
-        let t0 = std::time::Instant::now();
-        let matte = m.matte(&rgb, w, h).unwrap();
-        eprintln!("birefnet matte: {}ms", t0.elapsed().as_millis());
-        let inside = matte[(230 * w) + 256];
-        let corner = matte[(20 * w) + 20];
-        assert!(inside > 0.6, "the blob should matte as subject: {inside}");
-        assert!(corner < 0.3, "the sky corner should not: {corner}");
+        for spec in specs {
+            let mut m = Matting::load(&base, spec).unwrap();
+            assert_eq!(m.side(), 1024, "{}: the export's own square", spec.id);
+            assert_eq!(m.model(), spec.id);
+            let t0 = std::time::Instant::now();
+            let matte = m.matte(&rgb, w, h).unwrap();
+            eprintln!("{} matte: {}ms", spec.id, t0.elapsed().as_millis());
+            assert_eq!(matte.len(), w * h);
+            let inside = matte[(230 * w) + 256];
+            let corner = matte[(20 * w) + 20];
+            assert!(inside > 0.6, "{}: the blob should matte as subject: {inside}", spec.id);
+            assert!(corner < 0.3, "{}: the sky corner should not: {corner}", spec.id);
+        }
     }
 }

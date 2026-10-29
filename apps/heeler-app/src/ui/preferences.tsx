@@ -555,7 +555,7 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
   const known = [
     { id: "sam2_1_hiera_tiny", label: "Segment Anything 2.1 (Tiny)" },
     { id: "mobile_sam", label: "Segment Anything (MobileSAM)" },
-    { id: "birefnet_lite", label: "BiRefNet Lite (subject matte)" },
+    { id: "birefnet_dynamic", label: "BiRefNet dynamic (subject matte)" },
     { id: "lama", label: "LaMa (inpainting)" },
     { id: "vitmatte", label: "ViTMatte (edge refinement)" },
     { id: "depth_anything_v2_small", label: "Depth Anything V2 Small (scene depth)" },
@@ -567,9 +567,13 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
   // check, blank rather than guessing (a flashed "not installed" on an
   // installed model is a small lie with a visible correction).
   // A desktop older than Florence-2 (or a test's partial answer) has
-  // no florence entry; the row is simply not there then.
+  // no florence entry; the row is simply not there then. BiRefNet Lite,
+  // the earlier subject matte, is listed only while it is on disk, so it
+  // can be removed but is never offered.
   const listed = (m: SmartModels) =>
-    [m.sam, m.samLegacy, m.matte, m.fill, m.refine, m.depth, m.denoise, m.florence].filter((x): x is SmartModelStatus => !!x);
+    [m.sam, m.samLegacy, m.matte, m.lite?.installed ? m.lite : undefined, m.fill, m.refine, m.depth, m.denoise, m.florence].filter(
+      (x): x is SmartModelStatus => !!x,
+    );
   const rows = models
     ? listed(models)
     : known.map((item) => ({ ...item, installed: false, license: "", url: "", bytes: 0, version: "", pending: true }));

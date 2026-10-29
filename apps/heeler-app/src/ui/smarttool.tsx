@@ -30,7 +30,6 @@ import {
   type FlorenceRegion,
   type SmartModels,
 } from "../bridge";
-import { samFor, smartAsk } from "./smartnodeparts";
 import { logMsg } from "../log";
 import { reportToolError } from "./hints";
 import { DepthViewIcon, MaskEyeIcon, MaskOverlayIcon, SmartIcon } from "./panelicons";
@@ -41,6 +40,7 @@ import { activeSelectionMask, artLayers, artMaskNode, removalPending, maskViewOv
 import { publishBusy } from "./statusbarparts";
 import { parseSmartPoints, smartMarkersOn, smartPromptAt, subjectAim } from "../smartpoints";
 import { SMART_ICON_BUTTON, activeSmartMask, depthEyeHint, depthEyeModifier } from "./smarttoolparts";
+import { samFor, smartAsk, smartModelMissing } from "./smartnodeparts";
 
 type D = React.Dispatch<Command>;
 
@@ -950,11 +950,12 @@ export function SmartClickOverlay({
   if (!mask) return null;
 
   const models = status !== "loading" ? status : null;
+  // The SAM the compute would run on, what the consent card asks for.
   const sam = models !== null ? samFor(models, mask?.textParams?.model ?? "") : null;
-  const needsModel = sam !== null && !sam.installed;
+  const needsModel = models !== null && smartModelMissing(models, mode, mask.textParams?.model ?? "");
   // The matte upgrade offer: subject mode works via SAM regardless,
   // but BiRefNet's soft edges are the real thing.
-  const offerMatte = sam !== null && models !== null && sam.installed && !models.matte.installed;
+  const offerMatte = models !== null && !models.matte.installed;
 
   return (
     <div
@@ -1021,8 +1022,8 @@ export function SmartClickOverlay({
             style={{ marginTop: 3 }}
             onClick={() => {
               setDownloading(true);
-              void smartModelDownload("birefnet_lite")
-                .then(() => logMsg("info", "BiRefNet Lite installed"))
+              void smartModelDownload(models.matte.id)
+                .then(() => logMsg("info", `${models.matte.label} installed`))
                 .catch((err) => reportToolError("Download", err))
                 .finally(() => setDownloading(false));
             }}
@@ -1104,6 +1105,8 @@ export function SmartClickOverlay({
             onClick={() => {
               setBusy(true);
               publishBusy("SELECTING \u00b7 the model is computing the mask");
+              // From the recipe: the model it names, not whichever is
+              // preferred now.
               void smartClick(state.activeImage, mask.id, prompts, mode, aim, mask.textParams?.model ?? "")
                 .then((used) => {
                   dispatch({ type: "set_text_param", id: mask.id, param: "model", value: used });

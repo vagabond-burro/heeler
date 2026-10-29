@@ -8,7 +8,7 @@ The smart selection tools, the depth tools, Noise Reduction's Model method and t
 |---|---|---|
 | Segment Anything 2.1 (Tiny) | Smart selection: Click, Subject and Sky | 156 MB |
 | Segment Anything (MobileSAM) | Smart selections made before Heeler 2026.7 | 37 MB |
-| BiRefNet Lite | The subject one-shot matte | 224 MB |
+| BiRefNet dynamic | The subject one-shot matte | 972 MB |
 | LaMa | Remove and the Finish Fill layer | 208 MB |
 | ViTMatte | Selection Polish | 104 MB |
 | Depth Anything V2 Small | Fog, Depth Lighting, Depth of Field, depth masks and depth-range selections | 99 MB |
@@ -16,6 +16,8 @@ The smart selection tools, the depth tools, Noise Reduction's Model method and t
 | Florence-2 base | Select by text, and the assistant: what is in the photograph and where (optional) | 970 MB |
 
 Their licenses and origins are on the [open-source page](legal/open-source.md).
+
+BiRefNet Lite (224 MB) was the subject matte before BiRefNet dynamic. It is no longer offered, but a copy already installed stays listed in Preferences, **Models** until you remove it: it answers Subject until BiRefNet dynamic is installed, and it recomputes the mattes of selections made with it (see [The Subject matte](finish/masks-selections.md#the-subject-matte)).
 
 Florence-2 is Microsoft's, under the MIT license, packaged for ONNX by the Hugging Face onnx-community and trained on FLD-5B, Microsoft's own dataset. The assistant works without it, and you download it from Preferences, **Assistant** or **Models** if you want the assistant to know what is in the picture; the Smart tool's **Select by text** field asks for it the first time you use it (see [Select by text](finish/masks-selections.md#select-by-text)).
 

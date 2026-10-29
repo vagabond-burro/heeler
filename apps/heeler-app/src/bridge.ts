@@ -1586,6 +1586,9 @@ export type SmartModels = {
    * desktop older than SAM 2.1 */
   samLegacy?: SmartModelStatus;
   matte: SmartModelStatus;
+  /** BiRefNet Lite, the earlier subject matte: it still answers Subject
+   * where dynamic is not installed. Absent from an older desktop. */
+  lite?: SmartModelStatus;
   /** the inpainting model behind Remove and the Finish fill */
   fill: SmartModelStatus;
   /** ViTMatte, the P4 Selection Polish refinement */
@@ -1606,7 +1609,8 @@ function mockSmartModels(): SmartModels {
   return {
     sam: m("sam2_1_hiera_tiny", "Segment Anything 2.1 (Tiny)", 155_610_424, "Apache-2.0", "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX", "2024.09"),
     samLegacy: m("mobile_sam", "Segment Anything (MobileSAM)", 36_655_105, "Apache-2.0", "https://huggingface.co/vietanhdev/segment-anything-onnx-models", "2023.06"),
-    matte: m("birefnet_lite", "BiRefNet Lite (subject matte)", 224_005_088, "MIT", "https://huggingface.co/onnx-community/BiRefNet_lite-ONNX", "2024.09"),
+    matte: m("birefnet_dynamic", "BiRefNet dynamic (subject matte)", 972_495_971, "MIT", "https://huggingface.co/onnx-community/BiRefNet_dynamic-1024x1024-ONNX", "2025.03"),
+    lite: m("birefnet_lite", "BiRefNet Lite (subject matte)", 224_005_088, "MIT", "https://huggingface.co/onnx-community/BiRefNet_lite-ONNX", "2024.09"),
     fill: m("lama", "LaMa (inpainting)", 208_044_816, "Apache-2.0", "https://huggingface.co/Carve/LaMa-ONNX", "2024.03"),
     refine: m("vitmatte", "ViTMatte (edge refinement)", 103_885_865, "Apache-2.0 weights, MIT code", "https://huggingface.co/Xenova/vitmatte-small-composition-1k", "2024.06"),
     depth: m("depth_anything_v2_small", "Depth Anything V2 Small (scene depth)", 99_060_839, "Apache-2.0", "https://huggingface.co/onnx-community/depth-anything-v2-small", "2024.06"),
@@ -1817,8 +1821,9 @@ export async function smartRasterStatus(
  * provenance and the render trigger. `aim` is Subject's ask for the
  * SAM fallback (smartpoints.ts subjectAim), on the photograph like the
  * clicks. `model` is the node's own: a selection made with MobileSAM
- * keeps it while it is installed (lib.rs smart_sam_spec), and SAM 2.1's
- * id asks for a remake with SAM 2.1. */
+ * keeps it while it is installed (lib.rs smart_sam_spec), SAM 2.1's id
+ * asks for a remake with SAM 2.1, and a Subject matted with BiRefNet
+ * Lite is made again with Lite while it is installed. */
 export async function smartClick(
   imageId: string,
   nodeId: string,

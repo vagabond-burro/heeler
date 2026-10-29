@@ -282,11 +282,13 @@ and can be installed, updated or removed from Preferences (see
   The training data (SA-1B) is published by Meta under its own stated
   terms. It is kept for the smart selections made with it before
   2026.7, which it recomputes exactly as they were made.
-- **BiRefNet Lite** (the one-shot subject matte), © Zheng Peng and
-  the BiRefNet authors, under the **MIT license**: code and weights
-  alike. Its training corpus (DIS5K and related academic datasets) is
-  academic in origin; the weights are published by the author under
-  MIT, and Heeler uses them as published.
+- **BiRefNet dynamic** (the one-shot subject matte) and **BiRefNet
+  Lite** (the subject matte before it, kept for selections made with
+  it), © Zheng Peng and the BiRefNet authors, under the **MIT
+  license**: code and weights alike; ONNX packaging by the Hugging
+  Face onnx-community. Their training corpus (DIS5K and related
+  academic datasets) is academic in origin; the weights are published
+  by the author under MIT, and Heeler uses them as published.
 - **LaMa** (the fill behind Remove and the Finish Fill brush), ©
   Samsung AI Center and the LaMa authors, under the **Apache License
   2.0**: code and weights alike; ONNX packaging by Carve, also
