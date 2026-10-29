@@ -2648,7 +2648,11 @@ mod tests {
     /// A stack lends each frame a fixed slice, the estimate's retained
     /// frame plus its workspace (stack_render's per_frame, unaligned), and
     /// a real GPR develops inside it (the 26.5.1 review's full-size GPR
-    /// stack); in a quarter of it, it is refused.
+    /// stack); in a slice of four bytes a pixel, far under what any
+    /// develop holds, it is refused. The refusal was a quarter of the
+    /// slice, but the workspace grows with the machine's cores: here a
+    /// quarter fell 10 MiB short of the develop's 150, and on a Windows
+    /// machine with more cores it was enough and the develop went ahead.
     #[test]
     #[cfg(feature = "raw")]
     fn a_real_gpr_develops_inside_a_stack_frames_slice() {
@@ -2664,7 +2668,7 @@ mod tests {
         };
         let (w, h) = develop(per_frame).unwrap();
         assert_eq!((w.max(h), w.min(h)), (4000, 3000));
-        let short = develop(per_frame / 4).unwrap_err().to_string();
+        let short = develop(memory::bytes(est.width, est.height, 1, 4).unwrap()).unwrap_err().to_string();
         assert!(memory::is_refusal(&short), "{short}");
     }
 
