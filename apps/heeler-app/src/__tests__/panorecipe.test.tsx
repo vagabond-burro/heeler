@@ -21,7 +21,7 @@ function canceled(): State {
 }
 beforeEach(() => { backend.update.mockReset().mockResolvedValue(info); });
 
-it.each(["pano-surface-spherical", "pano-gain", "pano-straighten"])("a successful %s change resumes the new recipe", async (control) => {
+it.each(["pano-surface-spherical", "pano-gain", "pano-straighten", "pano-lens", "pano-autocrop"])("a successful %s change resumes the new recipe", async (control) => {
   let s = canceled();
   const nonce = s.previewNonce;
   render(<PanoPanel state={s} dispatch={(c) => { s = reduce(s, c); }} />);
@@ -49,4 +49,18 @@ it("a refused recipe change leaves the panorama canceled", async () => {
   fireEvent.click(await screen.findByTestId("pano-straighten"));
   await waitFor(() => expect(backend.update).toHaveBeenCalled());
   expect(s).toBe(old);
+});
+
+it("says which lens profile the frames were matched to, or that none was", async () => {
+  vi.mocked((await import("../bridge")).panoInfo).mockResolvedValueOnce({ ...info, lens_correction: true, lens_profile: "Olympus M.Zuiko 9-18mm", lens_frames: 1 });
+  render(<PanoPanel state={{ ...initialState(), activeImage: "pan" }} dispatch={() => {}} />);
+  expect((await screen.findByTestId("pano-lens-profile")).textContent).toBe("Profile: Olympus M.Zuiko 9-18mm (1 of 2 frames)");
+});
+
+it("switching lens correction off asks for frames stitched as they were", async () => {
+  let s = { ...initialState(), activeImage: "pan" };
+  render(<PanoPanel state={s} dispatch={(c) => { s = reduce(s, c); }} />);
+  expect((await screen.findByTestId("pano-lens-profile")).textContent).toBe("No lens profile found: frames stitch uncorrected");
+  fireEvent.click(screen.getByTestId("pano-lens"));
+  await waitFor(() => expect(backend.update).toHaveBeenCalledWith("pan", { lens_correction: false }));
 });

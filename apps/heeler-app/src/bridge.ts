@@ -1244,6 +1244,14 @@ export interface PanoInfo {
   members: string[];
   /** members the folder no longer has */
   missing: string[];
+  /** undo each frame's lens from its database profile before stitching */
+  lens_correction?: boolean;
+  /** the profile the members matched, and how many of them it covers;
+   * absent from an older backend */
+  lens_profile?: string | null;
+  lens_frames?: number;
+  /** open cropped to the largest rectangle the panorama fills */
+  auto_crop?: boolean;
 }
 
 /** What a panorama is made of, or null for an ordinary photograph. */
@@ -1262,12 +1270,22 @@ export async function updatePano(
     straighten?: boolean;
     bands?: number;
     members?: string[];
+    lens_correction?: boolean;
+    auto_crop?: boolean;
   }
 ): Promise<PanoInfo | null> {
   if (!isTauri()) return null;
   const result = await call<PanoInfo>("update_pano", { imageId, ...change });
   changedDenoiseCache(true);
   return result;
+}
+
+/** A panorama's starting crop as [crop_x, crop_y, crop_w, crop_h]: the
+ * largest rectangle its stitched picture fills. Waits for a stitch still
+ * running; null when the option is off or nothing needs cutting away. */
+export async function panoAutoCrop(imageId: string): Promise<[number, number, number, number] | null> {
+  if (!isTauri()) return null;
+  return call<[number, number, number, number] | null>("pano_auto_crop", { imageId });
 }
 
 export interface StitchProgress {

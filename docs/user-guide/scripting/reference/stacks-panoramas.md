@@ -113,7 +113,7 @@ Reads a panorama recipe.
 
 **Arguments:** `image_id` is the panorama's catalog id.
 
-**Returns:** dictionary containing `surface`, `gain_compensation`, `straighten`, `bands`, `members`, and `missing`.
+**Returns:** dictionary containing `surface`, `gain_compensation`, `straighten`, `bands`, `members`, `missing`, `lens_correction`, `auto_crop`, and `lens_profile` with `lens_frames` (the lens profile the members matched, or `None`, and how many members it covers).
 
 **Raises:** `HeelerError` when the id is absent, is not a panorama, or cannot be read.
 
@@ -129,6 +129,8 @@ heeler.pano_configure(
     straighten=None,
     bands=None,
     members=None,
+    lens_correction=None,
+    auto_crop=None,
 )
 ```
 
@@ -142,6 +144,8 @@ Rewrites selected panorama fields and invalidates its cached render. `None` pres
 - `straighten`: optional boolean enabling automatic leveling.
 - `bands`: optional integer blend-band count. The server clamps it to 1 to 6.
 - `members`: optional iterable of at least two member filenames in order.
+- `lens_correction`: optional boolean undoing each frame's lens distortion from its lens profile before stitching.
+- `auto_crop`: optional boolean opening the panorama cropped to the largest rectangle it fills. It changes no pixel of the stitch, so it does not stitch again.
 
 **Returns:** updated panorama-info dictionary.
 

@@ -7,7 +7,8 @@ import { clearThumbnail, isTauri, lensProfileFor, loadGraphResult, loadLastGoodG
 import { queueQuadMembers } from "../quadedit";
 import { linkedWith } from "../links";
 import { writeGraphKeepingTakes } from "../copyedits";
-import { freshNodesFor, photoLineWidth } from "../state";
+import { freshNodesFor, isPano, photoLineWidth } from "../state";
+import { offerPanoCrop } from "../panocrop";
 import { logDebug, logMsg } from "../log";
 
 /** A save can finish while Reset or a newer edit replaces its graph.
@@ -160,6 +161,10 @@ export function GraphPersistence({ state, dispatch }: { state: State; dispatch: 
         const width = g?.lineWidth ?? (result.status === "absent" ? result.lineWidth : undefined);
         if (g || width !== undefined) dispatch({ type: "set_photo_line_width", id: image, width: typeof width === "number" ? width : 0 });
       }
+      // A panorama no one has edited opens on the largest rectangle it
+      // fills, once its stitch says where that is.
+      const editedAtRead = entry?.edited ?? false;
+      if (isPano(entry ?? { name })) void offerPanoCrop(image, () => stateRef.current, dispatch, !editedAtRead);
       if (!g) {
         if (upgrade) dispatch({ type: "apply_merged_defaults" });
         dispatch({ type: "settle_link_edits", id: image });

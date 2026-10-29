@@ -18,8 +18,10 @@
 //! do both, at different scales, which is what multi-band blending is.
 
 use crate::bundle::Camera;
+use crate::lens::Lens;
 use crate::geom::solve;
 use crate::gray::{blur_with_stop, Gray};
+use crate::seam::{seam_bytes, seam_ownership};
 use heeler_engine::buffers::ImageBuf;
 
 /// Expected variance of the intensity error between two frames of the
@@ -62,6 +64,10 @@ pub struct CompositeOpts {
     /// Legacy serialized option. Admission uses the shared machine budget;
     /// memory pressure never changes the requested canvas dimensions.
     pub memory_budget: usize,
+    /// Cut the seams between frames where they agree (the seam module).
+    /// Off, each pixel goes to the frame that looks at it most directly,
+    /// which slices or ghosts anything that moved between the shots.
+    pub seams: bool,
 }
 
 impl Default for CompositeOpts {
@@ -72,6 +78,7 @@ impl Default for CompositeOpts {
             gain_compensation: true,
             bands: 4,
             memory_budget: 2 << 30, // 2 GiB
+            seams: true,
         }
     }
 }
@@ -90,6 +97,9 @@ impl Default for CompositeOpts {
 /// - the per-band accumulators, three color planes and a weight: `16 * bands`
 /// - the scratch a single frame's band decomposition needs: about 32
 /// - the finished image: 16
+///
+/// The seam finder's reduced canvas is a fixed allowance beside this
+/// (seam::seam_bytes), admitted with it.
 ///
 /// Six frames into four bands is a little over 200 bytes per pixel, so a
 /// 2 GiB allowance holds around ten megapixels of panorama. Admission
@@ -112,17 +122,47 @@ pub struct Frame<'a> {
     /// latest review's R1: up to a pixel on an ordinary frame, eight on a
     /// very tall one).
     pub aspect: f64,
+    /// The lens's distortion, undone as the frame is placed (the lens
+    /// module); None treats the frame as a pinhole, as every frame
+    /// used to be.
+    pub lens: Option<Lens>,
 }
 
 impl<'a> Frame<'a> {
     /// A frame whose pixels are square to its camera.
     pub fn new(image: &'a ImageBuf, camera: Camera) -> Self {
-        Frame { image, camera, aspect: 1.0 }
+        Frame { image, camera, aspect: 1.0, lens: None }
     }
 
     /// The focal length down the frame, in its pixels.
     fn fy(&self) -> f64 {
         self.camera.f * self.aspect
+    }
+
+    /// The direction, in this camera's coordinates, its pixel `(x, y)`
+    /// saw: from the frame's center, through the lens undone, over the
+    /// focal length.
+    fn ray_at(&self, x: f64, y: f64) -> [f64; 3] {
+        let (w, h) = (self.image.width, self.image.height);
+        let (mut dx, mut dy) = (x - w as f64 * 0.5, y - h as f64 * 0.5);
+        if let Some(lens) = &self.lens {
+            (dx, dy) = lens.undistort(dx, dy, w, h);
+        }
+        [dx / self.camera.f, dy / self.fy(), 1.0]
+    }
+
+    /// The pixel a direction in this camera's coordinates lands on,
+    /// through the lens: the inverse of ray_at. None behind the camera.
+    fn pixel_at(&self, cam: [f64; 3]) -> Option<(f64, f64)> {
+        if cam[2] <= 1e-9 {
+            return None;
+        }
+        let (w, h) = (self.image.width, self.image.height);
+        let (mut dx, mut dy) = (self.camera.f * cam[0] / cam[2], self.fy() * cam[1] / cam[2]);
+        if let Some(lens) = &self.lens {
+            (dx, dy) = lens.distort(dx, dy, w, h);
+        }
+        Some((dx + w as f64 * 0.5, dy + h as f64 * 0.5))
     }
 }
 
@@ -234,10 +274,9 @@ fn sample_rgb(img: &ImageBuf, x: f64, y: f64) -> Option<[f32; 3]> {
 }
 
 /// Where a frame's pixel `(x, y)` sits on the output surface.
-fn to_canvas(proj: &Projection, frame: &Frame, x: f64, y: f64, w: usize, h: usize) -> Option<(f64, f64)> {
+fn to_canvas(proj: &Projection, frame: &Frame, x: f64, y: f64) -> Option<(f64, f64)> {
     // Centered coordinates, undo the lens, rotate into the world.
-    let d = [(x - w as f64 * 0.5) / frame.camera.f, (y - h as f64 * 0.5) / frame.fy(), 1.0];
-    proj.place(frame.camera.r.transpose().mul_vec(d))
+    proj.place(frame.camera.r.transpose().mul_vec(frame.ray_at(x, y)))
 }
 
 /// Yaw of a world direction, matching what `place` reports.
@@ -287,8 +326,7 @@ fn yaw_shift_for(frames: &[Frame], surface: Surface) -> f64 {
                 (0.0, t * h as f64),
                 (w as f64, t * h as f64),
             ] {
-                let d = [(x - w as f64 * 0.5) / f.camera.f, (y - h as f64 * 0.5) / f.fy(), 1.0];
-                let rel = wrap_pi(yaw_of(f.camera.r.transpose().mul_vec(d)) - centre);
+                let rel = wrap_pi(yaw_of(f.camera.r.transpose().mul_vec(f.ray_at(x, y))) - centre);
                 rel_lo = rel_lo.min(rel);
                 rel_hi = rel_hi.max(rel);
             }
@@ -349,7 +387,7 @@ fn bounds(frames: &[Frame], proj: &Projection) -> Option<(f64, f64, f64, f64)> {
                 (0.0, t * h as f64),
                 (w as f64, t * h as f64),
             ] {
-                if let Some((cx, cy)) = to_canvas(proj, f, x, y, w, h) {
+                if let Some((cx, cy)) = to_canvas(proj, f, x, y) {
                     lo_x = lo_x.min(cx);
                     lo_y = lo_y.min(cy);
                     hi_x = hi_x.max(cx);
@@ -365,9 +403,9 @@ fn bounds(frames: &[Frame], proj: &Projection) -> Option<(f64, f64, f64, f64)> {
 }
 
 /// One frame, warped onto the canvas.
-struct Warped {
-    rgb: [Gray; 3],
-    weight: Gray,
+pub(crate) struct Warped {
+    pub(crate) rgb: [Gray; 3],
+    pub(crate) weight: Gray,
 }
 
 fn warp(frame: &Frame, proj: &Projection, width: usize, height: usize) -> Warped {
@@ -380,12 +418,9 @@ fn warp(frame: &Frame, proj: &Projection, width: usize, height: usize) -> Warped
             // than scattering input pixels forward and leaving holes
             // wherever the frame was stretched.
             let d = proj.ray(cx as f64 + 0.5, cy as f64 + 0.5);
-            let cam = frame.camera.r.mul_vec(d);
-            if cam[2] <= 1e-9 {
+            let Some((sx, sy)) = frame.pixel_at(frame.camera.r.mul_vec(d)) else {
                 continue;
-            }
-            let sx = frame.camera.f * cam[0] / cam[2] + w as f64 * 0.5;
-            let sy = frame.fy() * cam[1] / cam[2] + h as f64 * 0.5;
+            };
             let Some(px) = sample_rgb(frame.image, sx, sy) else {
                 continue;
             };
@@ -553,7 +588,7 @@ pub fn composite_with_control(
     }
 
     let needed = heeler_engine::memory::or_unwind(heeler_engine::memory::bytes(width, height, 1, bytes_per_pixel(frames.len(), opts.bands))
-        .and_then(|canvas| heeler_engine::memory::sum(std::iter::once(canvas).chain(frames.iter().map(|f| f.image.data.len().saturating_mul(4))))));
+        .and_then(|canvas| heeler_engine::memory::sum(std::iter::once(canvas).chain(frames.iter().map(|f| f.image.data.len().saturating_mul(4))).chain(std::iter::once(if opts.seams { seam_bytes(frames.len(), width, height) } else { 0 })))));
     let _job = heeler_engine::memory::or_unwind(heeler_engine::memory::Job::admit(needed, "panorama canvas, warps and blend pyramids"));
 
     // Warping is the first of the two heavy passes over the canvas, and
@@ -588,7 +623,15 @@ pub fn composite_with_control(
         }
     }
 
-    let owner = ownership(&warps, width, height);
+    let owner = if opts.seams && warps.len() > 1 {
+        if stop() {
+            return None;
+        }
+        on_progress(0.52, "Finding seams between frames");
+        seam_ownership(&warps, width, height, stop)?
+    } else {
+        ownership(&warps, width, height)
+    };
     let bands = opts.bands.max(1);
 
     // Per band: the weighted sum of every frame's contribution, and the
@@ -708,15 +751,15 @@ mod tests {
         let solved = cam(1800.0, [0.1, 0.3, 0.0]);
         let (small, big) = (ImageBuf::new(reg.0, reg.1), ImageBuf::new(full.0, full.1));
         let at_reg = Frame::new(&small, solved);
-        let at_full = Frame { image: &big, camera: Camera { f: solved.f * sx, r: solved.r }, aspect: sy / sx };
+        let at_full = Frame { image: &big, camera: Camera { f: solved.f * sx, r: solved.r }, aspect: sy / sx, lens: None };
         let across_only = Frame::new(&big, Camera { f: solved.f * sx, r: solved.r });
         let proj = Projection { surface: Surface::Spherical, scale: 4000.0, origin_x: 0.0, origin_y: 0.0, yaw: 0.0 };
         let mut worst_old = 0.0f64;
         for (u, v) in [(0.0, 0.0), (57.0, 0.0), (114.0, 2048.0), (0.0, 1024.0), (114.0, 300.0)] {
-            let want = to_canvas(&proj, &at_reg, u, v, reg.0, reg.1).unwrap();
-            let got = to_canvas(&proj, &at_full, u * sx, v * sy, full.0, full.1).unwrap();
+            let want = to_canvas(&proj, &at_reg, u, v).unwrap();
+            let got = to_canvas(&proj, &at_full, u * sx, v * sy).unwrap();
             assert!((got.0 - want.0).abs() < 1e-6 && (got.1 - want.1).abs() < 1e-6, "pixel ({u}, {v}): {got:?} against {want:?}");
-            let old = to_canvas(&proj, &across_only, u * sx, v * sy, full.0, full.1).unwrap();
+            let old = to_canvas(&proj, &across_only, u * sx, v * sy).unwrap();
             worst_old = worst_old.max((old.0 - want.0).hypot(old.1 - want.1));
         }
         assert!(worst_old > 5.0, "the across-only conversion was off by {worst_old} pixels");
@@ -752,6 +795,76 @@ mod tests {
             }
         }
         img
+    }
+
+    /// The same scene with a figure standing in it, in world angles: the
+    /// columns `theta` across and `phi` up, bright against the scene.
+    fn render_with(cam: &Camera, w: usize, h: usize, figures: &[(f64, f64)]) -> ImageBuf {
+        let mut img = render(cam, w, h, 1.0);
+        for y in 0..h {
+            for x in 0..w {
+                let d = [(x as f64 - w as f64 * 0.5) / cam.f, (y as f64 - h as f64 * 0.5) / cam.f, 1.0];
+                let world = cam.r.transpose().mul_vec(d);
+                let len = (world[0] * world[0] + world[1] * world[1] + world[2] * world[2]).sqrt();
+                let (theta, phi) = (world[0].atan2(world[2]), (world[1] / len).asin());
+                if figures.iter().any(|&(lo, hi)| theta >= lo && theta < hi && phi.abs() < 0.17) {
+                    img.set_pixel(x, y, [0.95, 0.3, 0.25, 1.0]);
+                }
+            }
+        }
+        img
+    }
+
+    /// A pan with someone walking through the overlap: the left
+    /// frame caught them at one place, the right frame a step further
+    /// on. The seam must go round them, so each figure is in the
+    /// panorama whole or not at all: never sliced, never a ghost. Each
+    /// pixel to the frame that looks at it most directly put the seam
+    /// down the middle of the overlap, through the first figure.
+    #[test]
+    fn a_figure_walking_through_the_overlap_is_neither_sliced_nor_ghosted() {
+        let (a, b) = (cam(300.0, [0.0, -0.25, 0.0]), cam(300.0, [0.0, 0.25, 0.0]));
+        // Where each frame saw the walker; the overlap is about a
+        // quarter radian either side of straight ahead.
+        let (first, second) = ((-0.035, 0.025), (0.07, 0.11));
+        let opts = CompositeOpts { surface: Surface::Cylindrical, gain_compensation: false, ..Default::default() };
+        let stitch = |fa: &[(f64, f64)], fb: &[(f64, f64)], seams: bool| {
+            let (ia, ib) = (render_with(&a, 240, 180, fa), render_with(&b, 240, 180, fb));
+            composite(&[Frame::new(&ia, a), Frame::new(&ib, b)], &CompositeOpts { seams, ..opts.clone() }).unwrap()
+        };
+        let clean = stitch(&[], &[], true);
+        // Where each figure lands on the canvas: stood still in both
+        // frames, it is wherever the output differs from the empty scene.
+        let place = |f: (f64, f64)| {
+            let with = stitch(&[f], &[f], true);
+            (0..clean.width * clean.height)
+                .filter(|&p| (with.data[p * 4] - clean.data[p * 4]).abs() > 0.25)
+                .collect::<Vec<_>>()
+        };
+        let (r1, r2) = (place(first), place(second));
+        assert!(r1.len() > 200 && r2.len() > 200, "figures of {} and {} pixels", r1.len(), r2.len());
+
+        // How much of a figure's place shows the figure, and how far the
+        // rest strays from the empty scene.
+        let judge = |out: &ImageBuf, region: &[usize]| {
+            let shown = region.iter().filter(|&&p| out.data[p * 4] > 0.7).count() as f32 / region.len() as f32;
+            let ghost = region
+                .iter()
+                .filter(|&&p| out.data[p * 4] <= 0.7)
+                .map(|&p| (out.data[p * 4] - clean.data[p * 4]).abs())
+                .fold(0.0f32, f32::max);
+            (shown, ghost)
+        };
+        let cut = stitch(&[first], &[second], true);
+        for (name, region) in [("first", &r1), ("second", &r2)] {
+            let (shown, ghost) = judge(&cut, region);
+            assert!(shown < 0.03 || shown > 0.97, "the {name} figure is sliced: {:.0}% shown", shown * 100.0);
+            assert!(ghost < 0.06, "the {name} figure left a ghost {ghost} strong");
+        }
+        let old = stitch(&[first], &[second], false);
+        let (shown, ghost) = judge(&old, &r1);
+        assert!(shown > 0.1 && shown < 0.9, "the middle seam should slice the first figure: {:.0}% shown", shown * 100.0);
+        assert!(ghost > 0.15, "and leave the rest of it as a ghost: {ghost}");
     }
 
     #[test]

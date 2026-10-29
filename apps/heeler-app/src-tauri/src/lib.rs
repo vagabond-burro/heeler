@@ -9277,6 +9277,16 @@ pub struct PanoManifest {
     #[serde(default = "four")]
     pub bands: u32,
     pub members: Vec<String>,
+    /// Undo each frame's lens distortion before matching and painting,
+    /// from the lens database where it knows the lens (stitch_lens).
+    /// Off stitches every frame as a pinhole, as panoramas always were.
+    #[serde(default = "yes")]
+    pub lens_correction: bool,
+    /// Open the panorama cropped to the largest rectangle it fills
+    /// (pano_auto_crop), as an ordinary Crop & Rotate crop the user can
+    /// widen again. Off opens it uncropped, ragged edges and all.
+    #[serde(default = "yes")]
+    pub auto_crop: bool,
 }
 
 fn auto_surface_name() -> String {
@@ -9419,6 +9429,90 @@ async fn resume_pano_stitch(image_id: String) -> Result<(), String> {
     Ok(())
 }
 
+/// The starting crop of each panorama stitched this session, by image
+/// id, beside the recipe text it was stitched from: what pano_auto_crop
+/// answers once a stitch (or the proxy cache) has produced the picture.
+/// The crop is read off the picture itself, so a cached stitch answers
+/// as surely as a fresh one.
+type PanoCrops = (Mutex<HashMap<String, (String, Option<heeler_stitch::CropRect>)>>, std::sync::Condvar);
+fn pano_crops() -> &'static PanoCrops {
+    static C: std::sync::OnceLock<PanoCrops> = std::sync::OnceLock::new();
+    C.get_or_init(Default::default)
+}
+
+/// What a recipe stitches: its text with the auto_crop switch set
+/// aside, since cropping or not is decided after the stitch and changes
+/// none of its pixels.
+fn stitch_recipe(text: &str) -> Option<String> {
+    let manifest: PanoManifest = serde_json::from_str(text).ok()?;
+    serde_json::to_string(&PanoManifest { auto_crop: true, ..manifest }).ok()
+}
+
+/// Notes a stitched panorama's starting crop, for whoever is waiting on
+/// it. The recipe is the one captured before the stitch, not the manifest
+/// on disk now, which may already describe the next stitch. Either tier
+/// will do: the crop is in fractions and holds at both
+/// (heeler_stitch::auto_crop draws its inner sides in by a cell).
+///
+/// A stitch the recipe has since moved past is not noted: finishing
+/// after its successor, it would otherwise displace the answer a waiter
+/// for the current recipe needs. A failed stitch is noted as having no
+/// crop, so its waiters stop waiting; a canceled one is not, since
+/// resuming it stitches the same recipe again.
+fn note_pano_crop(image_id: &str, path: &Path, recipe: &str, stitched: &Result<ImageBuf, String>) {
+    let crop = match stitched {
+        Ok(img) => heeler_stitch::auto_crop(img),
+        Err(e) if e == PANO_CANCELED => return,
+        Err(_) => None,
+    };
+    if std::fs::read_to_string(path).ok().as_deref().and_then(stitch_recipe).as_deref() != Some(recipe) {
+        return;
+    }
+    let (map, ready) = pano_crops();
+    map.lock().unwrap_or_else(|e| e.into_inner()).insert(image_id.to_string(), (recipe.to_string(), crop));
+    ready.notify_all();
+}
+
+/// How long pano_auto_crop waits for a stitch to finish. A full-size
+/// stitch of many frames can take minutes; the panorama opens uncropped
+/// if it takes longer.
+const PANO_CROP_WAIT: std::time::Duration = std::time::Duration::from_secs(300);
+
+/// A panorama's starting crop, as Crop & Rotate's [crop_x, crop_y,
+/// crop_w, crop_h]: the largest rectangle the stitched picture fills.
+/// Waits for the stitch of the panorama's current recipe when it is
+/// still running. None when the recipe's auto_crop is off, the picture
+/// fills its whole canvas, or no stitch arrived in time.
+#[tauri::command]
+async fn pano_auto_crop(app: tauri::AppHandle, image_id: String) -> Result<Option<[f32; 4]>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = with_session(&app, |s| Ok(s.paths.get(&image_id).cloned()))?;
+        let Some(path) = path.filter(|p| is_pano_path(p)) else { return Ok(None) };
+        if !read_pano(&path)?.auto_crop {
+            return Ok(None);
+        }
+        let recipe = std::fs::read_to_string(&path).ok().as_deref().and_then(stitch_recipe).ok_or("bad panorama manifest")?;
+        let deadline = std::time::Instant::now() + PANO_CROP_WAIT;
+        let (map, ready) = pano_crops();
+        let mut held = map.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            if let Some((stitched_from, crop)) = held.get(&image_id) {
+                if *stitched_from == recipe {
+                    let full = heeler_stitch::CropRect { x: 0.0, y: 0.0, w: 1.0, h: 1.0 };
+                    return Ok(crop.filter(|c| *c != full).map(|c| [c.x, c.y, c.w, c.h]));
+                }
+            }
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            if left.is_zero() {
+                return Ok(None);
+            }
+            held = ready.wait_timeout(held, left).unwrap_or_else(|e| e.into_inner()).0;
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Whether a panorama at its current recipe is canceled, for a render
 /// about to stitch it.
 fn pano_canceled_now(app: &tauri::AppHandle, image_id: &str) -> bool {
@@ -9481,8 +9575,10 @@ macro_rules! debug_log {
 /// may hold the wrong frames, so it is not answered again, and neither
 /// is one composited before a registered frame came back at each side's
 /// own scale (Frame::aspect, the latest review's R1), which placed its
-/// frames up to a few pixels off.
-const PANO_SOLVE: &str = "register2048-aspect";
+/// frames up to a few pixels off, nor one whose seams ran down the
+/// middle of each overlap instead of where the frames agree, nor one
+/// painted as pinholes from a lens the database could have undone.
+const PANO_SOLVE: &str = "register2048-aspect-seams-lens";
 
 /// The proxy-cache tier of a full-size stitch.
 fn pano_full_tier(image_id: &str, opts: heeler_io::RawSourceOpts) -> String {
@@ -9530,6 +9626,22 @@ fn render_pano_at(
     on_warn: &dyn Fn(&str),
     preview_edge: Option<usize>,
     stop: &dyn Fn() -> bool,
+) -> Result<ImageBuf, String> {
+    render_pano_through(path, decode, max_dimension, on_progress, on_warn, preview_edge, stop, &|_| None)
+}
+
+/// The same, with each member's lens from `lens_for` (stitch_lens), which
+/// the recipe's lens_correction switches on.
+#[allow(clippy::too_many_arguments)]
+fn render_pano_through(
+    path: &Path,
+    decode: &dyn Fn(&Path) -> Result<ImageBuf, String>,
+    max_dimension: usize,
+    on_progress: &dyn Fn(f32, &str),
+    on_warn: &dyn Fn(&str),
+    preview_edge: Option<usize>,
+    stop: &dyn Fn() -> bool,
+    lens_for: &dyn Fn(&Path) -> Option<heeler_stitch::Lens>,
 ) -> Result<ImageBuf, String> {
     let manifest = read_pano(path)?;
     let folder = path.parent().unwrap_or(Path::new("."));
@@ -9594,6 +9706,13 @@ fn render_pano_at(
         bands: manifest.bands as usize,
         straighten: manifest.straighten,
         memory_budget: usize::MAX, // legacy field; the shared budget admits the canvas
+        seams: true,
+        lenses: if manifest.lens_correction {
+            read_names.iter().map(|name| lens_for(&folder.join(name))).collect()
+        } else {
+            Vec::new()
+        },
+        fit_lens: false,
     };
     let stitched = heeler_stitch::stitch_with_control(&refs, &opts, &|f, stage| {
         on_progress(DECODE_SHARE + (1.0 - DECODE_SHARE) * f, stage)
@@ -9854,8 +9973,9 @@ fn load_source(
                     return Err(PANO_CANCELED.into());
                 }
                 let job = StitchJob::begin(app, image_id, members.len(), false);
+                let crop_recipe = std::fs::read_to_string(&path).ok().as_deref().and_then(stitch_recipe);
                 let result = cached_render(app, &path, &members, &tier, || {
-                    render_pano_at(
+                    render_pano_through(
                         &path,
                         &|p| pano_member_preview(p, opts, edge),
                         edge,
@@ -9863,9 +9983,13 @@ fn load_source(
                         &|m| emit_log(app, "warn", m.to_string()),
                         Some(pano_member_edge(edge)),
                         &|| job.stopped(),
+                        &|m| stitch_lens(app, m).map(|(_, lens)| lens),
                     )
                 });
                 remember_stitch_outcome(&path, &members, &tier, &result);
+                if let Some(recipe) = crop_recipe {
+                    note_pano_crop(image_id, &path, &recipe, &result);
+                }
                 job.finish(&result);
                 return result;
             }
@@ -10310,8 +10434,9 @@ fn full_source(
                 return Err(PANO_CANCELED.into());
             }
             let job = StitchJob::begin(app, image_id, members.len(), true);
+            let crop_recipe = std::fs::read_to_string(&p).ok().as_deref().and_then(stitch_recipe);
             let out = cached_render(app, &p, &members, &tier, || {
-                render_pano_at(
+                render_pano_through(
                     &p,
                     &|m| heeler_io::decode_any_with(m, opts).map_err(|e| e.to_string()),
                     PANO_FULL_MAX,
@@ -10319,9 +10444,13 @@ fn full_source(
                     &|m| emit_log(app, "warn", m.to_string()),
                     None,
                     &|| job.stopped(),
+                    &|m| stitch_lens(app, m).map(|(_, lens)| lens),
                 )
             });
             remember_stitch_outcome(&p, &members, &tier, &out);
+            if let Some(recipe) = crop_recipe {
+                note_pano_crop(image_id, &p, &recipe, &out);
+            }
             job.finish(&out);
             Arc::new(out?)
         }
@@ -13617,6 +13746,26 @@ fn lens_profile_for_in(app: &tauri::AppHandle, image_id: &str) -> Result<Option<
         }
         None => none,
     }))
+}
+
+/// A panorama member's lens as the stitcher undoes it, with the profile's
+/// name: the database profile its EXIF names, at its focal length, in
+/// its own crop (lens_profile_for's rules). None for a lens the database
+/// does not know or calibrated no distortion for, which stitches as a
+/// pinhole.
+fn stitch_lens(app: &tauri::AppHandle, path: &Path) -> Option<(String, heeler_stitch::Lens)> {
+    let head = read_head(path, EXIF_HEAD).ok()?;
+    let exif = heeler_io::read_exif(&head);
+    let name = exif.lens.filter(|n| !n.is_empty())?;
+    let hit = lens_db(app).match_lens(&name)?;
+    let focal = exif.focal_length.as_ref().filter(|r| r.den != 0 && r.num > 0).map(|r| r.num as f32 / r.den as f32);
+    let row = hit.distortion_at(focal)?;
+    let scale = match (focal, exif.focal_35) {
+        (Some(f), Some(f35)) if f > 1.0 => (hit.crop_factor / (f35 as f32 / f)).clamp(0.25, 4.0),
+        _ => 1.0,
+    };
+    let lens = heeler_stitch::Lens::Profile { model: row.model, a: row.a, b: row.b, c: row.c, scale };
+    lens.is_known().then(|| (format!("{} {}", hit.maker, hit.model), lens))
 }
 
 /// The lens correction a DNG or GPR carries for itself, upright, as the
@@ -19042,6 +19191,8 @@ async fn create_pano(
                     straighten: true,
                     bands: 4,
                     members,
+                    auto_crop: true,
+                    lens_correction: true,
                 },
             )?;
             let id = fresh_image_id(catalog, &target).map_err(|e| e.to_string())?;
@@ -21116,6 +21267,32 @@ pub struct PanoInfo {
     pub members: Vec<String>,
     /// Which members cannot currently be read.
     pub missing: Vec<String>,
+    pub lens_correction: bool,
+    /// The lens profile the members were matched to, when any was, and
+    /// how many of the members it covers; the panel says which, or that
+    /// none was found.
+    pub lens_profile: Option<String>,
+    pub lens_frames: usize,
+    pub auto_crop: bool,
+}
+
+/// A recipe as the panel reads it, with its members' lens profiles.
+fn pano_info_of(app: &tauri::AppHandle, path: &Path, manifest: PanoManifest) -> PanoInfo {
+    let folder = path.parent().unwrap_or(Path::new("."));
+    let missing = manifest.members.iter().filter(|m| !folder.join(m).exists()).cloned().collect();
+    let profiles: Vec<String> = manifest.members.iter().filter_map(|m| stitch_lens(app, &folder.join(m)).map(|(name, _)| name)).collect();
+    PanoInfo {
+        surface: manifest.surface,
+        gain_compensation: manifest.gain_compensation,
+        straighten: manifest.straighten,
+        bands: manifest.bands,
+        members: manifest.members,
+        missing,
+        lens_correction: manifest.lens_correction,
+        lens_profile: profiles.first().cloned(),
+        lens_frames: profiles.len(),
+        auto_crop: manifest.auto_crop,
+    }
 }
 
 /// What a panorama is made of, for the panel. None for anything else.
@@ -21128,17 +21305,7 @@ async fn pano_info(app: tauri::AppHandle, image_id: String) -> Result<Option<Pan
             return Ok(None);
         }
         let manifest = read_pano(&path)?;
-        let folder = path.parent().unwrap_or(Path::new("."));
-        let missing =
-            manifest.members.iter().filter(|m| !folder.join(m).exists()).cloned().collect();
-        Ok(Some(PanoInfo {
-            surface: manifest.surface,
-            gain_compensation: manifest.gain_compensation,
-            straighten: manifest.straighten,
-            bands: manifest.bands,
-            members: manifest.members,
-            missing,
-        }))
+        Ok(Some(pano_info_of(&app, &path, manifest)))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -21154,6 +21321,8 @@ async fn update_pano(
     straighten: Option<bool>,
     bands: Option<u32>,
     members: Option<Vec<String>>,
+    lens_correction: Option<bool>,
+    auto_crop: Option<bool>,
 ) -> Result<PanoInfo, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let path = with_session(&app, |s| Ok(s.paths.get(&image_id).cloned()))?
@@ -21162,6 +21331,12 @@ async fn update_pano(
             return Err("that image is not a panorama".into());
         }
         let mut manifest = read_pano(&path)?;
+        let restitch = surface.is_some()
+            || gain_compensation.is_some()
+            || straighten.is_some()
+            || bands.is_some()
+            || members.is_some()
+            || lens_correction.is_some();
         if let Some(s) = surface {
             manifest.surface = s;
         }
@@ -21174,6 +21349,12 @@ async fn update_pano(
         if let Some(b) = bands {
             manifest.bands = b.clamp(1, 6);
         }
+        if let Some(l) = lens_correction {
+            manifest.lens_correction = l;
+        }
+        if let Some(a) = auto_crop {
+            manifest.auto_crop = a;
+        }
         if let Some(m) = members {
             if m.len() < 2 {
                 return Err("a panorama needs at least two frames".into());
@@ -21182,23 +21363,17 @@ async fn update_pano(
         }
         write_pano(&path, &manifest)?;
         // Same pair as update_stack: drop the decode AND bump the recipe
-        // generation, or the executor keeps serving the old stitch.
-        with_session(&app, |s| {
-            s.invalidate_decoded(&image_id);
-            *s.recipe_gen.entry(image_id.clone()).or_insert(0) += 1;
-            Ok(())
-        })?;
-        let folder = path.parent().unwrap_or(Path::new(".")).to_path_buf();
-        let missing =
-            manifest.members.iter().filter(|m| !folder.join(m).exists()).cloned().collect();
-        Ok(PanoInfo {
-            surface: manifest.surface,
-            gain_compensation: manifest.gain_compensation,
-            straighten: manifest.straighten,
-            bands: manifest.bands,
-            members: manifest.members,
-            missing,
-        })
+        // generation, or the executor keeps serving the old stitch. The
+        // crop switch alone changes no pixel of the stitch, so it keeps
+        // the stitch it has.
+        if restitch {
+            with_session(&app, |s| {
+                s.invalidate_decoded(&image_id);
+                *s.recipe_gen.entry(image_id.clone()).or_insert(0) += 1;
+                Ok(())
+            })?;
+        }
+        Ok(pano_info_of(&app, &path, manifest))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -22761,6 +22936,7 @@ pub fn run() {
             read_doc_asset,
             pano_info,
             update_pano,
+            pano_auto_crop,
             stack_info,
             update_stack,
             stack_add_frames,
@@ -26047,7 +26223,7 @@ mod tests {
         write_stack(&stack, &StackManifest { version: 1, mode: "mean".into(), align: false, members: vec!["frames/frame.png".into()] }).unwrap();
         let pano = dir.path().join("wide.pano");
         write_pano(&pano, &PanoManifest { version: 1, surface: "cylindrical".into(), gain_compensation: true,
-            straighten: true, bands: 4, members: vec!["frames/frame.png".into()] }).unwrap();
+            straighten: true, bands: 4, members: vec!["frames/frame.png".into()], auto_crop: true, lens_correction: true }).unwrap();
         let source = Arc::new(ImageBuf::filled(64, 32, [2.0, 1.0, 0.5, 1.0]));
         let mut graph = ui_graph();
         graph.nodes[2].enabled = false;
@@ -29911,7 +30087,7 @@ mod tests {
             gain_compensation: true,
             straighten: true,
             bands: 4,
-            members: vec!["l.png".into(), "r.png".into()],
+            members: vec!["l.png".into(), "r.png".into()], auto_crop: true, lens_correction: true,
         };
         write_pano(&pano, &manifest).unwrap();
         let decode = |p: &Path| heeler_io::decode_any(p).map_err(|e| e.to_string());
@@ -29960,6 +30136,64 @@ mod tests {
         assert!(!pano_canceled_at("test-canceled-pano-a", 3), "and the old mark is dropped");
     }
 
+    /// A stitched panorama's starting crop is read off the stitch and
+    /// held for the recipe it came from: it holds no empty pixel, and the
+    /// crop switch is no part of that recipe, so turning it off and on
+    /// needs no new stitch.
+    #[test]
+    fn a_stitch_notes_the_crop_it_fills_whatever_its_crop_switch() {
+        let dir = tempfile::tempdir().unwrap();
+        let world = pano_world();
+        for (name, yaw) in [("l.png", -0.15f64), ("r.png", 0.15)] {
+            let img = pano_view(&world, yaw, 260, 200);
+            std::fs::write(dir.path().join(name), heeler_io::encode_png(&img).unwrap()).unwrap();
+        }
+        let pano = dir.path().join("PANO_crop.pano");
+        let mut manifest = PanoManifest {
+            version: 1,
+            surface: "cylindrical".into(),
+            gain_compensation: true,
+            straighten: true,
+            bands: 4,
+            members: vec!["l.png".into(), "r.png".into()],
+            lens_correction: true,
+            auto_crop: true,
+        };
+        write_pano(&pano, &manifest).unwrap();
+        let on = std::fs::read_to_string(&pano).unwrap();
+        let recipe = stitch_recipe(&on).unwrap();
+        let decode = |p: &Path| heeler_io::decode_any(p).map_err(|e| e.to_string());
+        let out = render_pano(&pano, &decode, 2000, &|_, _| {});
+        note_pano_crop("pano-crop-test", &pano, &recipe, &out);
+        let img = out.unwrap();
+        manifest.auto_crop = false;
+        write_pano(&pano, &manifest).unwrap();
+        let off = std::fs::read_to_string(&pano).unwrap();
+        assert_ne!(on, off);
+        assert_eq!(stitch_recipe(&on), stitch_recipe(&off), "the crop switch is not part of what is stitched");
+
+        let held = pano_crops().0.lock().unwrap().get("pano-crop-test").cloned().expect("the crop was noted");
+        // A later manifest on disk must not relabel the completed stitch.
+        manifest.surface = "planar".into();
+        write_pano(&pano, &manifest).unwrap();
+        let next = std::fs::read_to_string(&pano).unwrap();
+        assert_ne!(stitch_recipe(&next), stitch_recipe(&on));
+        assert_eq!(Some(held.0.clone()), stitch_recipe(&on));
+        // The next recipe's stitch fails, which answers its waiters with
+        // no crop; the older stitch finishing late, or a cancel, changes
+        // nothing.
+        let newer = stitch_recipe(&next).unwrap();
+        note_pano_crop("pano-crop-test", &pano, &newer, &Err("no overlap".into()));
+        note_pano_crop("pano-crop-test", &pano, &held.0, &Ok(img.clone()));
+        note_pano_crop("pano-crop-test", &pano, &newer, &Err(PANO_CANCELED.into()));
+        assert_eq!(pano_crops().0.lock().unwrap().get("pano-crop-test").cloned(), Some((newer, None)));
+        let r = held.1.expect("a two-frame pan has edges to crop");
+        let (x0, y0) = ((r.x * img.width as f32) as usize, (r.y * img.height as f32) as usize);
+        let (x1, y1) = (((r.x + r.w) * img.width as f32).ceil() as usize, ((r.y + r.h) * img.height as f32).ceil() as usize);
+        assert!((y0..y1.min(img.height)).all(|y| (x0..x1.min(img.width)).all(|x| img.pixel(x, y)[3] > 0.5)), "an empty pixel inside {r:?}");
+        assert!(r.w * r.h > 0.6, "the crop keeps most of the panorama: {r:?}");
+    }
+
     /// A panorama is a recipe in the folder too, and everything
     /// downstream has to treat it as an ordinary photograph.
     #[test]
@@ -29981,7 +30215,7 @@ mod tests {
                 gain_compensation: true,
                 straighten: true,
                 bands: 4,
-                members: vec!["l.png".into(), "r.png".into()],
+                members: vec!["l.png".into(), "r.png".into()], auto_crop: true, lens_correction: true,
             },
         )
         .unwrap();
@@ -30021,7 +30255,7 @@ mod tests {
                 gain_compensation: true,
                 straighten: true,
                 bands: 4,
-                members: vec!["a.png".into(), "gone.png".into()],
+                members: vec!["a.png".into(), "gone.png".into()], auto_crop: true, lens_correction: true,
             },
         )
         .unwrap();
@@ -30050,7 +30284,7 @@ mod tests {
                 gain_compensation: true,
                 straighten: true,
                 bands: 4,
-                members: vec!["l.png".into(), "r.png".into()],
+                members: vec!["l.png".into(), "r.png".into()], auto_crop: true, lens_correction: true,
             },
         )
         .unwrap();

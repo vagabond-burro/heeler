@@ -8,9 +8,10 @@
 //! pipeline: recognition first, stitching second.
 
 use crate::bundle::{
-    bundle_adjust, estimate_focals, initial_cameras, rms_error, rotate_all, straighten, Camera,
-    PairConstraint,
+    bundle_adjust, bundle_adjust_radial, estimate_focals, initial_cameras, rms_error, rms_error_radial, rotate_all,
+    straighten, Camera, PairConstraint,
 };
+use crate::lens::Lens;
 use crate::composite::{composite_with_control, CompositeOpts, Frame, Surface};
 use crate::features::detect;
 use crate::geom::Mat3;
@@ -52,6 +53,17 @@ pub struct StitchOpts {
     /// Legacy option retained for callers. The shared machine budget admits
     /// the requested canvas or refuses it without changing its resolution.
     pub memory_budget: usize,
+    /// Cut the seams between frames where they agree (CompositeOpts::seams).
+    pub seams: bool,
+    /// Each input's lens, by the input's index, from the lens database
+    /// where it knows the lens; a missing entry or None is a pinhole, as
+    /// every frame used to be. Undone before features are matched and
+    /// again as the frame is painted (the lens module).
+    pub lenses: Vec<Option<Lens>>,
+    /// For frames none of which has a lens in `lenses`: fit one radial
+    /// term shared by all of them in the solve (bundle_adjust_radial),
+    /// kept only where it improves the fit.
+    pub fit_lens: bool,
 }
 
 impl Default for StitchOpts {
@@ -63,6 +75,9 @@ impl Default for StitchOpts {
             bands: 4,
             straighten: true,
             memory_budget: 2 << 30,
+            seams: true,
+            lenses: Vec::new(),
+            fit_lens: false,
         }
     }
 }
@@ -76,6 +91,9 @@ pub struct Stitched {
     /// Root mean square reprojection error, in pixels. How well the
     /// cameras actually agree.
     pub rms: f64,
+    /// The radial term the solve fitted (StitchOpts::fit_lens), when it
+    /// fitted one and kept it.
+    pub radial: Option<f64>,
 }
 
 /// Why a stitch produced nothing.
@@ -194,7 +212,18 @@ pub fn stitch_with_control(
             None => Gray::from_image(img),
         };
         reg.push((gray.width, gray.height));
-        features.push(detect(&gray, FEATURE_LIMIT));
+        let mut found = detect(&gray, FEATURE_LIMIT);
+        // Where a pinhole would have seen each point: the homographies,
+        // the solve and the composite all assume one.
+        if let Some(lens) = lens_of(opts, images, i) {
+            let (w, h) = (gray.width, gray.height);
+            for f in found.iter_mut() {
+                let (x, y) = lens.undistort(f.kp.x as f64 - w as f64 * 0.5, f.kp.y as f64 - h as f64 * 0.5, w, h);
+                f.kp.x = (x + w as f64 * 0.5) as f32;
+                f.kp.y = (y + h as f64 * 0.5) as f32;
+            }
+        }
+        features.push(found);
     }
 
     // Every pair, both to decide what belongs together and to collect the
@@ -277,7 +306,16 @@ pub fn stitch_with_control(
     let focals = estimate_focals(&constraints, &dims);
     let cams = initial_cameras(used.len(), &constraints, &focals);
     let mut cams = bundle_adjust(&cams, &constraints);
-    let rms = rms_error(&cams, &constraints);
+    let mut rms = rms_error(&cams, &constraints);
+    // A lens nobody described: one shared radial term, if it earns it.
+    let mut radial = None;
+    if opts.fit_lens && used.iter().all(|&g| lens_of(opts, images, g).is_none()) {
+        if let Some((fitted, k)) = bundle_adjust_radial(&cams, &constraints, &dims) {
+            rms = rms_error_radial(&fitted, &constraints, k, &dims);
+            cams = fitted;
+            radial = Some(k);
+        }
+    }
     if opts.straighten {
         let level = straighten(&cams);
         cams = rotate_all(&cams, &level);
@@ -289,7 +327,10 @@ pub fn stitch_with_control(
     let frames: Vec<Frame> = used
         .iter()
         .zip(&cams)
-        .map(|(&idx, cam)| frame_at_full_size(images[idx], cam, reg[idx]))
+        .map(|(&idx, cam)| {
+            let lens = radial.map(|k| Lens::Radial { k }).or_else(|| lens_of(opts, images, idx).cloned());
+            Frame { lens, ..frame_at_full_size(images[idx], cam, reg[idx]) }
+        })
         .collect();
     if stop() {
         return Err(StitchError::Canceled);
@@ -302,6 +343,7 @@ pub fn stitch_with_control(
             gain_compensation: opts.gain_compensation,
             bands: opts.bands,
             memory_budget: opts.memory_budget,
+            seams: opts.seams,
         },
         &|f, stage| on_progress(P_SOLVE + (1.0 - P_SOLVE) * f, stage),
         stop,
@@ -313,7 +355,7 @@ pub fn stitch_with_control(
     let image = image.ok_or(StitchError::NothingToDraw)?;
     on_progress(1.0, "Done");
 
-    Ok(Stitched { image, used, rms })
+    Ok(Stitched { image, used, rms, radial })
 }
 
 /// A frame solved at its registration size `reg`, back in its own
@@ -322,7 +364,14 @@ pub fn stitch_with_control(
 pub(crate) fn frame_at_full_size<'a>(image: &'a ImageBuf, cam: &Camera, reg: (usize, usize)) -> Frame<'a> {
     let sx = image.width as f64 / reg.0 as f64;
     let sy = image.height as f64 / reg.1 as f64;
-    Frame { image, camera: Camera { f: cam.f * sx, r: cam.r }, aspect: sy / sx }
+    Frame { image, camera: Camera { f: cam.f * sx, r: cam.r }, aspect: sy / sx, lens: None }
+}
+
+/// Input `i`'s lens, when the caller described one the composite can use
+/// on that frame.
+fn lens_of<'a>(opts: &'a StitchOpts, images: &[&ImageBuf], i: usize) -> Option<&'a Lens> {
+    let img = images.get(i)?;
+    opts.lenses.get(i).and_then(Option::as_ref).filter(|l| l.holds_over(img.width, img.height))
 }
 
 /// The long edge a frame is registered at, or None when the frame is
@@ -416,14 +465,20 @@ mod tests {
     /// A perspective view of that world, so two frames are genuine views
     /// of the same scene rather than crops of one picture.
     fn view_of(tex: &Gray, cam: &Camera, w: usize, h: usize) -> ImageBuf {
+        view_through(tex, cam, w, h, None)
+    }
+
+    /// The same view through a lens that bends it: each pixel shows what
+    /// a pinhole would have seen where the lens undoes it to.
+    fn view_through(tex: &Gray, cam: &Camera, w: usize, h: usize, lens: Option<&Lens>) -> ImageBuf {
         let mut img = ImageBuf::new(w, h);
         for y in 0..h {
             for x in 0..w {
-                let d = [
-                    (x as f64 - w as f64 * 0.5) / cam.f,
-                    (y as f64 - h as f64 * 0.5) / cam.f,
-                    1.0,
-                ];
+                let (mut dx, mut dy) = (x as f64 - w as f64 * 0.5, y as f64 - h as f64 * 0.5);
+                if let Some(lens) = lens {
+                    (dx, dy) = lens.undistort(dx, dy, w, h);
+                }
+                let d = [dx / cam.f, dy / cam.f, 1.0];
                 let world = cam.r.transpose().mul_vec(d);
                 let len =
                     (world[0] * world[0] + world[1] * world[1] + world[2] * world[2]).sqrt();
@@ -632,6 +687,73 @@ mod tests {
         assert!((f.camera.f * f.aspect - 600.0 * 6000.0 / 2048.0).abs() < 1e-9);
         let square = ImageBuf::new(400, 300);
         assert_eq!(frame_at_full_size(&square, &cam(600.0, [0.0; 3]), (400, 300)).aspect, 1.0);
+    }
+
+    /// A wide-angle pan through a barrel lens, with the database's
+    /// profile for it and without. Solved as pinholes the frames agree
+    /// in the middle and drift apart toward their edges, where they
+    /// overlap; with the profile undone first they agree throughout. A
+    /// lens with no profile can still be fitted with one shared radial
+    /// term, and frames with no lens to describe stitch exactly as they
+    /// did.
+    #[test]
+    fn a_wide_pan_aligns_at_its_edges_once_the_lens_is_undone() {
+        let tex = world_texture();
+        // A 16mm-class barrel: about a fifth of a pixel at half the short
+        // side, some tens of pixels at the corners of these frames.
+        let barrel = Lens::Profile { model: "poly3".into(), a: -0.04, b: 0.0, c: 0.0, scale: 1.0 };
+        let cams: Vec<Camera> = [-0.5, 0.0, 0.5].iter().map(|&y| cam(190.0, [0.0, y, 0.0])).collect();
+        let imgs: Vec<ImageBuf> = cams.iter().map(|c| view_through(&tex, c, 300, 220, Some(&barrel))).collect();
+        let refs: Vec<&ImageBuf> = imgs.iter().collect();
+
+        let pinhole = stitch(&refs, &StitchOpts::default()).expect("the pan stitches as pinholes");
+        let profiled = stitch(&refs, &StitchOpts { lenses: vec![Some(barrel.clone()); 3], ..StitchOpts::default() }).expect("and with its profile");
+        let fitted = stitch(&refs, &StitchOpts { fit_lens: true, ..StitchOpts::default() }).expect("and with a fitted term");
+        println!("lens residuals: pinhole {:.3} px, profile {:.3} px, fitted {:.3} px (k {:?})", pinhole.rms, profiled.rms, fitted.rms, fitted.radial);
+        assert_eq!(profiled.used, vec![0, 1, 2]);
+        assert!(profiled.rms < pinhole.rms * 0.5, "the profile should halve the error at least: {} against {}", profiled.rms, pinhole.rms);
+        assert!(profiled.rms < 0.6, "profiled frames agree to {} pixels", profiled.rms);
+        assert!(profiled.radial.is_none(), "a profiled pan fits no term of its own");
+        let k = fitted.radial.expect("a barrel this strong earns a fitted term");
+        assert!(k > 0.0, "undoing barrel pushes the corners out: k {k}");
+        assert!(fitted.rms < pinhole.rms * 0.7, "the fitted term helps: {} against {}", fitted.rms, pinhole.rms);
+
+        // No lens to undo: the same picture as before, whatever is asked.
+        let plain: Vec<ImageBuf> = cams.iter().map(|c| view_of(&tex, c, 300, 220)).collect();
+        let plain: Vec<&ImageBuf> = plain.iter().collect();
+        let today = stitch(&plain, &StitchOpts::default()).unwrap();
+        let unknown = stitch(&plain, &StitchOpts { lenses: vec![None; 3], ..StitchOpts::default() }).unwrap();
+        assert_eq!(unknown.image.data, today.image.data, "frames with no profile stitch as they did");
+        let undistorted = stitch(&plain, &StitchOpts { fit_lens: true, ..StitchOpts::default() }).unwrap();
+        assert!(undistorted.radial.is_none_or(|k| k.abs() < 0.01), "a pinhole pan fits no lens: {:?}", undistorted.radial);
+    }
+
+    /// A hand-held pan, every frame a little higher or lower and rolled
+    /// a little, stitched through the whole pipeline: its ragged edges
+    /// crop to a rectangle with no empty pixel in it that still holds
+    /// most of the panorama.
+    #[test]
+    fn a_hand_held_pan_crops_to_a_rectangle_it_fills() {
+        let tex = world_texture();
+        let cams: Vec<Camera> = [(-0.45, 0.04, 0.03), (-0.15, -0.05, -0.02), (0.15, 0.03, 0.04), (0.45, -0.04, -0.03)]
+            .iter()
+            .map(|&(yaw, pitch, roll)| cam(320.0, [pitch, yaw, roll]))
+            .collect();
+        let imgs: Vec<ImageBuf> = cams.iter().map(|c| view_of(&tex, c, 260, 200)).collect();
+        let out = stitch(&imgs.iter().collect::<Vec<_>>(), &StitchOpts::default()).expect("a panorama");
+        assert_eq!(out.used, vec![0, 1, 2, 3]);
+        let img = &out.image;
+        let empty = (0..img.width * img.height).filter(|&p| img.data[p * 4 + 3] < 0.5).count();
+        assert!(empty > 0, "the fixture needs ragged edges to crop");
+        let r = crate::crop::auto_crop(img).expect("a crop");
+        let (x0, y0) = ((r.x * img.width as f32) as usize, (r.y * img.height as f32) as usize);
+        let (x1, y1) = (((r.x + r.w) * img.width as f32).ceil() as usize, ((r.y + r.h) * img.height as f32).ceil() as usize);
+        for y in y0..y1.min(img.height) {
+            for x in x0..x1.min(img.width) {
+                assert!(img.pixel(x, y)[3] > 0.5, "an empty pixel at ({x}, {y}) inside {r:?}");
+            }
+        }
+        assert!(r.w > 0.8 && r.h > 0.6, "the crop keeps most of the panorama: {r:?}");
     }
 
     /// The other half of automatic: a photograph that belongs to nothing
