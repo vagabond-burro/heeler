@@ -416,25 +416,28 @@ describe("the grid warp tool", () => {
     expect(latest.tool).toBe("none");
   });
 
-  it("the lines take the opposite of the photograph, and the sliders take over from that", () => {
+  it("the lines take the opposite of the photograph on Auto, and a picked color takes over from that", () => {
     // A warm, bright photograph gets dark, cool lines; a dark gray one
     // gets light gray lines, no color cast.
     expect(autoLineColor({ r: 0.9, g: 0.6, b: 0.3 })).toEqual({ hue: 210, luma: 12, sat: 0.75 });
     expect(autoLineColor({ r: 0.2, g: 0.2, b: 0.22 })).toMatchObject({ luma: 92, sat: 0 });
     expect(autoLineColor(null)).toEqual({ hue: 0, luma: 92, sat: 0 });
     const auto = { hue: 210, luma: 12, sat: 0 };
-    expect(resolveLineColor({ hue: 120, luma: null }, auto)).toEqual({ hue: 120, luma: 12, sat: 0.75 });
-    expect(resolveLineColor({ hue: null, luma: 50 }, auto)).toEqual({ hue: 210, luma: 50, sat: 0 });
-    // The panel: a slider write lands in the shared line color, Auto
-    // clears it, and the grid takes it.
+    expect(resolveLineColor({ color: null }, auto)).toEqual(auto);
+    expect(resolveLineColor({ color: "#ff0000" }, auto)).toEqual({ hue: 0, luma: 50, sat: 1 });
+    expect(resolveLineColor({ color: "#ffffff" }, auto)).toEqual({ hue: 0, luma: 100, sat: 0 });
+    // The panel: a picked color lands in the shared line color, and
+    // there is no Auto beside it.
     render(<Harness start={armed()} controls />);
-    expect(screen.getByTestId("gridwarp-line-auto")).toHaveAttribute("data-active", "true");
-    let s = reduce(armed(), { type: "set_line_color", hue: 400, luma: 130 });
-    expect(s.lineColor).toEqual({ hue: 40, luma: 100 });
-    s = reduce(s, { type: "set_line_color", hue: null });
-    expect(s.lineColor).toEqual({ hue: null, luma: 100 });
-    fireEvent.click(screen.getByTestId("gridwarp-line-auto"));
-    expect(latest.lineColor).toEqual({ hue: null, luma: null });
+    expect(screen.queryByTestId("gridwarp-line-auto")).toBeNull();
+    expect(screen.getByTestId("gridwarp-line-color-field")).toHaveAttribute("data-value", "#ffffff");
+    let s = reduce(armed(), { type: "set_line_color", color: "#ABCDEF" });
+    expect(s.lineColor).toEqual({ color: "#abcdef" });
+    s = reduce(s, { type: "set_line_color", color: "nope" });
+    expect(s.lineColor).toEqual({ color: null });
+    fireEvent.click(screen.getByTestId("gridwarp-line-color-field"));
+    fireEvent.click(screen.getByTestId("gridwarp-line-color-field-swatch-000000"));
+    expect(latest.lineColor).toEqual({ color: "#000000" });
   });
 
   it("the heat map's colors: luma from white to black, chroma from red to blue", () => {

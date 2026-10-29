@@ -12,15 +12,50 @@ export interface LineColor {
   sat: number;
 }
 
-/** The lines' color: the user's hue and luma where set, the automatic
- * opposite of the photograph where not. A hue set by hand is shown as
- * a color even on a gray photograph. */
+/** The lines' color: the picked or preferred color where there is
+ * one, the automatic opposite of the photograph where not. */
 export function resolveLineColor(ui: LineColorUi, auto: LineColor): LineColor {
-  return {
-    hue: ui.hue ?? auto.hue,
-    luma: ui.luma ?? auto.luma,
-    sat: ui.hue !== null ? 0.75 : auto.sat,
-  };
+  return ui.color ? hexToLineColor(ui.color) : auto;
+}
+
+/** #rrggbb as the hue (degrees), luma (HSL lightness, percent) and
+ * saturation (0..1) every overlay draws with (lineColorCss). */
+export function hexToLineColor(hex: string): LineColor {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  const n = m ? parseInt(m[1], 16) : 0xffffff;
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  const l = (max + min) / 2;
+  let h = 0;
+  if (d > 1e-6) {
+    if (max === r) h = 60 * (((g - b) / d) % 6);
+    else if (max === g) h = 60 * ((b - r) / d + 2);
+    else h = 60 * ((r - g) / d + 4);
+  }
+  const sat = d < 1e-6 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  return { hue: (h + 360) % 360, luma: l * 100, sat: Math.min(1, sat) };
+}
+
+/** A line color back to #rrggbb, for the picker to open on the color
+ * in use when that is the automatic one. */
+export function lineColorToHex(c: LineColor): string {
+  const l = c.luma / 100;
+  const k = (1 - Math.abs(2 * l - 1)) * c.sat;
+  const x = k * (1 - Math.abs(((c.hue / 60) % 2) - 1));
+  const m = l - k / 2;
+  const h = c.hue;
+  const t: [number, number, number] =
+    h < 60 ? [k, x, 0]
+    : h < 120 ? [x, k, 0]
+    : h < 180 ? [0, k, x]
+    : h < 240 ? [0, x, k]
+    : h < 300 ? [x, 0, k]
+    : [k, 0, x];
+  return `#${t.map((u) => Math.round(Math.min(1, Math.max(0, u + m)) * 255).toString(16).padStart(2, "0")).join("")}`;
 }
 
 /** The photograph's automatic line color, from the frame on screen.
@@ -127,8 +162,8 @@ export function patchAverage(
 
 /** The line color over one spot rather than over the whole photograph:
  * the same automatic opposite the shape outlines use (autoLineColor),
- * of the patch the mark sits on, and the user's own hue and luma where
- * set, since one LINES setting serves every overlay. */
+ * of the patch the mark sits on, and the color picked in a LINES row
+ * where there is one, since one LINES setting serves every overlay. */
 export function lineColorOver(
   ui: LineColorUi,
   avg: { r: number; g: number; b: number } | null,

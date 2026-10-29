@@ -62,6 +62,7 @@ import { watchOp } from "./opprogressparts";
 import { ModelConsentCard } from "./modelconsent";
 import { AssistantSettings } from "./assistantprefs";
 import { MenuField } from "./menufield";
+import { ColorField } from "./colorfield";
 import { PROFILE_CHOICES, SHARPENING_CHOICES, fitOf } from "./sourcemenusparts";
 import { CATEGORIES, type Category, SETTINGS } from "./preferencesparts";
 
@@ -1220,6 +1221,38 @@ function SettingsCategory({
                 step={1}
                 onChange={(value) => setPref({ shapeLineWidth: clampShapeLineWidth(value) })}
               />
+            }
+          />
+          <SettingBlock
+            id="line-color"
+            landing={landing}
+            control={
+              <div>
+                <ColorField
+                  value={state.prefs.lineColor ?? DEFAULT_PREFS.lineColor}
+                  onChange={(color) => setPref({ lineColor: color })}
+                  label="Line color"
+                  testid="prefs-line-color"
+                  hint="The color the lines over the photograph start in"
+                />
+              </div>
+            }
+          />
+          <SettingBlock
+            id="line-color-auto"
+            landing={landing}
+            control={
+              <div
+                className="toggle"
+                data-on={state.prefs.lineColorAuto ?? false}
+                role="switch"
+                aria-checked={state.prefs.lineColorAuto ?? false}
+                data-testid="prefs-line-color-auto"
+                data-hint={state.prefs.lineColorAuto ? "Lines take the opposite of the photograph's average" : "Lines take the line color"}
+                onClick={() => setPref({ lineColorAuto: !(state.prefs.lineColorAuto ?? false) })}
+              >
+                <div className="dot" />
+              </div>
             }
           />
           <SettingBlock

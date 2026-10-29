@@ -1,28 +1,36 @@
 // The color of the lines drawn over the photograph: Grid Warp's grid, Shape
-// Warp's rings, the Radial and Linear layers' gizmos, the crop tool's box. Automatic is the
-// opposite of the photograph's own average ("the white grid
-// lines are hard to see in my current image"); the Hue and Luma sliders take
-// over from it, and Auto hands it back. One setting for every overlay, so a
+// Warp's rings, the Radial and Linear layers' gizmos, the crop tool's box.
+// One color picker sets it ("only have a color picker that the user selects
+// color from"), white until it does. One setting for every overlay, so a
 // color chosen for one tool is there for the next (2026-09-07: "the same
-// LINE color feature", for Shape Warp and the Radial layer).
+// LINE color feature", for Shape Warp and the Radial layer). The automatic
+// opposite of the photograph is a preference, off by default (2026-10-29:
+// the dark lines it chose over bright photographs too often did not show).
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Command, LineColorUi, State } from "../state";
 import { SHAPE_LINE_WIDTH_RANGE, photoLineWidth, shapeLineWidth } from "../state";
-import { lineColorCss } from "../gridwarp";
 import { clampMenu, viewportSize, type MenuBox } from "./menupos";
 import { TrackSlider, ValueField } from "./track";
-import { resolveLineColor, useAutoLineColor } from "./linecolorparts";
+import { lineColorToHex, resolveLineColor, useAutoLineColor } from "./linecolorparts";
 import { ResetIcon } from "./panelicons";
+import { ColorField, ColorPicker } from "./colorfield";
 
 type D = (cmd: Command) => void;
 
 const chipStyle: React.CSSProperties = { fontSize: 11, height: 18, boxSizing: "border-box", padding: "0 7px", display: "inline-flex", alignItems: "center", gap: 4 };
 
-/** The LINES row: Hue and Luma sliders, the swatch, and Auto. The
- * `prefix` keeps each section's test ids apart; `subject` names what
- * the lines are in the hints ("grid lines", "shape outlines"). */
+/** The color in use, as hex: the picked or preferred one, or the
+ * automatic one where Preferences asks for it. */
+function useLineHex(lineColor: LineColorUi, previewUrl: string | null): string {
+  const auto = useAutoLineColor(previewUrl);
+  return lineColor.color ?? lineColorToHex(resolveLineColor(lineColor, auto));
+}
+
+/** The LINES row: a swatch that opens the color picker. The `prefix`
+ * keeps each section's test ids apart; `subject` names what the lines
+ * are in the hint ("grid lines", "shape outlines"). */
 export function LinesRow({
   lineColor,
   dispatch,
@@ -36,77 +44,26 @@ export function LinesRow({
   prefix: string;
   subject: string;
 }) {
-  const auto = useAutoLineColor(previewUrl);
-  const line = resolveLineColor(lineColor, auto);
-  const isAuto = lineColor.hue === null && lineColor.luma === null;
+  const hex = useLineHex(lineColor, previewUrl);
   return (
-    <div data-testid={`${prefix}-lines`} style={{ display: "flex", gap: 6, alignItems: "flex-start", marginTop: 5, flexWrap: "wrap" }}>
-      <span style={{ fontSize: 11, color: "var(--text-ghost)", letterSpacing: ".08em", minWidth: 62, paddingTop: 4 }}>LINES</span>
-      <div style={{ flex: 1, minWidth: 140 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 11, color: "var(--text-ghost)", width: 28 }}>Hue</span>
-          <div style={{ flex: 1 }}>
-            <TrackSlider
-              label="Line hue"
-              value={line.hue}
-              lo={0}
-              hi={360}
-              step={1}
-              testid={`${prefix}-line-hue`}
-              hint={`Hue of the ${subject}, and of every tool's lines over the photograph. Automatic is the opposite of the photograph's average`}
-              onChange={(v) => dispatch({ type: "set_line_color", hue: v })}
-            />
-          </div>
-          <span className="tnum" data-testid={`${prefix}-line-hue-value`} style={{ fontSize: 11, width: 28, textAlign: "right" }}>
-            {Math.round(line.hue)}
-          </span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
-          <span style={{ fontSize: 11, color: "var(--text-ghost)", width: 28 }}>Luma</span>
-          <div style={{ flex: 1 }}>
-            <TrackSlider
-              label="Line luma"
-              value={line.luma}
-              lo={0}
-              hi={100}
-              step={1}
-              testid={`${prefix}-line-luma`}
-              hint={`Brightness of the ${subject}, and of every tool's lines over the photograph. Automatic is dark on a light photograph, light on a dark one`}
-              onChange={(v) => dispatch({ type: "set_line_color", luma: v })}
-            />
-          </div>
-          <span className="tnum" data-testid={`${prefix}-line-luma-value`} style={{ fontSize: 11, width: 28, textAlign: "right" }}>
-            {Math.round(line.luma)}
-          </span>
-        </div>
-      </div>
-      <span
-        data-testid={`${prefix}-line-swatch`}
-        data-hint={`The color the ${subject} are drawn in`}
-        style={{ width: 14, height: 14, marginTop: 3, borderRadius: 2, background: lineColorCss(line.hue, line.luma, line.sat, 1), boxShadow: "0 0 0 1px rgba(0,0,0,.5)" }}
+    <div data-testid={`${prefix}-lines`} style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 5 }}>
+      <span style={{ fontSize: 11, color: "var(--text-ghost)", letterSpacing: ".08em", minWidth: 62 }}>LINES</span>
+      <ColorField
+        value={hex}
+        onChange={(color) => dispatch({ type: "set_line_color", color })}
+        label="Line color"
+        testid={`${prefix}-line-color-field`}
+        hint={`The color the ${subject} are drawn in, and every tool's lines over the photograph; Preferences sets the color they start in`}
       />
-      <button
-        className="chip"
-        data-testid={`${prefix}-line-auto`}
-        data-active={isAuto}
-        data-hint="Back to the automatic color: the opposite of the photograph's own average"
-        onClick={() => dispatch({ type: "set_line_color", hue: null, luma: null })}
-        style={chipStyle}
-      >
-        Auto
-      </button>
     </div>
   );
 }
 
 const POPOVER_ZOOM = 1.25;
 
-/** The swatch popover's insides: Hue, Luma and Thickness on one grid,
- * their names, tracks and numbers in shared columns so the three line
- * up ("The sliders are all different widths and heights. They should
- * be aligned"), with LINES, Auto and the thickness's reset stacked to
- * their left. The same settings LinesRow and LineWidthRow write, and
- * the same test ids. */
+/** The swatch popover's insides: the color picker, and Thickness under
+ * it with its reset, the names in one column so the two line up. The
+ * same settings LinesRow and LineWidthRow write, and the same test ids. */
 function LinesPanel({
   state,
   lineColor,
@@ -122,61 +79,27 @@ function LinesPanel({
   prefix: string;
   subject: string;
 }) {
-  const line = resolveLineColor(lineColor, useAutoLineColor(previewUrl));
-  const isAuto = lineColor.hue === null && lineColor.luma === null;
+  const hex = useLineHex(lineColor, previewUrl);
   const width = shapeLineWidth(state);
   const own = photoLineWidth(state) > 0;
   const widthHint = `How thick the ${subject} draw on this photograph, in pixels; the preference sets it for every photograph`;
   const name: React.CSSProperties = { fontSize: 11, color: "var(--text-ghost)" };
-  const number: React.CSSProperties = { fontSize: 11, textAlign: "right" };
-  const left: React.CSSProperties = { gridColumn: 1, justifySelf: "start" };
   return (
     <div
       data-testid={`${prefix}-lines`}
-      style={{ display: "grid", gridTemplateColumns: "56px 58px minmax(80px, 1fr) 30px 14px", columnGap: 6, rowGap: 6, alignItems: "center", marginTop: 5 }}
+      style={{ display: "grid", gridTemplateColumns: "58px minmax(80px, 1fr) 30px 22px", columnGap: 6, rowGap: 8, alignItems: "center", marginTop: 5 }}
     >
-      <span style={{ ...left, ...name, letterSpacing: ".08em" }}>LINES</span>
-      <span style={{ ...name, gridColumn: 2 }}>Hue</span>
-      <div className="strack-flex">
-        <TrackSlider
-          label="Line hue"
-          value={line.hue}
-          lo={0}
-          hi={360}
-          step={1}
-          testid={`${prefix}-line-hue`}
-          hint={`Hue of the ${subject}, and of every tool's lines over the photograph. Automatic is the opposite of the photograph's average`}
-          onChange={(v) => dispatch({ type: "set_line_color", hue: v })}
+      <span style={{ ...name, alignSelf: "start", paddingTop: 2 }}>Color</span>
+      <div style={{ gridColumn: "2 / 5" }}>
+        <ColorPicker
+          value={hex}
+          onChange={(color) => dispatch({ type: "set_line_color", color })}
+          label="Line color"
+          testid={`${prefix}-line-color-field`}
         />
       </div>
-      <span className="tnum" data-testid={`${prefix}-line-hue-value`} style={number}>
-        {Math.round(line.hue)}
-      </span>
-      <span
-        data-testid={`${prefix}-line-swatch`}
-        data-hint={`The color the ${subject} are drawn in`}
-        style={{ width: 14, height: 14, borderRadius: 2, background: lineColorCss(line.hue, line.luma, line.sat, 1), boxShadow: "0 0 0 1px rgba(0,0,0,.5)" }}
-      />
 
-      <span style={{ ...name, gridColumn: 2 }}>Luma</span>
-      <div className="strack-flex">
-        <TrackSlider
-          label="Line luma"
-          value={line.luma}
-          lo={0}
-          hi={100}
-          step={1}
-          testid={`${prefix}-line-luma`}
-          hint={`Brightness of the ${subject}, and of every tool's lines over the photograph. Automatic is dark on a light photograph, light on a dark one`}
-          onChange={(v) => dispatch({ type: "set_line_color", luma: v })}
-        />
-      </div>
-      <span className="tnum" data-testid={`${prefix}-line-luma-value`} style={number}>
-        {Math.round(line.luma)}
-      </span>
-      <span />
-
-      <span data-testid={`${prefix}-line-width-row`} style={{ ...name, gridColumn: 2 }}>Thickness</span>
+      <span data-testid={`${prefix}-line-width-row`} style={name}>Thickness</span>
       <div className="strack-flex">
         <TrackSlider
           label="Line thickness"
@@ -189,7 +112,7 @@ function LinesPanel({
           onChange={(v) => dispatch({ type: "set_photo_line_width", width: v })}
         />
       </div>
-      <span style={number}>
+      <span style={{ fontSize: 11, textAlign: "right" }}>
         <ValueField
           param="Line thickness"
           value={width}
@@ -202,19 +125,6 @@ function LinesPanel({
           onCommit={(v) => dispatch({ type: "set_photo_line_width", width: v })}
         />
       </span>
-      <span />
-      {/* Last in the source so Tab runs Hue, Luma, Thickness, then these;
-          placed in the first column by row. */}
-      <button
-        className="chip"
-        data-testid={`${prefix}-line-auto`}
-        data-active={isAuto}
-        data-hint="Back to the automatic color: the opposite of the photograph's own average"
-        onClick={() => dispatch({ type: "set_line_color", hue: null, luma: null })}
-        style={{ ...chipStyle, ...left, gridRow: 2 }}
-      >
-        Auto
-      </button>
       <button
         className="chip"
         data-testid={`${prefix}-line-width-pref`}
@@ -222,7 +132,7 @@ function LinesPanel({
         aria-label="Reset line thickness"
         data-hint={own ? "Reset line thickness: back to the Preferences setting" : "Reset line thickness: already the Preferences setting"}
         onClick={() => dispatch({ type: "set_photo_line_width", width: 0 })}
-        style={{ ...chipStyle, ...left, gridRow: 3, padding: "0 5px" }}
+        style={{ ...chipStyle, padding: "0 4px" }}
       >
         <ResetIcon />
       </button>
@@ -232,16 +142,17 @@ function LinesPanel({
 
 /** The line color as one swatch, for a toolbar with no room for the
  * LINES row (the crop bar): it shows the color in use and opens the
- * LINES row in a popover under it. The same one setting, so a color
+ * color picker in a popover under it. The same one setting, so a color
  * picked here is Grid Warp's and every other overlay's. A press outside
  * closes it, and so does Escape, handing focus back to the swatch.
  *
  * The popover sits on the page itself, not in the bar: the floating
  * bar is narrower than the stage on a small window and would cut it
  * off. Placed under the swatch, its right edge on the swatch's, and
- * kept inside the window (menupos.ts); opening it takes focus to Hue.
+ * kept inside the window (menupos.ts); opening it takes focus to the
+ * picker.
  * `name` heads the hint ("Crop line color"); `prefix` and `subject` go
- * to the LINES row, and to the THICKNESS row under it. Its rows draw a
+ * to the color picker, and to the Thickness row under it. Its rows draw a
  * quarter larger than a section's ("The font size of the line
  * properties is too small, scale by 1.25x"). */
 export function LineColorSwatch({
@@ -312,11 +223,10 @@ export function LineColorSwatch({
     return () => window.removeEventListener("resize", place);
   }, [open]);
   useEffect(() => {
-    if (open && at) panelRef.current?.querySelector<HTMLElement>("[role=slider]")?.focus();
+    if (open && at) panelRef.current?.querySelector<HTMLElement>("input, [role=slider]")?.focus();
   }, [open, at !== null]);
-  const line = resolveLineColor(lineColor, useAutoLineColor(previewUrl));
-  const isAuto = lineColor.hue === null && lineColor.luma === null;
-  const label = isAuto ? `${name}: Auto` : `${name}: hue ${Math.round(line.hue)}, luma ${Math.round(line.luma)}`;
+  const hex = useLineHex(lineColor, previewUrl);
+  const label = `${name}: ${hex}`;
   const panel = (
     <div
       ref={panelRef}
@@ -355,7 +265,7 @@ export function LineColorSwatch({
       >
         <span
           data-testid={`${prefix}-line-color-chip`}
-          style={{ width: 12, height: 12, borderRadius: 2, background: lineColorCss(line.hue, line.luma, line.sat, 1), boxShadow: "0 0 0 1px rgba(0,0,0,.5)" }}
+          style={{ width: 12, height: 12, borderRadius: 2, background: hex, boxShadow: "0 0 0 1px rgba(0,0,0,.5)" }}
         />
       </button>
       {open && (typeof document !== "undefined" && document.body ? createPortal(panel, document.body) : panel)}

@@ -488,7 +488,7 @@ describe("the rig's thickness", () => {
  * scene". The rig's handles wear the shared LINES color.*/
 it("the rig's handles take the LINES color, and the section offers the LINES row while the rig is up", () => {
   const s0 = initialState();
-  const s = reduce(reduce(s0, { type: "toggle_keylight_pick" }), { type: "set_line_color", hue: 120, luma: 50 });
+  const s = reduce(reduce(s0, { type: "toggle_keylight_pick" }), { type: "set_line_color", color: "#20df20" });
   const node = s.nodes.find((n) => n.id === "keylight")!;
   render(<KeyLightGizmo state={s} dispatch={() => {}} node={node} norm={() => [0.5, 0.5]} />);
   // hsla(120, 75%, 50%) as jsdom resolves it: the LINES green.

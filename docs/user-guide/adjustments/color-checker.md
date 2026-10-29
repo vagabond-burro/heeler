@@ -53,8 +53,8 @@ the overlay draws, so what you see is what the fit reads.
 
 The grid, the circles and the corner handles draw in the shared line
 color and thickness, the same settings Shape Warp's outlines use. The
-**LINES** row picks a hue and brightness or leaves them automatic (the
-opposite of the photograph's own average), and **THICKNESS** overrides
+**LINES** swatch opens a color picker (white until you pick another;
+**Line color** in Preferences sets the starting color), and **THICKNESS** overrides
 the preference for this photograph alone. One setting serves every
 tool, so a color chosen here is there for the warps, and vice versa.
 

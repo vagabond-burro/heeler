@@ -14,7 +14,7 @@
 import { isPrimaryPress } from "./pointerguard";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { NodeCard, State } from "../state";
-import { shapeLineWidth, warpNodeFor, RADIAL_SHAPES, SHAPE_AMOUNT_LABEL, type WarpTarget } from "../state";
+import { lineSetting, shapeLineWidth, warpNodeFor, RADIAL_SHAPES, SHAPE_AMOUNT_LABEL, type WarpTarget } from "../state";
 import { radialFromFrame, radialToFrame, warpSpaceOf, type WarpSpace } from "../warpspace";
 import { rootDispatch } from "../rootdispatch";
 import { publishShapeGestureEcho, useShapeGestureEcho, useShapeWarpLive } from "../gridwarplive";
@@ -236,7 +236,7 @@ export function ShapeWarpOverlay({
   useWarpPreview({ current, activeLive, previewUrl, live, onLive, context: `${state.activeImage}|${state.tool}|${ui.selected}|${ui.mode}` });
 
   // The rings take the same color as every tool's lines (linecolor.tsx).
-  const line = resolveLineColor(state.lineColor, useAutoLineColor(previewUrl));
+  const line = resolveLineColor(lineSetting(state), useAutoLineColor(previewUrl));
   const lineCss = lineColorCss(line.hue, line.luma, line.sat, 0.9);
   // And the same thickness: the photograph's own, or the preference.
   const lw = shapeLineWidth(state);
@@ -958,7 +958,7 @@ feathering"), so the section says it outright.*/}
         <TurnWheel key={`turn:${state.activeImage}:${state.tool}:${ui.selected}:${ui.mode}`} drag={drag} echo={echo ? echo.angle : null} disabled={!selected || holding || (target !== null && !armed)} />
         <PinchPad key={`pinch:${state.activeImage}:${state.tool}:${ui.selected}:${ui.mode}`} drag={drag} echo={echo ? [echo.scale, echo.scaleY] : null} disabled={!selected || holding || (target !== null && !armed)} />
       </div>
-      {lines && <LinesRow lineColor={state.lineColor} dispatch={dispatch} previewUrl={frame} prefix="shapewarp" subject="shape rings" />}
+      {lines && <LinesRow lineColor={lineSetting(state)} dispatch={dispatch} previewUrl={frame} prefix="shapewarp" subject="shape rings" />}
       {/* The outlines' thickness for this photograph: the preference
 until set here, for every shape at once ("a user can
 define custom sizes for a photo"). The shared row, so the Color

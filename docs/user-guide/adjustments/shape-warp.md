@@ -67,7 +67,7 @@ Where the picture pulls away from the frame, **Stretch** carries the border pixe
 
 ## The lines' color
 
-The rings take the opposite of the photograph: the complementary hue of its average color, dark on a light picture and light on a dark one. The **Hue** and **Luma** sliders under **Lines** take over from it, and **Auto** hands the choice back. It is the same setting Grid Warp and the Radial layer use, so a color chosen here is theirs too. In Warp mode the picked shape is drawn in the accent color. In Position mode its placement gizmo uses the shared line color.
+The rings draw in white, the color **Preferences > Interface > Line color** sets. The swatch beside **Lines** opens a color picker for another; the color picked lasts until you quit or change the preference. **Preferences > Interface > Automatic line color** draws them in the opposite of the photograph's own color instead. It is the same setting Grid Warp and the Radial layer use, so a color chosen here is theirs too. In Warp mode the picked shape is drawn in the accent color. In Position mode its placement gizmo uses the shared line color.
 
 **Thickness** is how heavy the outlines draw, in pixels. Preferences (Interface, Shape outline thickness) sets it for every photograph, the Radial and Linear layers' gizmos included, and ships at 2. The number here sets it for this photograph alone, every shape at once, and is kept with the photograph; **Preference** hands it back. It is a view setting like the preference, not an edit: setting it marks nothing edited and is not an undo step.
 

@@ -14,6 +14,7 @@
 
 ### Changed
 
+- **The lines over the photograph are white.** The crop box, the warp grids and rings, and the Radial and Linear layers' outlines draw in white rather than a color chosen from the photograph, and a color picker replaces the Hue and Luma sliders. **Preferences > Interface** sets the starting color, and **Automatic line color** there brings back the color chosen from the photograph. [Grid Warp](user-guide/adjustments/grid-warp.md#the-lines-color).
 - **Colors shift a little.** Because of the new color, photographs you have already edited can look slightly different, most of all those taken under tungsten light. For about 200 cameras, among them Olympus and OM System, Pentax, Samsung, Phase One, Leaf and Kodak bodies and some Panasonic and Sony ones, the color in daylight changes a little too, since Heeler now uses the same calibrations for them as for every other camera. Your edits are kept; check the color on a photograph that matters before exporting it again. [Source](user-guide/adjustments/source.md).
 - **Fujifilm X-Trans photographs use Heeler's own demosaic at full size.** Fine detail and edges against a bright sky can look very slightly different from before. [Source](user-guide/adjustments/source.md).
 - **Highlights: Rebuild and the Demosaic menu are gone.** A photograph edited with Rebuild now develops with Clip, and one edited with the Fast or Fine demosaic develops with Heeler's demosaic. [Source](user-guide/adjustments/source.md#raw-controls).

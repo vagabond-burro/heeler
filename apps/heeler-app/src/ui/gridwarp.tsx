@@ -17,7 +17,7 @@ import { modLabel } from "../platform";
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { State } from "../state";
 import { useGridWarpLive } from "../gridwarplive";
-import { GRID_WARP_MAX_INFLUENCE, shapeLineWidth, warpNodeFor, type WarpTarget } from "../state";
+import { GRID_WARP_MAX_INFLUENCE, lineSetting, shapeLineWidth, warpNodeFor, type WarpTarget } from "../state";
 import { pixelsPerUnit, warpSpaceOf, type WarpSpace } from "../warpspace";
 import { rootDispatch } from "../rootdispatch";
 import { applyGesture, centroid, influenceWeights, lineColorCss, marqueeHits, nearestLine, nearestVertex, restLike, vertexCount, vertexPos, warpedLine, MAX_CELLS, type GridMesh, type MeshGesture } from "../gridwarp";
@@ -153,7 +153,7 @@ export function GridWarpOverlay({
     return space ? space.fromFrame(f) : f;
   };
   const auto = useAutoLineColor(previewUrl);
-  const line = resolveLineColor(state.lineColor, auto);
+  const line = resolveLineColor(lineSetting(state), auto);
   const lineCss = lineColorCss(line.hue, line.luma, line.sat);
   const lineFaint = lineColorCss(line.hue, line.luma, line.sat, 0.18);
 
@@ -1238,7 +1238,7 @@ that fill the panel, label above and readout below each.*/}
           draws over the photograph (linecolor.tsx): the grid reads the
           one photograph setting (shapeLineWidth), so its seat is here
           too. */}
-      {lines && <LinesRow lineColor={state.lineColor} dispatch={dispatch} previewUrl={frame} prefix="gridwarp" subject="grid lines" />}
+      {lines && <LinesRow lineColor={lineSetting(state)} dispatch={dispatch} previewUrl={frame} prefix="gridwarp" subject="grid lines" />}
       {lines && <LineWidthRow state={state} dispatch={dispatch} prefix="gridwarp" subject="grid lines" />}
       {node && !armed && (
         <div className="help" style={{ marginTop: 5 }} data-testid="gridwarp-readout">

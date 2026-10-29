@@ -58,7 +58,7 @@ import { panePropsEqual } from "./viewmemo";
 import type { Command, NodeCard, State } from "../state";
 import { NEUTRAL_PARAMS, BRUSH_TIPS, availableMaskTypes, PANEL_TABS, RADIAL_SHAPES, RANGE_PRESETS, SELECT_METHODS, SELECT_OPS, SHAPE_AMOUNT_LABEL, TEXTURED_TIPS, activeSelectionMask, layersOf, hardRange, paramRange, clampBlurStrength, toolNode, detailEqViewOn, visiblePanelTabs, sectionExportId, artLayers, artMaskOf } from "../state";
 import type { LayerMaskType, PanelTab, PickMode, PickTarget, SelectOp } from "../state";
-import { photoFlips, photoTurn, pickMaskNode } from "../state";
+import { lineSetting, photoFlips, photoTurn, pickMaskNode } from "../state";
 import { CATEGORY_PIECES, recipeParamDefault } from "../recipes";
 import { ExportTick, LayerMaskExportRow, MaskExportTick } from "./exporttick";
 import { OpIcon } from "./selecticons";
@@ -1894,7 +1894,7 @@ draws at.*/}
           {(activeInfo.maskType === "radial" || activeInfo.maskType === "linear") && (
             <>
               <LinesRow
-                lineColor={state.lineColor}
+                lineColor={lineSetting(state)}
                 dispatch={dispatch}
                 previewUrl={state.images.find((i) => i.id === state.activeImage)?.src ?? null}
                 prefix={activeInfo.maskType}
@@ -5849,7 +5849,7 @@ cursor is going to be an eye dropper so should the icon").*/}
                 {sec.depthTools === "keylight" && state.keyLightPick && (
                   <>
                     <LinesRow
-                      lineColor={state.lineColor}
+                      lineColor={lineSetting(state)}
                       dispatch={dispatch}
                       previewUrl={frame ?? state.images.find((i) => i.id === state.activeImage)?.src ?? null}
                       prefix="keylight"

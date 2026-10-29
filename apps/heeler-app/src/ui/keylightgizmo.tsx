@@ -26,7 +26,7 @@ import { usePickSessions } from "../picksession";
 
 import { DirectionalLightIcon, PointLightIcon, SpotLightIcon } from "./panelicons";
 import React, { useLayoutEffect, useRef, useState } from "react";
-import { toolNode, type NodeCard, type State } from "../state";
+import { lineSetting, toolNode, type NodeCard, type State } from "../state";
 import { depthAt } from "../bridge";
 import { reportToolError } from "./hints";
 import { ColorField } from "./colorfield";
@@ -88,7 +88,7 @@ export function KeyLightGizmo({
   // A handle's fill keeps saying what the light is: amber emitting,
   // near-black dark, or the light's own color.
   const auto = useAutoLineColor(previewUrl);
-  const line = resolveLineColor(state.lineColor, auto);
+  const line = resolveLineColor(lineSetting(state), auto);
   const ink = (alpha: number) => lineColorCss(line.hue, line.luma, line.sat, alpha);
   const overlay = useRef<HTMLDivElement>(null);
   const drag = useRef<{

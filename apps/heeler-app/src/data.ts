@@ -873,7 +873,7 @@ export function initialState(): State {
     openedGroup: null,
     ...TOOL_SESSION_DEFAULTS,
     gridWarp: { selected: [], influence: 1, heat: "luma", link: false, live: null },
-    lineColor: { hue: null, luma: null },
+    lineColor: { color: null },
     photoLineWidth: {},
     shapeWarp: { selected: null, mode: "position" },
     brushRadius: 0.04,

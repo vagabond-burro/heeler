@@ -34,7 +34,7 @@ export function StraightenOverlay({
   dispatch,
   view = IDENTITY_VIEW,
   onDone,
-  lineColor = AUTO_LINE,
+  lineColor = WHITE_LINE,
   previewUrl = null,
 }: {
   node: NodeCard;
@@ -148,13 +148,13 @@ type RingDrag = {
  * parts of the shape." It used to be `move` over the whole overlay, and
  * only the center and the radius did anything at all.
  */
-const AUTO_LINE: LineColorUi = { hue: null, luma: null };
+const WHITE_LINE: LineColorUi = { color: "#ffffff" };
 
 export function RadialOverlay({
   node,
   dispatch,
   view = IDENTITY_VIEW,
-  lineColor = AUTO_LINE,
+  lineColor = WHITE_LINE,
   previewUrl = null,
   lineWidth = 2,
   dashed = false,
@@ -461,7 +461,7 @@ export function LinearOverlay({
   node,
   dispatch,
   view = IDENTITY_VIEW,
-  lineColor = AUTO_LINE,
+  lineColor = WHITE_LINE,
   previewUrl = null,
   lineWidth = 2,
 }: {
@@ -657,7 +657,7 @@ export function CropOverlay({
   view = IDENTITY_VIEW,
   stayInside = false,
   ratioName = null,
-  lineColor = AUTO_LINE,
+  lineColor = WHITE_LINE,
   lineWidth = 1,
   previewUrl = null,
 }: {
@@ -1248,7 +1248,7 @@ const MARKER_R = 6;
 /** The last repair marker debug line, so a still pointer logs once. */
 let lastMarkerLog = "";
 /** The LINES setting left on automatic. */
-const AUTO_LINES: LineColorUi = { hue: null, luma: null };
+const AUTO_LINES: LineColorUi = { color: null };
 
 /** Decoded frames for the clone preview, by URL. Module-level: the
  * overlay remounts as tools change and the picture does not. */

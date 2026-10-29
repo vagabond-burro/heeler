@@ -9,7 +9,7 @@ import { usePickSessions } from "../picksession";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Command, CurveChannel, NodeCard, State, Take } from "../state";
-import { activeStackMerge, cropTurnFrom, inspectDocked, pickMaskNode, antsSources, artLayerName, artMaskNode, chainTerminalId, frameLook, renderedSource, mainConversion, previewTarget, shapeLineWidth, transformDragOf, isPlacedLayer, layerFlipBlocked, photoTurn } from "../state";
+import { activeStackMerge, cropTurnFrom, lineSetting, inspectDocked, pickMaskNode, antsSources, artLayerName, artMaskNode, chainTerminalId, frameLook, renderedSource, mainConversion, previewTarget, shapeLineWidth, transformDragOf, isPlacedLayer, layerFlipBlocked, photoTurn } from "../state";
 import { XformIcon } from "./panelicons";
 import { maskBrushTarget, maskOverlayRgb, BRUSH_TIPS, MULTI_MAX, POLISH_MODES, SELECT_OPS, activeSelectionMask, applyPick, artFindLayer, artToolbarVisible, cropNode, cropToPicture, fitCropToAspect, keepCropInside, layerQuad, multiGrid, transformBox, toolNode } from "../state";
 import { OpIcon } from "./selecticons";
@@ -1606,7 +1606,7 @@ armed has settings to show.*/}
             // for the LINES row, so a swatch opens it.
             <LineColorSwatch
               state={state}
-              lineColor={state.lineColor}
+              lineColor={lineSetting(state)}
               dispatch={dispatch}
               previewUrl={engineFrame ?? beforeSrc ?? img?.src ?? null}
               prefix="crop"
@@ -1829,7 +1829,7 @@ existing stack").*/}
                     view={view}
                     stayInside={state.prefs.cropStayInside}
                     ratioName={ratioLabel(state.cropAspect, state.prefs.cropRatios)}
-                    lineColor={state.lineColor}
+                    lineColor={lineSetting(state)}
                     lineWidth={shapeLineWidth(state)}
                     previewUrl={engineFrame ?? beforeSrc ?? img?.src ?? null}
                   />
@@ -1941,7 +1941,7 @@ center, maybe rather the center of the visible pixels on the layer."*/}
                     // set_tool toggles, so re-sending the active tool
                     // clears it.
                     onDone={() => dispatch({ type: "set_tool", tool: "straighten" })}
-                    lineColor={state.lineColor}
+                    lineColor={lineSetting(state)}
                     previewUrl={engineFrame ?? beforeSrc ?? img?.src ?? null}
                   />
                 );
@@ -3261,7 +3261,7 @@ own and keep working underneath it.*/}
                       node={mask}
                       dispatch={dispatch}
                       view={view}
-                      lineColor={state.lineColor}
+                      lineColor={lineSetting(state)}
                       previewUrl={engineFrame ?? beforeSrc ?? img?.src ?? null}
                       lineWidth={shapeLineWidth(state)}
                     />
@@ -3272,7 +3272,7 @@ own and keep working underneath it.*/}
                       node={mask}
                       dispatch={dispatch}
                       view={view}
-                      lineColor={state.lineColor}
+                      lineColor={lineSetting(state)}
                       previewUrl={engineFrame ?? beforeSrc ?? img?.src ?? null}
                       lineWidth={shapeLineWidth(state)}
                     />

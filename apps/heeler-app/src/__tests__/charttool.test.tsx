@@ -461,7 +461,8 @@ describe("the sample param's seats", () => {
 
 describe("the chart lines' color and thickness", () => {
   it("the stroke color answers the frame: light lines on a dark photograph, dark on a light one", async () => {
-    const s = run(withChecker(), { type: "toggle_chart_place", id: "colorchecker" });
+    // With Automatic line color on in Preferences; off, the lines are white.
+    const s = run(run(withChecker(), { type: "set_prefs", prefs: { lineColorAuto: true } }), { type: "toggle_chart_place", id: "colorchecker" });
     const { unmount } = render(
       <ChartToolOverlay state={s} dispatch={() => {}} node={nodeOf(s)} norm={norm} previewUrl="frame://chart-dark" />,
     );

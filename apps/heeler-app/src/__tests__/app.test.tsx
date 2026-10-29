@@ -3022,10 +3022,12 @@ describe("Heeler UI", () => {
     expect(mask().getAttribute("aria-valuenow")).toBe("0.75");
     // The layer's section carries the shared LINES row, and the gizmo
     // draws in the color it holds.
-    expect(screen.getByTestId("radial-line-auto")).toHaveAttribute("data-active", "true");
-    fireEvent.click(screen.getByTestId("radial-line-auto"));
-    const ring = screen.getByTestId("radial-gizmo").querySelector("polygon")!;
-    expect(ring.getAttribute("stroke")).toMatch(/^hsla\(/);
+    expect(screen.queryByTestId("radial-line-auto")).toBeNull();
+    const ring = () => screen.getByTestId("radial-gizmo").querySelector("polygon")!;
+    expect(ring().getAttribute("stroke")).toBe("hsla(0, 0%, 100%, 0.95)");
+    fireEvent.click(screen.getByTestId("radial-line-color-field"));
+    fireEvent.click(screen.getByTestId("radial-line-color-field-swatch-000000"));
+    expect(ring().getAttribute("stroke")).toBe("hsla(0, 0%, 0%, 0.95)");
   });
 
   /// (2026-09-15): "When I have the move cursor but I don't click on the
@@ -3296,13 +3298,11 @@ describe("Heeler UI", () => {
       expect(e.getAttribute("stroke-width")).toBe("2");
       expect(e.getAttribute("stroke")).toMatch(/^hsla\(/);
     }
-    // A hue set on the LINES row draws the gradient in it.
-    const hue = screen.getByTestId("linear-line-hue");
-    hue.focus();
-    fireEvent.keyDown(hue, { key: "ArrowRight" });
-    expect(screen.getByTestId("linear-line-auto")).toHaveAttribute("data-active", "false");
-    const set = screen.getByTestId("linear-line-hue-value").textContent;
-    expect(line().getAttribute("stroke")).toMatch(new RegExp(`^hsla\\(${set}, 75%,`));
+    // White until a color is picked on the LINES row, then that color.
+    expect(line().getAttribute("stroke")).toMatch(/^hsla\(0, 0%, 100%,/);
+    fireEvent.click(screen.getByTestId("linear-line-color-field"));
+    fireEvent.click(screen.getByTestId("linear-line-color-field-swatch-4e7ea8"));
+    expect(line().getAttribute("stroke")).toMatch(/^hsla\(208, 37%, 48%,/);
     // A thickness typed for this photograph draws every line at it.
     const field = screen.getByTestId("linear-line-width") as HTMLInputElement;
     fireEvent.change(field, { target: { value: "6" } });

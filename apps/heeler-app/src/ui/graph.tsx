@@ -26,7 +26,7 @@ import { createPortal } from "react-dom";
 import { panePropsEqual } from "./viewmemo";
 import { SpectrumBar, Spectrums } from "./spectrum";
 import type { Backdrop, Category, Command, NodeCard, State, Wire } from "../state";
-import { artMaskView, BACKDROP_COLORS, CAT_COLOR, NODE_H, NODE_W, duplicable, nameMatches, PARAM_OPTIONS, REGISTRY_DEFAULTS, hasParamRange, TYPE_NUM_PARAMS, PARAM_TEXT_DEFAULT, paramRange, publishedValue, publishedChoice, FLAG_PARAMS, ART_KINDS, isLayerEffect, artLayers, warpNodeById, isPlacedLayer, wireLacksPort, LAYER_WARP, WIRE_GESTURE, exportWrittenName, exportWritesDepth, DEPTH_EXPORT_CONVENTION, DEPTH_MAP_CARD_CONVENTION, depthMapShowsDepth, PARAM_CHOICE_HINTS, maskIsOff, MASK_OFF_GESTURE, defaultGroupName, ungroupBlocked } from "../state";
+import { artMaskView, lineSetting, BACKDROP_COLORS, CAT_COLOR, NODE_H, NODE_W, duplicable, nameMatches, PARAM_OPTIONS, REGISTRY_DEFAULTS, hasParamRange, TYPE_NUM_PARAMS, PARAM_TEXT_DEFAULT, paramRange, publishedValue, publishedChoice, FLAG_PARAMS, ART_KINDS, isLayerEffect, artLayers, warpNodeById, isPlacedLayer, wireLacksPort, LAYER_WARP, WIRE_GESTURE, exportWrittenName, exportWritesDepth, DEPTH_EXPORT_CONVENTION, DEPTH_MAP_CARD_CONVENTION, depthMapShowsDepth, PARAM_CHOICE_HINTS, maskIsOff, MASK_OFF_GESTURE, defaultGroupName, ungroupBlocked } from "../state";
 import { GridWarpControls } from "./gridwarp";
 import { ShapeWarpControls } from "./shapewarp";
 import { FinishWarpControls } from "./finishwarp";
@@ -3770,7 +3770,7 @@ hand.*/}
             {(node.type === "heeler.radial_mask" || node.type === "heeler.linear_mask") && appState && (
               <>
                 <LinesRow
-                  lineColor={appState.lineColor}
+                  lineColor={lineSetting(appState)}
                   dispatch={dispatch}
                   previewUrl={appState.images.find((i) => i.id === appState.activeImage)?.src ?? null}
                   prefix={node.type === "heeler.radial_mask" ? "radial" : "linear"}

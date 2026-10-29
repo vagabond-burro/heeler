@@ -22,7 +22,7 @@
 import { isPrimaryPress } from "./pointerguard";
 import { useDragFollow } from "./dragfollow";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { colorCheckerNode, shapeLineWidth, toolNode, type Command, type NodeCard, type State } from "../state";
+import { colorCheckerNode, lineSetting, shapeLineWidth, toolNode, type Command, type NodeCard, type State } from "../state";
 import { chartCalibrate, imageMetadata, presetList, presetRead, presetSave, type PresetEntry } from "../bridge";
 import { usePickSessions } from "../picksession";
 import { FIT_ORDER, convertLegacyFit, fitNeedsOrderFix } from "../checkerfit";
@@ -429,7 +429,7 @@ never reads it as a toggle (2026-09-19).*/}
       <div className="kicker" data-testid="colorchecker-kicker-lines" style={{ marginTop: 6, marginBottom: 1, opacity: 0.75 }}>
         CHART LINES
       </div>
-      <LinesRow lineColor={state.lineColor} dispatch={dispatch} previewUrl={frame} prefix="colorchecker" subject="chart lines" />
+      <LinesRow lineColor={lineSetting(state)} dispatch={dispatch} previewUrl={frame} prefix="colorchecker" subject="chart lines" />
       <LineWidthRow state={state} dispatch={dispatch} prefix="colorchecker" subject="chart lines" />
       {amount && (
         <>
@@ -528,7 +528,7 @@ export function ChartToolOverlay({
     setDims((d) => (Math.abs(r.width - d[0]) > 0.5 || Math.abs(r.height - d[1]) > 0.5 ? [r.width, r.height] : d));
   });
   const auto = useAutoLineColor(previewUrl);
-  const line = resolveLineColor(state.lineColor, auto);
+  const line = resolveLineColor(lineSetting(state), auto);
   const ink = (alpha: number) => lineColorCss(line.hue, line.luma, line.sat, alpha);
   // Every line the tool draws takes the shared line thickness: the
   // preference, or this photograph's own where the row set one. The

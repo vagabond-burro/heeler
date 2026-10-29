@@ -46,9 +46,9 @@ The heat is on the handles only. The photograph between them stays as it is.
 
 ## The lines' color
 
-The grid lines take the opposite of the photograph: the complementary hue of its average color, dark on a light picture and light on a dark one, and plain gray on a gray picture. That is the automatic choice, and it is what you get on every photograph until you say otherwise.
+The grid lines draw in white, the color **Preferences > Interface > Line color** sets. The swatch beside **Lines** shows the color in use; click it for a color picker. A color picked there lasts until you quit or change the preference.
 
-The **Hue** and **Luma** sliders under **Lines** take over from it, and the swatch beside them shows the color in use. **Auto** hands the choice back to the photograph.
+**Preferences > Interface > Automatic line color** draws the lines in the opposite of the photograph instead: the complementary hue of its average color, dark on a light picture and light on a dark one, and plain gray on a gray picture. It is off unless you turn it on, since over a bright photograph its dark lines can be hard to see.
 
 The choice is one for every tool that draws lines over the photograph: Shape Warp's rings and the Radial layer's gizmo take the same color, and their Lines rows set the same thing.
 

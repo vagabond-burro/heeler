@@ -86,12 +86,10 @@ describe("inspector parity with Develop", () => {
       const { unmount } = render(<NodeParams node={node(type)} dispatch={(c) => got.push(c)} appState={initialState()} />);
       expect(screen.getByTestId(`${prefix}-lines`)).toBeTruthy();
       expect((screen.getByTestId(`${prefix}-line-width`) as HTMLInputElement).value).toBe("2");
-      fireEvent.click(screen.getByTestId(`${prefix}-line-auto`));
+      expect(screen.queryByTestId(`${prefix}-line-auto`)).toBeNull();
+      expect(screen.getByTestId(`${prefix}-line-color-field`)).toHaveAttribute("data-value", "#ffffff");
       fireEvent.click(screen.getByTestId(`${prefix}-line-width-pref`));
-      expect(got).toEqual([
-        { type: "set_line_color", hue: null, luma: null },
-        { type: "set_photo_line_width", width: 0 },
-      ]);
+      expect(got).toEqual([{ type: "set_photo_line_width", width: 0 }]);
       unmount();
     }
   });

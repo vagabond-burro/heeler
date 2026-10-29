@@ -102,6 +102,18 @@ export const SETTINGS = [
     description: "Sets how thick Shape Warp's rings and the Radial layer's gizmo draw over the photograph, in pixels; a photograph's Shape Warp can set its own.",
   },
   {
+    id: "line-color",
+    category: "interface",
+    label: "Line color",
+    description: "The color the lines over the photograph start in: the crop box, the warp grids and rings, the Radial and Linear layers' outlines. A tool's LINES color picker changes it until you quit.",
+  },
+  {
+    id: "line-color-auto",
+    category: "interface",
+    label: "Automatic line color",
+    description: "Draws the lines in the opposite of the photograph's own average color instead of the line color, until a tool's color picker sets one.",
+  },
+  {
     id: "viewer-zoom-speed",
     category: "interface",
     label: "Viewer zoom speed",

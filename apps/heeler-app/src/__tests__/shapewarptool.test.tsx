@@ -259,7 +259,7 @@ describe("the shape warp tool", () => {
   });
 
   it("Feather is a number in the section, and the rings and the gizmo take the shared line color", () => {
-    const start = reduce(withShape(), { type: "set_line_color", hue: 120, luma: 50 });
+    const start = reduce(withShape(), { type: "set_line_color", color: "#20df20" });
     render(
       <Harness
         start={start}
@@ -291,10 +291,11 @@ describe("the shape warp tool", () => {
     expect(rings[0].querySelector("polygon")!.getAttribute("stroke")).toBe("hsla(120, 75%, 50%, 0.9)");
     expect(rings[1].querySelector("polygon")!.getAttribute("stroke")).toBe("var(--accent)");
     // The section's LINES row is the same setting Grid Warp's is.
-    expect(screen.getByTestId("shapewarp-line-auto")).toHaveAttribute("data-active", "false");
-    fireEvent.click(screen.getByTestId("shapewarp-line-auto"));
-    expect(latest.lineColor).toEqual({ hue: null, luma: null });
-    expect(rings[0].querySelector("polygon")!.getAttribute("stroke")).toBe("hsla(0, 0%, 92%, 0.9)");
+    expect(screen.queryByTestId("shapewarp-line-auto")).toBeNull();
+    fireEvent.click(screen.getByTestId("shapewarp-line-color-field"));
+    fireEvent.click(screen.getByTestId("shapewarp-line-color-field-swatch-ffffff"));
+    expect(latest.lineColor).toEqual({ color: "#ffffff" });
+    expect(rings[0].querySelector("polygon")!.getAttribute("stroke")).toBe("hsla(0, 0%, 100%, 0.9)");
   });
 
   it("a row's dropdown gives the shape any of the Radial layer's outlines, with the outline's own knob", () => {

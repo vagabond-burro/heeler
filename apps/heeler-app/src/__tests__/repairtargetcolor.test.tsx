@@ -54,7 +54,7 @@ afterEach(() => {
   restore = null;
 });
 
-function markerOver(rgb: [number, number, number], lineColor = { hue: null, luma: null }, zoom = 1) {
+function markerOver(rgb: [number, number, number], lineColor: { color: string | null } = { color: null }, zoom = 1) {
   const flat = flatContext(rgb);
   restore = flat.restore;
   // The frame on screen: 1000 by 500 pixels.
@@ -119,8 +119,8 @@ describe("the repair source marker's color", () => {
     expect(screen.getByTestId("clone-source-edge").getAttribute("stroke")).toMatch(/, 96%, /);
   });
 
-  it("keeps a hue and luma set by hand in LINES", () => {
-    const { color } = markerOver([240, 240, 240], { hue: 120, luma: 50 } as never);
+  it("keeps a color picked by hand in LINES", () => {
+    const { color } = markerOver([240, 240, 240], { color: "#20df20" });
     expect(color).toMatch(/^hsla\(120, 75%, 50%/);
   });
 
@@ -169,7 +169,7 @@ describe("the repair source marker's color", () => {
 });
 
 it("keeps the marker and its sampled footprint constant at high zoom", () => {
-  const { reads } = markerOver([240, 240, 240], { hue: null, luma: null }, 4);
+  const { reads } = markerOver([240, 240, 240], { color: null }, 4);
   const marker = screen.getByTestId("clone-source");
   expect(marker.style.transform).toBe("scale(0.25)");
   const [, , w, h] = reads[reads.length - 1];

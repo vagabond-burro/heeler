@@ -91,6 +91,15 @@ export interface Prefs {
    * percentage). A photograph may set its own (State.photoLineWidth,
    * kept in its saved file beside the graph, never in it).*/
   shapeLineWidth: number;
+  /** the color the lines over the photograph draw in, as hex, until a
+   * tool's own picker sets another for the session: white, since a
+   * photograph kept from blowing out has few truly white pixels
+   * (2026-10-29: "I still prefer it to be white") */
+  lineColor: string;
+  /** the lines take the opposite of the photograph's own average
+   * instead of lineColor. Off by default and set only here: the dark
+   * lines it chose over bright photographs too often did not show. */
+  lineColorAuto: boolean;
   /** what the Color Tune's list calls an unnamed custom band: the
    * color it was picked from, as RGB, CMY or hex */
   consoleNameFormat: NameFormat;
@@ -265,6 +274,8 @@ export const DEFAULT_PREFS: Prefs = {
   paletteRecents: 10,
   consoleCustomMax: 4,
   shapeLineWidth: 2,
+  lineColor: "#ffffff",
+  lineColorAuto: false,
   consoleNameFormat: "rgb",
   curveMode: "rgb",
   depthEdges: 50,
@@ -395,6 +406,11 @@ export function migrateShapeLineWidth(value: unknown): number {
   const v = typeof value === "number" && Number.isFinite(value) ? value : NaN;
   if (Number.isFinite(v) && v > SHAPE_LINE_WIDTH_RANGE[1]) return clampShapeLineWidth(v / 100);
   return clampShapeLineWidth(value);
+}
+
+/** A six-digit hex color, the form the color picker writes. */
+export function isHexColor(value: unknown): value is string {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value);
 }
 
 export function clampShapeLineWidth(value: unknown): number {
@@ -4235,7 +4251,8 @@ export interface State {
   gridWarp: GridWarpUi;
   /** The color of the lines every tool draws over the photograph
    * (Grid Warp's grid, Shape Warp's rings, the Radial layer's gizmo):
-   * one choice for all of them, automatic until set. */
+   * one choice for all of them, picked in any tool's LINES row and kept
+   * for the session; until then the preference (lineSetting). */
   lineColor: LineColorUi;
   /** How thick the lines every overlay draws are, per photograph: image
    * id to pixels, for the photographs whose Thickness row was set
@@ -5423,7 +5440,7 @@ export type Command =
     }
   /** the color of every tool's lines over the photograph: a hue in
    * degrees and a luma in percent, null for the automatic choice */
-  | { type: "set_line_color"; hue?: number | null; luma?: number | null }
+  | { type: "set_line_color"; color: string | null }
   /** the whole mesh after a drag; builds the node on a first drag */
   | { type: "grid_warp_mesh"; mesh: GridMesh; target?: WarpTarget }
   /** the mesh mid-drag from the section's wheel or pad, or null */
@@ -7973,6 +7990,14 @@ export function cropTurnFrom(s: State): number | null {
   return s.tool === "crop" && s.gesture !== null && typeof s.cropTurnFrom === "number" ? s.cropTurnFrom : null;
 }
 
+/** The color the overlays draw in: the one picked in a LINES row this
+ * session, else the preference's, or the automatic choice where
+ * Preferences turns it on. */
+export function lineSetting(s: State): LineColorUi {
+  if (s.lineColor.color) return s.lineColor;
+  return { color: s.prefs.lineColorAuto ? null : s.prefs.lineColor };
+}
+
 export function shapeLineWidth(s: State): number {
   return photoLineWidth(s) || s.prefs.shapeLineWidth;
 }
@@ -8019,12 +8044,11 @@ export function colorCheckerNode(s: State): NodeCard {
   };
 }
 
-/** The overlay lines' color: hue in degrees and luma in percent, or
- * null for the automatic choice, which opposes the photograph's own
- * average. Shared by every tool that draws lines over the picture. */
+/** The overlay lines' color as hex, or null for the automatic choice,
+ * which opposes the photograph's own average. Shared by every tool
+ * that draws lines over the picture. */
 export interface LineColorUi {
-  hue: number | null;
-  luma: number | null;
+  color: string | null;
 }
 
 /** The Grid Warp tool's view state. */
@@ -17392,11 +17416,7 @@ function reduceInner(s: State, cmd: Command): State {
     case "set_line_color":
       return {
         ...s,
-        lineColor: {
-          ...s.lineColor,
-          ...(cmd.hue !== undefined ? { hue: cmd.hue === null ? null : ((Math.round(cmd.hue) % 360) + 360) % 360 } : {}),
-          ...(cmd.luma !== undefined ? { luma: cmd.luma === null ? null : Math.min(100, Math.max(0, Math.round(cmd.luma))) } : {}),
-        },
+        lineColor: { color: isHexColor(cmd.color) ? cmd.color.toLowerCase() : null },
       };
     case "grid_warp_mesh":
     case "grid_warp_density":
@@ -20446,6 +20466,8 @@ function reduceInner(s: State, cmd: Command): State {
         // The settings file is hand editable: anything but "cmy" is RGB.
         curveMode: merged.curveMode === "cmy" ? "cmy" : "rgb",
         shapeLineWidth: migrateShapeLineWidth(merged.shapeLineWidth),
+        lineColor: isHexColor(merged.lineColor) ? merged.lineColor.toLowerCase() : DEFAULT_PREFS.lineColor,
+        lineColorAuto: typeof merged.lineColorAuto === "boolean" ? merged.lineColorAuto : false,
         depthEdges: clampDepthSetting(merged.depthEdges, DEFAULT_PREFS.depthEdges),
         depthFlatten: clampDepthSetting(merged.depthFlatten, DEFAULT_PREFS.depthFlatten),
         depthSize: snapDepthSize(merged.depthSize),
@@ -20458,6 +20480,11 @@ function reduceInner(s: State, cmd: Command): State {
         // the brush panel's slider moves it for the session only.
         ...(cmd.prefs.maskOverlayOpacity !== undefined
           ? { brushOverlayStrength: prefs.maskOverlayOpacity / 100 }
+          : {}),
+        // Likewise the line color: set in Preferences, it is the color
+        // in use again, over any picked in a tool this session.
+        ...(cmd.prefs.lineColor !== undefined || cmd.prefs.lineColorAuto !== undefined
+          ? { lineColor: { color: null } }
           : {}),
         // A preference can hide a tab (Tether behind experimental
         // features): whatever named it clears on the spot, so neither the
