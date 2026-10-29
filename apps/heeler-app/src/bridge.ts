@@ -1275,7 +1275,18 @@ export async function updatePano(
   }
 ): Promise<PanoInfo | null> {
   if (!isTauri()) return null;
-  const result = await call<PanoInfo>("update_pano", { imageId, ...change });
+  // Tauri reads a command's arguments by their camelCase names and drops
+  // any other name without a word, so auto_crop, lens_correction and
+  // gain_compensation sent as they are spelled here never arrived: the
+  // switches wrote the recipe back unchanged and stayed on.
+  const { gain_compensation, lens_correction, auto_crop, ...rest } = change;
+  const result = await call<PanoInfo>("update_pano", {
+    imageId,
+    ...rest,
+    gainCompensation: gain_compensation,
+    lensCorrection: lens_correction,
+    autoCrop: auto_crop,
+  });
   changedDenoiseCache(true);
   return result;
 }
