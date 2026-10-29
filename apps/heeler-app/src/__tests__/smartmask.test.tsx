@@ -183,6 +183,9 @@ describe("the click overlay", () => {
     render(<SmartClickOverlay state={s} dispatch={(c) => got.push(c)} norm={norm} />);
     const badge = await screen.findByTestId("smart-uncomputed");
     expect(badge.textContent).toContain("NOT COMPUTED");
+    // Half again its first 9px: "font size could stand to be scaled by 1.5x".
+    expect(badge.style.fontSize).toBe("13.5px");
+    expect(screen.getByTestId("smart-recompute").style.fontSize).toBe("13.5px");
     fireEvent.click(screen.getByTestId("smart-recompute"));
     const { smartClick } = await import("../bridge");
     expect(vi.mocked(smartClick)).toHaveBeenCalledWith(s.activeImage, maskId, prompts, "click", "", "");

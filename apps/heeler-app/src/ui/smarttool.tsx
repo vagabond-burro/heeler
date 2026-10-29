@@ -1085,20 +1085,23 @@ export function SmartClickOverlay({
       )}
       {/* The uncomputed badge: clicks exist, pixels do not (a graph
           from another machine, or a cleared cache). One button
-          recomputes from the recipe. */}
+          recomputes from the recipe. Half again its first size, words
+          and button alike (2026-10-29: "kind of small tho, font size
+          could stand to be scaled by 1.5x"). */}
       {!cached && !busy && !needsModel && (
         <div
           data-testid="smart-uncomputed"
           style={{
-            position: "absolute", left: 8, bottom: 8, display: "flex", gap: 6, alignItems: "center",
-            fontSize: 9, letterSpacing: ".1em", color: "#c2c7cb",
-            background: "rgba(0,0,0,.55)", padding: "3px 7px",
+            position: "absolute", left: 12, bottom: 12, display: "flex", gap: 9, alignItems: "center",
+            fontSize: 13.5, letterSpacing: ".1em", color: "#c2c7cb",
+            background: "rgba(0,0,0,.55)", padding: "5px 10px",
           }}
         >
           MASK NOT COMPUTED ON THIS MACHINE
           <button
-            className="chip small"
+            className="chip"
             data-testid="smart-recompute"
+            style={{ fontSize: 13.5, padding: "2px 12px" }}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={() => {
               setBusy(true);
