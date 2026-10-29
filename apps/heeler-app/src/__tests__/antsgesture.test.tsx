@@ -165,6 +165,11 @@ const toScreen = (v: View, x: number, y: number) => [x * STAGE.w * v.scale + v.p
 describe("the ants at 1:1 through a zoom and a pan", () => {
   it("sit on the photograph's edge at every frame and never draw the slice's edge", async () => {
     const { useSelectionOutline } = await import("../ui/selectionparts");
+    // The hook reaches the bridge through a dynamic import, which the fake
+    // clock cannot hurry: loaded cold on a busy machine (a Windows run),
+    // it was still loading when the 60 frames below ran out. Loaded here,
+    // the hook's import is answered from the module cache.
+    await import("../bridge");
     const { s, node } = matted();
     let view: View = { px: -400, py: -150, scale: 2 };
     let slice = visible(view);
@@ -179,7 +184,9 @@ describe("the ants at 1:1 through a zoom and a pan", () => {
         await vi.advanceTimersByTimeAsync(16);
       });
     };
-    for (let i = 0; i < 60; i++) await frame();
+    // Up to ten seconds of frames for the first slice, ended by its ants
+    // rather than by a count that a slower machine can overrun.
+    for (let i = 0; i < 600 && !result.current.patch; i++) await frame();
     expect(result.current.patch, "the first slice's ants landed").toBeDefined();
 
     let frames = 0;
