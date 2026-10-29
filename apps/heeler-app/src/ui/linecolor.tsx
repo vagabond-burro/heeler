@@ -53,6 +53,7 @@ export function LinesRow({
         onChange={(color) => dispatch({ type: "set_line_color", color })}
         label="Line color"
         testid={`${prefix}-line-color-field`}
+        compact
         hint={`The color the ${subject} are drawn in, and every tool's lines over the photograph; Preferences sets the color they start in`}
       />
     </div>
@@ -60,6 +61,7 @@ export function LinesRow({
 }
 
 const POPOVER_ZOOM = 1.25;
+const POPOVER_WIDTH = 230;
 
 /** The swatch popover's insides: the color picker, and Thickness under
  * it with its reset, the names in one column so the two line up. The
@@ -96,6 +98,7 @@ function LinesPanel({
           onChange={(color) => dispatch({ type: "set_line_color", color })}
           label="Line color"
           testid={`${prefix}-line-color-field`}
+          compact
         />
       </div>
 
@@ -223,7 +226,7 @@ export function LineColorSwatch({
     return () => window.removeEventListener("resize", place);
   }, [open]);
   useEffect(() => {
-    if (open && at) panelRef.current?.querySelector<HTMLElement>("input, [role=slider]")?.focus();
+    if (open && at) panelRef.current?.querySelector<HTMLElement>("[role=slider]")?.focus();
   }, [open, at !== null]);
   const hex = useLineHex(lineColor, previewUrl);
   const label = `${name}: ${hex}`;
@@ -236,7 +239,7 @@ export function LineColorSwatch({
       aria-label={name}
       style={{
         position: "fixed", left: at?.x ?? 0, top: at?.y ?? 0, visibility: at ? "visible" : "hidden", zIndex: 80,
-        width: 290 * POPOVER_ZOOM, maxWidth: "calc(100vw - 16px)", boxSizing: "border-box",
+        width: POPOVER_WIDTH * POPOVER_ZOOM, maxWidth: "calc(100vw - 16px)", boxSizing: "border-box",
         background: "#191817", border: "1px solid var(--line-4)", boxShadow: "0 6px 18px rgba(0,0,0,.5)",
         padding: "5px 10px 10px",
       }}

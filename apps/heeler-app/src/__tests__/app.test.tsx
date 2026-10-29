@@ -3026,8 +3026,8 @@ describe("Heeler UI", () => {
     const ring = () => screen.getByTestId("radial-gizmo").querySelector("polygon")!;
     expect(ring().getAttribute("stroke")).toBe("hsla(0, 0%, 100%, 0.95)");
     fireEvent.click(screen.getByTestId("radial-line-color-field"));
-    fireEvent.click(screen.getByTestId("radial-line-color-field-swatch-000000"));
-    expect(ring().getAttribute("stroke")).toBe("hsla(0, 0%, 0%, 0.95)");
+    fireEvent.keyDown(screen.getByTestId("radial-line-color-field-hue"), { key: "ArrowRight" });
+    expect(ring().getAttribute("stroke")).toBe("hsla(5, 100%, 50%, 0.95)");
   });
 
   /// (2026-09-15): "When I have the move cursor but I don't click on the
@@ -3301,8 +3301,8 @@ describe("Heeler UI", () => {
     // White until a color is picked on the LINES row, then that color.
     expect(line().getAttribute("stroke")).toMatch(/^hsla\(0, 0%, 100%,/);
     fireEvent.click(screen.getByTestId("linear-line-color-field"));
-    fireEvent.click(screen.getByTestId("linear-line-color-field-swatch-4e7ea8"));
-    expect(line().getAttribute("stroke")).toMatch(/^hsla\(208, 37%, 48%,/);
+    fireEvent.keyDown(screen.getByTestId("linear-line-color-field-hue"), { key: "ArrowRight" });
+    expect(line().getAttribute("stroke")).toMatch(/^hsla\(5, 100%, 50%,/);
     // A thickness typed for this photograph draws every line at it.
     const field = screen.getByTestId("linear-line-width") as HTMLInputElement;
     fireEvent.change(field, { target: { value: "6" } });

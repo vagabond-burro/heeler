@@ -136,11 +136,16 @@ describe("the crop bar's line color swatch", () => {
     expect(panel.querySelector("[data-testid=crop-line-color-field-picker]")).not.toBeNull();
     expect(panel.querySelector("[data-testid=crop-line-width-row]")).not.toBeNull();
     for (const id of ["crop-line-hue", "crop-line-luma", "crop-line-auto"]) expect(screen.queryByTestId(id)).toBeNull();
-    // A swatch in the picker writes the shared line color.
-    fireEvent.click(screen.getByTestId("crop-line-color-field-swatch-4e7ea8"));
-    expect(view.sent).toContainEqual({ type: "set_line_color", color: "#4e7ea8" });
-    expect(view.state.lineColor).toEqual({ color: "#4e7ea8" });
-    expect(screen.getByTestId("crop-line-color-chip").style.background).toBe(asDrawn("#4e7ea8"));
+    // A quick pick, not a painting tool's: the field and the hue rail,
+    // no swatches and no hex box ("That's too many elements").
+    expect(screen.getByTestId("crop-line-color-field-field").style.height).toBe("44px");
+    expect(panel.querySelector("[data-testid^=crop-line-color-field-swatch-]")).toBeNull();
+    expect(screen.queryByTestId("crop-line-color-field-hex")).toBeNull();
+    // The hue rail writes the shared line color.
+    fireEvent.keyDown(screen.getByTestId("crop-line-color-field-hue"), { key: "ArrowRight" });
+    expect(view.sent).toContainEqual({ type: "set_line_color", color: "#ff1500" });
+    expect(view.state.lineColor).toEqual({ color: "#ff1500" });
+    expect(screen.getByTestId("crop-line-color-chip").style.background).toBe(asDrawn("#ff1500"));
     // The thickness's reset is an icon, gray while the preference is
     // already in use.
     const reset = screen.getByTestId("crop-line-width-pref");
@@ -161,9 +166,9 @@ describe("the crop bar's line color swatch", () => {
     fireEvent.click(swatch);
     expect(screen.getByTestId("crop-line-color-panel")).toBeInTheDocument();
     expect(swatch).toHaveAttribute("aria-expanded", "true");
-    const hex = screen.getByTestId("crop-line-color-field-hex");
-    hex.focus();
-    fireEvent.keyDown(hex, { key: "Escape" });
+    const hue = screen.getByTestId("crop-line-color-field-hue");
+    hue.focus();
+    fireEvent.keyDown(hue, { key: "Escape" });
     expect(screen.queryByTestId("crop-line-color-panel")).toBeNull();
     expect(document.activeElement).toBe(swatch);
     fireEvent.click(swatch);
@@ -176,7 +181,7 @@ describe("the crop bar's line color swatch", () => {
     expect(screen.queryByTestId("crop-line-color-panel")).toBeNull();
   });
 
-  it("is reachable from the keyboard, and a hex typed in the picker writes the shared line color", async () => {
+  it("is reachable from the keyboard, and the hue rail's arrows write the shared line color", async () => {
     const view = mountBoth();
     const user = userEvent.setup();
     await user.tab();
@@ -184,12 +189,14 @@ describe("the crop bar's line color swatch", () => {
     await user.keyboard("{Enter}");
     expect(screen.getByTestId("crop-line-color-panel")).toBeInTheDocument();
     // Opening it takes focus into the picker.
-    const hex = screen.getByTestId("crop-line-color-field-hex");
-    expect(document.activeElement).toBe(hex);
-    await user.clear(hex);
-    await user.type(hex, "#ff8800");
-    expect(view.sent.filter((c) => c.type === "set_line_color").pop()).toEqual({ type: "set_line_color", color: "#ff8800" });
-    expect(view.state.lineColor).toEqual({ color: "#ff8800" });
+    const hue = screen.getByTestId("crop-line-color-field-hue");
+    expect(document.activeElement).toBe(hue);
+    await user.keyboard("{ArrowRight}{ArrowRight}");
+    expect(view.sent.filter((c) => c.type === "set_line_color").pop()).toEqual({ type: "set_line_color", color: "#ff2a00" });
+    expect(view.state.lineColor).toEqual({ color: "#ff2a00" });
+    // Tab goes on to Thickness.
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByTestId("crop-line-width-track"));
   });
 
   it("opens under the swatch and stays inside the window wherever the swatch is", () => {
@@ -225,14 +232,16 @@ describe("the crop bar's line color swatch", () => {
     const view = mountBoth();
     expect(screen.queryByTestId("gridwarp-line-auto")).toBeNull();
     fireEvent.click(screen.getByTestId("crop-line-color"));
-    fireEvent.click(screen.getByTestId("crop-line-color-field-swatch-4e7ea8"));
-    expect(screen.getByTestId("gridwarp-line-color-field")).toHaveAttribute("data-value", "#4e7ea8");
+    fireEvent.keyDown(screen.getByTestId("crop-line-color-field-hue"), { key: "ArrowRight" });
+    expect(screen.getByTestId("gridwarp-line-color-field")).toHaveAttribute("data-value", "#ff1500");
     // Grid Warp's row sets it; the crop's swatch shows it.
     fireEvent.mouseDown(screen.getByTestId("outside"));
     fireEvent.click(screen.getByTestId("gridwarp-line-color-field"));
-    fireEvent.click(screen.getByTestId("gridwarp-line-color-field-swatch-8a5a3c"));
-    expect(view.state.lineColor).toEqual({ color: "#8a5a3c" });
-    expect(screen.getByTestId("crop-line-color").getAttribute("data-hint")).toMatch(/^Crop line color: #8a5a3c\./);
+    // Its popover is the same compact picker.
+    expect(screen.queryByTestId("gridwarp-line-color-field-hex")).toBeNull();
+    fireEvent.keyDown(screen.getByTestId("gridwarp-line-color-field-hue"), { key: "ArrowRight" });
+    expect(view.state.lineColor).toEqual({ color: "#ff2a00" });
+    expect(screen.getByTestId("crop-line-color").getAttribute("data-hint")).toMatch(/^Crop line color: #ff2a00\./);
   });
 });
 
@@ -269,7 +278,9 @@ describe("the line color preferences", () => {
     expect(screen.getByTestId("prefs-line-color-auto")).toHaveAttribute("aria-checked", "false");
     fireEvent.click(screen.getByTestId("prefs-line-color-auto"));
     expect(latest.prefs.lineColorAuto).toBe(true);
+    // Preferences keeps the full picker: swatches and a hex box.
     fireEvent.click(screen.getByTestId("prefs-line-color"));
+    expect(screen.getByTestId("prefs-line-color-hex")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("prefs-line-color-swatch-4e7ea8"));
     expect(latest.prefs.lineColor).toBe("#4e7ea8");
   });

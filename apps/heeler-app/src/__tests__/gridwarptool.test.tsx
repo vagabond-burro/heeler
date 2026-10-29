@@ -436,8 +436,8 @@ describe("the grid warp tool", () => {
     s = reduce(s, { type: "set_line_color", color: "nope" });
     expect(s.lineColor).toEqual({ color: null });
     fireEvent.click(screen.getByTestId("gridwarp-line-color-field"));
-    fireEvent.click(screen.getByTestId("gridwarp-line-color-field-swatch-000000"));
-    expect(latest.lineColor).toEqual({ color: "#000000" });
+    fireEvent.keyDown(screen.getByTestId("gridwarp-line-color-field-hue"), { key: "ArrowRight" });
+    expect(latest.lineColor).toEqual({ color: "#ff1500" });
   });
 
   it("the heat map's colors: luma from white to black, chroma from red to blue", () => {

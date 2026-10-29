@@ -293,9 +293,9 @@ describe("the shape warp tool", () => {
     // The section's LINES row is the same setting Grid Warp's is.
     expect(screen.queryByTestId("shapewarp-line-auto")).toBeNull();
     fireEvent.click(screen.getByTestId("shapewarp-line-color-field"));
-    fireEvent.click(screen.getByTestId("shapewarp-line-color-field-swatch-ffffff"));
-    expect(latest.lineColor).toEqual({ color: "#ffffff" });
-    expect(rings[0].querySelector("polygon")!.getAttribute("stroke")).toBe("hsla(0, 0%, 100%, 0.9)");
+    fireEvent.keyDown(screen.getByTestId("shapewarp-line-color-field-hue"), { key: "ArrowRight" });
+    expect(latest.lineColor).toEqual({ color: "#20df30" });
+    expect(rings[0].querySelector("polygon")!.getAttribute("stroke")).toMatch(/^hsla\(125, /);
   });
 
   it("a row's dropdown gives the shape any of the Radial layer's outlines, with the outline's own knob", () => {

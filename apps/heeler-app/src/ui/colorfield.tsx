@@ -33,6 +33,7 @@ export function ColorField({
   width = 26,
   onBegin,
   onEnd,
+  compact = false,
 }: {
   value: string;
   onChange: (hex: string) => void;
@@ -40,6 +41,8 @@ export function ColorField({
   testid: string;
   hint?: string;
   width?: number;
+  /** the field and the hue rail alone (ColorPicker's compact) */
+  compact?: boolean;
   /** Gesture brackets: a drag in the field or on the rail writes one
    * color per mousemove, and without the bracket each is its own undo
    * entry. The caller passes the key its command carries. */
@@ -99,7 +102,7 @@ export function ColorField({
             boxShadow: "0 8px 22px rgba(0,0,0,.6)", padding: 8,
           }}
         >
-          <ColorPicker value={value} onChange={onChange} label={label} testid={testid} onBegin={onBegin} onEnd={onEnd} />
+          <ColorPicker value={value} onChange={onChange} label={label} testid={testid} onBegin={onBegin} onEnd={onEnd} compact={compact} />
         </div>
       )}
     </div>
@@ -111,7 +114,11 @@ export function ColorField({
  * settings hold one inline (2026-09-30: "instead of having the pop up
  * color swatch the layer could be collapsible/expandable and have both
  * the color picker and color fields"). A drag is one gesture (onBegin
- * and onEnd); only the primary button drags.*/
+ * and onEnd); only the primary button drags. Compact is the field, low,
+ * and the hue rail alone, for a quick pick of the lines over the
+ * photograph (2026-10-29: "This isn't for a painting tool, it's just a
+ * quick select for line colors"); the hue rail takes the arrow keys
+ * either way.*/
 export function ColorPicker({
   value,
   onChange,
@@ -119,7 +126,8 @@ export function ColorPicker({
   testid,
   onBegin,
   onEnd,
-  fieldHeight = 96,
+  fieldHeight,
+  compact = false,
 }: {
   value: string;
   onChange: (hex: string) => void;
@@ -128,8 +136,10 @@ export function ColorPicker({
   onBegin?: () => void;
   onEnd?: () => void;
   fieldHeight?: number;
+  compact?: boolean;
 }) {
   const [h, s, v] = hexToHsv(value);
+  const height = fieldHeight ?? (compact ? 44 : 96);
   // The hex box's in-progress text. Bound straight to the canonical
   // value, a hex that is not yet six digits could never be typed: the
   // change was rejected, the prop never moved, and React snapped the
@@ -177,7 +187,7 @@ export function ColorPicker({
           track(e.currentTarget, e, (fx, fy) => onChange(hsvToHex(h, fx, 1 - fy)));
         }}
         style={{
-          position: "relative", height: fieldHeight, cursor: "crosshair",
+          position: "relative", height, cursor: "crosshair",
           background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${hsvToHex(h, 1, 1)})`,
           border: "1px solid var(--line-2)",
         }}
@@ -196,6 +206,18 @@ export function ColorPicker({
       {/* Hue rail. */}
       <div
         data-testid={`${testid}-hue`}
+        role="slider"
+        tabIndex={0}
+        aria-label={`${label} hue`}
+        aria-valuemin={0}
+        aria-valuemax={360}
+        aria-valuenow={Math.round(h)}
+        onKeyDown={(e) => {
+          const step = e.key === "ArrowRight" || e.key === "ArrowUp" ? 5 : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -5 : 0;
+          if (!step) return;
+          e.preventDefault();
+          onChange(hsvToHex((h + step + 360) % 360, s || 1, v || 1));
+        }}
         onPointerDown={(e) => {
           if (!isPrimaryPress(e)) return;
           e.preventDefault();
@@ -216,41 +238,45 @@ export function ColorPicker({
           }}
         />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 3 }}>
-        {SWATCHES.map((sw) => (
-          <button
-            key={sw}
-            data-testid={`${testid}-swatch-${sw.slice(1)}`}
-            aria-label={sw}
-            onClick={() => onChange(sw)}
+      {!compact && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 3 }}>
+            {SWATCHES.map((sw) => (
+              <button
+                key={sw}
+                data-testid={`${testid}-swatch-${sw.slice(1)}`}
+                aria-label={sw}
+                onClick={() => onChange(sw)}
+                style={{
+                  all: "unset", cursor: "pointer", height: 13, background: sw,
+                  border: `1px solid ${sw.toLowerCase() === value.toLowerCase() ? "var(--accent)" : "var(--line-2)"}`,
+                }}
+              />
+            ))}
+          </div>
+          <input
+            data-testid={`${testid}-hex`}
+            aria-label={`${label} hex`}
+            value={draft ?? value}
+            spellCheck={false}
+            onFocus={() => setDraft(value)}
+            onChange={(e) => {
+              const t = e.target.value;
+              setDraft(t);
+              const trimmed = t.trim();
+              if (/^#?[0-9a-f]{6}$/i.test(trimmed)) {
+                onChange(trimmed.startsWith("#") ? trimmed : `#${trimmed}`);
+              }
+            }}
+            onBlur={() => setDraft(null)}
             style={{
-              all: "unset", cursor: "pointer", height: 13, background: sw,
-              border: `1px solid ${sw.toLowerCase() === value.toLowerCase() ? "var(--accent)" : "var(--line-2)"}`,
+              background: "var(--bg-app)", border: "1px solid var(--line-4)",
+              color: "var(--text-body)", fontSize: 11, padding: "2px 5px",
+              fontFamily: "Consolas, ui-monospace, monospace", outline: "none",
             }}
           />
-        ))}
-      </div>
-      <input
-        data-testid={`${testid}-hex`}
-        aria-label={`${label} hex`}
-        value={draft ?? value}
-        spellCheck={false}
-        onFocus={() => setDraft(value)}
-        onChange={(e) => {
-          const t = e.target.value;
-          setDraft(t);
-          const trimmed = t.trim();
-          if (/^#?[0-9a-f]{6}$/i.test(trimmed)) {
-            onChange(trimmed.startsWith("#") ? trimmed : `#${trimmed}`);
-          }
-        }}
-        onBlur={() => setDraft(null)}
-        style={{
-          background: "var(--bg-app)", border: "1px solid var(--line-4)",
-          color: "var(--text-body)", fontSize: 11, padding: "2px 5px",
-          fontFamily: "Consolas, ui-monospace, monospace", outline: "none",
-        }}
-      />
+        </>
+      )}
     </div>
   );
 }
