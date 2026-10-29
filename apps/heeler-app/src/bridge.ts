@@ -1282,10 +1282,11 @@ export async function updatePano(
 
 /** A panorama's starting crop as [crop_x, crop_y, crop_w, crop_h]: the
  * largest rectangle its stitched picture fills. Waits for a stitch still
- * running; null when the option is off or nothing needs cutting away. */
-export async function panoAutoCrop(imageId: string): Promise<[number, number, number, number] | null> {
+ * running; null when the option is off or nothing needs cutting away.
+ * `evenOff` answers with the rectangle when the option is off too. */
+export async function panoAutoCrop(imageId: string, evenOff = false): Promise<[number, number, number, number] | null> {
   if (!isTauri()) return null;
-  return call<[number, number, number, number] | null>("pano_auto_crop", { imageId });
+  return call<[number, number, number, number] | null>("pano_auto_crop", { imageId, evenOff });
 }
 
 export interface StitchProgress {

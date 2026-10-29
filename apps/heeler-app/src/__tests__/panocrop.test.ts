@@ -95,3 +95,28 @@ it("an edit made while the stitch was still running keeps the panorama uncropped
   await opening;
   expect(crop(doc.get())).toEqual([0, 0, 1, 1]);
 });
+
+it("switching the option off takes out a starting crop given before the app last started", async () => {
+  // The crop was saved with the panorama; this run of the app never gave
+  // it, so only the stitch's own rectangle says it is Auto-crop's. The
+  // full-size stitch places it a cell from the preview's.
+  const doc = opened();
+  doc.dispatch({ type: "set_params", id: cropNode(doc.get()).id, values: { crop_x: 0.012, crop_y: 0.083, crop_w: 0.965, crop_h: 0.796 } });
+  backend.crop.mockImplementation(async (_id: string, evenOff?: boolean) => (evenOff ? CROP : null));
+  await offerPanoCrop("pan", doc.get, doc.dispatch, false, true);
+  expect(backend.crop).toHaveBeenLastCalledWith("pan", true);
+  expect(crop(doc.get())).toEqual([0, 0, 1, 1]);
+});
+
+it("switching the option off leaves a crop the user drew", async () => {
+  const doc = opened();
+  doc.dispatch({ type: "set_params", id: cropNode(doc.get()).id, values: { crop_x: 0.2, crop_y: 0.1, crop_w: 0.5, crop_h: 0.6 } });
+  backend.crop.mockImplementation(async (_id: string, evenOff?: boolean) => (evenOff ? CROP : null));
+  await offerPanoCrop("pan", doc.get, doc.dispatch, false, true);
+  expect(crop(doc.get())).toEqual([0.2, 0.1, 0.5, 0.6]);
+  // A re-stitch with the option off asks nothing more and changes nothing.
+  backend.crop.mockClear();
+  await offerPanoCrop("pan", doc.get, doc.dispatch, false);
+  expect(backend.crop).toHaveBeenCalledTimes(1);
+  expect(crop(doc.get())).toEqual([0.2, 0.1, 0.5, 0.6]);
+});

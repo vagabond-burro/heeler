@@ -10213,13 +10213,16 @@ const PANO_CROP_WAIT: std::time::Duration = std::time::Duration::from_secs(300);
 /// crop_w, crop_h]: the largest rectangle the stitched picture fills.
 /// Waits for the stitch of the panorama's current recipe when it is
 /// still running. None when the recipe's auto_crop is off, the picture
-/// fills its whole canvas, or no stitch arrived in time.
+/// fills its whole canvas, or no stitch arrived in time. `even_off` asks
+/// for the rectangle with the switch off too: switching it off takes away
+/// a crop that is that rectangle, which a crop given before the app last
+/// started is, though nothing in this run remembers giving it.
 #[tauri::command]
-async fn pano_auto_crop(app: tauri::AppHandle, image_id: String) -> Result<Option<[f32; 4]>, String> {
+async fn pano_auto_crop(app: tauri::AppHandle, image_id: String, even_off: Option<bool>) -> Result<Option<[f32; 4]>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let path = with_session(&app, |s| Ok(s.paths.get(&image_id).cloned()))?;
         let Some(path) = path.filter(|p| is_pano_path(p)) else { return Ok(None) };
-        if !read_pano(&path)?.auto_crop {
+        if !read_pano(&path)?.auto_crop && even_off != Some(true) {
             return Ok(None);
         }
         let recipe = std::fs::read_to_string(&path).ok().as_deref().and_then(stitch_recipe).ok_or("bad panorama manifest")?;

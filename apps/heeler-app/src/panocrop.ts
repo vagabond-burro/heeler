@@ -30,19 +30,33 @@ function same(a: Crop, b: Crop): boolean {
   return a.every((v, i) => Math.abs(v - b[i]) < 1e-6);
 }
 
+function near(a: Crop, b: Crop): boolean {
+  return a.every((v, i) => Math.abs(v - b[i]) <= GIVEN_NEAR);
+}
+
 function setCrop(s: State, c: Crop): Command {
   return { type: "set_params", id: cropNode(s).id, values: { crop_x: c[0], crop_y: c[1], crop_w: c[2], crop_h: c[3] } };
 }
 
+/** How near a crop must be to the rectangle the stitch fills to be taken
+ * for the one Auto-crop gave, when this session did not give it. The
+ * preview's stitch and the full-size one place the rectangle a cell
+ * apart, and a crop the user drew is not within this on every side. */
+const GIVEN_NEAR = 0.02;
+
 /** Asks for the panorama's starting crop and applies it where nobody
  * chose a crop. `fresh` says the photograph had no edits when it was
  * opened. With no starting crop to give (the option off, or nothing to
- * cut away), a crop this module gave goes back to the full frame. */
+ * cut away), a crop this module gave goes back to the full frame.
+ * `switchedOff`: the user just turned Auto-crop off, so a crop that is
+ * the rectangle the stitch fills goes too, though it was given before
+ * the app last started and this module has no record of it. */
 export async function offerPanoCrop(
   image: string,
   current: () => State,
   dispatch: (c: Command) => void,
   fresh: boolean,
+  switchedOff = false,
 ): Promise<void> {
   const request = (requested.get(image) ?? 0) + 1;
   requested.set(image, request);
@@ -57,6 +71,17 @@ export async function offerPanoCrop(
   const before = given.get(image);
   const ours = before !== undefined && same(now, before);
   if (!rect) {
+    if (!ours && switchedOff && !same(now, FULL)) {
+      const filled = await panoAutoCrop(image, true);
+      if (requested.get(image) !== request) return;
+      const s2 = current();
+      if (s2.activeImage !== image || !filled) return;
+      const now2 = cropOf(s2);
+      if (!near(now2, filled)) return;
+      dispatch(setCrop(s2, FULL));
+      given.delete(image);
+      return;
+    }
     if (ours) {
       dispatch(setCrop(s, FULL));
       given.delete(image);

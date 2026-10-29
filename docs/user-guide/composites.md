@@ -16,7 +16,7 @@ The Pano panel says which profile was found, and for how many of the frames. Whe
 
 A panorama's edges are ragged: each frame was pointed a little higher or lower than the last, and the surface bends them. With **Auto-crop** on (the default), a panorama nobody has edited opens with Crop & Rotate already set to the largest rectangle that has no empty area in it. It is an ordinary crop, not a cut: open the crop tool to widen it again, or press Undo, and the whole stitch is still there. If you change the panorama's surface or frames, a crop you have not touched follows the new edges; a crop you set yourself is left alone.
 
-Turn **Auto-crop** off and the panorama shows its whole canvas, empty edges included. Switching it off takes away a starting crop it gave this session, and switching it on or off never stitches again.
+Turn **Auto-crop** off and the panorama shows its whole canvas, empty edges included. Switching it off takes away the starting crop it gave, even one given before Heeler was last closed; a crop you drew yourself stays. Switching it on or off never stitches again.
 
 ### Seams
 
