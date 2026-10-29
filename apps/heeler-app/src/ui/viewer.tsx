@@ -16,6 +16,7 @@ import { OpIcon } from "./selecticons";
 import { TrackSlider } from "./track";
 import { StackMergeCanceled, StackMergeProgress } from "./stackmerge";
 import { CropFitControls, CropRatioBar } from "./cropratio";
+import { LineColorSwatch } from "./linecolor";
 import { ratioLabel } from "./cropratioparts";
 import { cropRectOf } from "../cropfit";
 import { SelectToolButton } from "./selecttool";
@@ -1554,6 +1555,18 @@ armed has settings to show.*/}
               onStayInside={(on) => dispatch({ type: "set_prefs", prefs: { cropStayInside: on } })}
             />
           )}
+          {state.tool === "crop" && (
+            // The crop's lines in the one line color; the bar has no room
+            // for the LINES row, so a swatch opens it.
+            <LineColorSwatch
+              lineColor={state.lineColor}
+              dispatch={dispatch}
+              previewUrl={engineFrame ?? beforeSrc ?? img?.src ?? null}
+              prefix="crop"
+              subject="crop lines"
+              name="Crop line color"
+            />
+          )}
           {state.tool === "crop" && state.splitOn && (
             <div style={{ width: 1, height: 14, background: "#1f2426" }} />
           )}
@@ -1758,7 +1771,18 @@ existing stack").*/}
                 // A stand-in when the photo has no crop node yet: the
                 // first drag builds the real one (materializeMainTool).
                 const crop = cropNode(state);
-                return <CropOverlay node={crop} dispatch={dispatch} aspect={state.cropAspect} view={view} stayInside={state.prefs.cropStayInside} ratioName={ratioLabel(state.cropAspect, state.prefs.cropRatios)} />;
+                return (
+                  <CropOverlay
+                    node={crop}
+                    dispatch={dispatch}
+                    aspect={state.cropAspect}
+                    view={view}
+                    stayInside={state.prefs.cropStayInside}
+                    ratioName={ratioLabel(state.cropAspect, state.prefs.cropRatios)}
+                    lineColor={state.lineColor}
+                    previewUrl={engineFrame ?? beforeSrc ?? img?.src ?? null}
+                  />
+                );
               })()}
             {/* Shape Warp: the same preview canvas and hold as Grid
                 Warp, with the shapes' overlay on top. Mounted while the
@@ -1866,6 +1890,8 @@ center, maybe rather the center of the visible pixels on the layer."*/}
                     // set_tool toggles, so re-sending the active tool
                     // clears it.
                     onDone={() => dispatch({ type: "set_tool", tool: "straighten" })}
+                    lineColor={state.lineColor}
+                    previewUrl={engineFrame ?? beforeSrc ?? img?.src ?? null}
                   />
                 );
               })()}

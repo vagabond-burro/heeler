@@ -34,6 +34,8 @@ export function StraightenOverlay({
   dispatch,
   view = IDENTITY_VIEW,
   onDone,
+  lineColor = AUTO_LINE,
+  previewUrl = null,
 }: {
   node: NodeCard;
   dispatch: D;
@@ -41,8 +43,14 @@ export function StraightenOverlay({
   /** Called once the angle is committed, so the viewer can drop back to
    * no tool: this is a one-shot gesture, not a mode you sit in. */
   onDone?: () => void;
+  /** the overlay lines' color (linecolor.tsx); automatic when unset */
+  lineColor?: LineColorUi;
+  /** the frame on screen, for the automatic color */
+  previewUrl?: string | null;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  const tint = resolveLineColor(lineColor, useAutoLineColor(previewUrl));
+  const lineCss = lineColorCss(tint.hue, tint.luma, tint.sat, 0.95);
   const [line, setLine] = useState<null | { x0: number; y0: number; x1: number; y1: number }>(null);
 
   /** Client point to a point inside this overlay, for drawing only. */
@@ -97,13 +105,13 @@ export function StraightenOverlay({
     >
       {line && (
         <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
-          <line x1={line.x0} y1={line.y0} x2={line.x1} y2={line.y1} stroke="var(--accent)" strokeWidth={1.4} />
-          <circle cx={line.x0} cy={line.y0} r={3} fill="var(--accent)" />
-          <circle cx={line.x1} cy={line.y1} r={3} fill="var(--accent)" />
+          <line data-testid="straighten-line" x1={line.x0} y1={line.y0} x2={line.x1} y2={line.y1} stroke={lineCss} strokeWidth={1.4} />
+          <circle cx={line.x0} cy={line.y0} r={3} fill={lineCss} />
+          <circle cx={line.x1} cy={line.y1} r={3} fill={lineCss} />
           <text
             x={(line.x0 + line.x1) / 2 + 10}
             y={(line.y0 + line.y1) / 2 - 8}
-            fill="#eef2f5"
+            fill={lineCss}
             fontSize={11}
             data-testid="straighten-readout"
           >
@@ -649,6 +657,8 @@ export function CropOverlay({
   view = IDENTITY_VIEW,
   stayInside = false,
   ratioName = null,
+  lineColor = AUTO_LINE,
+  previewUrl = null,
 }: {
   node: NodeCard;
   dispatch: D;
@@ -660,9 +670,19 @@ export function CropOverlay({
   stayInside?: boolean;
   /** the held ratio's name, worn on the crop's corner (2.39, 16:9) */
   ratioName?: string | null;
+  /** the overlay lines' color (linecolor.tsx); automatic when unset */
+  lineColor?: LineColorUi;
+  /** the frame on screen, for the automatic color */
+  previewUrl?: string | null;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const rectRef = useRef<HTMLDivElement>(null);
+  // The box, its guides, handles and ring in the one line color every
+  // overlay reads; the shade outside the crop and the labels' dark
+  // backing stay as they are, so the lines read on any photograph.
+  const tint = resolveLineColor(lineColor, useAutoLineColor(previewUrl));
+  const lineCss = lineColorCss(tint.hue, tint.luma, tint.sat, 0.95);
+  const guideCss = lineColorCss(tint.hue, tint.luma, tint.sat, 0.45);
   const drag = useRef<CropDrag | null>(null);
   const turning = useRef<RingDrag | null>(null);
   // Held while the ring is: the readout and the level grid show.
@@ -817,7 +837,7 @@ export function CropOverlay({
       onMouseDown={begin(mode)}
       style={{
         position: "absolute", left: pct(left), top: pct(top), width: 11, height: 11,
-        margin: -6, background: "#eef2f5", cursor: `${mode === "tl" || mode === "br" ? "nwse" : "nesw"}-resize`,
+        margin: -6, background: lineCss, cursor: `${mode === "tl" || mode === "br" ? "nwse" : "nesw"}-resize`,
         boxShadow: "0 0 0 1px rgba(0,0,0,.55)",
       }}
     />
@@ -845,7 +865,7 @@ export function CropOverlay({
         ref={rectRef}
         data-testid="crop-rect"
         onMouseDown={begin("move")}
-        style={{ position: "absolute", left: pct(x), top: pct(y), width: pct(w), height: pct(h), border: "1px solid #eef2f5", cursor: "move", boxSizing: "border-box" }}
+        style={{ position: "absolute", left: pct(x), top: pct(y), width: pct(w), height: pct(h), border: `1px solid ${lineCss}`, cursor: "move", boxSizing: "border-box" }}
       >
         {/* The rotation ring: a circle about the crop's center, the
 crop's short side across ("meet" keeps it round on any crop),
@@ -855,7 +875,7 @@ grabbed anywhere along a band either side of the line.*/}
           preserveAspectRatio="xMidYMid meet"
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible", pointerEvents: "none" }}
         >
-          <circle cx={50} cy={50} r={44} fill="none" stroke={ringHeld ? "var(--accent)" : "rgba(238,242,245,.45)"} strokeWidth={1} strokeDasharray={ringHeld ? undefined : "3 4"} vectorEffect="non-scaling-stroke" />
+          <circle cx={50} cy={50} r={44} fill="none" data-testid="crop-ring-line" stroke={ringHeld ? lineCss : guideCss} strokeWidth={1} strokeDasharray={ringHeld ? undefined : "3 4"} vectorEffect="non-scaling-stroke" />
           <circle
             data-testid="crop-ring"
             cx={50}
@@ -875,8 +895,8 @@ grabbed anywhere along a band either side of the line.*/}
           // set a horizon or an upright against.
           [1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
             <React.Fragment key={`level-${i}`}>
-              <div data-testid="crop-level-grid" style={{ position: "absolute", left: pct(i / 10), top: 0, bottom: 0, width: 1, background: "rgba(238,242,245,.28)" }} />
-              <div style={{ position: "absolute", top: pct(i / 10), left: 0, right: 0, height: 1, background: "rgba(238,242,245,.28)" }} />
+              <div data-testid="crop-level-grid" style={{ position: "absolute", left: pct(i / 10), top: 0, bottom: 0, width: 1, background: guideCss }} />
+              <div style={{ position: "absolute", top: pct(i / 10), left: 0, right: 0, height: 1, background: guideCss }} />
             </React.Fragment>
           ))}
         {ringHeld && (
@@ -892,8 +912,8 @@ grabbed anywhere along a band either side of the line.*/}
         )}
         {!ringHeld && [1 / 3, 2 / 3].map((t) => (
           <React.Fragment key={t}>
-            <div style={{ position: "absolute", left: pct(t), top: 0, bottom: 0, width: 1, background: "rgba(238,242,245,.35)" }} />
-            <div style={{ position: "absolute", top: pct(t), left: 0, right: 0, height: 1, background: "rgba(238,242,245,.35)" }} />
+            <div data-testid="crop-guide" style={{ position: "absolute", left: pct(t), top: 0, bottom: 0, width: 1, background: guideCss }} />
+            <div data-testid="crop-guide" style={{ position: "absolute", top: pct(t), left: 0, right: 0, height: 1, background: guideCss }} />
           </React.Fragment>
         ))}
         {ratioName && (
