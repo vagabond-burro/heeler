@@ -39,9 +39,9 @@ Straightening turns the photograph inside its frame, which leaves empty corners 
 - When **Straighten** changes (the row, the drawn line or the crop tool's rotation ring), the crop shrinks so no empty corner shows, keeping its center and its ratio. A crop that already filled the picture follows it back out, so straightening and then returning to level gives the whole frame again. A smaller crop is left alone until the picture's edge reaches it.
 - Dragging the crop or its corners outward stops at the picture's edge.
 
-Turn it off with **Stay inside** on the crop bar or on the **Crop** row at the foot of this section, and the crop stays wherever it is put. Flip and Rotate's quarter turns leave no empty corners and never change the crop. A document opens exactly as it was saved: the setting only acts on a new change of angle.
+Turn it off with the **Stay inside picture** button on the crop bar (a frame with a smaller dashed frame inside it, lit while on) or with **Stay inside** on the **Crop** row at the foot of this section, and the crop stays wherever it is put. Flip and Rotate's quarter turns leave no empty corners and never change the crop. A document opens exactly as it was saved: the setting only acts on a new change of angle.
 
-**Crop to picture** (**Crop to picture** on the crop bar, **To picture** on the **Crop** row) sets the largest crop that is all picture at the current angle, centered, in the ratio the crop bar holds, or else in the crop's own ratio. It is one undo step, and grays when the crop already is that.
+**Crop to picture** (the button on the crop bar showing an upright crop inside a turned picture, or **To picture** on the **Crop** row) sets the largest crop that is all picture at the current angle, centered, in the ratio the crop bar holds, or else in the crop's own ratio. It is one undo step, and grays when the crop already is that.
 
 A crop's sides go no smaller than a twentieth of the frame, so a very long, thin ratio (far past the film crops, such as 30:1) may have no crop that is all picture at a steep angle. Then **Stay inside picture** leaves the crop as it is, a ratio chosen on the crop bar is set without the hold, and **Crop to picture** grays.
 

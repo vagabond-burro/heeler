@@ -186,10 +186,11 @@ export function CropFitControls({
         data-testid="crop-to-picture"
         disabled={!canFit}
         data-hint={canFit ? "Crop to picture: the largest crop with no empty corner at this angle, in the crop's ratio" : "Crop to picture: the crop already is the largest with no empty corner"}
+        aria-label="Crop to picture"
         onClick={onFit}
-        style={{ fontSize: 11, padding: "2px 7px" }}
+        style={{ display: "inline-flex", alignItems: "center", padding: "2px 5px" }}
       >
-        Crop to picture
+        <CropToPictureIcon />
       </button>
       <button
         className="chip"
@@ -201,12 +202,34 @@ export function CropFitControls({
             ? "Stay inside picture: on, a Straighten shrinks the crop and a drag stops at the picture's edge, so no empty corner shows; click to let the crop go past it"
             : "Stay inside picture: off, the crop goes wherever it is put; click to keep it to the picture"
         }
+        aria-label="Stay inside picture"
         onClick={() => onStayInside(!stayInside)}
-        style={{ fontSize: 11, padding: "2px 7px" }}
+        style={{ display: "inline-flex", alignItems: "center", padding: "2px 5px" }}
       >
-        Stay inside
+        <StayInsideIcon />
       </button>
     </span>
+  );
+}
+
+/** A turned picture with the largest upright crop inside it. */
+function CropToPictureIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false">
+      <path d="M5 2.5 21.5 5 19 21.5 2.5 19z" />
+      <rect x="7" y="7" width="10" height="10" fill="currentColor" fillOpacity="0.35" />
+    </svg>
+  );
+}
+
+/** A crop held inside the picture's edge, pointing in from both sides. */
+function StayInsideIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false">
+      <rect x="2.5" y="2.5" width="19" height="19" rx="1" />
+      <rect x="8" y="8" width="8" height="8" strokeDasharray="2 2" />
+      <path d="M2.5 12h3M18.5 12h3M12 2.5v3M12 18.5v3" />
+    </svg>
   );
 }
 

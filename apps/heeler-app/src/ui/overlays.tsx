@@ -658,6 +658,7 @@ export function CropOverlay({
   stayInside = false,
   ratioName = null,
   lineColor = AUTO_LINE,
+  lineWidth = 1,
   previewUrl = null,
 }: {
   node: NodeCard;
@@ -672,6 +673,9 @@ export function CropOverlay({
   ratioName?: string | null;
   /** the overlay lines' color (linecolor.tsx); automatic when unset */
   lineColor?: LineColorUi;
+  /** the box's, the guides' and the ring's thickness in screen pixels
+   * (shapeLineWidth, the one thickness every line overlay reads) */
+  lineWidth?: number;
   /** the frame on screen, for the automatic color */
   previewUrl?: string | null;
 }) {
@@ -865,7 +869,7 @@ export function CropOverlay({
         ref={rectRef}
         data-testid="crop-rect"
         onMouseDown={begin("move")}
-        style={{ position: "absolute", left: pct(x), top: pct(y), width: pct(w), height: pct(h), border: `1px solid ${lineCss}`, cursor: "move", boxSizing: "border-box" }}
+        style={{ position: "absolute", left: pct(x), top: pct(y), width: pct(w), height: pct(h), border: `${lineWidth}px solid ${lineCss}`, cursor: "move", boxSizing: "border-box" }}
       >
         {/* The rotation ring: a circle about the crop's center, the
 crop's short side across ("meet" keeps it round on any crop),
@@ -875,7 +879,7 @@ grabbed anywhere along a band either side of the line.*/}
           preserveAspectRatio="xMidYMid meet"
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible", pointerEvents: "none" }}
         >
-          <circle cx={50} cy={50} r={44} fill="none" data-testid="crop-ring-line" stroke={ringHeld ? lineCss : guideCss} strokeWidth={1} strokeDasharray={ringHeld ? undefined : "3 4"} vectorEffect="non-scaling-stroke" />
+          <circle cx={50} cy={50} r={44} fill="none" data-testid="crop-ring-line" stroke={ringHeld ? lineCss : guideCss} strokeWidth={lineWidth} strokeDasharray={ringHeld ? undefined : "3 4"} vectorEffect="non-scaling-stroke" />
           <circle
             data-testid="crop-ring"
             cx={50}
@@ -912,8 +916,8 @@ grabbed anywhere along a band either side of the line.*/}
         )}
         {!ringHeld && [1 / 3, 2 / 3].map((t) => (
           <React.Fragment key={t}>
-            <div data-testid="crop-guide" style={{ position: "absolute", left: pct(t), top: 0, bottom: 0, width: 1, background: guideCss }} />
-            <div data-testid="crop-guide" style={{ position: "absolute", top: pct(t), left: 0, right: 0, height: 1, background: guideCss }} />
+            <div data-testid="crop-guide" style={{ position: "absolute", left: pct(t), top: 0, bottom: 0, width: lineWidth, marginLeft: -lineWidth / 2, background: guideCss }} />
+            <div data-testid="crop-guide" style={{ position: "absolute", top: pct(t), left: 0, right: 0, height: lineWidth, marginTop: -lineWidth / 2, background: guideCss }} />
           </React.Fragment>
         ))}
         {ratioName && (

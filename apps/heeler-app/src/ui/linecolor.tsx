@@ -98,6 +98,8 @@ export function LinesRow({
   );
 }
 
+const POPOVER_ZOOM = 1.25;
+
 /** The line color as one swatch, for a toolbar with no room for the
  * LINES row (the crop bar): it shows the color in use and opens the
  * LINES row in a popover under it. The same one setting, so a color
@@ -109,8 +111,11 @@ export function LinesRow({
  * off. Placed under the swatch, its right edge on the swatch's, and
  * kept inside the window (menupos.ts); opening it takes focus to Hue.
  * `name` heads the hint ("Crop line color"); `prefix` and `subject` go
- * to the LINES row. */
+ * to the LINES row, and to the THICKNESS row under it. Its rows draw a
+ * quarter larger than a section's ("The font size of the line
+ * properties is too small, scale by 1.25x"). */
 export function LineColorSwatch({
+  state,
   lineColor,
   dispatch,
   previewUrl,
@@ -118,6 +123,7 @@ export function LineColorSwatch({
   subject,
   name,
 }: {
+  state: State;
   lineColor: LineColorUi;
   dispatch: D;
   previewUrl: string | null;
@@ -190,12 +196,17 @@ export function LineColorSwatch({
       aria-label={name}
       style={{
         position: "fixed", left: at?.x ?? 0, top: at?.y ?? 0, visibility: at ? "visible" : "hidden", zIndex: 80,
-        width: 290, maxWidth: "calc(100vw - 16px)", boxSizing: "border-box",
+        width: 290 * POPOVER_ZOOM, maxWidth: "calc(100vw - 16px)", boxSizing: "border-box",
         background: "#191817", border: "1px solid var(--line-4)", boxShadow: "0 6px 18px rgba(0,0,0,.5)",
         padding: "5px 10px 10px",
       }}
     >
-      <LinesRow lineColor={lineColor} dispatch={dispatch} previewUrl={previewUrl} prefix={prefix} subject={subject} />
+      {/* Scaled inside the panel, not on it: zoom on the fixed panel
+          would scale its left and top as well. */}
+      <div style={{ zoom: POPOVER_ZOOM }}>
+        <LinesRow lineColor={lineColor} dispatch={dispatch} previewUrl={previewUrl} prefix={prefix} subject={subject} />
+        <LineWidthRow state={state} dispatch={dispatch} prefix={prefix} subject={subject} />
+      </div>
     </div>
   );
   return (

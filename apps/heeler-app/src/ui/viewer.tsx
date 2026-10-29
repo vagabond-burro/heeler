@@ -1598,6 +1598,7 @@ armed has settings to show.*/}
             // The crop's lines in the one line color; the bar has no room
             // for the LINES row, so a swatch opens it.
             <LineColorSwatch
+              state={state}
               lineColor={state.lineColor}
               dispatch={dispatch}
               previewUrl={engineFrame ?? beforeSrc ?? img?.src ?? null}
@@ -1821,6 +1822,7 @@ existing stack").*/}
                     stayInside={state.prefs.cropStayInside}
                     ratioName={ratioLabel(state.cropAspect, state.prefs.cropRatios)}
                     lineColor={state.lineColor}
+                    lineWidth={shapeLineWidth(state)}
                     previewUrl={engineFrame ?? beforeSrc ?? img?.src ?? null}
                   />
                 );

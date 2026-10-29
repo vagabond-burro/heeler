@@ -76,6 +76,17 @@ describe("the crop overlay's lines", () => {
   });
 });
 
+describe("the crop overlay's thickness", () => {
+  it("draws the box, the guides and the ring at the line thickness", () => {
+    const s = base();
+    render(<CropOverlay node={cropNode(s)} dispatch={() => {}} lineWidth={3} />);
+    expect(screen.getByTestId("crop-rect").style.borderWidth).toBe("3px");
+    const guides = screen.getAllByTestId("crop-guide");
+    expect(guides.map((g) => g.style.width || g.style.height)).toEqual(["3px", "3px", "3px", "3px"]);
+    expect(screen.getByTestId("crop-ring-line").getAttribute("stroke-width")).toBe("3");
+  });
+});
+
 /** The crop bar's swatch beside Grid Warp's LINES row, on one reducer. */
 function mountBoth(lineColor: LineColorUi = { hue: null, luma: null }) {
   const view: { state: State; sent: Command[] } = { state: { ...base(), lineColor }, sent: [] };
@@ -89,7 +100,7 @@ function mountBoth(lineColor: LineColorUi = { hue: null, luma: null }) {
     return (
       <div>
         <div data-testid="outside">elsewhere</div>
-        <LineColorSwatch lineColor={state.lineColor} dispatch={send} previewUrl={null} prefix="crop" subject="crop lines" name="Crop line color" />
+        <LineColorSwatch state={state} lineColor={state.lineColor} dispatch={send} previewUrl={null} prefix="crop" subject="crop lines" name="Crop line color" />
         <LinesRow lineColor={state.lineColor} dispatch={send} previewUrl={null} prefix="gridwarp" subject="grid lines" />
       </div>
     );
@@ -109,6 +120,19 @@ describe("the crop bar's line color swatch", () => {
     const auto = resolveLineColor({ hue: null, luma: null }, autoLineColor(null));
     expect(screen.getByTestId("crop-line-color-chip").style.background).toBe(asDrawn(lineColorCss(auto.hue, auto.luma, auto.sat, 1)));
     expect(screen.getByTestId("crop-line-color").getAttribute("data-hint")).toMatch(/^Crop line color: Auto\./);
+  });
+
+  it("holds the thickness under the color, a quarter larger than a section's rows", () => {
+    // "The font size of the line properties is too small, scale by 1.25x
+    // and also missing the line thickness controls."
+    const view = mountBoth();
+    fireEvent.click(screen.getByTestId("crop-line-color"));
+    const panel = screen.getByTestId("crop-line-color-panel");
+    expect((panel.firstElementChild as HTMLElement).style.zoom).toBe("1.25");
+    expect(panel.querySelector("[data-testid=crop-lines]")).not.toBeNull();
+    expect(panel.querySelector("[data-testid=crop-line-width-row]")).not.toBeNull();
+    fireEvent.click(screen.getByTestId("crop-line-width-pref"));
+    expect(view.sent).toContainEqual({ type: "set_photo_line_width", width: 0 });
   });
 
   it("opens the picker on a click, and Escape or a press outside closes it", () => {
