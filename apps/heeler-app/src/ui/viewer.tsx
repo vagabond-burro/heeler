@@ -70,6 +70,8 @@ import { MenuField } from "./menufield";
 import { maskOfLayer } from "../layerids";
 import { HoverSampler } from "../hoversampler";
 import { CURVE_PICK_REACH, layoutSplit, oneToOneBox, snapToDevice, visibleRoi, zoomSegActive } from "./viewerparts";
+import { Loupe, Navigator, ViewAidButtons } from "./viewaids";
+import { clampLoupeMag, clampLoupeRadius, loupeWheel, type StageView } from "./viewaidsparts";
 
 /** sRGB encode, matching the engine's to_display: the curve editor's
  * axis is display space, samples arrive scene-linear. */
@@ -653,6 +655,9 @@ async function recolorHueRead(cur: State, input: string, node: string, nx: numbe
   return { hue, chroma };
 }
 
+/** The stage's padding round the frame, inside its overflow. */
+const STAGE_PAD = 16;
+
 export function Viewer({
   state,
   dispatch,
@@ -1166,6 +1171,23 @@ export function Viewer({
     zoomRate: state.prefs.viewerZoomRate,
     rotationStep: state.prefs.viewerRotationStep,
     invertZoom: state.prefs.wheelZoomInverted,
+    // The Loupe up takes the wheel's zoom for its magnification and
+    // Ctrl+scroll for its size; Shift's pan and the rotations still move
+    // the canvas.
+    claimWheel: state.prefs.loupeOn
+      ? (e) => {
+          const op = loupeWheel(e, isMac(), state.prefs.viewerZoomRate, state.prefs.wheelZoomInverted);
+          if (!op) return false;
+          dispatch({
+            type: "set_prefs",
+            prefs:
+              op.kind === "mag"
+                ? { loupeMagnification: clampLoupeMag(state.prefs.loupeMagnification * op.factor) }
+                : { loupeRadius: clampLoupeRadius(state.prefs.loupeRadius * op.factor) },
+          });
+          return true;
+        }
+      : undefined,
   });
   // View rotation turns the canvas, not the tools. Every overlay gets the
   // current transform and inverts it when mapping the pointer, so crop,
@@ -1174,6 +1196,21 @@ export function Viewer({
   const view: ViewTransform = base
     ? { rotation: state.view.viewRotation, zoom: stageScale }
     : IDENTITY_VIEW;
+  // The Navigator's and the Loupe's view of the stage: the whole stage
+  // box, its padding too (the frame can show there), centered where the
+  // frame is.
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const patchRef = useRef<HTMLImageElement | null>(null);
+  const aidView: StageView | null =
+    base && stageSize
+      ? {
+          stage: { w: stageSize.w + 2 * STAGE_PAD, h: stageSize.h + 2 * STAGE_PAD },
+          base,
+          scale: stageScale,
+          pan: state.view.pan,
+          rotation: state.view.viewRotation,
+        }
+      : null;
   // Grid Warp's drag: the overlay writes the live mesh here and bumps
   // the version; the preview canvas redraws from it in the same commit.
   const gridWarpLive = useRef<WarpPair | null>(null);
@@ -1388,6 +1425,10 @@ button used to wear went to Split, where it says what Split does
             <path d="M12 4v16" />
           </svg>
         </button>
+        {/* The viewing aids: a map of the frame while zoomed past the
+            canvas, and a magnifying glass under the pointer. */}
+        <div style={{ width: 1, height: 14, background: "#1f2426" }} />
+        <ViewAidButtons state={state} dispatch={dispatch} />
         {/* No Brush button here. The brush belongs to a layer's mask, and arming
 it with no such layer did nothing. "I don't like the
 implicit workflow of it creating a brush adjustment layer. Someone
@@ -1507,7 +1548,7 @@ the cursor is on the photo.*/}
         onMouseDownCapture={spacePan.onMouseDown}
         onPointerDownCapture={spacePan.onPointerDown}
         style={{
-          flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, position: "relative", overflow: "hidden",
+          flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: STAGE_PAD, position: "relative", overflow: "hidden",
           // A drawn selection can begin on the gray around the picture,
           // so the gray wears its cursor (2026-10-08: "the cursor
           // doesn't change until it's within the picture border so it
@@ -1655,6 +1696,7 @@ existing stack").*/}
         )}
         {img && !state.splitOn && !abOn && multi.length < 2 && Boolean(engineFrame ?? beforeSrc ?? img.src) && (
           <div
+            ref={frameRef}
             data-testid="stage-frame"
             onMouseMove={(e) => {
               const out = readoutRef.current;
@@ -1752,6 +1794,7 @@ existing stack").*/}
                 stale mask slice the moment mask view turns off. */}
             {visiblePatch && (
               <img
+                ref={patchRef}
                 src={visiblePatch.url}
                 alt=""
                 data-testid="roi-patch"
@@ -4159,6 +4202,35 @@ softness it was pretending not to be related to.*/}
               />
             </div>
           )}
+        {img && !state.splitOn && !abOn && multi.length < 2 && aidView && Boolean(engineFrame ?? beforeSrc ?? img.src) && (
+          <>
+            {state.prefs.navigatorOn && (
+              <Navigator
+                view={aidView}
+                src={(engineFrame ?? beforeSrc ?? img.src)!}
+                corner={state.prefs.navigatorCorner}
+                size={state.prefs.navigatorSize}
+                filter={filter}
+                dispatch={dispatch}
+              />
+            )}
+            {state.prefs.loupeOn && (
+              <Loupe
+                stageRef={stageRef}
+                frameRef={frameRef}
+                imgRef={imgRef}
+                patchRef={patchRef}
+                patchRect={visiblePatch ? visiblePatch.rect : null}
+                view={aidView}
+                mag={state.prefs.loupeMagnification}
+                radius={state.prefs.loupeRadius}
+                truePct={truePct}
+                frameWidth={knownFrame ? knownFrame[0] : null}
+                filter={filter}
+              />
+            )}
+          </>
+        )}
         {/* The status row that used to float here moved to the app's docked
 StatusBar. "status/notifications/tooltips can be
 impossible to read" over the photograph.*/}

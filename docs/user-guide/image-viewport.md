@@ -17,6 +17,20 @@ The image viewport is the central canvas for viewing, comparing, cropping, selec
 
 View rotation is temporary navigation, not an edit. Straighten and crop are edit operations and are recorded in History.
 
+## Navigator and Loupe
+
+Two buttons after Split on the viewer's toolbar help you find your way around a photograph zoomed in close. Each shows the accent color while it is on, and both stay as you left them from one launch to the next.
+
+**Navigator** (a frame with a small rectangle in it) puts a thumbnail of the whole photograph in a corner of the canvas, with a rectangle for the part the canvas shows. It appears only while the photograph is zoomed past the canvas, so that some of it is out of view, and goes away at Fit. Drag the rectangle to move the view; click anywhere else on the thumbnail to center the view there, and keep dragging from it. Under view rotation the rectangle turns with the view. Right-click the button to choose the corner: **Top Left**, **Top Right**, **Bottom Left** or **Bottom Right** (Bottom Right to start). **Preferences > Interface > Navigator size** sets how large it draws, as a percent of the canvas (20 percent to start, 10 to 40).
+
+**Loupe** (a magnifying glass, or press `L`) is a round glass that follows the pointer over the canvas and shows what is under it magnified. Its magnification is printed just below it, with what that comes to in the photograph's own pixels once Heeler knows its full size (`4× · 250%`). While it is up:
+
+- Scroll, pinch or press `Cmd+=` and `Cmd+-` (`Ctrl+=` and `Ctrl+-` on Windows) to change the Loupe's magnification, from 1.5 to 16 times what the canvas shows, instead of the canvas's zoom. `Option` (`Alt` on Windows) while scrolling changes it more finely.
+- Hold `Cmd` (`Ctrl` on Windows) while scrolling, or press `Cmd+Shift+=` and `Cmd+Shift+-` (`Ctrl+Shift+=` and `Ctrl+Shift+-` on Windows), to make the glass bigger or smaller.
+- `Shift`+scroll, middle-drag and `Space`-drag still pan the canvas, and the rotation combinations still turn it.
+
+The Loupe shows the pixels the viewer already has: the frame on screen, and at 1:1 the sharp full-resolution slice where it covers the spot, so a Loupe over a photograph at 100% shows its real pixels, drawn as squares past one photograph pixel per screen pixel. It never asks for a render of its own. Clicks, drags and every tool work through it exactly as they do without it; it steps aside over the toolbar, the floating bars and the Navigator. The magnification and size are kept from one launch to the next.
+
 ## Before/after and split view
 
 The toolbar's buttons are icons: a gamut triangle for the warning, crop corners, a horizon being leveled for Straighten, two frames for Before/After and a divided frame for Split. While the Finish layers are up, **Flip Horizontal** and **Flip Vertical** follow Straighten and mirror the selected layer (see [Flipping a layer](finish/README.md#flipping-a-layer)). Each names itself in the status bar when the pointer rests on it.

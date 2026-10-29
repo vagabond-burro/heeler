@@ -1754,6 +1754,10 @@ export function MenuBar({ state, dispatch }: { state: State; dispatch: D }) {
       items: [
         item("Expand All Sections", () => runCommand("view.sections.expand", state, dispatch), "menu-view-sections-expand", false, "view.sections.expand", "Opens every adjustment section, the ones the filter chips leave out too; sections hidden in Preferences stay hidden. Option-click a closed section to do the same."),
         item("Collapse All Sections", () => runCommand("view.sections.collapse", state, dispatch), "menu-view-sections-collapse", false, "view.sections.collapse", "Folds every adjustment section, the ones the filter chips leave out too; sections hidden in Preferences stay hidden. Option-click an open section to do the same."),
+        // The canvas header's two viewing aids, here too so their keys
+        // have a menu to show in.
+        check("Navigator", state.prefs.navigatorOn, () => runCommand("view.navigator", state, dispatch), "menu-view-navigator", "A map of the whole photograph in a corner of the canvas while it is zoomed past the canvas; drag its rectangle to move the view", "view.navigator"),
+        check("Loupe", state.prefs.loupeOn, () => runCommand("view.loupe", state, dispatch), "menu-view-loupe", "A magnifying glass under the pointer; while it is up the wheel and the zoom keys change its magnification", "view.loupe"),
       ],
     },
     // The Window menu (2026-09-09): every pop-out as a switch, the way

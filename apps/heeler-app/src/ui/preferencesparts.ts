@@ -114,6 +114,12 @@ export const SETTINGS = [
     description: "Sets the number of degrees applied by each modified wheel rotation step.",
   },
   {
+    id: "navigator-size",
+    category: "interface",
+    label: "Navigator size",
+    description: "Sets how large the canvas's Navigator draws, as a percent of the canvas; it shows while the Navigator button is on and the photograph is zoomed past the canvas.",
+  },
+  {
     id: "wheel-zoom-direction",
     category: "interface",
     label: "Wheel zoom direction",

@@ -115,6 +115,14 @@ export const COMMANDS: CommandSpec[] = [
   { id: "view.fit", label: "Fit the Photograph", group: "View", scope: "develop", binding: "F", blurb: "The frame key, viewer flavor; Ctrl+0 works in every workspace" },
   { id: "view.before_after", label: "Before / After", group: "View", scope: "global", binding: "" },
   { id: "view.split", label: "Split View", group: "View", scope: "global", binding: "" },
+  // The canvas header's two viewing aids. L for the Loupe, free in every
+  // workspace (Shift+L is the Library). While it is up the zoom keys
+  // change its magnification rather than the canvas's, and with Shift
+  // added they change its size, the keyboard's Ctrl+scroll.
+  { id: "view.navigator", label: "Navigator", group: "View", scope: "global", binding: "" },
+  { id: "view.loupe", label: "Loupe", group: "View", scope: "global", binding: "L", blurb: "A magnifying glass under the pointer; the zoom keys and the wheel change its magnification while it is up" },
+  { id: "view.loupe.bigger", label: "Bigger Loupe", group: "View", scope: "global", binding: "Ctrl+Shift+=", blurb: "Only while the Loupe is up" },
+  { id: "view.loupe.smaller", label: "Smaller Loupe", group: "View", scope: "global", binding: "Ctrl+Shift+-", blurb: "Only while the Loupe is up" },
 
   // Culling
   { id: "nav.next_image", label: "Next Photo", group: "Culling", scope: "global", binding: "ArrowDown" },

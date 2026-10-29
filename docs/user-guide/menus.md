@@ -10,7 +10,7 @@ The menu bar changes slightly with the workspace. Develop shows **Layer**; Graph
 - **Recent Catalogs** folds out the last ten catalogs this computer has had open, most recent first, with the one in use ticked; choose one to switch to it. Right-click an entry for **Remove from this list**, or choose **Clear list** at the bottom to empty it; both forget a path and leave every database where it is. A catalog whose file is not there right now, on an unplugged drive for instance, is shown grayed and stays in the list. While a slow drive is still answering, its entry stays usable and says so when you point at it. The full history, past the ten the menu shows, is in Catalogs and recovery.
 - **Catalogs and recovery…** creates, opens, copies, moves, or merges the catalog database that stores library records and organization. Its [recovery controls](recovery.md) follow catalog creation, opening, and import: Catalog backup preserves the database; Recovery bundle also preserves edit graphs, takes, and user presets. Verify recovery bundle checks the bundle and referenced originals offline.
 - **Preferences…** (`Cmd+,`, `Ctrl+,` on Windows) opens the settings, in tabs: General, Interface, Editing & Brush, Import & Files, Export, Scripting, Assistant, Models, Storage, Backup and Hotkeys. It is on this File menu on a Mac too. A few of the tabs:
-  - **Interface**: the **Adjustment sections** sub tab chooses which sections the Adjustments panel shows and which sit pinned at its top; see [Hiding sections](adjustments/README.md#hiding-sections).
+  - **Interface**: **Navigator size**, how large the canvas's [Navigator](image-viewport.md#navigator-and-loupe) draws, as a percent of the canvas. The **Adjustment sections** sub tab chooses which sections the Adjustments panel shows and which sit pinned at its top; see [Hiding sections](adjustments/README.md#hiding-sections).
   - **Editing & Brush**: the brush's grain steps, **Mask overlay color** (red, magenta, cyan or green, each with its dot) and **Mask overlay opacity**, how strongly every mask overlay and depth view tints where the mask is white (50 percent to start, grays in proportion). The brush panel's Overlay slider starts from it each session.
   - **Import & Files**: how a newly imported RAW starts, **RAW default profile** (Linear, Standard or Film) and, below it, **RAW default sharpening** (Off, Low, Standard or High, the [Source section's Sharpening](adjustments/source.md); Standard to start). Both apply only to photographs opened for the first time after the change and to a Reset all edits; a photograph that already has edits keeps its own choice. Rendered files (JPEG, TIFF and the like) and Bake to Image results are never capture sharpened.
   - **Export**: **Never overwrite an existing file** saves an export whose name is taken to the next free name (`-2`, `-3`); off, a save dialog's Replace? is honored. No export ever writes over a photograph in your library (see [Export](export.md)).
@@ -136,6 +136,9 @@ For operations on existing nodes, use the graph context menu. See [Graph canvas]
 
 - **Expand All Sections** opens every adjustment section, the ones the filter chips leave out too; sections hidden in Preferences stay hidden. Option-clicking (Alt-clicking on Windows) a closed section header does the same.
 - **Collapse All Sections** folds every adjustment section, the ones the filter chips leave out too; sections hidden in Preferences stay hidden. Option-clicking (Alt-clicking on Windows) an open section header does the same.
+
+- **Navigator** shows or hides the canvas's map of the whole photograph, the toolbar's Navigator button; see [Navigator and Loupe](image-viewport.md#navigator-and-loupe).
+- **Loupe** (`L`) shows or hides the magnifying glass under the pointer, the toolbar's Loupe button. While it is up, the zoom keys change its magnification and `Cmd+Shift+=` and `Cmd+Shift+-` (`Ctrl+Shift+=` and `Ctrl+Shift+-` on Windows) its size.
 
 Option-Shift-click (Alt+Shift-click on Windows) limits the gesture to sections with the same on/off state. Both commands appear in Find a Control and accept custom shortcuts. These actions do not change undo history.
 
@@ -420,6 +423,8 @@ These are the shipped menu choices. **None** means no default key; assign one in
 | Node > Utility > Output > Output | None |
 | View > Collapse All Sections | None |
 | View > Expand All Sections | None |
+| View > Loupe | `L` |
+| View > Navigator | None |
 | Window > Adjustments filter > All | None |
 | Window > Adjustments filter > Free | None |
 | Window > Adjustments filter > On | None |

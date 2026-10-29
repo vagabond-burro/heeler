@@ -48,6 +48,8 @@ describe("every command does something", () => {
       // photograph with no selection layer has none, and they hand the
       // key back rather than inventing one.
       if (c.id.startsWith("select.")) s = reduce(s, { type: "add_layer", maskType: "selection" });
+      // The Loupe's size keys hand the key back while it is down.
+      if (c.id.startsWith("view.loupe.")) s = reduce(s, { type: "set_prefs", prefs: { loupeOn: true } });
       // Fill needs somewhere to put the color as well as something to
       // shape it, so it also needs a Finish layer to be active.
       if (c.id === "select.fill") s = reduce(s, { type: "art_add_layer", kind: "paint" });
