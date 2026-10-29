@@ -4,12 +4,46 @@ Geometry controls image rotation, aspect transformation, and the nondestructive 
 
 ## Controls
 
-- **Straighten** rotates the photograph. Use the viewport tool to drag along a line that should be level.
+- **Straighten** rotates the photograph, up to 45° either way. Use the viewport tool to drag along a line that should be level, or turn it by hand with the crop tool's rotation ring.
 - **Aspect** stretches the picture: negative values widen it and positive values heighten it. It is not the crop's ratio. To crop to 16:9, 3:2 or another ratio, choose **Photo > Crop / Straighten** and pick the ratio there (see [Image viewport](../image-viewport.md)).
 - **Crop width** and **Crop height** set the retained size.
 - **Crop left** and **Crop top** position the retained rectangle.
 
 Geometry starts off, and a photograph carries no geometry node until it is used: switching the section on or making the first crop or straighten drag in the viewport adds it. The viewport crop tool is the normal visual way to edit these values. Numeric rows are useful for matching crops or entering exact geometry. Pixels outside the crop are retained and can be restored.
+
+## Rotation ring
+
+With the crop tool up, the crop wears a dashed ring about its center. Drag along the ring, or anywhere in the shaded area outside the crop, and the picture turns about the crop's center as the pointer goes round; the cursor is the rotate arrow wherever a drag will turn. The angle shows in the middle of the crop while you drag, and a level grid replaces the thirds so a horizon or an upright can be set against it.
+
+- Hold `Shift` to land on whole degrees.
+- Hold `Option` (`Alt` on Windows) for fine control: the picture turns a tenth as far as the pointer.
+- Double-click the ring to put the picture level again.
+
+The ring writes the same angle as the **Straighten** row, so the two always agree, and it stops at the same 45° either way; quarter turns stay with **Rotate**. A whole drag is one undo step. With **Stay inside picture** on, the crop shrinks as you turn so no empty corner shows, and turning back gives back the crop you started with (see [Crop to picture](#crop-to-picture)).
+
+## Crop ratios
+
+The crop bar's menu, and **Photo > Crop / Straighten > Crop to Aspect Ratio**, hold the crop to a ratio while you drag it:
+
+- **Free** and **Original** (the photograph's own shape).
+- The common ratios: 1:1, 3:2, 4:3, 5:4, 16:9, and the upright 2:3, 3:4 and 9:16.
+- The film crops, in a group of their own and named by their decimals, each the width for a height of 1: **1.85** (widescreen theatrical), **2.00**, **2.35** and **2.39** (anamorphic scope: 2.39 is the current standard, 2.35 its traditional name), **2.40**, **2.50** and **2.76** (ultra-wide 65 mm).
+- Ratios you saved in the aspect ratio calculator, after a rule.
+
+The swap button beside the menu turns the held ratio on its side: 2.39 becomes 1:2.39 for an upright crop, and 3:2 becomes 2:3. While a ratio is held its name shows in the crop's top-left corner (2.39, 16:9, or a saved ratio's name). A ratio of your own can also be typed as width and height, decimals included (2.39 and 1).
+
+## Crop to picture
+
+Straightening turns the photograph inside its frame, which leaves empty corners where the turned picture no longer reaches. **Stay inside picture** keeps the crop clear of them, and it is on by default:
+
+- When **Straighten** changes (the row, the drawn line or the crop tool's rotation ring), the crop shrinks so no empty corner shows, keeping its center and its ratio. A crop that already filled the picture follows it back out, so straightening and then returning to level gives the whole frame again. A smaller crop is left alone until the picture's edge reaches it.
+- Dragging the crop or its corners outward stops at the picture's edge.
+
+Turn it off with **Stay inside** on the crop bar or on the **Crop** row at the foot of this section, and the crop stays wherever it is put. Flip and Rotate's quarter turns leave no empty corners and never change the crop. A document opens exactly as it was saved: the setting only acts on a new change of angle.
+
+**Crop to picture** (**Crop to picture** on the crop bar, **To picture** on the **Crop** row) sets the largest crop that is all picture at the current angle, centered, in the ratio the crop bar holds, or else in the crop's own ratio. It is one undo step, and grays when the crop already is that.
+
+A crop's sides go no smaller than a twentieth of the frame, so a very long, thin ratio (far past the film crops, such as 30:1) may have no crop that is all picture at a steep angle. Then **Stay inside picture** leaves the crop as it is, a ratio chosen on the crop bar is set without the hold, and **Crop to picture** grays.
 
 ## Flip
 

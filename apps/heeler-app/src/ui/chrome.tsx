@@ -8,7 +8,7 @@ import { panePropsEqual } from "./viewmemo";
 import { createPortal } from "react-dom";
 import type { Mode, State, TreeNode } from "../state";
 import { exportDpi, photoFlipBlocked, photoFlips, photoTurnBlocked, layerMaskToggleTarget } from "../state";
-import { ART_CONTENT_KINDS, ART_KINDS, CROP_RATIOS, DOC_SEL_ID, cropRatioList, LAYER_MASK_TYPES, SELECT_METHODS, availableMaskTypes, activeSelectionMask, bakeable, filtersActive, folderHasEdits, parseAspect, selectionHasContent, selectionLoadSource, stackAppendTargets, taggingTargets, thumbCell, visibleImages, duplicable } from "../state";
+import { ART_CONTENT_KINDS, ART_KINDS, CINEMA_FROM, CROP_RATIOS, DOC_SEL_ID, cropRatioList, LAYER_MASK_TYPES, SELECT_METHODS, availableMaskTypes, activeSelectionMask, bakeable, filtersActive, folderHasEdits, parseAspect, selectionHasContent, selectionLoadSource, stackAppendTargets, taggingTargets, thumbCell, visibleImages, duplicable } from "../state";
 import { layerActionHint, layerActions, maskToggleItem } from "../layeractions";
 import { bakeMaskRaster } from "../bridge";
 import { reportToolError } from "./hints";
@@ -1303,10 +1303,11 @@ export function MenuBar({ state, dispatch }: { state: State; dispatch: D }) {
               "Crop to any shape: no ratio held.",
             )}
             {cropRatioList(state.prefs).map(([label, ratio], i) => (
-              // The person's saved ratios follow the shipped ones, past a
-              // rule; their names are free text, so their ids count.
+              // The film crops are a group of their own, and the person's
+              // saved ratios follow the shipped ones, each past a rule;
+              // saved names are free text, so their ids count.
               <React.Fragment key={`${i}-${label}`}>
-                {i === CROP_RATIOS.length && <div className="sep" />}
+                {(i === CINEMA_FROM || i === CROP_RATIOS.length) && <div className="sep" />}
                 {item(
                   label,
                   () => {

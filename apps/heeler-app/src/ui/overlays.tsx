@@ -15,12 +15,13 @@ import { lineColorOver, lineEdgeOver, patchAverage, resolveLineColor, useAutoLin
 import { quadCenter } from "../state";
 import { quadFolds, reshapeByHandle, scaleByHandle, snapMove, type Guides, type Handle } from "../imagelayers";
 import { useDragFollow } from "./dragfollow";
+import { holdInside, stayInside as stayInsideFit, type CropRect } from "../cropfit";
 
 /** The fields of a mouse event a drag reads, from the element or the
  * window (dragfollow.ts). */
 type PointerAt = { clientX: number; clientY: number; shiftKey: boolean; altKey: boolean; buttons: number };
 import { flashStatus } from "./hints";
-import { ANTS_SURFACE, IDENTITY_VIEW, MASK_WASH, type RadialZone, type TransformDrag, type ViewTransform, cloneSourceMarkerAt, framePoint, frameScreenSize, norm, normFree, quadRotation, radialZoneAt, reshapeFor, snapAngle, snapRotation, straightenAngle, transformQuad } from "./overlaysparts";
+import { ANTS_SURFACE, IDENTITY_VIEW, MASK_WASH, type RadialZone, type TransformDrag, type ViewTransform, cloneSourceMarkerAt, framePoint, frameScreenSize, norm, normFree, quadRotation, radialZoneAt, reshapeFor, ringAngle, ringStep, snapAngle, snapRotation, STRAIGHTEN_LIMIT, straightenAngle, transformQuad } from "./overlaysparts";
 
 type D = React.Dispatch<Command>;
 
@@ -33,6 +34,8 @@ export function StraightenOverlay({
   dispatch,
   view = IDENTITY_VIEW,
   onDone,
+  lineColor = AUTO_LINE,
+  previewUrl = null,
 }: {
   node: NodeCard;
   dispatch: D;
@@ -40,8 +43,14 @@ export function StraightenOverlay({
   /** Called once the angle is committed, so the viewer can drop back to
    * no tool: this is a one-shot gesture, not a mode you sit in. */
   onDone?: () => void;
+  /** the overlay lines' color (linecolor.tsx); automatic when unset */
+  lineColor?: LineColorUi;
+  /** the frame on screen, for the automatic color */
+  previewUrl?: string | null;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  const tint = resolveLineColor(lineColor, useAutoLineColor(previewUrl));
+  const lineCss = lineColorCss(tint.hue, tint.luma, tint.sat, 0.95);
   const [line, setLine] = useState<null | { x0: number; y0: number; x1: number; y1: number }>(null);
 
   /** Client point to a point inside this overlay, for drawing only. */
@@ -96,13 +105,13 @@ export function StraightenOverlay({
     >
       {line && (
         <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
-          <line x1={line.x0} y1={line.y0} x2={line.x1} y2={line.y1} stroke="var(--accent)" strokeWidth={1.4} />
-          <circle cx={line.x0} cy={line.y0} r={3} fill="var(--accent)" />
-          <circle cx={line.x1} cy={line.y1} r={3} fill="var(--accent)" />
+          <line data-testid="straighten-line" x1={line.x0} y1={line.y0} x2={line.x1} y2={line.y1} stroke={lineCss} strokeWidth={1.4} />
+          <circle cx={line.x0} cy={line.y0} r={3} fill={lineCss} />
+          <circle cx={line.x1} cy={line.y1} r={3} fill={lineCss} />
           <text
             x={(line.x0 + line.x1) / 2 + 10}
             y={(line.y0 + line.y1) / 2 - 8}
-            fill="#eef2f5"
+            fill={lineCss}
             fontSize={11}
             data-testid="straighten-readout"
           >
@@ -118,6 +127,17 @@ type CropDrag = {
   mode: "move" | "tl" | "tr" | "bl" | "br";
   start: [number, number];
   orig: { x: number; y: number; w: number; h: number };
+};
+
+/** A drag on the crop's rotation ring: the crop's center on screen, the
+ * pointer's last place, the turn gathered so far (Shift rounds what is
+ * written, not this), and the angle and crop it began from. */
+type RingDrag = {
+  center: { x: number; y: number };
+  last: { x: number; y: number };
+  raw: number;
+  angle0: number;
+  crop0: CropRect;
 };
 
 /** Interactive radial mask gizmo.
@@ -635,19 +655,86 @@ export function CropOverlay({
   dispatch,
   aspect = null,
   view = IDENTITY_VIEW,
+  stayInside = false,
+  ratioName = null,
+  lineColor = AUTO_LINE,
+  previewUrl = null,
 }: {
   node: NodeCard;
   dispatch: D;
   /** target width/height PIXEL ratio to constrain corner drags, or null */
   aspect?: number | null;
   view?: ViewTransform;
+  /** Stay inside picture (Prefs.cropStayInside): a drag stops where the
+   * crop would take in an empty corner of the turned photograph */
+  stayInside?: boolean;
+  /** the held ratio's name, worn on the crop's corner (2.39, 16:9) */
+  ratioName?: string | null;
+  /** the overlay lines' color (linecolor.tsx); automatic when unset */
+  lineColor?: LineColorUi;
+  /** the frame on screen, for the automatic color */
+  previewUrl?: string | null;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  const rectRef = useRef<HTMLDivElement>(null);
+  // The box, its guides, handles and ring in the one line color every
+  // overlay reads; the shade outside the crop and the labels' dark
+  // backing stay as they are, so the lines read on any photograph.
+  const tint = resolveLineColor(lineColor, useAutoLineColor(previewUrl));
+  const lineCss = lineColorCss(tint.hue, tint.luma, tint.sat, 0.95);
+  const guideCss = lineColorCss(tint.hue, tint.luma, tint.sat, 0.45);
   const drag = useRef<CropDrag | null>(null);
+  const turning = useRef<RingDrag | null>(null);
+  // Held while the ring is: the readout and the level grid show.
+  const [ringHeld, setRingHeld] = useState(false);
   const x = node.params.crop_x ?? 0;
   const y = node.params.crop_y ?? 0;
   const w = node.params.crop_w ?? 1;
   const h = node.params.crop_h ?? 1;
+  const angle = node.params.angle ?? 0;
+
+  /** The frame's shape: the overlay is the frame. */
+  const frameShape = () => {
+    const el = root.current;
+    return el && el.offsetWidth > 0 && el.offsetHeight > 0 ? el.offsetWidth / el.offsetHeight : null;
+  };
+
+  // The rotation ring, and the shade outside the crop: dragging turns
+  // the picture about the crop's center, writing Straighten's angle as
+  // it goes, one undo step for the drag. Shift lands on whole degrees,
+  // Option moves a tenth as far. With Stay inside picture the crop is
+  // held to the turned picture from where it stood when the drag began,
+  // so turning back gives it back.
+  const beginTurn = (e: React.MouseEvent) => {
+    if (!isPrimaryPress(e) || !rectRef.current) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const r = rectRef.current.getBoundingClientRect();
+    dispatch({ type: "begin_gesture", key: `${node.id}.batch` });
+    turning.current = {
+      center: { x: r.left + r.width / 2, y: r.top + r.height / 2 },
+      last: { x: e.clientX, y: e.clientY },
+      raw: angle,
+      angle0: angle,
+      crop0: { crop_x: x, crop_y: y, crop_w: w, crop_h: h },
+    };
+    setRingHeld(true);
+    followed.start();
+  };
+
+  const onTurn = (e: PointerAt) => {
+    const t = turning.current;
+    if (!t || e.buttons !== 1) return;
+    const at = { x: e.clientX, y: e.clientY };
+    t.raw = Math.min(STRAIGHTEN_LIMIT, Math.max(-STRAIGHTEN_LIMIT, t.raw + ringStep(t.center, t.last, at, e.altKey)));
+    t.last = at;
+    const next = ringAngle(t.raw, e.shiftKey);
+    const frame = frameShape();
+    // The crop goes with the angle in one write, so the reducer leaves
+    // it where it is put (cropHeldInside).
+    const crop = stayInside && frame ? (stayInsideFit(t.crop0, frame, t.angle0, next) ?? t.crop0) : null;
+    dispatch({ type: "set_params", id: node.id, values: { angle: next, ...(crop ?? {}) } });
+  };
 
   const begin = (mode: CropDrag["mode"]) => (e: React.MouseEvent) => {
     if (!isPrimaryPress(e)) return;
@@ -658,6 +745,7 @@ export function CropOverlay({
   };
 
   const onMove = (e: PointerAt) => {
+    if (turning.current) return onTurn(e);
     const d = drag.current;
     if (!d || e.buttons !== 1) return;
     const [px, py] = norm(e, root.current!, view);
@@ -710,16 +798,36 @@ export function CropOverlay({
         }
       }
     }
+    // Held at the turned photograph's edge: as far toward the pointer as
+    // stays all picture (holdInside, cropfit.ts). The overlay is the
+    // frame, so its sides give the frame's shape.
+    const el = root.current;
+    if (stayInside && el && el.offsetWidth > 0 && el.offsetHeight > 0) {
+      next = holdInside(
+        { crop_x: o.x, crop_y: o.y, crop_w: o.w, crop_h: o.h },
+        next,
+        el.offsetWidth / el.offsetHeight,
+        node.params.angle ?? 0,
+      );
+    }
     dispatch({ type: "set_params", id: node.id, values: next });
   };
 
   // A crop edge dragged past the picture holds at its edge, and the
-  // drag carries on (dragfollow.ts).
+  // drag carries on (dragfollow.ts). A drag the window loses to a blur,
+  // or the overlay to an unmount, ends here too, closing its gesture.
   const endDrag = () => {
-    if (drag.current) dispatch({ type: "end_gesture" });
+    if (drag.current || turning.current) dispatch({ type: "end_gesture" });
     drag.current = null;
+    turning.current = null;
+    setRingHeld(false);
   };
-  const followed = useDragFollow<MouseEvent>({ move: onMove, up: endDrag });
+  // Double-clicking the ring puts the picture level again.
+  const level = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (angle !== 0) dispatch({ type: "set_param", id: node.id, param: "angle", value: 0 });
+  };
+  const followed = useDragFollow<MouseEvent>({ move: onMove, up: endDrag, lost: endDrag });
 
   const pct = (v: number) => `${v * 100}%`;
   const handle = (mode: CropDrag["mode"], left: number, top: number) => (
@@ -729,7 +837,7 @@ export function CropOverlay({
       onMouseDown={begin(mode)}
       style={{
         position: "absolute", left: pct(left), top: pct(top), width: 11, height: 11,
-        margin: -6, background: "#eef2f5", cursor: `${mode === "tl" || mode === "br" ? "nwse" : "nesw"}-resize`,
+        margin: -6, background: lineCss, cursor: `${mode === "tl" || mode === "br" ? "nwse" : "nesw"}-resize`,
         boxShadow: "0 0 0 1px rgba(0,0,0,.55)",
       }}
     />
@@ -739,7 +847,9 @@ export function CropOverlay({
     <div
       ref={root}
       data-testid="crop-overlay"
-      style={{ position: "absolute", inset: 0, cursor: "crosshair" }}
+      data-hint="Drag outside the crop, or along its ring, to rotate the picture: Shift for whole degrees, Option for fine control"
+      onMouseDown={beginTurn}
+      style={{ position: "absolute", inset: 0, cursor: ROTATE_CURSOR }}
       onMouseMove={(e) => { if (!followed.active()) onMove(e); }}
       // Only a drag this overlay began has a gesture to close: a middle
       // or right release over the crop is the end of nothing.
@@ -752,16 +862,71 @@ export function CropOverlay({
       <div style={{ position: "absolute", left: pct(x + w), right: 0, top: pct(y), height: pct(h), background: "rgba(8,8,8,.55)" }} />
       {/* rect, thirds, handles */}
       <div
+        ref={rectRef}
         data-testid="crop-rect"
         onMouseDown={begin("move")}
-        style={{ position: "absolute", left: pct(x), top: pct(y), width: pct(w), height: pct(h), border: "1px solid #eef2f5", cursor: "move", boxSizing: "border-box" }}
+        style={{ position: "absolute", left: pct(x), top: pct(y), width: pct(w), height: pct(h), border: `1px solid ${lineCss}`, cursor: "move", boxSizing: "border-box" }}
       >
-        {[1 / 3, 2 / 3].map((t) => (
+        {/* The rotation ring: a circle about the crop's center, the
+crop's short side across ("meet" keeps it round on any crop),
+grabbed anywhere along a band either side of the line.*/}
+        <svg
+          viewBox="0 0 100 100"
+          preserveAspectRatio="xMidYMid meet"
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible", pointerEvents: "none" }}
+        >
+          <circle cx={50} cy={50} r={44} fill="none" data-testid="crop-ring-line" stroke={ringHeld ? lineCss : guideCss} strokeWidth={1} strokeDasharray={ringHeld ? undefined : "3 4"} vectorEffect="non-scaling-stroke" />
+          <circle
+            data-testid="crop-ring"
+            cx={50}
+            cy={50}
+            r={44}
+            fill="none"
+            stroke="transparent"
+            strokeWidth={7}
+            data-hint="Rotation ring: drag to rotate the picture (Shift whole degrees, Option fine); double-click to level it"
+            onMouseDown={beginTurn}
+            onDoubleClick={level}
+            style={{ pointerEvents: "stroke", cursor: ROTATE_CURSOR }}
+          />
+        </svg>
+        {ringHeld &&
+          // A level grid while the ring is held: lines every tenth to
+          // set a horizon or an upright against.
+          [1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
+            <React.Fragment key={`level-${i}`}>
+              <div data-testid="crop-level-grid" style={{ position: "absolute", left: pct(i / 10), top: 0, bottom: 0, width: 1, background: guideCss }} />
+              <div style={{ position: "absolute", top: pct(i / 10), left: 0, right: 0, height: 1, background: guideCss }} />
+            </React.Fragment>
+          ))}
+        {ringHeld && (
+          <div
+            data-testid="crop-angle-readout"
+            style={{
+              position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", padding: "2px 7px",
+              fontSize: 12, color: "#eef2f5", background: "rgba(8,8,8,.62)", borderRadius: 3, pointerEvents: "none",
+            }}
+          >
+            {angle.toFixed(1)}°
+          </div>
+        )}
+        {!ringHeld && [1 / 3, 2 / 3].map((t) => (
           <React.Fragment key={t}>
-            <div style={{ position: "absolute", left: pct(t), top: 0, bottom: 0, width: 1, background: "rgba(238,242,245,.35)" }} />
-            <div style={{ position: "absolute", top: pct(t), left: 0, right: 0, height: 1, background: "rgba(238,242,245,.35)" }} />
+            <div data-testid="crop-guide" style={{ position: "absolute", left: pct(t), top: 0, bottom: 0, width: 1, background: guideCss }} />
+            <div data-testid="crop-guide" style={{ position: "absolute", top: pct(t), left: 0, right: 0, height: 1, background: guideCss }} />
           </React.Fragment>
         ))}
+        {ratioName && (
+          <div
+            data-testid="crop-ratio-label"
+            style={{
+              position: "absolute", left: 6, top: 6, padding: "1px 5px", fontSize: 11, lineHeight: "15px",
+              color: "#eef2f5", background: "rgba(8,8,8,.55)", borderRadius: 3, pointerEvents: "none",
+            }}
+          >
+            {ratioName}
+          </div>
+        )}
       </div>
       {handle("tl", x, y)}
       {handle("tr", x + w, y)}

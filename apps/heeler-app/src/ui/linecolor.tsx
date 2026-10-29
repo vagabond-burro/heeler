@@ -1,15 +1,17 @@
 // The color of the lines drawn over the photograph: Grid Warp's grid, Shape
-// Warp's rings, the Radial and Linear layers' gizmos. Automatic is the
+// Warp's rings, the Radial and Linear layers' gizmos, the crop tool's box. Automatic is the
 // opposite of the photograph's own average ("the white grid
 // lines are hard to see in my current image"); the Hue and Luma sliders take
 // over from it, and Auto hands it back. One setting for every overlay, so a
 // color chosen for one tool is there for the next (2026-09-07: "the same
 // LINE color feature", for Shape Warp and the Radial layer).
 
-import React from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Command, LineColorUi, State } from "../state";
 import { SHAPE_LINE_WIDTH_RANGE, photoLineWidth, shapeLineWidth } from "../state";
 import { lineColorCss } from "../gridwarp";
+import { clampMenu, viewportSize, type MenuBox } from "./menupos";
 import { TrackSlider, ValueField } from "./track";
 import { resolveLineColor, useAutoLineColor } from "./linecolorparts";
 
@@ -93,6 +95,131 @@ export function LinesRow({
         Auto
       </button>
     </div>
+  );
+}
+
+/** The line color as one swatch, for a toolbar with no room for the
+ * LINES row (the crop bar): it shows the color in use and opens the
+ * LINES row in a popover under it. The same one setting, so a color
+ * picked here is Grid Warp's and every other overlay's. A press outside
+ * closes it, and so does Escape, handing focus back to the swatch.
+ *
+ * The popover sits on the page itself, not in the bar: the floating
+ * bar is narrower than the stage on a small window and would cut it
+ * off. Placed under the swatch, its right edge on the swatch's, and
+ * kept inside the window (menupos.ts); opening it takes focus to Hue.
+ * `name` heads the hint ("Crop line color"); `prefix` and `subject` go
+ * to the LINES row. */
+export function LineColorSwatch({
+  lineColor,
+  dispatch,
+  previewUrl,
+  prefix,
+  subject,
+  name,
+}: {
+  lineColor: LineColorUi;
+  dispatch: D;
+  previewUrl: string | null;
+  prefix: string;
+  subject: string;
+  name: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [at, setAt] = useState<MenuBox | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const close = (refocus: boolean) => {
+    setOpen(false);
+    setAt(null);
+    if (refocus) buttonRef.current?.focus();
+  };
+  // Escape closes the popover and nothing else, wherever focus is: the
+  // crop tool's own Escape would put the crop away. Heard first, at the
+  // window in the capture phase, as the aspect ratio calculator's is. A
+  // press on neither the swatch nor the popover closes it too.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      close(true);
+    };
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (buttonRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      close(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("mousedown", onDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("mousedown", onDown, true);
+    };
+  }, [open]);
+  // Placed once it has a size, and again if the window changes under it.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const b = buttonRef.current?.getBoundingClientRect();
+      const p = panelRef.current;
+      if (!b || !p) return;
+      const size = { w: p.offsetWidth, h: p.offsetHeight };
+      const below = clampMenu({ x: b.right - size.w, y: b.bottom + 8 }, size, viewportSize(), 8);
+      // No room below: above the swatch rather than over it.
+      const y = b.bottom + 8 + size.h + 8 > viewportSize().h && b.top - 8 - size.h >= 8 ? b.top - 8 - size.h : below.y;
+      setAt({ x: below.x, y });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open]);
+  useEffect(() => {
+    if (open && at) panelRef.current?.querySelector<HTMLElement>("[role=slider]")?.focus();
+  }, [open, at !== null]);
+  const line = resolveLineColor(lineColor, useAutoLineColor(previewUrl));
+  const isAuto = lineColor.hue === null && lineColor.luma === null;
+  const label = isAuto ? `${name}: Auto` : `${name}: hue ${Math.round(line.hue)}, luma ${Math.round(line.luma)}`;
+  const panel = (
+    <div
+      ref={panelRef}
+      id={`${prefix}-line-color-panel`}
+      data-testid={`${prefix}-line-color-panel`}
+      role="dialog"
+      aria-label={name}
+      style={{
+        position: "fixed", left: at?.x ?? 0, top: at?.y ?? 0, visibility: at ? "visible" : "hidden", zIndex: 80,
+        width: 290, maxWidth: "calc(100vw - 16px)", boxSizing: "border-box",
+        background: "#191817", border: "1px solid var(--line-4)", boxShadow: "0 6px 18px rgba(0,0,0,.5)",
+        padding: "5px 10px 10px",
+      }}
+    >
+      <LinesRow lineColor={lineColor} dispatch={dispatch} previewUrl={previewUrl} prefix={prefix} subject={subject} />
+    </div>
+  );
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        className="chip"
+        data-testid={`${prefix}-line-color`}
+        data-active={open}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-controls={`${prefix}-line-color-panel`}
+        aria-label={label}
+        data-hint={`${label}. Click to choose it; the same color draws every tool's lines over the photograph`}
+        onClick={() => (open ? close(false) : setOpen(true))}
+        style={{ display: "inline-flex", alignItems: "center", padding: "2px 5px" }}
+      >
+        <span
+          data-testid={`${prefix}-line-color-chip`}
+          style={{ width: 12, height: 12, borderRadius: 2, background: lineColorCss(line.hue, line.luma, line.sat, 1), boxShadow: "0 0 0 1px rgba(0,0,0,.5)" }}
+        />
+      </button>
+      {open && (typeof document !== "undefined" && document.body ? createPortal(panel, document.body) : panel)}
+    </>
   );
 }
 

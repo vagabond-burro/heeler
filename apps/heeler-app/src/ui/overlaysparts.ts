@@ -139,6 +139,33 @@ export function straightenAngle(
   return Math.min(STRAIGHTEN_LIMIT, Math.max(-STRAIGHTEN_LIMIT, Number(next.toFixed(2))));
 }
 
+/** The crop tool's rotation ring, one pointer move: the turn the
+ * pointer made about the crop's center since the last move, in degrees
+ * clockwise on screen (positive turns the picture clockwise, the
+ * engine's way), taken the short way round. The view's own rotation
+ * turns both readings alike, so it drops out of the difference. A tenth
+ * of it when `fine` (Option), for the last fraction of a degree. */
+export function ringStep(
+  center: { x: number; y: number },
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  fine = false,
+): number {
+  const at = (p: { x: number; y: number }) => (Math.atan2(p.y - center.y, p.x - center.x) * 180) / Math.PI;
+  let d = at(to) - at(from);
+  while (d > 180) d -= 360;
+  while (d <= -180) d += 360;
+  return fine ? d / 10 : d;
+}
+
+/** The angle the ring writes from the turn gathered so far: within
+ * Straighten's limit, on whole degrees when `whole` (Shift), else to the
+ * hundredth the Straighten row shows. */
+export function ringAngle(raw: number, whole = false): number {
+  const held = Math.min(STRAIGHTEN_LIMIT, Math.max(-STRAIGHTEN_LIMIT, raw));
+  return whole ? Math.round(held) : Number(held.toFixed(2));
+}
+
 /** What dragging a particular part of the radial gizmo does.
  *
  * Named rather than inferred at the point of use, because each one needs

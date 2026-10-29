@@ -11,11 +11,14 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Command, CurveChannel, NodeCard, State, Take } from "../state";
 import { activeStackMerge, inspectDocked, pickMaskNode, antsSources, artLayerName, artMaskNode, chainTerminalId, frameLook, renderedSource, mainConversion, previewTarget, shapeLineWidth, transformDragOf, isPlacedLayer, layerFlipBlocked, photoTurn } from "../state";
 import { XformIcon } from "./panelicons";
-import { maskBrushTarget, maskOverlayRgb, BRUSH_TIPS, MULTI_MAX, POLISH_MODES, SELECT_OPS, activeSelectionMask, applyPick, artFindLayer, artToolbarVisible, cropNode, fitCropToAspect, layerQuad, multiGrid, transformBox, toolNode } from "../state";
+import { maskBrushTarget, maskOverlayRgb, BRUSH_TIPS, MULTI_MAX, POLISH_MODES, SELECT_OPS, activeSelectionMask, applyPick, artFindLayer, artToolbarVisible, cropNode, cropToPicture, fitCropToAspect, keepCropInside, layerQuad, multiGrid, transformBox, toolNode } from "../state";
 import { OpIcon } from "./selecticons";
 import { TrackSlider } from "./track";
 import { StackMergeCanceled, StackMergeProgress } from "./stackmerge";
-import { CropRatioBar } from "./cropratio";
+import { CropFitControls, CropRatioBar } from "./cropratio";
+import { LineColorSwatch } from "./linecolor";
+import { ratioLabel } from "./cropratioparts";
+import { cropRectOf } from "../cropfit";
 import { SelectToolButton } from "./selecttool";
 import { DodgeToolButton } from "./dodgetool";
 import { ShapeToolButton } from "./shapetool";
@@ -987,7 +990,7 @@ export function Viewer({
     if (!dims) return;
     const crop = cropNode(state);
     const fit = fitCropToAspect(crop.params, state.cropAspect, dims);
-    if (fit) dispatch({ type: "set_params", id: crop.id, values: fit });
+    if (fit) dispatch({ type: "set_params", id: crop.id, values: keepCropInside(state, { ...cropRectOf(crop.params), ...fit }) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.tool, state.cropAspect, srcDims, turnedOdd, natural, state.activeImage]);
 
@@ -1537,8 +1540,31 @@ armed has settings to show.*/}
                 if (!ratio || !dims) return;
                 const crop = cropNode(state);
                 const fit = fitCropToAspect(crop.params, ratio, dims);
-                if (fit) dispatch({ type: "set_params", id: crop.id, values: fit });
+                if (fit) dispatch({ type: "set_params", id: crop.id, values: keepCropInside(state, { ...cropRectOf(crop.params), ...fit }) });
               }}
+            />
+          )}
+          {state.tool === "crop" && (
+            <CropFitControls
+              stayInside={state.prefs.cropStayInside}
+              canFit={cropToPicture(state) !== null}
+              onFit={() => {
+                const fit = cropToPicture(state);
+                if (fit) dispatch({ type: "set_params", id: cropNode(state).id, values: fit });
+              }}
+              onStayInside={(on) => dispatch({ type: "set_prefs", prefs: { cropStayInside: on } })}
+            />
+          )}
+          {state.tool === "crop" && (
+            // The crop's lines in the one line color; the bar has no room
+            // for the LINES row, so a swatch opens it.
+            <LineColorSwatch
+              lineColor={state.lineColor}
+              dispatch={dispatch}
+              previewUrl={engineFrame ?? beforeSrc ?? img?.src ?? null}
+              prefix="crop"
+              subject="crop lines"
+              name="Crop line color"
             />
           )}
           {state.tool === "crop" && state.splitOn && (
@@ -1745,7 +1771,18 @@ existing stack").*/}
                 // A stand-in when the photo has no crop node yet: the
                 // first drag builds the real one (materializeMainTool).
                 const crop = cropNode(state);
-                return <CropOverlay node={crop} dispatch={dispatch} aspect={state.cropAspect} view={view} />;
+                return (
+                  <CropOverlay
+                    node={crop}
+                    dispatch={dispatch}
+                    aspect={state.cropAspect}
+                    view={view}
+                    stayInside={state.prefs.cropStayInside}
+                    ratioName={ratioLabel(state.cropAspect, state.prefs.cropRatios)}
+                    lineColor={state.lineColor}
+                    previewUrl={engineFrame ?? beforeSrc ?? img?.src ?? null}
+                  />
+                );
               })()}
             {/* Shape Warp: the same preview canvas and hold as Grid
                 Warp, with the shapes' overlay on top. Mounted while the
@@ -1853,6 +1890,8 @@ center, maybe rather the center of the visible pixels on the layer."*/}
                     // set_tool toggles, so re-sending the active tool
                     // clears it.
                     onDone={() => dispatch({ type: "set_tool", tool: "straighten" })}
+                    lineColor={state.lineColor}
+                    previewUrl={engineFrame ?? beforeSrc ?? img?.src ?? null}
                   />
                 );
               })()}

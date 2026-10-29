@@ -15,6 +15,13 @@ export const SAME_RATIO = 1e-4;
 export function ratioPair(aspect: number | null, saved: SavedCropRatio[] = []): [string, string] {
   if (aspect === null || !Number.isFinite(aspect) || aspect <= 0) return ["", ""];
   for (const [label, ratio] of CROP_RATIOS) {
+    // A film crop is its decimal to 1 (2.39: 1), and turned on its side
+    // 1 to its decimal.
+    if (!label.includes(":")) {
+      if (Math.abs(ratio - aspect) < SAME_RATIO) return [label, "1"];
+      if (Math.abs(1 / ratio - aspect) < SAME_RATIO) return ["1", label];
+      continue;
+    }
     if (Math.abs(ratio - aspect) < SAME_RATIO) {
       const [w, h] = label.split(":");
       return [w, h];
@@ -50,4 +57,14 @@ export function resolutionRatio(w: number, h: number): { label: string; ratio: n
   const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
   const d = gcd(w, h);
   return { label: `${w / d}:${h / d}`, ratio };
+}
+
+/** What a held ratio is called on the crop: a preset's or a saved
+ * ratio's own name (2.39, 16:9, Cinema), else the W: H the fields show,
+ * a film crop on its side as 1:2.39. Null when free. */
+export function ratioLabel(aspect: number | null, saved: SavedCropRatio[] = []): string | null {
+  if (aspect === null || !Number.isFinite(aspect) || aspect <= 0) return null;
+  for (const [label, ratio] of CROP_RATIOS) if (Math.abs(ratio - aspect) < SAME_RATIO) return label;
+  for (const r of saved) if (Math.abs(r.w / r.h - aspect) < SAME_RATIO) return r.name;
+  return ratioPair(aspect, saved).join(":");
 }
