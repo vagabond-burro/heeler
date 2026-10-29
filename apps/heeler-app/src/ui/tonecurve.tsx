@@ -27,6 +27,9 @@ import {
   type ToneCurveDoc,
 } from "../toneprofile";
 import { vtToDisplay } from "../viewtransform";
+import { modLabel } from "../platform";
+import { InterpCycle } from "./interpglyph";
+import { CURVE_POINT_CURSOR } from "./cursors";
 import { SourceMenuRow } from "./sourcemenus";
 
 type D = React.Dispatch<Command>;
@@ -61,6 +64,19 @@ const H = 150;
 const PAD = { l: 22, r: 8, t: 8, b: 16 };
 const round4 = (v: number) => Math.round(v * 1e4) / 1e4;
 const say = (dispatch: D, text: string) => dispatch({ type: "set_notice", text });
+/** The panels' chip, at the panel's 11 px. */
+const CHIP: React.CSSProperties = { fontSize: 11, padding: "2px 10px" };
+/** How near a press has to land to take a point, as in Curves: the
+ * drawn dots are far smaller than anyone can click, so a near miss
+ * added a stray point beside the one meant (2026-10-29: "Impossible to
+ * edit, isn't it supposed to behave like the curve editor?"). */
+const GRAB_PX = 11;
+/** The least room between neighbors, in stops: closer, two points read
+ * as one and the curve between them as a cliff. */
+const MIN_GAP = 0.25;
+/** Curves' remove chord: CTRL, or CMD where macOS keeps CTRL-click for
+ * the context menu. */
+const removeClick = (e: { ctrlKey: boolean; metaKey: boolean }) => e.ctrlKey || e.metaKey;
 
 export function ToneCurveBlock({ node, dispatch, width = 260 }: { node: NodeCard; dispatch: D; width?: number }) {
   const broken = curveBroken(node);
@@ -113,13 +129,15 @@ export function ToneCurveBlock({ node, dispatch, width = 260 }: { node: NodeCard
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <button
+            className="chip"
+            style={CHIP}
             data-testid="tone-curve-reset"
             data-hint="Replace the unreadable curve with one that starts on the Standard curve"
             onClick={() => dispatch({ type: "set_tone_curve", id: node.id, curve: toneCurveJson(standardSeed()) })}
           >
             Reset
           </button>
-          <button data-testid="tone-curve-import" data-hint="Replace the unreadable curve with one read from a file" onClick={() => void importFile()}>
+          <button className="chip" style={CHIP} data-testid="tone-curve-import" data-hint="Replace the unreadable curve with one read from a file" onClick={() => void importFile()}>
             Import…
           </button>
         </div>
@@ -134,21 +152,19 @@ export function ToneCurveBlock({ node, dispatch, width = 260 }: { node: NodeCard
         <div className="kicker" style={{ width: 78, flex: "none" }}>
           Shape
         </div>
-        {(["smooth", "linear"] as const).map((k) => (
-          <button
-            key={k}
-            data-testid={`tone-curve-${k}`}
-            aria-pressed={curve.interp === k}
-            data-hint={k === "smooth" ? "A smooth curve through the points, never overshooting them" : "Straight lines from point to point"}
-            onClick={() => write({ ...curve, interp: k })}
-            style={{ opacity: curve.interp === k ? 1 : 0.55 }}
-          >
-            {k === "smooth" ? "Smooth" : "Linear"}
-          </button>
-        ))}
+        {/* The Curves editor's one button, cycling the faces this curve
+            has (2026-10-29: "Why is tone profile curve not using the
+            same smooth/linear buttons used on the curve editors?"). */}
+        <InterpCycle
+          mode={curve.interp === "linear" ? "linear" : "smooth"}
+          modes={["smooth", "linear"]}
+          testid="tone-curve-interp"
+          onChange={(m) => write({ ...curve, interp: m === "linear" ? "linear" : "smooth" })}
+        />
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <input
+          className="field"
           data-testid="tone-curve-name"
           aria-label="Profile name"
           value={shownName}
@@ -158,25 +174,27 @@ export function ToneCurveBlock({ node, dispatch, width = 260 }: { node: NodeCard
           }}
           style={{ flex: 1, minWidth: 0 }}
         />
-        <button data-testid="tone-curve-save" disabled={!shownName.trim()} data-hint="Save this curve as a tone profile in the profiles folder; it then lists in the Profile menu" onClick={() => void save()}>
+        <button className="chip" style={CHIP} data-testid="tone-curve-save" disabled={!shownName.trim()} data-hint="Save this curve as a tone profile in the profiles folder; it then lists in the Profile menu" onClick={() => void save()}>
           Save
         </button>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <button
+          className="chip"
+          style={CHIP}
           data-testid="tone-curve-import"
           data-hint="Read a curve from a tone profile file, a 1D .cube LUT, a two-column text file (stops, display), or a DNG or camera profile's tone curve"
           onClick={() => void importFile()}
         >
           Import…
         </button>
-        <button data-testid="tone-curve-export" data-hint="Write this curve to a .heelerprofile file to share" onClick={() => void exportFile()}>
+        <button className="chip" style={CHIP} data-testid="tone-curve-export" data-hint="Write this curve to a .heelerprofile file to share" onClick={() => void exportFile()}>
           Export…
         </button>
       </div>
       <div style={{ fontSize: 11, color: "var(--text-ghost)", lineHeight: 1.5 }}>
         Scene light in stops around middle gray, left to right, against the display value. Drag a point; click to add one;
-        double-click one to remove it. The curve is saved in the document, so it renders the same without the profile file.
+        {` ${modLabel("ctrl")}`}-click one to remove it. The curve is saved in the document, so it renders the same without the profile file.
         Toe and Highlight roll stand down: the curve is its own.
       </div>
     </div>
@@ -214,8 +232,8 @@ function ToneCurveEditor({
   const moved = (i: number, [x, y]: [number, number]): ToneCurveDoc => {
     // A point stays between its neighbors, so the order never changes
     // under the pointer.
-    const left = i > 0 ? pts[i - 1][0] + 0.05 : lo;
-    const right = i < pts.length - 1 ? pts[i + 1][0] - 0.05 : hi;
+    const left = i > 0 ? pts[i - 1][0] + MIN_GAP : lo;
+    const right = i < pts.length - 1 ? pts[i + 1][0] - MIN_GAP : hi;
     const next = pts.map((p, k): [number, number] => (k === i ? [round4(Math.min(right, Math.max(left, x))), round4(y)] : p));
     return { ...curve, points: next };
   };
@@ -233,6 +251,35 @@ function ToneCurveEditor({
   const linear = (x: number) => Math.min(1, vtToDisplay(0.18 * 2 ** x));
   const ticks = [];
   for (let x = Math.ceil(lo / 2) * 2; x <= hi; x += 2) ticks.push(x);
+  /** The point within GRAB_PX of the press, the nearest, and only where
+   * the press is nearer it than halfway to the next one, so the gap
+   * between close points still takes a new point (Curves' rule). */
+  const nearest = (clientX: number, clientY: number): number | null => {
+    const r = svg.current!.getBoundingClientRect();
+    const px = (i: number) => [r.left + xPx(pts[i][0]), r.top + yPx(pts[i][1])];
+    let best: number | null = null;
+    let bestD = GRAB_PX;
+    pts.forEach((_, i) => {
+      const [cx, cy] = px(i);
+      const d = Math.hypot(clientX - cx, clientY - cy);
+      if (d <= bestD) {
+        bestD = d;
+        best = i;
+      }
+    });
+    if (best !== null) {
+      const [bx, by] = px(best);
+      const spacing = Math.min(
+        ...pts.map((_, i) => {
+          if (i === best) return Infinity;
+          const [cx, cy] = px(i);
+          return Math.hypot(cx - bx, cy - by);
+        }),
+      );
+      if (bestD > spacing * 0.45) return null;
+    }
+    return best;
+  };
   const finish = () => {
     if (drag.current === null) return;
     drag.current = null;
@@ -248,11 +295,28 @@ function ToneCurveEditor({
       width={width}
       height={H}
       style={{ background: "var(--bg-app)", borderRadius: "var(--radius-btn)", touchAction: "none", cursor: "crosshair" }}
+      onContextMenu={(e) => e.preventDefault()}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
+        e.preventDefault();
+        const hit = nearest(e.clientX, e.clientY);
+        if (hit !== null) {
+          // Curves' grammar: the chord removes an inner point (the ends
+          // hold the curve's reach), a plain press drags it.
+          if (removeClick(e)) {
+            if (hit > 0 && hit < pts.length - 1) onChange({ ...curve, points: pts.filter((_, k) => k !== hit) });
+            return;
+          }
+          drag.current = hit;
+          dispatch({ type: "begin_gesture", key: `${nodeId}.tone_curve` });
+          svg.current?.setPointerCapture(e.pointerId);
+          return;
+        }
+        // A remove-click that misses every point adds nothing.
+        if (removeClick(e)) return;
         // A click off the points adds one there and drags it.
         const [x, y] = at(e);
-        if (pts.some(([px]) => Math.abs(px - x) < 0.05)) return;
+        if (pts.some(([px]) => Math.abs(px - x) < MIN_GAP)) return;
         // One more would be a curve the engine refuses.
         if (pts.length >= MAX_POINTS) {
           say(dispatch, `A tone curve may have at most ${MAX_POINTS} points; remove one to add another`);
@@ -302,17 +366,7 @@ function ToneCurveEditor({
           fill="#131211"
           stroke="var(--accent)"
           strokeWidth={1.5}
-          style={{ cursor: "grab" }}
-          onPointerDown={(e) => {
-            if (e.button !== 0) return;
-            e.stopPropagation();
-            drag.current = i;
-            dispatch({ type: "begin_gesture", key: `${nodeId}.tone_curve` });
-            svg.current?.setPointerCapture(e.pointerId);
-          }}
-          onDoubleClick={() => {
-            if (pts.length > 2) onChange({ ...curve, points: pts.filter((_, k) => k !== i) });
-          }}
+          style={{ cursor: CURVE_POINT_CURSOR }}
         >
           <title>{`${x >= 0 ? "+" : ""}${x.toFixed(2)} stops: ${toneCurveAt(curve, x).toFixed(3)}`}</title>
         </circle>

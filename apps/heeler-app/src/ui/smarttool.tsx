@@ -790,6 +790,7 @@ be able to refine it." Yes.*/}
 what it found. On the click tool's row, under the buttons. */}
       <div style={{ flexBasis: "100%", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
         <input
+          className="field"
           data-testid="smart-find"
           type="text"
           value={phrase}
@@ -797,7 +798,7 @@ what it found. On the click tool's row, under the buttons. */}
           placeholder={mode === "text" && mask.textParams?.phrase ? mask.textParams.phrase : "Select by text: the red car"}
           aria-label="Select by text"
           data-hint="Select by text: type what to select and press Return; the picture reader finds it and the model selects it"
-          style={{ flex: "1 1 120px", minWidth: 0, fontSize: 11 }}
+          style={{ flex: "1 1 120px", minWidth: 0 }}
           onChange={(e) => {
             setPhrase(e.target.value);
             // These boxes answer the old phrase, not the one being typed.

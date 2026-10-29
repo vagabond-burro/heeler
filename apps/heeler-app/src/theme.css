@@ -740,6 +740,20 @@ Canvas should use the same font size as the menus").*/
 }
 .dialog input[type="text"]:focus, .dialog textarea:focus { border-color: var(--accent); }
 
+/* The panels' one text field: the Export panel's Name look, dark on the
+   app's ground with the line border, the accent on focus. The tone
+   profile's name and Select by text wore the browser's white field
+   (2026-10-29: "There is already an established look for text fields
+   in Heeler"). */
+.field {
+  background: var(--bg-app); border: 1px solid var(--line-4); color: var(--text-body);
+  font: inherit; font-size: 11px; padding: 3px 6px; outline: none; border-radius: var(--radius-btn);
+  box-sizing: border-box;
+}
+.field::placeholder { color: var(--text-faint); }
+.field:focus { border-color: var(--accent); }
+.field:disabled { opacity: 0.55; }
+
 .viewer-toolbar {
   height: 34px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 12px;
   background: #131211; border-bottom: 1px solid var(--line-hard);

@@ -25,6 +25,7 @@ import {
   WHITE_STOPS,
   curveBroken,
   parseToneCurve,
+  toneCurveJson,
   profileChoices,
   profileMenuValue,
   profilePick,
@@ -38,6 +39,14 @@ import { ProfileMenuRow, ToneCurveBlock } from "../ui/tonecurve";
 import { chooseWith, menuValue } from "./menuhelp";
 
 const profileOf = (s: State) => s.nodes.find((n) => n.type === "heeler.tone_profile")!;
+
+/** A press on a drawn point, where the editor's hit test looks for it:
+ * the test DOM lays the plot out at the page's origin. */
+function pressOn(el: Element, init: MouseEventInit = {}): MouseEvent {
+  const cx = Number(el.getAttribute("cx"));
+  const cy = Number(el.getAttribute("cy"));
+  return new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, clientX: cx, clientY: cy, ...init });
+}
 
 describe("Tone Profile: Custom", () => {
   it("a fresh Custom starts on the Standard curve, white held at scene white", () => {
@@ -139,12 +148,70 @@ describe("Tone Profile: Custom", () => {
     expect(parseToneCurve((fresh as { curve: string }).curve)).toEqual(standardSeed());
   });
 
+  it("edits like Curves: a near miss grabs, the remove chord takes an inner point, points keep their room", () => {
+    // "Tone profile curve is all messed up. Impossible to edit, isn't it
+    // supposed to behave like the curve editor?"
+    const id = profileOf(initialState()).id;
+    let node = { ...profileOf(initialState()), textParams: { ...profileOf(initialState()).textParams, mode: "custom", curve: toneCurveJson(standardSeed()) } };
+    const writes: string[] = [];
+    const dispatch = vi.fn((c: { type: string; curve?: string }) => {
+      if (c.type === "set_tone_curve") {
+        writes.push(c.curve!);
+        node = { ...node, textParams: { ...node.textParams, curve: c.curve! } };
+      }
+    });
+    const view = render(<ToneCurveBlock node={node} dispatch={dispatch as never} />);
+    const editor = screen.getByTestId("tone-curve-editor") as unknown as SVGSVGElement;
+    editor.setPointerCapture = vi.fn();
+    const count = () => screen.getAllByTestId(/^tone-curve-point-/).length;
+    const n = count();
+    // Six pixels off a point grabs it: a drag, no new point.
+    const p2 = screen.getByTestId("tone-curve-point-2");
+    fireEvent(editor, new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, clientX: Number(p2.getAttribute("cx")) + 4, clientY: Number(p2.getAttribute("cy")) + 4 }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "begin_gesture", key: `${id}.tone_curve` });
+    expect(writes).toHaveLength(0);
+    // Dragged onto its neighbor, it stops a quarter stop short.
+    const p3 = screen.getByTestId("tone-curve-point-3");
+    fireEvent(editor, new MouseEvent("pointermove", { bubbles: true, clientX: Number(p3.getAttribute("cx")) + 20, clientY: Number(p3.getAttribute("cy")) }));
+    const dragged = parseToneCurve(writes[writes.length - 1])!.points;
+    expect(dragged[3][0] - dragged[2][0]).toBeGreaterThanOrEqual(0.25 - 1e-6);
+    fireEvent(editor, new MouseEvent("pointerup", { bubbles: true }));
+    view.rerender(<ToneCurveBlock node={node} dispatch={dispatch as never} />);
+    // The remove chord on an end point keeps it; on an inner one takes it.
+    const before = writes.length;
+    fireEvent(editor, pressOn(screen.getByTestId("tone-curve-point-0"), { metaKey: true }));
+    expect(writes).toHaveLength(before);
+    fireEvent(editor, pressOn(screen.getByTestId(`tone-curve-point-${n - 1}`), { ctrlKey: true }));
+    expect(writes).toHaveLength(before);
+    // A remove chord off every point adds nothing.
+    fireEvent(editor, new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, ctrlKey: true, clientX: 120, clientY: 20 }));
+    expect(writes).toHaveLength(before);
+    expect(screen.getByText(/-click one to remove it/)).toBeInTheDocument();
+  });
+
+  it("wears the app's controls: Curves' Smooth and Linear button, chips, the panel's text field", () => {
+    // "Why is tone profile curve not using the same smooth/linear buttons
+    // used on the curve editors? The buttons and input field does not
+    // match the look of the rest of the app."
+    const dispatch = vi.fn();
+    render(<ToneCurveBlock node={profileOf(initialState())} dispatch={dispatch} />);
+    const interp = screen.getByTestId("tone-curve-interp");
+    expect(interp).toHaveClass("chip");
+    expect(interp.getAttribute("data-mode")).toBe("smooth");
+    fireEvent.click(interp);
+    const [cmd] = dispatch.mock.calls[dispatch.mock.calls.length - 1];
+    expect(parseToneCurve(cmd.curve)!.interp).toBe("linear");
+    for (const id of ["tone-curve-save", "tone-curve-import", "tone-curve-export"]) expect(screen.getByTestId(id)).toHaveClass("chip");
+    expect(screen.getByTestId("tone-curve-name")).toHaveClass("field");
+    expect(screen.queryByTestId("tone-curve-smooth")).toBeNull();
+  });
+
   it("a canceled point drag closes its undo gesture", () => {
     const dispatch = vi.fn();
     render(<ToneCurveBlock node={profileOf(initialState())} dispatch={dispatch} />);
     const editor = screen.getByTestId("tone-curve-editor") as unknown as SVGSVGElement;
     editor.setPointerCapture = vi.fn();
-    fireEvent(screen.getByTestId("tone-curve-point-2"), new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    fireEvent(screen.getByTestId("tone-curve-point-2"), pressOn(screen.getByTestId("tone-curve-point-2")));
     expect(dispatch).toHaveBeenCalledWith({ type: "begin_gesture", key: `${profileOf(initialState()).id}.tone_curve` });
     fireEvent(editor, new MouseEvent("pointercancel", { bubbles: true }));
     expect(dispatch).toHaveBeenCalledWith({ type: "end_gesture" });
@@ -227,8 +294,10 @@ describe("Tone Profile: Custom", () => {
     expect(screen.queryByRole("slider", { name: /highlight roll/i })).not.toBeInTheDocument();
     expect(screen.getByRole("slider", { name: /profile amt/i })).toBeInTheDocument();
     expect(screen.getAllByTestId(/^tone-curve-point-/)).toHaveLength(standardSeed().points.length);
-    // Double-clicking a point removes it.
+    // Curves' remove chord takes a point away; a double-click does not.
     fireEvent.doubleClick(screen.getByTestId("tone-curve-point-3"));
+    expect(screen.getAllByTestId(/^tone-curve-point-/)).toHaveLength(standardSeed().points.length);
+    fireEvent(screen.getByTestId("tone-curve-point-3"), pressOn(screen.getByTestId("tone-curve-point-3"), { ctrlKey: true }));
     expect(screen.getAllByTestId(/^tone-curve-point-/)).toHaveLength(standardSeed().points.length - 1);
     // Save names it and writes it.
     const name = screen.getByTestId("tone-curve-name");

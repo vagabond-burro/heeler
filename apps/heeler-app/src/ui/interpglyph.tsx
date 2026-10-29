@@ -18,12 +18,16 @@ export function InterpCycle({
   mode,
   testid,
   onChange,
+  modes = INTERP_CYCLE,
 }: {
   mode: InterpGlyphMode;
   testid: string;
   onChange: (next: InterpGlyphMode) => void;
+  /** the faces this editor has, in cycle order: a curve with no
+   * tangents (the tone profile's) cycles Smooth and Linear alone */
+  modes?: InterpGlyphMode[];
 }) {
-  const next = INTERP_CYCLE[(INTERP_CYCLE.indexOf(mode) + 1) % INTERP_CYCLE.length];
+  const next = modes[(modes.indexOf(mode) + 1) % modes.length];
   const label = `${INTERP_LABEL[mode]}: ${INTERP_WHAT[mode]}. Click for ${INTERP_LABEL[next].toLowerCase()}`;
   return (
     <button

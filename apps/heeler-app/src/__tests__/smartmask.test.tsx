@@ -542,6 +542,8 @@ describe("the click overlay", () => {
       render(<SmartModePanel state={withSmart()} dispatch={() => {}} />);
       await type("the dog");
       await screen.findByTestId("smart-find-matches");
+      // The panel's own text field, not the browser's white one.
+      expect(screen.getByTestId("smart-find")).toHaveClass("field");
       fireEvent.change(screen.getByTestId("smart-find"), { target: { value: "the cat" } });
       expect(screen.queryByTestId("smart-find-matches")).toBeNull();
     });
