@@ -271,11 +271,17 @@ the same either way. A downloaded model lives in Heeler's data folder
 and can be installed, updated or removed from Preferences (see
 [Downloaded models](../models.md)).
 
+- **SAM 2.1 Hiera Tiny** (Segment Anything 2.1: the clicks, Subject
+  and Sky of every smart selection made since Heeler 2026.7), © Meta
+  Platforms, under the **Apache License 2.0**: code and weights alike;
+  ONNX packaging by the Hugging Face onnx-community. Its training data
+  (SA-V) is published by Meta under **CC-BY-4.0**.
 - **MobileSAM** (the Segment Anything image encoder, distilled) and
   the **Segment Anything mask decoder**, © Meta AI and the MobileSAM
   authors, under the **Apache License 2.0**: code and weights alike.
   The training data (SA-1B) is published by Meta under its own stated
-  terms.
+  terms. It is kept for the smart selections made with it before
+  2026.7, which it recomputes exactly as they were made.
 - **BiRefNet Lite** (the one-shot subject matte), © Zheng Peng and
   the BiRefNet authors, under the **MIT license**: code and weights
   alike. Its training corpus (DIS5K and related academic datasets) is
@@ -314,7 +320,8 @@ and can be installed, updated or removed from Preferences (see
   The model reads only your photograph, on your machine.
 
 - **Florence-2 base** (what the assistant knows is in a photograph:
-  captions, objects and where a phrase is), © Microsoft Corporation,
+  captions, objects and where a phrase is; and where the phrase typed
+  into Select by text is), © Microsoft Corporation,
   under the **MIT license**: code and weights alike; ONNX packaging by
   the Hugging Face onnx-community, also MIT. It was trained on FLD-5B,
   Microsoft's own dataset of 126 million images with 5.4 billion

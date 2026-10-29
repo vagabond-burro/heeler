@@ -19,13 +19,18 @@ import {
   bakeMaskRaster,
   inpaintFill,
   smartClick,
+  smartFind,
   smartMatte,
   smartModelDownload,
   smartModelStatus,
   smartRasterStatus,
   smartSelect,
+  SAM_MODEL,
+  FLORENCE_NOT_INSTALLED,
+  type FlorenceRegion,
   type SmartModels,
 } from "../bridge";
+import { samFor, smartAsk } from "./smartnodeparts";
 import { logMsg } from "../log";
 import { reportToolError } from "./hints";
 import { DepthViewIcon, MaskEyeIcon, MaskOverlayIcon, SmartIcon } from "./panelicons";
@@ -483,6 +488,17 @@ export function SmartModePanel({
   const [models, setModels] = useState<SmartModels | null>(null);
   const [matteConsent, setMatteConsent] = useState(false);
   const [matting, setMatting] = useState(false);
+  // Select by text: the phrase being typed, the matches to choose from
+  // when it found several, the "nothing matches" line, and the
+  // Florence-2 consent line when the model is not here.
+  const [phrase, setPhrase] = useState("");
+  const [matches, setMatches] = useState<FlorenceRegion[] | null>(null);
+  const [findNote, setFindNote] = useState("");
+  const [findConsent, setFindConsent] = useState(false);
+  const findRequest = useRef(0);
+  const computeRequest = useRef(0);
+  const mask = aimed ?? activeSmartMask(state);
+  const maskId = mask?.id ?? "";
   useEffect(() => {
     let live = true;
     void smartModelStatus().then((m) => {
@@ -491,23 +507,90 @@ export function SmartModePanel({
     return () => {
       live = false;
     };
-  }, [matteConsent, matting]);
-  const mask = aimed ?? activeSmartMask(state);
+  }, [matteConsent, matting, findConsent]);
+  useEffect(() => {
+    setPhrase("");
+    setMatches(null);
+    setFindNote("");
+    setFindConsent(false);
+    setBusy(false);
+    return () => {
+      // A late answer belongs to the photograph and mask that asked for it.
+      findRequest.current += 1;
+      computeRequest.current += 1;
+      publishBusy(null);
+    };
+  }, [state.activeImage, maskId]);
   if (!mask) return null;
   const mode = mask.textParams?.mode ?? "click";
   const prompts = mask.textParams?.prompts ?? "[]";
   const hasSelection = prompts !== "[]" || (mask.textParams?.model ?? "") !== "";
-  const compute = (m: string, pts: string, aim = "") => {
+  // A selection made with MobileSAM keeps it (lib.rs smart_sam_spec);
+  // remaking it with SAM 2.1 is the user's call, offered beside it.
+  const madeWithMobileSam = (mask.textParams?.model ?? "").split("+")[0] === "mobile_sam";
+  const compute = (m: string, pts: string, aim = "", model = mask.textParams?.model ?? "") => {
+    const request = ++computeRequest.current;
     setBusy(true);
     publishBusy("SELECTING \u00b7 the model is computing the mask");
-    void (m === "subject" ? smartClick(state.activeImage, mask.id, pts, m, aim) : smartClick(state.activeImage, mask.id, pts, m))
+    void smartClick(state.activeImage, mask.id, pts, m, aim, model)
       .then((used) => {
-        dispatch({ type: "set_text_param", id: mask.id, param: "model", value: used });
+        if (computeRequest.current === request) {
+          dispatch({ type: "set_text_param", id: mask.id, param: "model", value: used });
+        }
       })
       .catch((err) => reportToolError("Smart selection", err))
       .finally(() => {
-        publishBusy(null);
-        setBusy(false);
+        if (computeRequest.current === request) {
+          publishBusy(null);
+          setBusy(false);
+        }
+      });
+  };
+  // A phrase's matches become the selection: the phrase and the boxes
+  // go in the recipe, one undo step, and the clicks start over, since
+  // they belonged to whatever was selected before. SAM answers each
+  // box; clicks after that refine it as in Click.
+  const selectBoxes = (text: string, chosen: FlorenceRegion[]) => {
+    const r = (v: number) => Math.round(v * 10000) / 10000;
+    const boxes = JSON.stringify(chosen.map((b) => [r(b.x0), r(b.y0), r(b.x1), r(b.y1)]));
+    setMatches(null);
+    dispatch({ type: "set_params", id: mask.id, values: {}, text: { mode: "text", phrase: text, boxes, prompts: "[]" } });
+    compute("text", "[]", boxes);
+  };
+  const find = () => {
+    const text = phrase.trim();
+    if (!text || busy) return;
+    const request = ++findRequest.current;
+    let handedOff = false;
+    setFindNote("");
+    setMatches(null);
+    setBusy(true);
+    publishBusy("FINDING \u00b7 the picture reader is looking for the phrase");
+    void smartFind(state.activeImage, text)
+      .then((found) => {
+        if (findRequest.current !== request) return;
+        if (found.length === 0) {
+          setFindNote(`Nothing in the photograph matches \u201c${text}\u201d.`);
+          logMsg("info", `Select by text: nothing matches "${text}"`);
+        } else if (found.length === 1) {
+          // SAM owns the busy state from here, including the global status.
+          handedOff = true;
+          selectBoxes(text, found);
+        } else {
+          // Numbered left to right, the way they are read off the photograph.
+          setMatches([...found].sort((a, b) => a.x0 + a.x1 - (b.x0 + b.x1)));
+        }
+      })
+      .catch((err) => {
+        if (findRequest.current !== request) return;
+        if (String(err).includes(FLORENCE_NOT_INSTALLED)) setFindConsent(true);
+        else reportToolError("Select by text", err);
+      })
+      .finally(() => {
+        if (findRequest.current === request && !handedOff) {
+          publishBusy(null);
+          setBusy(false);
+        }
       });
   };
   return (
@@ -561,6 +644,17 @@ click/subject/sky that refine/remove/to-mask have").*/}
           {matting ? "REFINING…" : "COMPUTING…"}
         </span>
       )}
+      {madeWithMobileSam && !busy && !matting && models?.sam.installed && (
+        <button
+          className="chip small"
+          data-testid="smart-remake"
+          data-tip="Remake with SAM 2.1"
+          data-hint="Made with MobileSAM: remakes this selection from its clicks with SAM 2.1, whose edges are cleaner; the shape may change"
+          onClick={() => compute(mode, prompts, smartAsk(mask.textParams), SAM_MODEL)}
+        >
+          SAM 2.1
+        </button>
+      )}
       {/* The actions, at the mode buttons' own size (one square, a picture in
 each, since 2026-09-29) and pushed to the right edge with the space
 between the two sets (2026-09-29: "The refine/remove/to mask buttons
@@ -600,8 +694,8 @@ refinement falls away, ready to run again.*/}
               }
               setMatting(true);
               publishBusy("REFINING \u00b7 the matting model is at the edge");
-              void (mode === "subject"
-                ? smartMatte(state.activeImage, mask.id, mode, prompts, mask.textParams?.model ?? "", mask.textParams?.aim ?? "")
+              void (mode === "subject" || mode === "text"
+                ? smartMatte(state.activeImage, mask.id, mode, prompts, mask.textParams?.model ?? "", smartAsk(mask.textParams))
                 : smartMatte(state.activeImage, mask.id, mode, prompts, mask.textParams?.model ?? ""))
                 .then((used) => {
                   dispatch({ type: "set_text_param", id: mask.id, param: "model", value: used });
@@ -685,6 +779,82 @@ owns a SNAPSHOT of the selection (see add_inpaint_for), so nothing
 about a past removal has any claim on the live selection. On the
 freeze: "I click to select, I should be able to clear that. I should
 be able to refine it." Yes.*/}
+      {/* Select by text: Florence-2 finds the phrase, SAM selects
+what it found. On the click tool's row, under the buttons. */}
+      <div style={{ flexBasis: "100%", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+        <input
+          data-testid="smart-find"
+          type="text"
+          value={phrase}
+          disabled={busy || matting}
+          placeholder={mode === "text" && mask.textParams?.phrase ? mask.textParams.phrase : "Select by text: the red car"}
+          aria-label="Select by text"
+          data-hint="Select by text: type what to select and press Return; the picture reader finds it and the model selects it"
+          style={{ flex: "1 1 120px", minWidth: 0, fontSize: 11 }}
+          onChange={(e) => {
+            setPhrase(e.target.value);
+            // These boxes answer the old phrase, not the one being typed.
+            setMatches(null);
+            setFindNote("");
+          }}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") find();
+          }}
+        />
+        {matches && (
+          <span data-testid="smart-find-matches" style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 9, color: "var(--text-faint)" }}>{matches.length} FOUND, LEFT TO RIGHT:</span>
+            <button className="chip small" data-testid="smart-find-all" onClick={() => selectBoxes(phrase.trim(), matches)}>
+              ALL
+            </button>
+            {matches.map((m, i) => (
+              <button
+                key={i}
+                className="chip small"
+                data-testid={`smart-find-${i + 1}`}
+                data-hint={`Select by text: selects the ${ordinal(i + 1)} match from the left, ${m.label}`}
+                onClick={() => selectBoxes(phrase.trim(), [m])}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </span>
+        )}
+      </div>
+      {findNote && (
+        <div data-testid="smart-find-none" style={{ flexBasis: "100%", fontSize: 9, color: "var(--text-faint)" }}>
+          {findNote}
+        </div>
+      )}
+      {findConsent && models?.florence && !models.florence.installed && (
+        <div
+          data-testid="smart-find-consent"
+          style={{ flexBasis: "100%", fontSize: 9, color: "var(--text-faint)", lineHeight: 1.5 }}
+        >
+          Select by text needs {models.florence.label} · {Math.round(models.florence.bytes / 1e6)} MB ·{" "}
+          {models.florence.license}
+          <div style={{ overflowWrap: "anywhere" }}>From {models.florence.url}</div>
+          <button
+            className="chip small"
+            data-testid="smart-find-download"
+            disabled={busy || matting}
+            style={{ marginTop: 2 }}
+            onClick={() => {
+              setBusy(true);
+              void smartModelDownload(models.florence.id)
+                .then(() => {
+                  logMsg("info", "Florence-2 installed");
+                  setFindConsent(false);
+                })
+                .catch((err) => reportToolError("Download", err))
+                .finally(() => setBusy(false));
+            }}
+          >
+            DOWNLOAD
+          </button>
+        </div>
+      )}
       {/* The matte model's consent line, same contract as the fill's. */}
       {matteConsent && models?.refine && !models.refine.installed && (
         <div
@@ -718,6 +888,11 @@ be able to refine it." Yes.*/}
   );
 }
 
+/** "first", "second"... for the match chips' hints. */
+function ordinal(n: number): string {
+  return ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"][n - 1] ?? `${n}th`;
+}
+
 export function SmartClickOverlay({
   state,
   dispatch,
@@ -748,7 +923,7 @@ export function SmartClickOverlay({
   const prompts = mask?.textParams?.prompts ?? "[]";
   const mode = mask?.textParams?.mode ?? "click";
   // Subject's aim is part of its recipe (lib.rs smart_recipe_prompts).
-  const aim = mode === "subject" ? (mask?.textParams?.aim ?? "") : "";
+  const aim = smartAsk(mask?.textParams);
   // The badge's question: is the raster for exactly this recipe here? A
   // graph from another machine carries clicks but no pixels, and the
   // answer must be visible, never silent.
@@ -775,17 +950,18 @@ export function SmartClickOverlay({
   if (!mask) return null;
 
   const models = status !== "loading" ? status : null;
-  const needsModel = models !== null && !models.sam.installed;
+  const sam = models !== null ? samFor(models, mask?.textParams?.model ?? "") : null;
+  const needsModel = sam !== null && !sam.installed;
   // The matte upgrade offer: subject mode works via SAM regardless,
   // but BiRefNet's soft edges are the real thing.
-  const offerMatte = models !== null && models.sam.installed && !models.matte.installed;
+  const offerMatte = sam !== null && models !== null && sam.installed && !models.matte.installed;
 
   return (
     <div
       data-testid="smart-overlay"
       style={{ position: "absolute", inset: 0, cursor: busy ? "progress" : "crosshair" }}
       onMouseDown={(e) => {
-        if (!isPrimaryPress(e) || needsModel || busy || mode !== "click") return;
+        if (!isPrimaryPress(e) || needsModel || busy || (mode !== "click" && mode !== "text")) return;
         e.stopPropagation();
         const [nx, ny] = norm(e, e.currentTarget);
         if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return;
@@ -807,7 +983,9 @@ export function SmartClickOverlay({
         dispatch({ type: "set_text_param", id: mask.id, param: "prompts", value: json });
         setBusy(true);
         publishBusy("SELECTING \u00b7 the model is computing the mask");
-        void smartClick(state.activeImage, mask.id, json)
+        // Text's clicks refine what the phrase found: same compute,
+        // with its boxes beside them.
+        void smartClick(state.activeImage, mask.id, json, mode, aim, mask.textParams?.model ?? "")
           .then((used) => {
             dispatch({ type: "set_text_param", id: mask.id, param: "model", value: used });
           })
@@ -885,16 +1063,16 @@ export function SmartClickOverlay({
       })()}
       {/* The consent card, when the tool is armed but the model is not
           here: name, license, size, source, and an explicit button. */}
-      {needsModel && models !== null && (
+      {needsModel && sam !== null && (
         <ModelConsentCard
           title="SMART SELECTION NEEDS ITS MODEL"
-          model={models.sam}
+          model={sam}
           testid="smart"
           downloading={downloading}
           place={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)" }}
           onDownload={() => {
             setDownloading(true);
-            void smartModelDownload()
+            void smartModelDownload(sam.id)
               .then(() => logMsg("info", "Smart selection model installed"))
               .catch((err) => reportToolError("Download", err))
               .finally(() => setDownloading(false));
@@ -926,7 +1104,7 @@ export function SmartClickOverlay({
             onClick={() => {
               setBusy(true);
               publishBusy("SELECTING \u00b7 the model is computing the mask");
-              void (mode === "subject" ? smartClick(state.activeImage, mask.id, prompts, mode, aim) : smartClick(state.activeImage, mask.id, prompts, mode))
+              void smartClick(state.activeImage, mask.id, prompts, mode, aim, mask.textParams?.model ?? "")
                 .then((used) => {
                   dispatch({ type: "set_text_param", id: mask.id, param: "model", value: used });
                 })

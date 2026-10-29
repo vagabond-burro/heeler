@@ -14,7 +14,7 @@ import { makeNode, specFor } from "../nodes";
 import { reduce, type Command, type NodeCard, type State } from "../state";
 import { Inspector, NodeEditor } from "../ui/graph";
 import { activeSmartMask } from "../ui/smarttoolparts";
-import { smartCardNote, smartModelMissing } from "../ui/smartnodeparts";
+import { samFor, smartCardNote, smartModelMissing } from "../ui/smartnodeparts";
 import * as bridge from "../bridge";
 
 let samInstalled = true;
@@ -95,7 +95,7 @@ describe("a Smart Mask node's face", () => {
     await waitFor(() => expect(status).toHaveAttribute("data-state", "not-detected"));
     fireEvent.click(screen.getByTestId("smart-node-detect"));
     await waitFor(() => expect(got).toContainEqual({ type: "set_text_param", id: node.id, param: "model", value: "mobile_sam" }));
-    expect(bridge.smartClick).toHaveBeenCalledWith(s.activeImage, node.id, "[]", "sky");
+    expect(bridge.smartClick).toHaveBeenCalledWith(s.activeImage, node.id, "[]", "sky", "", "");
   });
 
   it("a computed Sky reads as detected", async () => {
@@ -119,7 +119,7 @@ describe("a Smart Mask node's face", () => {
       fireEvent.click(screen.getByTestId("smart-mode-sky"));
     });
     expect(got).toContainEqual({ type: "set_text_param", id: node.id, param: "mode", value: "sky" });
-    await waitFor(() => expect(bridge.smartClick).toHaveBeenCalledWith(s.activeImage, node.id, "[]", "sky"));
+    await waitFor(() => expect(bridge.smartClick).toHaveBeenCalledWith(s.activeImage, node.id, "[]", "sky", "", ""));
   });
 
   it("Click mode offers the viewer pick, aimed at this node", async () => {
@@ -171,6 +171,14 @@ describe("a Smart Mask card", () => {
     expect(smartModelMissing(models(false, true), "sky")).toBe(true);
     // Not known yet is not missing.
     expect(smartModelMissing(null, "sky")).toBe(false);
+    // An old Subject's matte id still names MobileSAM for its SAM fallback.
+    const legacy = {
+      sam: model("sam2_1_hiera_tiny", false),
+      samLegacy: model("mobile_sam", true),
+      matte: model("birefnet_lite", false),
+    } as unknown as Parameters<typeof smartModelMissing>[0];
+    expect(samFor(legacy!, "birefnet_lite").id).toBe("mobile_sam");
+    expect(smartModelMissing(legacy, "subject", "birefnet_lite")).toBe(false);
   });
 
   it("wears the note on the canvas", async () => {

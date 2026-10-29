@@ -2,7 +2,7 @@
 // smartnode.tsx exports components alone and Vite can refresh it in place as
 // it is edited instead of reloading the window.
 import { useEffect, useState } from "react";
-import { smartModelStatus, type SmartModels } from "../bridge";
+import { SAM_MODEL, smartModelStatus, type SmartModels, type SmartModelStatus } from "../bridge";
 import type { NodeCard } from "../state";
 
 /** The smart models' standing for a face or a card: asked when `ask`
@@ -26,13 +26,34 @@ export function useSmartModels(ask: boolean, refresh: unknown = 0): SmartModels 
   return models;
 }
 
+/** A Smart mask's ask beside its clicks, what its compute and its
+ * recipe take as `aim` (lib.rs smart_ask): Subject's aim point, or
+ * Text's boxes, the phrase's matches. Empty for the other modes. */
+export function smartAsk(textParams: Record<string, string> | undefined): string {
+  const mode = textParams?.mode || "click";
+  if (mode === "subject") return textParams?.aim ?? "";
+  if (mode === "text") return textParams?.boxes ?? "";
+  return "";
+}
+
+/** The SAM a Smart mask's next compute runs on, from the model its
+ * recipe records (lib.rs smart_sam_spec). Any nonempty record from
+ * before SAM 2.1 keeps MobileSAM while it is installed, including an
+ * old Subject's matte id when its SAM fallback has to run. */
+export function samFor(models: SmartModels, recorded: string): SmartModelStatus {
+  const base = recorded.split("+")[0];
+  if (base !== "" && base !== SAM_MODEL && models.samLegacy?.installed) return models.samLegacy;
+  return models.sam;
+}
+
 /** Whether the model a Smart mask's mode needs is missing here: SAM for
- * every mode, except Subject, which BiRefNet answers when it is
- * installed (lib.rs smart_compute). Not known yet is not missing. */
-export function smartModelMissing(models: SmartModels | null, mode: string): boolean {
+ * every mode (the one samFor picks), except Subject, which BiRefNet
+ * answers when it is installed (lib.rs smart_compute). Not known yet is
+ * not missing. */
+export function smartModelMissing(models: SmartModels | null, mode: string, recorded = ""): boolean {
   if (!models?.sam) return false;
   if (mode === "subject" && models.matte?.installed) return false;
-  return !models.sam.installed;
+  return !samFor(models, recorded).installed;
 }
 
 /** The words a Smart Mask card wears under its picture when the mask is
@@ -42,9 +63,10 @@ export function smartModelMissing(models: SmartModels | null, mode: string): boo
 export function smartCardNote(n: NodeCard, models: SmartModels | null): string {
   if (n.type !== "heeler.smart_mask" || !n.enabled) return "";
   const mode = n.textParams?.mode || "click";
-  if (smartModelMissing(models, mode)) return "Model not installed: mask empty";
+  if (smartModelMissing(models, mode, n.textParams?.model ?? "")) return "Model not installed: mask empty";
   if ((n.textParams?.model ?? "") !== "") return "";
   if (mode === "subject" || mode === "sky") return "Not detected yet: Detect in the Inspector";
+  if (mode === "text" && (n.textParams?.boxes || "[]") === "[]") return "No phrase found yet: mask empty";
   if ((n.textParams?.prompts || "[]") === "[]") return "No clicks yet: mask empty";
   return "";
 }

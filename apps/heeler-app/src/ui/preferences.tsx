@@ -553,6 +553,7 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
   }, [busy, refresh, state.prefs.modelStoreDir]);
 
   const known = [
+    { id: "sam2_1_hiera_tiny", label: "Segment Anything 2.1 (Tiny)" },
     { id: "mobile_sam", label: "Segment Anything (MobileSAM)" },
     { id: "birefnet_lite", label: "BiRefNet Lite (subject matte)" },
     { id: "lama", label: "LaMa (inpainting)" },
@@ -568,7 +569,7 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
   // A desktop older than Florence-2 (or a test's partial answer) has
   // no florence entry; the row is simply not there then.
   const listed = (m: SmartModels) =>
-    [m.sam, m.matte, m.fill, m.refine, m.depth, m.denoise, m.florence].filter((x): x is SmartModelStatus => !!x);
+    [m.sam, m.samLegacy, m.matte, m.fill, m.refine, m.depth, m.denoise, m.florence].filter((x): x is SmartModelStatus => !!x);
   const rows = models
     ? listed(models)
     : known.map((item) => ({ ...item, installed: false, license: "", url: "", bytes: 0, version: "", pending: true }));

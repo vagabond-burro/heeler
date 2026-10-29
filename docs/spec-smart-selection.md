@@ -403,7 +403,25 @@ about ML.
   ONNX for SUBJECT/matting (with the layer-4 caveat recorded on the
   open-source page); SAM-prompted sky; alpha export path. Optional:
   upgrade P1's decoder to SAM 2.1 tiny if the ONNX export proves
-  clean.
+  clean. Done in 2026.7 (issue 81): SAM 2.1 Hiera Tiny from the
+  onnx-community export at a pinned revision makes every new
+  selection; each selection's recipe already records its model, so
+  MobileSAM stays for the selections made with it, a click on one
+  keeps it while it is installed, and remaking one with SAM 2.1 is a
+  button, the user's call. Small was measured too and left out: its
+  encode ran two to three times Tiny's, past the budget on a laptop.
+- **Select by text (2026.7, issue 82).** A Smart mask's fourth mode,
+  "text": Florence-2's phrase grounding (already installed for the
+  assistant) on the same preview the masks embed gives boxes in
+  fractions of the photograph; each is a SAM box prompt, with the
+  clicks inside it, and the masks are merged by max. An add click
+  outside every box is a click prompt of its own. The node keeps
+  `phrase` (shown, never keyed) and `boxes` (keyed: the mode's ask,
+  where Subject keeps its aim), so batch renders and other machines
+  reproduce it without Florence-2. Several matches: offered left to
+  right, or all; none: said, nothing changes. If Florence-2's boxes
+  prove too loose, the fallback is Grounding DINO (Apache-2.0), a
+  separate decision.
 - **P3: subject removal.** Spec Section 17 amendment FIRST. Then
   LaMa or MI-GAN behind the same download-consent flow, driven by
   P1's masks, with the Places2/FFHQ provenance stated plainly in the
@@ -414,6 +432,12 @@ about ML.
 
 - Encode (MobileSAM, 1024px preview): <= 2s CPU, target <500ms via
   CoreML; runs once per photo, async, never blocks the render pump.
+  Measured 2026-10-27 on an M4 Max under heavy load, CPU, release
+  build, a 1600x1066 preview: SAM 2.1 Tiny 0.42 to 0.53s encode and
+  19 to 34ms per click including the mask's resize to the preview;
+  MobileSAM 0.18 to 0.20s and 18 to 23ms. SAM 2.1's three planes
+  take 16 MB per photo against MobileSAM's 4 MB, so the session's
+  embedding cache is counted in bytes (72 MB) rather than entries.
 - Per-click decode: <= 150ms end-to-end including upsample.
 - BiRefNet one-shot: <= 4s CPU at 1024, async with progress; cached
   thereafter.

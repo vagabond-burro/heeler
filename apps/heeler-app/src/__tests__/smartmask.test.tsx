@@ -2,7 +2,7 @@
 // click tool's recipe writes, and the consent card. The model itself
 // is pinned by the vision crate's gated test; nothing here needs it.
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "../data";
 import { artMaskNode, reduce, toolForMaskType, type Command, type State } from "../state";
@@ -14,8 +14,16 @@ vi.mock("../bridge", async (importOriginal) => {
     ...real,
     smartModelStatus: vi.fn(async () => ({
       sam: {
-        id: "mobile_sam",
+        id: "sam2_1_hiera_tiny",
         installed: mockInstalled,
+        label: "Segment Anything 2.1 (Tiny)",
+        license: "Apache-2.0",
+        url: "https://example.test/vision_encoder.onnx",
+        bytes: 155_610_424,
+      },
+      samLegacy: {
+        id: "mobile_sam",
+        installed: mockLegacy,
         label: "Segment Anything (MobileSAM)",
         license: "Apache-2.0",
         url: "https://example.test/model.zip",
@@ -45,16 +53,28 @@ vi.mock("../bridge", async (importOriginal) => {
         url: "https://example.test/vitmatte.onnx",
         bytes: 103_885_865,
       },
+      florence: {
+        id: "florence_2_base",
+        installed: mockFlorence,
+        label: "Florence-2 base (what is in the picture)",
+        license: "MIT",
+        url: "https://example.test/vision_encoder.onnx",
+        bytes: 970_082_648,
+      },
     })),
     inpaintFill: vi.fn(async () => "fill123"),
     smartModelDownload: vi.fn(async () => {}),
-    smartClick: vi.fn(async () => "mobile_sam"),
+    smartClick: vi.fn(async () => "sam2_1_hiera_tiny"),
     smartMatte: vi.fn(async () => "mobile_sam+vitmatte"),
     smartRasterStatus: vi.fn(async () => mockCached),
     smartSelect: vi.fn(async () => "cafecafecafecafe"),
+    smartFind: vi.fn(async () => mockFound),
   };
 });
+let mockFound: { label: string; x0: number; y0: number; x1: number; y1: number }[] = [];
 let mockInstalled = true;
+let mockLegacy = true;
+let mockFlorence = true;
 let mockCached = true;
 let mockMatte = true;
 let mockFill = true;
@@ -64,6 +84,9 @@ const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
 
 beforeEach(() => {
   mockInstalled = true;
+  mockLegacy = true;
+  mockFlorence = true;
+  mockFound = [];
   mockCached = true;
   mockMatte = true;
   mockFill = true;
@@ -162,7 +185,7 @@ describe("the click overlay", () => {
     expect(badge.textContent).toContain("NOT COMPUTED");
     fireEvent.click(screen.getByTestId("smart-recompute"));
     const { smartClick } = await import("../bridge");
-    expect(vi.mocked(smartClick)).toHaveBeenCalledWith(s.activeImage, maskId, prompts, "click");
+    expect(vi.mocked(smartClick)).toHaveBeenCalledWith(s.activeImage, maskId, prompts, "click", "", "");
   });
 
   it("the one-shot chips (in the PANEL, ) set the mode and compute", async () => {
@@ -174,7 +197,7 @@ describe("the click overlay", () => {
     fireEvent.click(screen.getByTestId("smart-mode-sky"));
     expect(got).toContainEqual({ type: "set_text_param", id: maskId, param: "mode", value: "sky" });
     const { smartClick } = await import("../bridge");
-    expect(vi.mocked(smartClick)).toHaveBeenCalledWith(s.activeImage, maskId, "[]", "sky");
+    expect(vi.mocked(smartClick)).toHaveBeenCalledWith(s.activeImage, maskId, "[]", "sky", "", "");
     // And the chips are NOT on the photograph any more: the overlay
     // renders markers and cards, never the mode row.
     render(<SmartClickOverlay state={s} dispatch={() => {}} norm={norm} />);
@@ -339,15 +362,194 @@ describe("the click overlay", () => {
     const got: Command[] = [];
     render(<SmartClickOverlay state={withSmart()} dispatch={(c) => got.push(c)} norm={norm} />);
     const card = await screen.findByTestId("smart-consent");
-    expect(card.textContent).toContain("MobileSAM");
+    expect(card.textContent).toContain("Segment Anything 2.1");
     expect(card.textContent).toContain("Apache-2.0");
-    expect(card.textContent).toContain("37 MB");
+    expect(card.textContent).toContain("156 MB");
     expect(card.textContent).toContain("example.test");
     fireEvent.mouseDown(screen.getByTestId("smart-overlay"), { clientX: 40, clientY: 60, button: 0 });
     expect(got.filter((c) => c.type === "set_text_param")).toHaveLength(0);
     // NOT NOW puts the tool down instead of leaving a dead crosshair.
     fireEvent.click(screen.getByTestId("smart-not-now"));
     expect(got).toContainEqual({ type: "set_tool", tool: "none" });
+  });
+
+  // SAM 2.1 in place of MobileSAM (2026.7): a selection made with
+  // MobileSAM keeps it, so a refinement click goes out with its model
+  // and needs no SAM 2.1 download; remaking it with SAM 2.1 is a chip
+  // in the panel, the user's call. A new selection asks for SAM 2.1.
+  it("a MobileSAM selection keeps its model, and the panel offers the remake", async () => {
+    mockInstalled = false;
+    let s = withSmart();
+    const maskId = s.activeLayer!.replace("_adj", "_mask");
+    const prompts = JSON.stringify([{ x: 0.5, y: 0.5, positive: true }]);
+    s = run(s, { type: "set_params", id: maskId, values: {}, text: { prompts, model: "mobile_sam" } });
+    const got: Command[] = [];
+    const { unmount } = render(<SmartClickOverlay state={s} dispatch={(c) => got.push(c)} norm={norm} />);
+    await waitFor(() => expect(screen.getByTestId("smart-overlay").style.cursor).toBe("crosshair"));
+    expect(screen.queryByTestId("smart-consent")).toBeNull();
+    fireEvent.mouseDown(screen.getByTestId("smart-overlay"), { clientX: 40, clientY: 60, button: 0 });
+    const { smartClick } = await import("../bridge");
+    await waitFor(() => expect(vi.mocked(smartClick)).toHaveBeenCalled());
+    expect(vi.mocked(smartClick).mock.calls[0]![5]).toBe("mobile_sam");
+    unmount();
+    // MobileSAM gone from the store: the click would remake it, so it
+    // asks for SAM 2.1 first.
+    mockLegacy = false;
+    const gone = render(<SmartClickOverlay state={s} dispatch={() => {}} norm={norm} />);
+    expect((await screen.findByTestId("smart-consent")).textContent).toContain("Segment Anything 2.1");
+    gone.unmount();
+    // The remake chip shows once SAM 2.1 is here, and asks for it.
+    mockInstalled = true;
+    mockLegacy = true;
+    vi.mocked(smartClick).mockClear();
+    render(<SmartModePanel state={s} dispatch={() => {}} />);
+    fireEvent.click(await screen.findByTestId("smart-remake"));
+    expect(vi.mocked(smartClick)).toHaveBeenCalledWith(s.activeImage, maskId, prompts, "click", "", "sam2_1_hiera_tiny");
+  });
+
+  // Select by text (2026.7): the phrase goes to Florence-2, what it
+  // found goes in the recipe as boxes beside the phrase, and SAM
+  // answers them in the Text mode; the clicks start over.
+  describe("select by text", () => {
+    const type = async (text: string) => {
+      const field = await screen.findByTestId("smart-find");
+      fireEvent.change(field, { target: { value: text } });
+      fireEvent.keyDown(field, { key: "Enter" });
+    };
+
+    it("one match becomes the selection, its box in the recipe", async () => {
+      mockFound = [{ label: "red car", x0: 0.12345678, y0: 0.2, x1: 0.5, y1: 0.75 }];
+      const s = withSmart();
+      const maskId = s.activeLayer!.replace("_adj", "_mask");
+      const got: Command[] = [];
+      render(<SmartModePanel state={s} dispatch={(c) => got.push(c)} />);
+      await type("the red car");
+      const { smartClick, smartFind } = await import("../bridge");
+      await waitFor(() => expect(vi.mocked(smartClick)).toHaveBeenCalled());
+      expect(vi.mocked(smartFind)).toHaveBeenCalledWith(s.activeImage, "the red car");
+      const boxes = "[[0.1235,0.2,0.5,0.75]]";
+      expect(got).toContainEqual({
+        type: "set_params",
+        id: maskId,
+        values: {},
+        text: { mode: "text", phrase: "the red car", boxes, prompts: "[]" },
+      });
+      expect(vi.mocked(smartClick)).toHaveBeenCalledWith(s.activeImage, maskId, "[]", "text", boxes, "");
+    });
+
+    it("several matches are offered left to right, one or all", async () => {
+      mockFound = [
+        { label: "dog", x0: 0.6, y0: 0.1, x1: 0.9, y1: 0.5 },
+        { label: "dog", x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.5 },
+      ];
+      const s = withSmart();
+      const maskId = s.activeLayer!.replace("_adj", "_mask");
+      const got: Command[] = [];
+      const { unmount } = render(<SmartModePanel state={s} dispatch={(c) => got.push(c)} />);
+      await type("the dog");
+      await screen.findByTestId("smart-find-matches");
+      const { smartClick } = await import("../bridge");
+      expect(vi.mocked(smartClick)).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByTestId("smart-find-1"));
+      expect(vi.mocked(smartClick)).toHaveBeenCalledWith(s.activeImage, maskId, "[]", "text", "[[0.1,0.1,0.3,0.5]]", "");
+      unmount();
+      vi.mocked(smartClick).mockClear();
+      render(<SmartModePanel state={s} dispatch={() => {}} />);
+      await type("the dog");
+      fireEvent.click(await screen.findByTestId("smart-find-all"));
+      expect(vi.mocked(smartClick)).toHaveBeenCalledWith(
+        s.activeImage,
+        maskId,
+        "[]",
+        "text",
+        "[[0.1,0.1,0.3,0.5],[0.6,0.1,0.9,0.5]]",
+        "",
+      );
+    });
+
+    it("no match says so and changes nothing", async () => {
+      const s = withSmart();
+      const got: Command[] = [];
+      render(<SmartModePanel state={s} dispatch={(c) => got.push(c)} />);
+      await type("a unicorn");
+      expect((await screen.findByTestId("smart-find-none")).textContent).toContain("a unicorn");
+      expect(got).toHaveLength(0);
+      const { smartClick } = await import("../bridge");
+      expect(vi.mocked(smartClick)).not.toHaveBeenCalled();
+    });
+
+    it("editing the phrase retires the old phrase's matches", async () => {
+      mockFound = [
+        { label: "dog", x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.5 },
+        { label: "dog", x0: 0.6, y0: 0.1, x1: 0.9, y1: 0.5 },
+      ];
+      render(<SmartModePanel state={withSmart()} dispatch={() => {}} />);
+      await type("the dog");
+      await screen.findByTestId("smart-find-matches");
+      fireEvent.change(screen.getByTestId("smart-find"), { target: { value: "the cat" } });
+      expect(screen.queryByTestId("smart-find-matches")).toBeNull();
+    });
+
+    it("a late find does not select on another photograph", async () => {
+      const bridge = await import("../bridge");
+      let finish!: (regions: typeof mockFound) => void;
+      vi.mocked(bridge.smartFind).mockImplementationOnce(
+        () => new Promise((resolve) => { finish = resolve; }),
+      );
+      const s = withSmart();
+      const got: Command[] = [];
+      const view = render(<SmartModePanel state={s} dispatch={(c) => got.push(c)} />);
+      await type("the dog");
+      view.rerender(
+        <SmartModePanel
+          state={{ ...s, activeImage: "another-photograph" }}
+          dispatch={(c) => got.push(c)}
+        />,
+      );
+      await act(async () => {
+        finish([{ label: "dog", x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.5 }]);
+      });
+      expect(got).toHaveLength(0);
+      expect(bridge.smartClick).not.toHaveBeenCalled();
+    });
+
+    it("without Florence-2 it names the download instead", async () => {
+      mockFlorence = false;
+      const bridge = await import("../bridge");
+      vi.mocked(bridge.smartFind).mockRejectedValueOnce(new Error(bridge.FLORENCE_NOT_INSTALLED));
+      render(<SmartModePanel state={withSmart()} dispatch={() => {}} />);
+      await type("the sky");
+      const line = await screen.findByTestId("smart-find-consent");
+      expect(line.textContent).toContain("Florence-2");
+      expect(line.textContent).toContain("970 MB");
+      fireEvent.click(screen.getByTestId("smart-find-download"));
+      expect(vi.mocked(bridge.smartModelDownload)).toHaveBeenCalledWith("florence_2_base");
+    });
+
+    it("a click on a Text selection refines it, with its boxes", async () => {
+      let s = withSmart();
+      const maskId = s.activeLayer!.replace("_adj", "_mask");
+      const boxes = "[[0.1,0.1,0.3,0.5]]";
+      s = run(s, { type: "set_params", id: maskId, values: {}, text: { mode: "text", phrase: "the dog", boxes, prompts: "[]", model: "sam2_1_hiera_tiny" } });
+      render(<SmartClickOverlay state={s} dispatch={() => {}} norm={norm} />);
+      await waitFor(() => expect(screen.getByTestId("smart-overlay").style.cursor).toBe("crosshair"));
+      fireEvent.mouseDown(screen.getByTestId("smart-overlay"), { clientX: 20, clientY: 30, button: 0 });
+      const { smartClick } = await import("../bridge");
+      await waitFor(() => expect(vi.mocked(smartClick)).toHaveBeenCalled());
+      const call = vi.mocked(smartClick).mock.calls[0]!;
+      expect(call[3]).toBe("text");
+      expect(call[4]).toBe(boxes);
+      expect(JSON.parse(call[2])).toHaveLength(1);
+    });
+  });
+
+  it("a selection made with SAM 2.1 offers no remake", async () => {
+    let s = withSmart();
+    const maskId = s.activeLayer!.replace("_adj", "_mask");
+    s = run(s, { type: "set_text_param", id: maskId, param: "model", value: "sam2_1_hiera_tiny" });
+    render(<SmartModePanel state={s} dispatch={() => {}} />);
+    await screen.findByTestId("smart-modes");
+    expect(screen.queryByTestId("smart-remake")).toBeNull();
   });
 });
 

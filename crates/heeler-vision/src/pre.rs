@@ -1,7 +1,8 @@
 //! Pre/post processing, pure math, unit-tested without any model:
-//! the longest-side-1024 resize SAM was trained on, the click
-//! transform into that frame, and the logits-to-probability read of
-//! the decoder's answer.
+//! the longest-side-1024 resize SAM was trained on, MobileSAM's
+//! letterbox canvas and SAM 2.1's squashed square, the click transform
+//! into each frame, and the logits-to-probability read of the
+//! decoder's answer.
 
 /// SAM's working side: the longest side of the encoder input.
 pub const SAM_SIDE: usize = 1024;
@@ -118,6 +119,42 @@ pub fn mask_from_canvas(canvas: &[f32], orig_w: usize, orig_h: usize) -> Vec<f32
         }
     }
     out
+}
+
+/// SAM 2.1's input side: the image is squashed to this square, aspect
+/// ignored, exactly as its own processor does (no letterbox), and the
+/// clicks and the mask follow the same per-axis stretch.
+pub const SAM2_SIDE: usize = 1024;
+
+/// SAM 2.1's encoder input from an RGB HWC image with values 0..255:
+/// squashed to the square, scaled to 0..1, ImageNet mean and deviation
+/// taken out, planar (CHW). Its graph does no normalizing of its own.
+pub fn sam2_pixels(rgb: &[f32], w: usize, h: usize) -> Vec<f32> {
+    const MEAN: [f32; 3] = [0.485, 0.456, 0.406];
+    const STD: [f32; 3] = [0.229, 0.224, 0.225];
+    let square = resize_exact_rgb(rgb, w, h, SAM2_SIDE, SAM2_SIDE);
+    let plane = SAM2_SIDE * SAM2_SIDE;
+    let mut out = vec![0.0f32; plane * 3];
+    for (i, px) in square.chunks(3).enumerate() {
+        for c in 0..3 {
+            out[c * plane + i] = (px[c] / 255.0 - MEAN[c]) / STD[c];
+        }
+    }
+    out
+}
+
+/// A point in original-image coordinates, moved onto SAM 2.1's square.
+pub fn sam2_point(x: f32, y: f32, orig_w: usize, orig_h: usize) -> (f32, f32) {
+    (x * SAM2_SIDE as f32 / orig_w as f32, y * SAM2_SIDE as f32 / orig_h as f32)
+}
+
+/// SAM 2.1's low-resolution mask logits (the whole square at a quarter
+/// side) stretched back onto the original frame, then read as
+/// probability. The logits are resized, not the probabilities: the
+/// edge stays a sigmoid's width at full size instead of a blur four
+/// pixels of the square wide.
+pub fn sam2_mask(logits: &[f32], lw: usize, lh: usize, orig_w: usize, orig_h: usize) -> Vec<f32> {
+    sigmoid_mask(&resize_plane(logits, lw, lh, orig_w, orig_h))
 }
 
 /// Bilinear resize of an RGB HWC buffer to an EXACT size, whatever the
@@ -269,6 +306,35 @@ mod tests {
         let back = mask_from_canvas(&canvas, w, h);
         assert!(back[50 * w + 100] > 0.9, "inside the square");
         assert!(back[10 * w + 10] < 0.1, "outside it");
+    }
+
+    #[test]
+    fn sam2_squashes_to_its_square_and_normalizes_planar() {
+        // A mid-gray frame of any aspect: every value of each plane is
+        // that channel's (0.5 - mean) / std, laid out channel by channel.
+        let (w, h) = (300usize, 120usize);
+        let img = vec![127.5f32; w * h * 3];
+        let px = sam2_pixels(&img, w, h);
+        let plane = SAM2_SIDE * SAM2_SIDE;
+        assert_eq!(px.len(), plane * 3);
+        assert!((px[0] - (0.5 - 0.485) / 0.229).abs() < 1e-5);
+        assert!((px[plane + 77] - (0.5 - 0.456) / 0.224).abs() < 1e-5);
+        assert!((px[2 * plane + plane - 1] - (0.5 - 0.406) / 0.225).abs() < 1e-5);
+        // Clicks stretch per axis, like the image.
+        let (x, y) = sam2_point(150.0, 30.0, w, h);
+        assert!((x - 512.0).abs() < 1e-3 && (y - 256.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn sam2_mask_lands_where_the_square_put_it() {
+        // The right half of the low-resolution square is "in": on a
+        // wide original, so is the right half of the frame.
+        let (lw, lh) = (256usize, 256usize);
+        let logits: Vec<f32> = (0..lw * lh).map(|i| if i % lw >= lw / 2 { 12.0 } else { -12.0 }).collect();
+        let (w, h) = (400usize, 100usize);
+        let m = sam2_mask(&logits, lw, lh, w, h);
+        assert_eq!(m.len(), w * h);
+        assert!(m[50 * w + 350] > 0.99 && m[50 * w + 50] < 0.01);
     }
 
     #[test]

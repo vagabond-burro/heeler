@@ -1,8 +1,8 @@
 //! The ML boundary.
 //!
 //! Four licensed layers, each cleared separately: the runtime (ort,
-//! MIT/Apache), the architectures and weights (MobileSAM encoder +
-//! SAM decoder, Apache-2.0), and the training data (SA-1B/SA-V,
+//! MIT/Apache), the architectures and weights (SAM 2.1 and MobileSAM,
+//! Apache-2.0), and the training data (SA-1B/SA-V,
 //! Meta's published terms, the cleanest story in the field). Models
 //! are DOWNLOADED on explicit consent, never bundled: the installer
 //! stays small, and every download is verified against the SHA-256
@@ -33,7 +33,7 @@ pub use inpaint::{fill_crop, Inpaint};
 pub use matting::Matting;
 pub use models::{
     download_model, download_source, installed, installed_version, model_dir, model_paths, remove_model, verify_file, ArchiveKind,
-    ExtraFile, ExtraSource, InstallRecord, ModelSource, ModelSpec, BIREFNET_LITE, DEPTH_ANYTHING, FLORENCE_2, LAMA, MOBILE_SAM, SCUNET,
+    ExtraFile, ExtraSource, InstallRecord, ModelSource, ModelSpec, BIREFNET_LITE, DEPTH_ANYTHING, FLORENCE_2, LAMA, MOBILE_SAM, SAM2_1_TINY, SCUNET,
     VITMATTE,
 };
 pub use refine::{
