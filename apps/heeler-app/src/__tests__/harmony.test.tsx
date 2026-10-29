@@ -206,9 +206,30 @@ it("a drag across the hue seam keeps the anchor and hover inside 0 through 359",
   fireEvent.click(screen.getByTestId("spectrum-harmony"));
   const canvas = screen.getByTestId("spectrum-canvas");
   canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 200 } as DOMRect);
+  // Pressed on the ring first: the ring follows only its own drag.
+  fireEvent.mouseDown(canvas, { button: 0, clientX: 300, clientY: 50 });
   fireEvent.mouseMove(canvas, { buttons: 1, clientX: 250, clientY: 99.9 });
   expect(got).toContainEqual({ type: "set_harmony", value: { anchor: 0 } });
   expect(screen.getByTestId("spectrum-status")).toHaveTextContent("hue 0°");
+  fireEvent.mouseUp(window);
+});
+
+it("a drag pressed elsewhere crosses the ring without moving the anchor", () => {
+  // The straighten line or a stroke carried off the canvas holds the
+  // button as it passes over the panels.
+  const got: Command[] = [];
+  render(<Spectrums state={initialState()} dispatch={c => got.push(c)} frame={null} />);
+  fireEvent.click(screen.getByTestId("spectrum-harmony"));
+  const canvas = screen.getByTestId("spectrum-canvas");
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 200 } as DOMRect);
+  fireEvent.mouseMove(canvas, { buttons: 1, clientX: 250, clientY: 99.9 });
+  expect(got.filter(c => c.type === "set_harmony")).toEqual([]);
+  // Its own press, then released: a later held move is not its drag.
+  fireEvent.mouseDown(canvas, { button: 0, clientX: 250, clientY: 99.9 });
+  fireEvent.mouseUp(window);
+  got.length = 0;
+  fireEvent.mouseMove(canvas, { buttons: 1, clientX: 300, clientY: 50 });
+  expect(got.filter(c => c.type === "set_harmony")).toEqual([]);
 });
 
 it("Harmony guidance stays in the hover hint without a stale instruction painted on the wheel", async () => {

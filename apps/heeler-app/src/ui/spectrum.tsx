@@ -13,6 +13,7 @@
 // window is exactly as blurry as that sounds.
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { usePressedHere } from "./pointerguard";
 import type { Command, CurveChannel, State } from "../state";
 import { PROFILE_RADIUS_MAX, activeSelectionMask } from "../state";
 import { useEngineMask } from "./selectionparts";
@@ -905,6 +906,8 @@ export function Spectrums({
   // ink at the right, the highlights' figure comes first.
   const clipFlipped = kind === "histogram" && histInk && channel !== "luma";
 
+  // The ring follows only a drag pressed on it, not one crossing it.
+  const ring = usePressedHere();
   const anchorAt = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (kind !== "harmony" || !dispatch) return;
     const r = e.currentTarget.getBoundingClientRect();
@@ -1144,7 +1147,7 @@ the buttons got smaller.*/}
             // A drag on the ring carries the anchor with it, the wheel redrawing
             // under the hand ("The wheel should update while
             // dragging in realtime").
-            if (e.buttons === 1) anchorAt(e);
+            if (ring.held(e)) anchorAt(e);
             // The profile's point along the line, marked on the viewer too.
             if (kind === "profile" && dispatch && state.profileLine) {
               dispatch({ type: "set_profile_hover", t: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) });
@@ -1154,7 +1157,10 @@ the buttons got smaller.*/}
             // The harmony anchor is set by pointing at the ring: the
             // press's angle IS the hue, on the wheels' own axis, and
             // the drag that follows keeps setting it.
-            if (e.button === 0) anchorAt(e);
+            if (e.button === 0) {
+              ring.press();
+              anchorAt(e);
+            }
           }}
           onMouseLeave={() => {
             setAt(null);

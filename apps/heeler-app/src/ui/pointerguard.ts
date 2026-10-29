@@ -18,6 +18,8 @@
 //   * the middle button always pans, whatever tool is armed;
 //   * the right button keeps its context menu and never paints.
 
+import { useRef } from "react";
+
 /** The fields of a mouse or pointer event the rule reads. */
 type Press = { button: number; buttons?: number };
 
@@ -42,4 +44,31 @@ export function isPrimaryPress(e: Press): boolean {
  * that would paint with no button down. */
 export function primaryHeld(e: { buttons: number }): boolean {
   return (e.buttons & 1) === 1;
+}
+
+/** Whether the primary button held on a move was pressed on this
+ * element. A control that follows a held button must ask, not only
+ * whether the button is down: a drag that began elsewhere and crosses
+ * it (the straighten line, a crop edge or a brush stroke carried off the
+ * canvas, which the window now follows) holds the button too, and a
+ * slider in the panel took that drag for its own and moved (2026-10-29:
+ * "when I dragged outside of the canvas the image shifted its color
+ * tone", the line crossing the Color panel's Temp). `press` on the
+ * element's own primary press; the release anywhere ends it. */
+export function usePressedHere(): { press: () => void; held: (e: { buttons: number }) => boolean } {
+  const down = useRef(false);
+  const press = () => {
+    if (down.current) return;
+    down.current = true;
+    const up = () => {
+      down.current = false;
+      window.removeEventListener("mouseup", up, true);
+      window.removeEventListener("pointerup", up, true);
+      window.removeEventListener("blur", up);
+    };
+    window.addEventListener("mouseup", up, true);
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("blur", up);
+  };
+  return { press, held: (e) => down.current && primaryHeld(e) };
 }

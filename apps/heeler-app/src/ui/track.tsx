@@ -91,12 +91,6 @@ export function TrackSlider({
     // SHIFT snaps to the coarse grid; a control with a step always
     // quantizes to it, shift or not.
     const next = shift ? quantize(raw, snapStep(lo, hi)) : step !== undefined ? quantize(raw, step) : raw;
-    // A move this track never saw pressed (a press that began outside
-    // it) writes as it always did.
-    if (!dragging.current) {
-      onChange(next);
-      return;
-    }
     setDrag(next);
     startTransition(() => onChange(next));
   };
@@ -136,7 +130,10 @@ export function TrackSlider({
         onBegin?.();
         setFromClientX(e.clientX, e.shiftKey);
       }}
-      onPointerMove={(e) => !disabled && e.buttons === 1 && setFromClientX(e.clientX, e.shiftKey)}
+      // Only a drag this track was pressed for: one that began elsewhere
+      // (a straighten line or a stroke carried off the canvas) holds the
+      // button too as it crosses, and must pass over without moving it.
+      onPointerMove={(e) => !disabled && dragging.current && e.buttons === 1 && setFromClientX(e.clientX, e.shiftKey)}
       onPointerUp={() => !disabled && release()}
       onLostPointerCapture={() => !disabled && release()}
       onKeyDown={(e) => {

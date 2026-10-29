@@ -1,4 +1,4 @@
-import { isPrimaryPress } from "./pointerguard";
+import { isPrimaryPress, usePressedHere } from "./pointerguard";
 import { InspectLayer, InspectPanel } from "./inspect";
 import { DepthBandOverlay } from "./depthband";
 import { RecolorPairLayer } from "./recolorpairs";
@@ -161,6 +161,7 @@ function ABCompareView({
   base: { w: number; h: number } | null;
 }) {
   const ab = state.abCompare!;
+  const split = usePressedHere();
   const [frames, setFrames] = useState<{ a: string | null; b: string | null }>({ a: null, b: null });
   useEffect(() => {
     let live = true;
@@ -193,11 +194,13 @@ function ABCompareView({
       }}
       onMouseDown={(e) => {
         if (!isPrimaryPress(e)) return;
+        split.press();
         const rect = e.currentTarget.getBoundingClientRect();
         dispatch({ type: "set_split_pos", pos: (e.clientX - rect.left) / rect.width });
       }}
       onMouseMove={(e) => {
-        if (e.buttons !== 1) return;
+        // A drag pressed here, not one crossing from the panels.
+        if (!split.held(e)) return;
         const rect = e.currentTarget.getBoundingClientRect();
         dispatch({ type: "set_split_pos", pos: (e.clientX - rect.left) / rect.width });
       }}
