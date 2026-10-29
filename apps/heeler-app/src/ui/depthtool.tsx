@@ -158,7 +158,6 @@ export function DepthRunner({ state, dispatch }: { state: State; dispatch: D }) 
           model={status}
           testid="depth"
           downloading={downloading}
-          place={{ position: "fixed", left: "50%", bottom: 76, transform: "translateX(-50%)", zIndex: 40 }}
           onDownload={() => {
             setDownloading(true);
             void smartModelDownload(meta.download)
@@ -246,7 +245,6 @@ export function NormalsRunner({ state, dispatch }: { state: State; dispatch: D }
       model={models.normals}
       testid="normals"
       downloading={downloading}
-      place={{ position: "fixed", left: "50%", bottom: 76, transform: "translateX(-50%)", zIndex: 40 }}
       onDownload={() => {
         setDownloading(true);
         void smartModelDownload("moge_2_vits_normal")
@@ -320,7 +318,6 @@ export function SubjectFitRunner({ state, dispatch }: { state: State; dispatch: 
       model={model}
       testid="depth-subject"
       downloading={downloading}
-      place={{ position: "fixed", left: "50%", bottom: 76, transform: "translateX(-50%)", zIndex: 40 }}
       onDownload={() => {
         setDownloading(true);
         void smartModelDownload(models?.lite ? "birefnet_lite" : "birefnet_dynamic")
@@ -622,7 +619,6 @@ export function DepthModelChoice({ node, state, dispatch }: { node: NodeCard; st
             model={status}
             testid="depth-model"
             downloading={downloading}
-            place={{ position: "fixed", left: "50%", bottom: 76, transform: "translateX(-50%)", zIndex: 40 }}
             secondary={
               downloading
                 ? undefined

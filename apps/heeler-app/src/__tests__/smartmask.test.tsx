@@ -348,8 +348,9 @@ describe("the click overlay", () => {
     expect(offer.textContent).toContain("BiRefNet");
     expect(offer.textContent).toContain("972 MB");
     expect(offer.textContent).toContain("MIT");
-    // At the foot of the photograph, centered, like the others.
-    expect(offer.style.bottom).toBe("16px");
+    // In the middle of the window, like every other.
+    expect(offer.style.position).toBe("fixed");
+    expect(offer.style.top).toBe("50%");
     expect(offer.style.left).toBe("50%");
     const { smartModelDownload } = await import("../bridge");
     fireEvent.click(screen.getByTestId("smart-subject-matte-download"));

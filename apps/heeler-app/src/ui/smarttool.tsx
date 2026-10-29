@@ -1009,8 +1009,8 @@ export function SmartClickOverlay({
     >
       {/* The matte upgrade offer, only when subject is the mode and
           only the soft-matte model is missing: the consent card every
-          model asks with, name, size, license and source, at the foot
-          of the photograph (2026-10-29: the offer was its own small
+          model asks with, name, size, license and source, in the
+          middle of the window (2026-10-29: the offer was its own small
           text in the corner, "not the same as other models"). Subject
           works without it, so it can be put away for the session. */}
       {mode === "subject" && offerMatte && models !== null && !matteDeclined && (
@@ -1020,7 +1020,6 @@ export function SmartClickOverlay({
             model={models.matte}
             testid="smart-subject-matte"
             downloading={downloading}
-            place={{ position: "absolute", left: "50%", bottom: 16, transform: "translateX(-50%)", zIndex: 40 }}
             onDownload={() => {
               setDownloading(true);
               void smartModelDownload(models.matte.id)
@@ -1070,7 +1069,6 @@ export function SmartClickOverlay({
           model={sam}
           testid="smart"
           downloading={downloading}
-          place={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)" }}
           onDownload={() => {
             setDownloading(true);
             void smartModelDownload(sam.id)
@@ -1301,7 +1299,6 @@ export function SmartSelectOverlay({
           model={models.sam}
           testid="smart"
           downloading={downloading}
-          place={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)" }}
           onDownload={() => {
             setDownloading(true);
             void smartModelDownload()

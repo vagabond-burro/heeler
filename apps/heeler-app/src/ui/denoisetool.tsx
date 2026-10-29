@@ -93,7 +93,6 @@ export function DenoiseRunner({ state, dispatch }: { state: State; dispatch: D }
           model={models.denoise}
           testid="denoise"
           downloading={downloading}
-          place={{ position: "fixed", left: "50%", bottom: 76, transform: "translateX(-50%)", zIndex: 40 }}
           onDownload={() => {
             setDownloading(true);
             void smartModelDownload("scunet_color_real_psnr")

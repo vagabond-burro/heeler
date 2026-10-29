@@ -143,7 +143,6 @@ export function FlorenceRow() {
           model={model}
           testid="prefs-assistant-florence"
           downloading={downloading}
-          place={{ fontSize: 13, maxWidth: "100%" }}
           onDownload={download}
           secondary={{ label: "NOT NOW", testid: "prefs-assistant-florence-later", onClick: () => setAsking(false) }}
         />

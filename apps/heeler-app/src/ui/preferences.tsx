@@ -535,8 +535,8 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
   const [checking, setChecking] = useState(false);
   const [applying, setApplying] = useState<string | null>(null);
   // INSTALL from the table (2026-09-09: "proactively install it from
-  // Preferences"): the same consent card every tool shows, under the
-  // table, naming the model, its size, its license and its source
+  // Preferences"): the same consent card every tool shows, over the
+  // dialog, naming the model, its size, its license and its source
   // before a byte is fetched; the download runs on the card's button.
   const [consent, setConsent] = useState<string | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
@@ -683,7 +683,6 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
             model={model}
             testid={`prefs-install-${model.id}`}
             downloading={installing === model.id}
-            place={{ marginTop: 8, fontSize: 13, maxWidth: "100%" }}
             onDownload={() => {
               setInstalling(model.id);
               void smartModelDownload(model.id)

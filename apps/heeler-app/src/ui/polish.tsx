@@ -467,7 +467,6 @@ function MatteConsentCard({
       model={models.refine}
       testid="matte"
       downloading={downloading}
-      place={{ position: "fixed", left: "50%", bottom: 76, transform: "translateX(-50%)", zIndex: 40 }}
       onDownload={onDownload}
     />
   );

@@ -142,7 +142,6 @@ export function FillRunner({ state, dispatch }: { state: State; dispatch: D }) {
           model={models.fill}
           testid="fill"
           downloading={downloading}
-          place={{ position: "absolute", left: "50%", bottom: 16, transform: "translateX(-50%)" }}
           onDownload={() => {
             setDownloading(true);
             void smartModelDownload("lama")
