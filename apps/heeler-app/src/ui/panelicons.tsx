@@ -765,3 +765,16 @@ export function RemoveIcon({ size = 12 }: { size?: number }) {
     </svg>
   );
 }
+
+/** Recompute: two arrows chasing round, read the map again. Not the
+ * single arrow of Reset, which puts settings back. */
+export function RecomputeIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d="M20 11a8 8 0 0 0-14.3-4.9" />
+      <path d="M5 3v4h4" />
+      <path d="M4 13a8 8 0 0 0 14.3 4.9" />
+      <path d="M19 21v-4h-4" />
+    </svg>
+  );
+}

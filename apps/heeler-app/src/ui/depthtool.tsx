@@ -519,7 +519,19 @@ export function DepthProgressSheet() {
  * that they may land differently; the old map stays on screen until the
  * new one answers. A model that is not installed is asked for here, with
  * its size, and the download's progress shows in the card. */
-export function DepthModelChoice({ node, state, dispatch }: { node: NodeCard; state: State; dispatch: D }) {
+export function DepthModelChoice({
+  node,
+  state,
+  dispatch,
+  part,
+}: {
+  node: NodeCard;
+  state: State;
+  dispatch: D;
+  /** the section's rows hold the two apart: the model menu (with its
+   * switch note and download card), or Detail's sizes; both when absent */
+  part?: "model" | "detail";
+}) {
   const model = depthModelOf(node);
   const size = snapDepthSize(node.params.size, model);
   const [switched, setSwitched] = useState<{ image: string | null; from: DepthModelId } | null>(null);
@@ -562,6 +574,24 @@ export function DepthModelChoice({ node, state, dispatch }: { node: NodeCard; st
           : s === 504
             ? "Read the scene at the model's own size, 504 px: the relief inside a subject, a second or so"
             : "Read the scene at 1008 px: the finest relief, about four times the time and several GB of memory";
+  const sizes = (
+      <div className="zoom-seg" role="group" aria-label="Depth detail" style={{ border: "1px solid var(--line-4)" }}>
+        {depthSizesFor(model).map((s) => (
+          <button
+            key={s}
+            data-testid={`depth-size-${s}`}
+            data-active={size === s || undefined}
+            aria-pressed={size === s}
+            data-hint={sizeHint(s)}
+            style={{ fontSize: 11, padding: "2px 8px" }}
+            onClick={() => dispatch({ type: "set_param", id: node.id, param: "size", value: s })}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+  );
+  if (part === "detail") return sizes;
   return (
     <>
       <MenuField
@@ -579,21 +609,7 @@ export function DepthModelChoice({ node, state, dispatch }: { node: NodeCard; st
           dispatch({ type: "set_text_param", id: node.id, param: "model", value: id });
         }}
       />
-      <div className="zoom-seg" role="group" aria-label="Depth detail" style={{ border: "1px solid var(--line-4)" }}>
-        {depthSizesFor(model).map((s) => (
-          <button
-            key={s}
-            data-testid={`depth-size-${s}`}
-            data-active={size === s || undefined}
-            aria-pressed={size === s}
-            data-hint={sizeHint(s)}
-            style={{ fontSize: 9, padding: "2px 7px" }}
-            onClick={() => dispatch({ type: "set_param", id: node.id, param: "size", value: s })}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
+      {part === undefined && sizes}
       {note && (
         <div
           data-testid="depth-model-note"

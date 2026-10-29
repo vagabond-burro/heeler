@@ -110,12 +110,14 @@ describe("text sizes", () => {
     // The allowlist exempts whole legacy files, but it was written for the
     // sizes that were already there when the rule landed. The depth chips
     // (FROM FILE, Recompute, NO DEPTH MAP; 26.3 Phase 10) are new code
-    // inside a legacy file and still have to meet the rule.
+    // inside a legacy file and still have to meet the rule. Recompute is
+    // an icon since 2026-10-29 (the Depth Map's Model row) and carries no
+    // text, so the text chips are the other three.
     const text = readFileSync(resolve(UI, "simple.tsx"), "utf8");
     const chips = [
       ...text.matchAll(/data-testid=[^\n]*depth-(?:from-file|recompute|missing)[\s\S]{0,400}?style=\{\{([^}]*)\}\}/g),
     ];
-    expect(chips.length, "the Phase 10 depth chips should exist in simple.tsx").toBeGreaterThanOrEqual(4);
+    expect(chips.length, "the Phase 10 depth chips should exist in simple.tsx").toBeGreaterThanOrEqual(3);
     const small: string[] = [];
     for (const chip of chips) {
       for (const m of chip[1].matchAll(INLINE_SIZE)) {

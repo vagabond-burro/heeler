@@ -36,7 +36,7 @@ import { TrackSlider, ValueField } from "./track";
 export { ValueField };
 import { KeyLightControls } from "./keylightgizmo";
 import { lightsOf, writeLights } from "./keylightgizmoparts";
-import { DepthInvertIcon, EyedropperIcon, LightAddIcon, LightRigIcon, ResetIcon, ScopeIcon } from "./panelicons";
+import { DepthInvertIcon, EyedropperIcon, LightAddIcon, LightRigIcon, RecomputeIcon, ResetIcon, ScopeIcon } from "./panelicons";
 import { publishBusy } from "./statusbarparts";
 import { flashStatus } from "./hints";
 import { GridWarpControls } from "./gridwarp";
@@ -5635,42 +5635,111 @@ menu"). The graph inspector's Source node draws the same rows.*/}
                 {sec.detailEq && <DetailEqualizer state={state} dispatch={dispatch} width={width ?? 320} />}
                 {sec.grainFilmWidget && <GrainFrameRow grain={node} dispatch={dispatch} />}
                 {sec.grainFilmWidget && <GrainFilmRow grain={node} nodes={state.nodes} dispatch={dispatch} />}
-                {sec.depthTools && sec.depthTools !== "halation" && (
+                {/* The Depth Map's own controls on the slider rows' grid, one
+                    named row for what reads the map and one for how it
+                    shows (2026-10-29: "Depth map controls and options feel
+                    bunched and un-organized"). */}
+                {sec.depthTools === "depthmap" &&
+                  (() => {
+                    const n = sec.node(state);
+                    const fromFile = depthFromFile(state);
+                    const fitted = state.depthView && state.depthViewFit === "subject";
+                    return (
+                      <div data-testid="depth-map-controls" style={{ margin: "2px 0 6px" }}>
+                        <div className="srow" data-testid="depth-model-row" style={{ gridTemplateColumns: "78px 1fr auto", height: "auto", minHeight: 28 }}>
+                          <span className="lbl">Model</span>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", minWidth: 0 }}>
+                            {/* A photograph whose file carries its own depth
+                                (an OpenEXR Z or mist pass) is read, not
+                                modeled: exact at every size, so Detail has
+                                nothing to choose and the chip says where the
+                                map came from instead. */}
+                            {fromFile ? (
+                              <span
+                                className="chip"
+                                data-testid="depth-from-file"
+                                data-hint={`The depth map is the file's own ${fromFile} pass, exact to the pixel: nothing to model, so Detail does not apply`}
+                                style={{ fontSize: 11, padding: "2px 8px", cursor: "default" }}
+                              >
+                                FROM FILE
+                              </span>
+                            ) : (
+                              n && <DepthModelChoice node={n} state={state} dispatch={dispatch} part="model" />
+                            )}
+                          </div>
+                          <button
+                            className="chip"
+                            data-testid="depth-recompute"
+                            aria-label="Recompute the depth map"
+                            data-tip="Recompute"
+                            data-hint={
+                              fromFile
+                                ? "Recompute: read the depth pass from the file again and refine it at the current settings"
+                                : "Recompute: read the scene's depth again from scratch; the model runs fresh and the map is refined at the current settings"
+                            }
+                            style={{ padding: "2px 6px", display: "inline-flex", alignItems: "center", alignSelf: "start", marginTop: 3 }}
+                            onClick={() => {
+                              void depthForget(state)
+                                .then(() => dispatch({ type: "recompute_depth" }))
+                                .catch((err) => reportToolError("Depth Map", err));
+                            }}
+                          >
+                            <RecomputeIcon />
+                          </button>
+                        </div>
+                        {!fromFile && n && (
+                          <div className="srow" data-testid="depth-detail-row" style={{ gridTemplateColumns: "78px 1fr" }}>
+                            <span className="lbl">Detail</span>
+                            <div style={{ display: "flex", alignItems: "center" }}>
+                              <DepthModelChoice node={n} state={state} dispatch={dispatch} part="detail" />
+                            </div>
+                          </div>
+                        )}
+                        <div className="srow" data-testid="depth-view-row" style={{ gridTemplateColumns: "78px 1fr" }}>
+                          <span className="lbl">View</span>
+                          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                            <DepthViewButton depthView={state.depthView} red={state.maskRed}
+                              onToggle={(flavor) => dispatch({ type: "toggle_depth_view", flavor })}
+                              testid="depth-view-depthmap" />
+                            {/* The view fitted to the subject (2026-10-29: the
+                                owl's face read flat in a map whose grays
+                                spanned perch to background): its grays over
+                                the subject's own depth. The map the tools read
+                                is the same either way. */}
+                            <button
+                              className="chip"
+                              data-testid="depth-view-subject"
+                              data-active={fitted}
+                              aria-pressed={fitted}
+                              data-hint={
+                                fitted
+                                  ? "View depth over the subject's own depth: click for the whole scene's again"
+                                  : "View depth over the subject's own depth, so the relief inside it shows (a face, a beak). Only the view changes; the map the tools read does not"
+                              }
+                              style={{ fontSize: 11, padding: "2px 8px" }}
+                              onClick={() => dispatch({ type: "toggle_depth_view_subject" })}
+                            >
+                              SUBJECT
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                {sec.depthTools && sec.depthTools !== "halation" && sec.depthTools !== "depthmap" && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "2px 0 6px", alignItems: "center" }}>
                     {/* The View depth eye sits on EVERY section that reads the map, Depth Map
-included: (2026-09-05) wants it in reach while editing, and wants the
+included (in its View row above): (2026-09-05) wants it in reach while editing, and wants the
 eye to say "this section uses the depth map". A deliberate exception to
 the one-seat rule.*/}
                     <DepthViewButton depthView={state.depthView} red={state.maskRed}
                       onToggle={(flavor) => dispatch({ type: "toggle_depth_view", flavor })}
                       testid={`depth-view-${sec.depthTools}`} />
-                    {/* The view fitted to the subject (2026-10-29: the owl's
-                        face read flat in a map whose grays spanned perch to
-                        background): its grays over the subject's own depth.
-                        The map the tools read is the same either way. */}
-                    {sec.depthTools === "depthmap" && (
-                      <button
-                        className="chip"
-                        data-testid="depth-view-subject"
-                        data-active={state.depthView && state.depthViewFit === "subject"}
-                        aria-pressed={state.depthView && state.depthViewFit === "subject"}
-                        data-hint={
-                          state.depthView && state.depthViewFit === "subject"
-                            ? "View depth over the subject's own depth: click for the whole scene's again"
-                            : "View depth over the subject's own depth, so the relief inside it shows (a face, a beak). Only the view changes; the map the tools read does not"
-                        }
-                        style={{ fontSize: 11, padding: "2px 8px" }}
-                        onClick={() => dispatch({ type: "toggle_depth_view_subject" })}
-                      >
-                        SUBJECT
-                      </button>
-                    )}
                     {/* The wire is the delivery (26.3 Phase 10.3): a
                         section asking for the plane with no wire to a
                         Depth Map renders flat, and says so here rather
                         than looking broken. */}
-                    {sec.depthTools !== "depthmap" &&
-                      (() => {
+                    {(() => {
                         const n = sec.node(state);
                         if (!depthMapMissing(state, n)) return null;
                         return (
@@ -5684,48 +5753,6 @@ the one-seat rule.*/}
                           </span>
                         );
                       })()}
-                    {sec.depthTools === "depthmap" &&
-                      (() => {
-                        const n = sec.node(state);
-                        // A photograph whose file carries its own depth
-                        // (an OpenEXR Z or mist pass) is read, not
-                        // modeled: exact at every size, so Detail has
-                        // nothing to choose and the chip says where the
-                        // map came from instead.
-                        const fromFile = depthFromFile(state);
-                        if (fromFile) {
-                          return (
-                            <span
-                              className="chip"
-                              data-testid="depth-from-file"
-                              data-hint={`The depth map is the file's own ${fromFile} pass, exact to the pixel: nothing to model, so Detail does not apply`}
-                              style={{ fontSize: 11, padding: "2px 8px", cursor: "default" }}
-                            >
-                              FROM FILE
-                            </span>
-                          );
-                        }
-                        return n ? <DepthModelChoice node={n} state={state} dispatch={dispatch} /> : null;
-                      })()}
-                    {sec.depthTools === "depthmap" && (
-                      <button
-                        className="chip"
-                        data-testid="depth-recompute"
-                        data-hint={
-                          depthFromFile(state)
-                            ? "Read the depth pass from the file again and refine it at the current settings"
-                            : "Read the scene's depth again from scratch: the model runs fresh and the map is refined at the current settings"
-                        }
-                        style={{ fontSize: 11, padding: "2px 8px" }}
-                        onClick={() => {
-                          void depthForget(state)
-                            .then(() => dispatch({ type: "recompute_depth" }))
-                            .catch((err) => reportToolError("Depth Map", err));
-                        }}
-                      >
-                        RECOMPUTE
-                      </button>
-                    )}
                     {sec.depthTools === "keylight" && sec.node(state) && (
                       <NormalsChoice state={state} node={sec.node(state)!} dispatch={dispatch} />
                     )}

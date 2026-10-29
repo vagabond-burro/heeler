@@ -71,6 +71,29 @@ describe("the depth view's Subject fit", () => {
   });
 });
 
+describe("the Depth Map section's rows", () => {
+  it("lays its controls out as named rows on the sliders' grid: Model with Recompute, Detail, View", () => {
+    // "Depth map controls and options feel bunched and un-organized"
+    render(<SimplePanel state={run(fresh(), { type: "set_category", title: "Depth Map", on: true })} dispatch={() => {}} />);
+    const row = (id: string) => screen.getByTestId(id);
+    const label = (id: string) => row(id).querySelector(".lbl")?.textContent;
+    expect(label("depth-model-row")).toBe("Model");
+    expect(row("depth-model-row").contains(screen.getByTestId("depth-model"))).toBe(true);
+    expect(row("depth-model-row").contains(screen.getByTestId("depth-recompute"))).toBe(true);
+    expect(screen.getByTestId("depth-recompute")).toHaveAttribute("aria-label", "Recompute the depth map");
+    expect(label("depth-detail-row")).toBe("Detail");
+    expect(row("depth-detail-row").contains(screen.getByTestId("depth-size-518"))).toBe(true);
+    expect(row("depth-model-row").contains(screen.getByTestId("depth-size-518"))).toBe(false);
+    expect(label("depth-view-row")).toBe("View");
+    expect(row("depth-view-row").contains(screen.getByTestId("depth-view-depthmap"))).toBe(true);
+    expect(row("depth-view-row").contains(screen.getByTestId("depth-view-subject"))).toBe(true);
+    // The rows share the sliders' 78 px label column.
+    for (const id of ["depth-model-row", "depth-detail-row", "depth-view-row"]) {
+      expect(row(id).style.gridTemplateColumns.startsWith("78px")).toBe(true);
+    }
+  });
+});
+
 describe("the subject matte runner", () => {
   const fitted = () => run(fresh(), { type: "set_category", title: "Depth Map", on: true }, { type: "toggle_depth_view_subject" });
 
