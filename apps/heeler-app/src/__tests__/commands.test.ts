@@ -193,6 +193,23 @@ describe("ENTER applies the modal tool, ESC still cancels", () => {
     // Nothing armed, no tool: Escape declines and stays free.
     expect(press("tool.cancel", second.next).handled).toBe(false);
   });
+
+  it("Escape puts the Loupe down after the pickers and before the tool", () => {
+    // "Loupe should be canceled with the ESC key."
+    let s = reduce(initialState(), { type: "set_tool", tool: "crop" });
+    s = reduce(s, { type: "set_prefs", prefs: { loupeOn: true } });
+    s = reduce(s, { type: "toggle_dof_pick" });
+    const first = press("tool.cancel", s);
+    expect(first.next.dofPick).toBe(false);
+    expect(first.next.prefs.loupeOn).toBe(true);
+    const second = press("tool.cancel", first.next);
+    expect(second.handled).toBe(true);
+    expect(second.next.prefs.loupeOn).toBe(false);
+    expect(second.next.tool).toBe("crop");
+    const third = press("tool.cancel", second.next);
+    expect(third.next.tool).toBe("none");
+    expect(press("tool.cancel", third.next).handled).toBe(false);
+  });
 });
 
 describe("the brush takes [ and ] while it is up", () => {

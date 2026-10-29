@@ -120,7 +120,7 @@ export const COMMANDS: CommandSpec[] = [
   // change its magnification rather than the canvas's, and with Shift
   // added they change its size, the keyboard's Ctrl+scroll.
   { id: "view.navigator", label: "Navigator", group: "View", scope: "global", binding: "" },
-  { id: "view.loupe", label: "Loupe", group: "View", scope: "global", binding: "L", blurb: "A magnifying glass under the pointer; the zoom keys and the wheel change its magnification while it is up" },
+  { id: "view.loupe", label: "Loupe", group: "View", scope: "global", binding: "L", blurb: "A magnifying glass under the pointer; the zoom keys and the wheel change its magnification while it is up, and Escape puts it down" },
   { id: "view.loupe.bigger", label: "Bigger Loupe", group: "View", scope: "global", binding: "Ctrl+Shift+=", blurb: "Only while the Loupe is up" },
   { id: "view.loupe.smaller", label: "Smaller Loupe", group: "View", scope: "global", binding: "Ctrl+Shift+-", blurb: "Only while the Loupe is up" },
 

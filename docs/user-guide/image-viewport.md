@@ -28,6 +28,7 @@ Two buttons after Split on the viewer's toolbar help you find your way around a 
 - Scroll, pinch or press `Cmd+=` and `Cmd+-` (`Ctrl+=` and `Ctrl+-` on Windows) to change the Loupe's magnification, from 1.5 to 16 times what the canvas shows, instead of the canvas's zoom. `Option` (`Alt` on Windows) while scrolling changes it more finely.
 - Hold `Cmd` (`Ctrl` on Windows) while scrolling, or press `Cmd+Shift+=` and `Cmd+Shift+-` (`Ctrl+Shift+=` and `Ctrl+Shift+-` on Windows), to make the glass bigger or smaller.
 - `Shift`+scroll, middle-drag and `Space`-drag still pan the canvas, and the rotation combinations still turn it.
+- `Esc` puts the Loupe down. An armed picker goes first, and a tool under the Loupe waits for the next `Esc`.
 
 The Loupe shows the pixels the viewer already has: the frame on screen, and at 1:1 the sharp full-resolution slice where it covers the spot, so a Loupe over a photograph at 100% shows its real pixels, drawn as squares past one photograph pixel per screen pixel. It never asks for a render of its own. Clicks, drags and every tool work through it exactly as they do without it; it steps aside over the toolbar, the floating bars and the Navigator. The magnification and size are kept from one launch to the next.
 

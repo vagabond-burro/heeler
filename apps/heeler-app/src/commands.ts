@@ -925,6 +925,12 @@ export function runCommand(
         dispatch({ type: "disarm_pickers" });
         return true;
       }
+      // The Loupe is the next layer up: "Loupe should be canceled with
+      // the ESC key". A tool under it waits for the next press.
+      if (state.prefs.loupeOn) {
+        dispatch({ type: "set_prefs", prefs: { loupeOn: false } });
+        return true;
+      }
       if (state.tool === "none") return false;
       dispatch({ type: "cancel_tool" });
       return true;
