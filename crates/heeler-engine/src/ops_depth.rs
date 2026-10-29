@@ -255,7 +255,10 @@ pub fn key_light_reach(short: f32) -> f32 {
     let scale = (full / 6.0).ceil().max(1.0);
     let radius = (full / scale).round().max(2.0);
     let median = (2.0 * short / 1365.0).round().clamp(2.0, 6.0);
-    ((4.0 * radius + 3.0) * scale + median + 1.0) / short
+    // And the lamps' read of the light already there (lamp_lit): two
+    // box passes of its radius, feeding every pixel's gain.
+    let lit = 2.0 * lamp_lit_radius(short) as f32;
+    ((4.0 * radius + 3.0) * scale + median + 1.0 + lit) / short
 }
 
 /// The measured contract's cliff: an absolute jump of more than this
@@ -683,6 +686,85 @@ fn spot_cone(cone: f32, softness: f32) -> (f32, f32) {
 /// times it (POWER on KeyLightSpec).
 const POWER_SCALE: f32 = 3.0 / 100.0;
 
+/// A lamp (point or spot) ADDS light: what it lands on a surface is the
+/// surface's color times the light, not a multiple of the light already
+/// there. As a multiple, a lamp aimed at a night street only doubled
+/// pixels near black, and the pool of light never showed (2026-10-29:
+/// "the spotlight controls don't do a good job of approximating how a
+/// light will effect an image"). The light already on a surface is read
+/// as the local mean luminance (LAMP_LIT_RADIUS of the short side, the
+/// pixel's own when brighter), floored at LAMP_LIT_FLOOR; the lamp's push
+/// becomes a gain of its light over that. On a scene lit at middle gray
+/// (LAMP_MID) a lamp reads as it always did; darker, it reads stronger,
+/// up to nine times at the floor; brighter, weaker, as a real lamp in
+/// daylight does. Negative lamps still take light away as a multiple.
+const LAMP_MID: f32 = 0.18;
+const LAMP_LIT_FLOOR: f32 = 0.02;
+const LAMP_LIT_RADIUS: f32 = 0.015;
+
+/// The light already on each pixel for the lamps' push (LAMP_MID): the
+/// local mean luminance, two box passes wide, or the pixel's own where
+/// brighter, never under the floor.
+fn lamp_lit(src: &ImageBuf, short: f32) -> Vec<f32> {
+    let (w, h) = (src.width, src.height);
+    let lum: Vec<f32> = src
+        .data
+        .chunks(4)
+        .map(|p| (0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]).max(0.0))
+        .collect();
+    let r = lamp_lit_radius(short);
+    let mean = box_mean_clamped(&box_mean_clamped(&lum, w, h, r), w, h, r);
+    mean.iter().zip(&lum).map(|(m, l)| m.max(*l).max(LAMP_LIT_FLOOR)).collect()
+}
+
+/// The lit read's box radius in pixels: what key_light_reach adds twice.
+fn lamp_lit_radius(short: f32) -> usize {
+    ((LAMP_LIT_RADIUS * short.max(1.0)).round() as usize).max(1)
+}
+
+/// A box mean of radius r over a plane, the window shrinking at the
+/// buffer's edges: prefix sums along each row, then each column, in
+/// double precision. Its own sums, not the shared running-sum pass,
+/// which keeps band carries this op does not take: a band's rows come
+/// with the op's reach around them, so the window never needs rows
+/// outside the band.
+fn box_mean_clamped(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
+    use rayon::prelude::*;
+    let mut rows = vec![0.0f32; w * h];
+    rows.par_chunks_mut(w).enumerate().for_each(|(y, out)| {
+        let mut pre = vec![0.0f64; w + 1];
+        for x in 0..w {
+            pre[x + 1] = pre[x] + src[y * w + x] as f64;
+        }
+        for x in 0..w {
+            let (a, b) = (x.saturating_sub(r), (x + r + 1).min(w));
+            out[x] = ((pre[b] - pre[a]) / (b - a) as f64) as f32;
+        }
+    });
+    let mut out = vec![0.0f32; w * h];
+    let cols: Vec<Vec<f32>> = (0..w)
+        .into_par_iter()
+        .map(|x| {
+            let mut pre = vec![0.0f64; h + 1];
+            for y in 0..h {
+                pre[y + 1] = pre[y] + rows[y * w + x] as f64;
+            }
+            (0..h)
+                .map(|y| {
+                    let (a, b) = (y.saturating_sub(r), (y + r + 1).min(h));
+                    ((pre[b] - pre[a]) / (b - a) as f64) as f32
+                })
+                .collect()
+        })
+        .collect();
+    for (x, col) in cols.iter().enumerate() {
+        for (y, v) in col.iter().enumerate() {
+            out[y * w + x] = *v;
+        }
+    }
+    out
+}
+
 pub(crate) fn key_light(
     node: &Node,
     inputs: &[(String, Value)],
@@ -888,6 +970,12 @@ pub(crate) fn key_light(
     // and its height: the normal, then every rig in order. Shared by
     // the two contracts below; the arithmetic is the model path's,
     // unchanged.
+    // Only a rig with a lamp pays for the read of the light already there.
+    let lit: Vec<f32> = if rigs.iter().any(|r| !matches!(r, Rig::Directional { .. })) { lamp_lit(&src, short) } else { Vec::new() };
+    // A lamp's push as a gain: its light over the light already on the
+    // pixel, at middle gray what it always was. Negative pushes stay as
+    // they were.
+    let lamp = |x: usize, y: usize, dev: f32| if dev > 0.0 { dev * LAMP_MID / lit[y * w + x] } else { dev };
     let shade = |x: usize, y: usize, gx: f32, gy: f32, hgt: f32| -> [f32; 3] {
         let inv = 1.0 / (gx * gx + gy * gy + 1.0).sqrt();
         let (nx, ny, nz) = file_normal(x, y).unwrap_or((-gx * inv, -gy * inv, inv));
@@ -944,7 +1032,7 @@ pub(crate) fn key_light(
                         // unmistakable.
                         let dzw = 2.5 * dz;
                         let atten = range2 / (range2 + dx * dx + dy * dy + dzw * dzw);
-                        push_gain(&mut gain, lambert * atten * s, tint);
+                        push_gain(&mut gain, lamp(x, y, lambert * atten * s), tint);
                     }
                     Rig::Spot { pos, axis, cone, range2, s, tint } => {
                         // The lamp's push, its Lambert and its falloff
@@ -962,7 +1050,7 @@ pub(crate) fn key_light(
                         let lambert = (nx * lx + ny * ly + nz * lz).max(0.0);
                         let dzw = 2.5 * dz;
                         let atten = range2 / (range2 + dx * dx + dy * dy + dzw * dzw);
-                        push_gain(&mut gain, lambert * atten * beam * s, tint);
+                        push_gain(&mut gain, lamp(x, y, lambert * atten * beam * s), tint);
                     }
                 }
             }
@@ -4033,6 +4121,41 @@ mod tests {
         assert!(center > 0.35, "the cone's center is lit: {center}");
         assert_eq!(img.pixel(w / 2 + 40, h / 2)[0], 0.3, "past the cone, nothing");
         assert_eq!(img.pixel(2, 2)[0], 0.3, "the corner is outside the cone");
+    }
+
+    /// A lamp adds light onto what it lands on (LAMP_MID): on a frame
+    /// lit at middle gray it pushes what it always pushed; on a dark one
+    /// it lands the same light, so a far larger share of the pixel, and a
+    /// pool shows on a night street; on a bright one, a smaller share. A
+    /// negative lamp still takes away its share as before.
+    #[test]
+    fn a_lamp_adds_light_rather_than_multiplying_the_light_there() {
+        let (w, h) = (96usize, 64);
+        let flat_plane = || Value::Image(Arc::new(ImageBuf::filled(w, h, [0.5, 0.5, 0.5, 1.0])));
+        let gain_on = |level: f32, light: &str| {
+            let mut node = make_node("heeler.key_light");
+            node.params.insert("lights".into(), ParamValue::Text(format!("[{light}]")));
+            let out = key_light(&node, &[("in".to_string(), frame(w, h, level)), ("raster".to_string(), flat_plane())]).unwrap();
+            out.as_image().unwrap().pixel(w / 2, h / 2)[0] / level
+        };
+        let spot = r#"{"kind":"spot","px":0.5,"py":0.5,"depth":0,"tx":0.5,"ty":0.5,"target_depth":50,"cone":30,"softness":20,"range":100,"power":60}"#;
+        let lamp = r#"{"kind":"point","px":0.5,"py":0.5,"depth":30,"range":80,"power":60}"#;
+        for light in [spot, lamp] {
+            let mid = gain_on(LAMP_MID, light) - 1.0;
+            let dark = gain_on(0.03, light) - 1.0;
+            let bright = gain_on(0.6, light) - 1.0;
+            assert!(mid > 0.05, "{light}: lit at middle gray, {mid}");
+            // The same light over a sixth of the light there: six times the share.
+            assert!((dark / mid - 6.0).abs() < 0.05, "{light}: dark {dark} vs mid {mid}");
+            assert!((bright / mid - LAMP_MID / 0.6).abs() < 0.01, "{light}: bright {bright} vs mid {mid}");
+            // Under the floor the share stops growing.
+            let darker = gain_on(0.005, light) - 1.0;
+            assert!((darker / mid - LAMP_MID / LAMP_LIT_FLOOR).abs() < 0.1, "{light}: floored {darker}");
+        }
+        // A negative lamp darkens by the same share on any frame.
+        let dim = r#"{"kind":"point","px":0.5,"py":0.5,"depth":30,"range":80,"power":-60}"#;
+        assert!((gain_on(0.03, dim) - gain_on(0.6, dim)).abs() < 1e-4);
+        assert!(gain_on(0.3, dim) < 1.0);
     }
 
     /// Softness widens the edge's fade inward: the center is the same,
