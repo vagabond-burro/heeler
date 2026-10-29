@@ -286,10 +286,16 @@ export const SETTINGS = [
     description: "Sets the Flatten a photograph's Depth Map section starts with and resets to: how much ripple is smoothed out of what the photograph shows as flat.",
   },
   {
+    id: "depth-model",
+    category: "models",
+    label: "Default depth model",
+    description: "Sets the depth model a new photograph's Depth Map section reads with: V2 Small, small and fast, or DA3 Mono Large, for relief inside a subject at about four times the time. A photograph keeps the model it was born with.",
+  },
+  {
     id: "depth-size",
     category: "models",
     label: "Depth map detail",
-    description: "Sets the working size a photograph's Depth Map section starts with: the model's own 518 px, or 700 or 1036 for finer edges at a slower read.",
+    description: "Sets the working size a photograph's Depth Map section starts with: V2's own 518 px, or 700 or 1036 for finer edges at a slower read; DA3 reads at 504 or 1008.",
   },
   {
     id: "model-inventory",

@@ -1594,6 +1594,9 @@ export type SmartModels = {
   /** ViTMatte, the P4 Selection Polish refinement */
   refine: SmartModelStatus;
   depth: SmartModelStatus;
+  /** Depth Anything 3 Mono Large, the Depth Map's larger model (desktop
+   * only). Absent from an older desktop. */
+  depthDa3?: SmartModelStatus;
   /** MoGe-2 ViT-S, Depth Lighting's Model normals */
   normals: SmartModelStatus;
   /** SCUNet, Noise Reduction's Model method */
@@ -1616,6 +1619,7 @@ function mockSmartModels(): SmartModels {
     fill: m("lama", "LaMa (inpainting)", 208_044_816, "Apache-2.0", "https://huggingface.co/Carve/LaMa-ONNX", "2024.03"),
     refine: m("vitmatte", "ViTMatte (edge refinement)", 103_885_865, "Apache-2.0 weights, MIT code", "https://huggingface.co/Xenova/vitmatte-small-composition-1k", "2024.06"),
     depth: m("depth_anything_v2_small", "Depth Anything V2 Small (scene depth)", 99_060_839, "Apache-2.0", "https://huggingface.co/onnx-community/depth-anything-v2-small", "2024.06"),
+    depthDa3: m("depth_anything_3_mono_large", "Depth Anything 3 Mono Large (scene depth, detail)", 433_346_946, "Apache-2.0 (code and the DA3MONO-LARGE weights)", "https://github.com/vagabond-burro/heeler/releases/download/models/depth_anything_3_mono_large_int8.onnx", "2026.10"),
     normals: m("moge_2_vits_normal", "MoGe-2 ViT-S (surface normals)", 140_852_051, "MIT", "https://huggingface.co/Ruicheng/moge-2-vits-normal-onnx", "2025.07"),
     denoise: m("scunet_color_real_psnr", "SCUNet (noise reduction)", 76_936_854, "Apache-2.0", "https://huggingface.co/Heliosoph/scunet-onnx", "2026.06"),
     florence: m("florence_2_base", "Florence-2 base (what is in the picture)", 970_082_648, "MIT", "https://huggingface.co/onnx-community/Florence-2-base", "2025.05"),
@@ -1693,6 +1697,21 @@ export function onModelsChanged(fn: () => void): () => void {
 function modelsChanged() {
   modelChangeEpoch++;
   for (const fn of modelChangeListeners) fn();
+}
+
+/** A consented download's bytes so far, whole percents apart. */
+export interface ModelDownloadProgress {
+  model: string;
+  done: number;
+  total: number;
+}
+
+export const MODEL_DOWNLOAD_CHANNEL = "model-download-progress";
+
+/** Subscribes to every model download's progress. Returns an unsubscribe. */
+export function onModelDownloadProgress(fn: (p: ModelDownloadProgress) => void): () => void {
+  if (!isTauri()) return () => {};
+  return onTauriEvent<ModelDownloadProgress>(MODEL_DOWNLOAD_CHANNEL, fn);
 }
 
 /** The consented download: call ONLY from a dialog that has already

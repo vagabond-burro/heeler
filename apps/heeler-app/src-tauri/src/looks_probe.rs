@@ -44,7 +44,8 @@ fn sources_for(ui: &UiGraph, source: &Arc<ImageBuf>, plane: Option<&Arc<ImageBuf
 
 /// The depth plane the depth_map command would plant for this graph.
 fn plane_for(ui: &UiGraph, source: &ImageBuf, vision: &Path) -> Option<Arc<ImageBuf>> {
-    if !heeler_vision::installed(vision, &heeler_vision::DEPTH_ANYTHING) {
+    let recipe = depth_recipe(ui);
+    if !heeler_vision::installed(vision, recipe.model.spec()) {
         return None;
     }
     let (w, h) = (source.width, source.height);
@@ -54,8 +55,7 @@ fn plane_for(ui: &UiGraph, source: &ImageBuf, vision: &Path) -> Option<Arc<Image
             rgb[i * 3 + c] = heeler_engine::ops::to_display(px[c].max(0.0)).min(1.0) * 255.0;
         }
     }
-    let recipe = depth_recipe(ui);
-    let mut est = heeler_vision::DepthEstimator::load(vision, &heeler_vision::DEPTH_ANYTHING).ok()?;
+    let mut est = heeler_vision::DepthEstimator::load(vision, recipe.model.spec()).ok()?;
     let far = est.depth_at(&rgb, w, h, recipe.size as usize).ok()?;
     let far = refine_plane(&far, &rgb, w, h, recipe);
     Some(Arc::new(plane_raster(&far, w, h)))

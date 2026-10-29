@@ -156,14 +156,16 @@ fn main() {
         }
     }
     let t = Instant::now();
-    // DEPTH_WORK=700 or 1036 reads at the Depth Map section's larger sizes.
-    let work: usize = std::env::var("DEPTH_WORK").ok().and_then(|v| v.parse().ok()).unwrap_or(518);
+    // DEPTH_MODEL=da3_mono_large reads with the larger model; DEPTH_WORK=700
+    // or 1036 (1008 for DA3) reads at the Depth Map section's larger sizes.
+    let model = heeler_vision::DepthModel::from_id(&std::env::var("DEPTH_MODEL").unwrap_or_default());
+    let work: usize = std::env::var("DEPTH_WORK").ok().and_then(|v| v.parse().ok()).unwrap_or(model.native());
     let far = if let Some(path) = std::env::var_os("DEPTH_PLANE") {
         let bytes = std::fs::read(path).expect("cached plane");
         assert_eq!(bytes.len(), w * h * 4, "cached plane must match preview dimensions");
         bytes.chunks_exact(4).map(|b| f32::from_le_bytes(b.try_into().unwrap())).collect()
     } else {
-        let mut est = heeler_vision::DepthEstimator::load(base, &heeler_vision::DEPTH_ANYTHING).expect("model");
+        let mut est = heeler_vision::DepthEstimator::load(base, model.spec()).expect("model");
         est.depth_at(&rgb, w, h, work).expect("depth")
     };
     println!("depth in {:?}", t.elapsed());

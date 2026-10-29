@@ -1,5 +1,5 @@
-// The depth runner: computes the photograph's farness plane (Depth
-// Anything V2 Small) the first time any depth tool - Fog, Key Light,
+// The depth runner: computes the photograph's farness plane (with the
+// Depth Map's model, V2 Small or DA3 Mono Large) the first time any depth tool - Fog, Key Light,
 // Depth of Field - actually says something, and pokes a render so the
 // planted raster shows. One compute per photograph; the Rust side
 // no-ops when the raster already exists on disk, so revisiting a
@@ -7,13 +7,14 @@
 // name, size, license, source, nothing fetched silently.
 
 import React, { useEffect, useRef, useState } from "react";
-import { depthMap, filePasses, modelsEpoch, smartModelDownload, smartModelStatus, surfaceNormals, type SmartModels } from "../bridge";
+import { depthMap, filePasses, modelsEpoch, onModelsChanged, smartModelDownload, smartModelStatus, surfaceNormals, type SmartModels } from "../bridge";
 import { logMsg } from "../log";
 import { reportToolError } from "./hints";
+import { MenuField } from "./menufield";
 import { ModelConsentCard } from "./modelconsent";
 import { publishBusy } from "./statusbarparts";
-import type { Command, State, NodeCard } from "../state";
-import { DEPTH_SHEET_DELAY_MS, depthEstimate, depthFailureNow, depthFromFile, depthGeometryKey, depthInlineShown, depthProgressNow, depthRecipeKey, depthWanted, dismissDepthFailure, failure, passesOf, publishFailure, publishProgress, recordDepthTiming, shiftInline, subscribeDepthProgress } from "./depthtoolparts";
+import { DEPTH_MODELS, depthModelOf, depthSizesFor, depthTuned, snapDepthSize, type Command, type DepthModelId, type State, type NodeCard } from "../state";
+import { inlineConsent, shiftInlineConsent, DEPTH_SHEET_DELAY_MS, depthEstimate, depthFailureNow, depthFromFile, depthGeometryKey, depthInlineShown, depthProgressNow, depthRecipeKey, depthWanted, dismissDepthFailure, failure, passesOf, publishFailure, publishProgress, recordDepthTiming, shiftInline, subscribeDepthProgress } from "./depthtoolparts";
 
 type D = React.Dispatch<Command>;
 
@@ -62,9 +63,21 @@ export function DepthRunner({ state, dispatch }: { state: State; dispatch: D }) 
   const sizeKey = /s(\d+)$/.exec(recipe)?.[1] ?? "518";
   const done = useRef<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
-  const [needModel, setNeedModel] = useState(false);
+  // The model the last read found missing: a read with it waits for the
+  // download, a read with the other model (switched back) goes ahead.
+  const model = depthModelOf(state.nodes.find((n) => n.type === "heeler.depth_map" && n.enabled));
+  const [missing, setMissing] = useState<DepthModelId | null>(null);
+  const needModel = !fromFile && missing === model;
+  const setNeedModel = (on: boolean) => setMissing(on ? model : null);
   const [models, setModels] = useState<SmartModels | null>(null);
   const [downloading, setDownloading] = useState(false);
+  // A model installed anywhere (Preferences, the Depth Map section's
+  // own card) is the answer this runner waits for.
+  useEffect(() => onModelsChanged(() => setMissing(null)), []);
+  // The Depth Map section shows its own card while its model is
+  // missing; this one stands down meanwhile.
+  const [inlineAsks, setInlineAsks] = useState(inlineConsent);
+  useEffect(() => subscribeDepthProgress(() => setInlineAsks(inlineConsent)), []);
   useEffect(() => {
     if (!needModel) return;
     let live = true;
@@ -134,21 +147,23 @@ export function DepthRunner({ state, dispatch }: { state: State; dispatch: D }) 
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wanted, mark, busy, needModel, state.gesture, fromFile]);
+  const meta = DEPTH_MODELS.find((m) => m.id === model) ?? DEPTH_MODELS[0];
+  const status = models?.[meta.status];
   return (
     <>
       <DepthProgressSheet />
-      {wanted && needModel && models && (
+      {wanted && needModel && status && inlineAsks === 0 && (
         <ModelConsentCard
-          title="THE DEPTH TOOLS NEED THEIR MODEL"
-          model={models.depth}
+          title={model === "v2_small" ? "THE DEPTH TOOLS NEED THEIR MODEL" : "THIS PHOTOGRAPH'S DEPTH MODEL IS NOT INSTALLED"}
+          model={status}
           testid="depth"
           downloading={downloading}
           place={{ position: "fixed", left: "50%", bottom: 76, transform: "translateX(-50%)", zIndex: 40 }}
           onDownload={() => {
             setDownloading(true);
-            void smartModelDownload("depth_anything_v2_small")
+            void smartModelDownload(meta.download)
               .then(() => {
-                logMsg("info", "Depth Anything V2 Small installed");
+                logMsg("info", `${meta.label} installed`);
                 setNeedModel(false);
               })
               .catch((err) => reportToolError("Download", err))
@@ -424,6 +439,136 @@ export function DepthProgressSheet() {
     <div data-testid="depth-sheet" data-state="busy" role="status" style={card} onMouseDown={(e) => e.stopPropagation()}>
       <DepthProgressBar testid="depth-sheet-progress" inline={false} fontSize={11} />
     </div>
+  );
+}
+
+/** The Depth Map section's Model and Detail: which model reads the
+ * scene, and at which of its own sizes. Switching a photograph whose
+ * Levels or depth masks were set against the old map says in one line
+ * that they may land differently; the old map stays on screen until the
+ * new one answers. A model that is not installed is asked for here, with
+ * its size, and the download's progress shows in the card. */
+export function DepthModelChoice({ node, state, dispatch }: { node: NodeCard; state: State; dispatch: D }) {
+  const model = depthModelOf(node);
+  const size = snapDepthSize(node.params.size, model);
+  const [switched, setSwitched] = useState<{ image: string | null; from: DepthModelId } | null>(null);
+  const [models, setModels] = useState<SmartModels | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const epoch = modelsEpoch();
+  useEffect(() => {
+    let live = true;
+    void smartModelStatus().then((m) => {
+      if (live) setModels(m);
+    });
+    return () => {
+      live = false;
+    };
+  }, [epoch, model, downloading]);
+  const meta = DEPTH_MODELS.find((m) => m.id === model) ?? DEPTH_MODELS[0];
+  const status = models?.[meta.status];
+  // V2 missing is the runner's to ask for, when a depth tool needs it,
+  // as it always was; DA3 is asked for here, the moment it is chosen.
+  const asking = model !== "v2_small" && !!status && !status.installed;
+  useEffect(() => {
+    if (!asking) return;
+    shiftInlineConsent(1);
+    return () => shiftInlineConsent(-1);
+  }, [asking]);
+  // The note belongs to the switch on this photograph.
+  const note = switched && switched.image === state.activeImage && switched.from !== model ? switched.from : null;
+  const label = (id: DepthModelId) => DEPTH_MODELS.find((m) => m.id === id)?.short ?? id;
+  const hints: Record<DepthModelId, string> = {
+    v2_small: "Depth Anything V2 Small: small and fast, the subject's outline and the scene's planes. DA3 Large reads more relief inside a subject",
+    da3_mono_large: "Depth Anything 3 Mono Large: relief inside a subject (a face, a beak, a wing edge), about four times V2's time and memory",
+  };
+  const sizeHint = (s: number) =>
+    s === 518
+      ? "Read the scene at the model's own size, 518 px: fastest, the detail every other setting starts from"
+      : s === 700
+        ? "Read the scene at 700 px: finer edges, about twice the time"
+        : s === 1036
+          ? "Read the scene at 1036 px: the finest edges, about four times the time and memory"
+          : s === 504
+            ? "Read the scene at the model's own size, 504 px: the relief inside a subject, a second or so"
+            : "Read the scene at 1008 px: the finest relief, about four times the time and several GB of memory";
+  return (
+    <>
+      <MenuField
+        testid="depth-model"
+        label="Depth model"
+        hint="Which model reads the scene's depth for this photograph"
+        node={node.id}
+        param="model"
+        value={model}
+        options={DEPTH_MODELS.map((m) => ({ id: m.id, label: m.short, hint: hints[m.id] }))}
+        fitLabels={DEPTH_MODELS.map((m) => m.short)}
+        onChange={(id) => {
+          if (id === model || !DEPTH_MODELS.some((m) => m.id === id)) return;
+          if (depthTuned(state)) setSwitched({ image: state.activeImage, from: model });
+          dispatch({ type: "set_text_param", id: node.id, param: "model", value: id });
+        }}
+      />
+      <div className="zoom-seg" role="group" aria-label="Depth detail" style={{ border: "1px solid var(--line-4)" }}>
+        {depthSizesFor(model).map((s) => (
+          <button
+            key={s}
+            data-testid={`depth-size-${s}`}
+            data-active={size === s || undefined}
+            aria-pressed={size === s}
+            data-hint={sizeHint(s)}
+            style={{ fontSize: 9, padding: "2px 7px" }}
+            onClick={() => dispatch({ type: "set_param", id: node.id, param: "size", value: s })}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+      {note && (
+        <div
+          data-testid="depth-model-note"
+          style={{ flexBasis: "100%", fontSize: 11, color: "var(--text-dim)" }}
+        >
+          Levels and depth masks were set on {label(note)}'s map and may land differently on {label(model)}'s.
+        </div>
+      )}
+      {asking && status && (
+        <>
+          <span
+            className="chip"
+            data-testid="depth-model-missing"
+            data-hint={`${meta.label} is not installed yet: until it is, the depth tools keep the map they had`}
+            style={{ fontSize: 11, padding: "2px 8px", cursor: "default" }}
+          >
+            NOT INSTALLED
+          </span>
+          {/* Standing where the runner's card stands, at the standard
+              card's size: the section is too narrow to hold it. */}
+          <ModelConsentCard
+            title={`${label(model)} IS NOT INSTALLED`}
+            model={status}
+            testid="depth-model"
+            downloading={downloading}
+            place={{ position: "fixed", left: "50%", bottom: 76, transform: "translateX(-50%)", zIndex: 40 }}
+            secondary={
+              downloading
+                ? undefined
+                : {
+                    label: "USE V2 SMALL",
+                    testid: "depth-model-keep-v2",
+                    onClick: () => dispatch({ type: "set_text_param", id: node.id, param: "model", value: "v2_small" }),
+                  }
+            }
+            onDownload={() => {
+              setDownloading(true);
+              void smartModelDownload(meta.download)
+                .then(() => logMsg("info", `${meta.label} installed`))
+                .catch((err) => reportToolError("Download", err))
+                .finally(() => setDownloading(false));
+            }}
+          />
+        </>
+      )}
+    </>
   );
 }
 

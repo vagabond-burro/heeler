@@ -3057,7 +3057,24 @@ fn plant_smart_rasters_whole(
                         format!("{}@depth", n.id),
                         SourceImage { image: arc, version: want, measured },
                     );
+                    continue;
                 }
+            }
+        }
+        // A switched Model keeps the map it had until the new one
+        // answers (or, with the new model not installed yet, until it
+        // is): the other model's plane at the same settings, from the
+        // session or the disk. Planted under its own version, so nothing
+        // downstream mistakes it for the new model's.
+        for other in depth_other_model_versions(image_id, depth, depth_input) {
+            let held = session.smart_rasters.get(&key).filter(|(_, v)| *v == other).map(|(r, _)| r.clone());
+            let read = || {
+                let bytes = std::fs::read(smart_raster_lookup(disk_base?, other)).ok()?;
+                heeler_io::decode_png_raw(&bytes).ok().map(Arc::new)
+            };
+            if let Some(arc) = held.or_else(read) {
+                sources.insert(format!("{}@depth", n.id), SourceImage { image: arc, version: other, measured });
+                break;
             }
         }
     }
@@ -3209,7 +3226,9 @@ fn apply_depth_levels(
     let Some(levels) = depth_levels(graph) else {
         return;
     };
-    let raw = depth_version(image_id, depth_recipe(graph), depth_input_key_in_session(session, graph, image_id));
+    let recipe = depth_recipe(graph);
+    let input = depth_input_key_in_session(session, graph, image_id);
+    let raw = depth_version(image_id, recipe, input);
     let want = levelled_version(raw, levels);
     let key = format!("{image_id}|depth-levels");
     let mut shaped: Option<Arc<ImageBuf>> = session
@@ -3217,7 +3236,16 @@ fn apply_depth_levels(
         .get(&key)
         .filter(|(_, version)| *version == want)
         .map(|(raster, _)| raster.clone());
+    // The other model's plane a switched Model holds until its own
+    // answers takes the same Levels, uncached: it is on screen for one
+    // read's time.
+    let held = depth_other_model_versions(image_id, recipe, input);
     for s in sources.values_mut() {
+        if held.contains(&s.version) {
+            s.image = Arc::new(levelled_plane(&s.image, levels));
+            s.version = levelled_version(s.version, levels);
+            continue;
+        }
         if s.version != raw {
             continue;
         }
@@ -3441,6 +3469,10 @@ pub struct SmartModels {
     /// Depth Anything V2 Small: the scene-depth model behind Fog,
     /// Key Light, Depth of Field, and depth-range selections.
     pub depth: SmartModelStatus,
+    /// Depth Anything 3 Mono Large: the Depth Map's larger model, for
+    /// relief inside a subject (desktop only).
+    #[serde(rename = "depthDa3")]
+    pub depth_da3: SmartModelStatus,
     /// MoGe-2 ViT-S: Depth Lighting's Model normals.
     pub normals: SmartModelStatus,
     /// SCUNet: Noise Reduction's Model method.
@@ -3460,6 +3492,7 @@ async fn smart_model_status(app: tauri::AppHandle) -> Result<SmartModels, String
         fill: model_status_of(&base, &heeler_vision::LAMA),
         refine: model_status_of(&base, &heeler_vision::VITMATTE),
         depth: model_status_of(&base, &heeler_vision::DEPTH_ANYTHING),
+        depth_da3: model_status_of(&base, &heeler_vision::DEPTH_ANYTHING_3_MONO),
         normals: model_status_of(&base, &heeler_vision::MOGE_2_VITS),
         denoise: model_status_of(&base, &heeler_vision::SCUNET),
         florence: model_status_of(&base, &heeler_vision::FLORENCE_2),
@@ -3478,19 +3511,42 @@ async fn smart_model_download(app: tauri::AppHandle, model: Option<String>) -> R
         Some("lama") => &heeler_vision::LAMA,
         Some("vitmatte") => &heeler_vision::VITMATTE,
         Some("depth_anything_v2_small") => &heeler_vision::DEPTH_ANYTHING,
+        Some("depth_anything_3_mono_large") => &heeler_vision::DEPTH_ANYTHING_3_MONO,
         Some("moge_2_vits_normal") => &heeler_vision::MOGE_2_VITS,
         Some("scunet_color_real_psnr") => &heeler_vision::SCUNET,
         Some("florence_2_base") => &heeler_vision::FLORENCE_2,
         Some("mobile_sam") => &heeler_vision::MOBILE_SAM,
         _ => &heeler_vision::SAM2_1_TINY,
     };
+    let reporter = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        heeler_vision::download_model(&base, spec, |_, _| {}).map_err(|e| e.to_string())
+        // Whole percents only: a 433 MB download reports thousands of
+        // chunks, and the card needs a hundred steps at most.
+        let mut last = u64::MAX;
+        heeler_vision::download_model(&base, spec, |done, total| {
+            let percent = (done.saturating_mul(100)).checked_div(total).unwrap_or(0).min(100);
+            if percent != last {
+                last = percent;
+                use tauri::Emitter;
+                let _ = reporter.emit(MODEL_DOWNLOAD_EVENT, ModelDownloadProgress { model: spec.id.to_string(), done, total });
+            }
+        })
+        .map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())??;
     note_models_changed(&app);
     Ok(())
+}
+
+pub const MODEL_DOWNLOAD_EVENT: &str = "model-download-progress";
+
+/// A consented download's bytes so far, for the card that asked for it.
+#[derive(Serialize, Clone)]
+pub struct ModelDownloadProgress {
+    pub model: String,
+    pub done: u64,
+    pub total: u64,
 }
 
 /// Remove one model (or, with no name, all of them). Sessions and
@@ -3519,6 +3575,8 @@ async fn smart_model_remove(app: tauri::AppHandle, model: Option<String>) -> Res
         }
         Some("depth_anything_v2_small") => heeler_vision::remove_model(&base, &heeler_vision::DEPTH_ANYTHING)
             .map_err(|e| e.to_string()),
+        Some("depth_anything_3_mono_large") => heeler_vision::remove_model(&base, &heeler_vision::DEPTH_ANYTHING_3_MONO)
+            .map_err(|e| e.to_string()),
         Some("moge_2_vits_normal") => heeler_vision::remove_model(&base, &heeler_vision::MOGE_2_VITS)
             .map_err(|e| e.to_string()),
         Some("scunet_color_real_psnr") => {
@@ -3539,6 +3597,7 @@ async fn smart_model_remove(app: tauri::AppHandle, model: Option<String>) -> Res
             heeler_vision::remove_model(&base, &heeler_vision::LAMA).map_err(|e| e.to_string())?;
             heeler_vision::remove_model(&base, &heeler_vision::VITMATTE).map_err(|e| e.to_string())?;
             heeler_vision::remove_model(&base, &heeler_vision::DEPTH_ANYTHING).map_err(|e| e.to_string())?;
+            heeler_vision::remove_model(&base, &heeler_vision::DEPTH_ANYTHING_3_MONO).map_err(|e| e.to_string())?;
             heeler_vision::remove_model(&base, &heeler_vision::MOGE_2_VITS).map_err(|e| e.to_string())?;
             heeler_vision::remove_model(&base, &heeler_vision::SCUNET).map_err(|e| e.to_string())?;
             heeler_vision::remove_model(&base, &heeler_vision::FLORENCE_2).map_err(|e| e.to_string())
@@ -3783,10 +3842,10 @@ async fn florence_cancel() -> Result<(), String> {
     Ok(())
 }
 
-/// The ten models Preferences can relocate, in one list so status,
+/// The eleven models Preferences can relocate, in one list so status,
 /// removal, moving and the update check can never disagree about what
 /// exists.
-pub(crate) const RELOCATABLE_MODELS: [&heeler_vision::ModelSpec; 10] = [
+pub(crate) const RELOCATABLE_MODELS: [&heeler_vision::ModelSpec; 11] = [
     &heeler_vision::SAM2_1_TINY,
     &heeler_vision::MOBILE_SAM,
     &heeler_vision::BIREFNET_DYNAMIC,
@@ -3794,6 +3853,7 @@ pub(crate) const RELOCATABLE_MODELS: [&heeler_vision::ModelSpec; 10] = [
     &heeler_vision::LAMA,
     &heeler_vision::VITMATTE,
     &heeler_vision::DEPTH_ANYTHING,
+    &heeler_vision::DEPTH_ANYTHING_3_MONO,
     &heeler_vision::MOGE_2_VITS,
     &heeler_vision::SCUNET,
     &heeler_vision::FLORENCE_2,
@@ -5593,13 +5653,17 @@ pub(crate) struct DepthRecipe {
     /// the share of the picture folded into "nearest" / "farthest"
     near: u8,
     far: u8,
-    /// the model's working size on the long edge: 518, 700 or 1036
+    /// the model's working size on the long edge: 518, 700 or 1036 for
+    /// V2, 504 or 1008 for DA3
     size: u16,
+    /// the section's Model: V2 when the parameter is missing, which is
+    /// every photograph from before the choice existed
+    model: heeler_vision::DepthModel,
 }
 
 impl Default for DepthRecipe {
     fn default() -> Self {
-        DepthRecipe { edges: 0, flatten: 0, near: 0, far: 0, size: 518 }
+        DepthRecipe { edges: 0, flatten: 0, near: 0, far: 0, size: 518, model: heeler_vision::DepthModel::V2Small }
     }
 }
 
@@ -5620,18 +5684,22 @@ fn depth_recipe(graph: &UiGraph) -> DepthRecipe {
     };
     let num = |k: &str, default: f64| n.params.get(k).and_then(|v| v.as_f64()).unwrap_or(default);
     let pct = |k: &str, hi: f64| num(k, 0.0).clamp(0.0, hi).round() as u8;
-    let size = num("size", 518.0);
-    let size = [518u16, 700, 1036]
-        .into_iter()
-        .min_by(|a, b| ((*a as f64) - size).abs().partial_cmp(&((*b as f64) - size).abs()).unwrap())
-        .unwrap_or(518);
+    let model = depth_model_of(n.params.get("model").and_then(|v| v.as_str()));
+    let size = model.snap_size(num("size", model.native() as f64));
     DepthRecipe {
         edges: pct("edges", 100.0),
         flatten: pct("flatten", 100.0),
         near: pct("near_clip", 40.0),
         far: pct("far_clip", 40.0),
         size,
+        model,
     }
+}
+
+/// The depth model a Depth Map's `model` parameter asks for: V2 when it
+/// is missing, as on every photograph from before the choice.
+fn depth_model_of(param: Option<&str>) -> heeler_vision::DepthModel {
+    param.map(heeler_vision::DepthModel::from_id).unwrap_or_default()
 }
 
 /// One farness raster per photograph, model and recipe. The raw plane
@@ -5642,7 +5710,7 @@ fn depth_recipe(graph: &UiGraph) -> DepthRecipe {
 fn depth_version(image_id: &str, recipe: DepthRecipe, input: Option<u64>) -> u64 {
     // |16 retired the 8-bit rasters: same model, new container, and
     // the old files age out by never being asked for again.
-    let model = heeler_vision::DEPTH_ANYTHING.id;
+    let model = recipe.model.spec().id;
     // 26.3 Phase 10.2: the map computes from what is wired into the
     // node, so the executor's content hash of that input keys the plane
     // alongside image, model and recipe; an upstream edit is a new
@@ -5901,10 +5969,24 @@ fn depth_plane_measured(session: &Session, image_id: &str, recipe: DepthRecipe) 
         && session.paths.get(image_id).is_some_and(|p| file_depth_of(p).is_some())
 }
 
+/// The plane versions of the same Depth Map settings read with each
+/// other model, Detail snapped to that model's own sizes: what a
+/// switched Model shows until its own plane answers.
+fn depth_other_model_versions(image_id: &str, recipe: DepthRecipe, input: Option<u64>) -> Vec<u64> {
+    heeler_vision::DepthModel::ALL
+        .into_iter()
+        .filter(|m| *m != recipe.model)
+        .map(|model| {
+            let size = model.snap_size(recipe.size as f64);
+            depth_version(image_id, DepthRecipe { model, size, ..recipe }, input)
+        })
+        .collect()
+}
+
 /// The model's own answer for a photograph at a working size, before
 /// any refinement: what the export refines again at full size.
 fn depth_raw_recipe(recipe: DepthRecipe) -> DepthRecipe {
-    DepthRecipe { size: recipe.size, ..DepthRecipe::default() }
+    DepthRecipe { size: recipe.size, model: recipe.model, ..DepthRecipe::default() }
 }
 
 /// Forgets a photograph's cached plane at the current recipe (and the
@@ -7265,14 +7347,14 @@ fn lighting_model_run_lock() -> std::sync::MutexGuard<'static, ()> {
 /// and the refinement with the raster it encodes (16 bytes a pixel
 /// more), which never overlap: the session is dropped before the
 /// refinement starts. The model's terms are metered in heeler-vision.
-fn depth_run_bytes(w: usize, h: usize, work: usize) -> Result<usize, String> {
-    let model = usize::try_from(heeler_vision::depth_run_reserve(w, h, work)).map_err(|e| e.to_string())?;
+fn depth_run_bytes(depth_model: heeler_vision::DepthModel, w: usize, h: usize, work: usize) -> Result<usize, String> {
+    let model = usize::try_from(heeler_vision::depth_run_reserve(depth_model, w, h, work)).map_err(|e| e.to_string())?;
     let refine = memory::bytes(w, h, 1, heeler_vision::DEPTH_REFINE_BYTES_PER_PIXEL as usize + 16).map_err(|e| e.to_string())?;
     memory::sum([memory::bytes(w, h, 1, 32).map_err(|e| e.to_string())?, model.max(refine)]).map_err(|e| e.to_string())
 }
 
-fn admit_depth_run(w: usize, h: usize, work: usize) -> Result<Job, String> {
-    Job::admit(depth_run_bytes(w, h, work)?, "depth map model and refinement").map_err(|e| e.to_string())
+fn admit_depth_run(model: heeler_vision::DepthModel, w: usize, h: usize, work: usize) -> Result<Job, String> {
+    Job::admit(depth_run_bytes(model, w, h, work)?, "depth map model and refinement").map_err(|e| e.to_string())
 }
 
 /// One surface_normals run over a (w, h) preview: the display-encoded
@@ -7287,8 +7369,8 @@ fn admit_normals_run(w: usize, h: usize) -> Result<Job, String> {
     Job::admit(normals_run_bytes(w, h)?, "surface normals model").map_err(|e| e.to_string())
 }
 
-/// Computes the photograph's farness plane (Depth Anything V2 Small)
-/// and persists it under the shared depth version; every fog, key
+/// Computes the photograph's farness plane (the Depth Map's Model:
+/// Depth Anything V2 Small, or 3 Mono Large) and persists it under the shared depth version; every fog, key
 /// light, and depth-of-field node plants from it. Runs once per
 /// photograph and is a no-op when the raster already exists.
 #[tauri::command]
@@ -7300,11 +7382,11 @@ async fn depth_map(
     let base = vision_base(&app)?;
     // A file with its own depth pass needs no model, installed or not.
     let file_depth = file_depth_source(&app, &image_id);
-    if file_depth.is_none() && !heeler_vision::installed(&base, &heeler_vision::DEPTH_ANYTHING) {
+    let recipe = depth_recipe(&graph);
+    if file_depth.is_none() && !heeler_vision::installed(&base, recipe.model.spec()) {
         return Err("model not installed".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let recipe = depth_recipe(&graph);
         let input_key = with_session(&app, |s| Ok(depth_input_key_in_session(s, &graph, &image_id)))?;
         let version = depth_version(&image_id, recipe, input_key);
         let path = smart_raster_path(&base, version);
@@ -7333,7 +7415,7 @@ async fn depth_map(
         let opts = source_opts_of(&graph);
         let source = preview_source(&app, &image_id, opts)?;
         let _run = lighting_model_run_lock();
-        let _job = admit_depth_run(source.width, source.height, recipe.size as usize)?;
+        let _job = admit_depth_run(recipe.model, source.width, source.height, recipe.size as usize)?;
         // 26.3 Phase 10.2: the model reads what is wired into the node,
         // rendered through the executor at this preview size, never the
         // raw decode behind the node's back. An unwired node, a file's
@@ -7391,7 +7473,7 @@ async fn depth_map(
                 // Loaded for this run and dropped after it: a held
                 // session keeps its whole working set, 2.2 GB at Detail
                 // 1036, and a load costs about 60 ms.
-                let mut est = heeler_vision::DepthEstimator::load(&base, &heeler_vision::DEPTH_ANYTHING)
+                let mut est = heeler_vision::DepthEstimator::load(&base, recipe.model.spec())
                     .map_err(|e| e.to_string())?;
                 let far = est.depth_at(&rgb, w, h, recipe.size as usize).map_err(|e| e.to_string())?;
                 drop(est);
@@ -29454,6 +29536,50 @@ mod tests {
         assert_eq!(smart_want("img", &bw, refined, None), depth_version("img", refined, None));
     }
 
+    /// The Depth Map's Model keys the plane: a section with no `model`
+    /// (every photograph from before the choice) or with V2's keeps V2's
+    /// keys to the bit, so nothing already computed is run again; DA3
+    /// is its own raster at its own Detail sizes, and a V2 size carried
+    /// over lands on DA3's nearest.
+    #[test]
+    fn the_depth_model_keys_the_plane_and_snaps_detail_to_its_own_sizes() {
+        use heeler_vision::DepthModel;
+        let node = |model: Option<&str>, size: f64, edges: f64| {
+            let mut params = HashMap::from([
+                ("edges".to_string(), serde_json::json!(edges)),
+                ("size".to_string(), serde_json::json!(size)),
+            ]);
+            if let Some(m) = model {
+                params.insert("model".to_string(), serde_json::json!(m));
+            }
+            UiGraph {
+                graph_id: "g".into(),
+                nodes: vec![UiNode { id: "depthmap".into(), node_type: "heeler.depth_map".into(), enabled: true, params }],
+                connections: vec![],
+            }
+        };
+        let raw_key = fnv1a64(format!("depth|img|{}|16", heeler_vision::DEPTH_ANYTHING.id).as_bytes());
+        // Missing, V2's own word, or a word this build does not know: V2.
+        for m in [None, Some("v2_small"), Some("someday_model")] {
+            let r = depth_recipe(&node(m, 518.0, 0.0));
+            assert_eq!(r.model, DepthModel::V2Small);
+            assert_eq!(depth_version("img", r, None), raw_key, "{m:?}");
+            assert_eq!(depth_version("img", depth_recipe(&node(m, 700.0, 50.0)), None), depth_version("img", depth_recipe(&node(None, 700.0, 50.0)), None));
+        }
+        // DA3: its own key, raw and refined, and its own sizes.
+        let da3 = depth_recipe(&node(Some("da3_mono_large"), 518.0, 0.0));
+        assert_eq!(da3.model, DepthModel::Da3MonoLarge);
+        assert_eq!(da3.size, 504, "V2's 518 lands on DA3's own 504");
+        assert_ne!(depth_version("img", da3, None), raw_key);
+        assert_eq!(depth_recipe(&node(Some("da3_mono_large"), 1036.0, 0.0)).size, 1008);
+        assert_eq!(depth_recipe(&node(Some("da3_mono_large"), 700.0, 0.0)).size, 504);
+        let refined = depth_recipe(&node(Some("da3_mono_large"), 1008.0, 50.0));
+        assert_eq!(depth_raw_recipe(refined).model, DepthModel::Da3MonoLarge, "the raw answer is the same model's");
+        assert_ne!(depth_version("img", refined, None), depth_version("img", depth_recipe(&node(None, 1036.0, 50.0)), None));
+        // And back: DA3's 1008 on V2 is V2's 1036.
+        assert_eq!(depth_recipe(&node(None, 1008.0, 0.0)).size, 1036);
+    }
+
     fn review_depth_graph() -> UiGraph {
         serde_json::from_value(serde_json::json!({
             "graph_id":"review-depth", "nodes":[
@@ -37455,6 +37581,49 @@ mod file_depth_tests {
         })).unwrap()
     }
 
+    /// A switched Model keeps the map it had: while DA3's plane is not
+    /// on disk (it is computing, or the model is not installed yet) the
+    /// V2 plane at the same settings plants under its own version, from
+    /// the session and from the disk; once DA3's lands, DA3's plants.
+    #[test]
+    fn a_switched_depth_model_holds_the_old_map_until_the_new_one_answers() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut graph = depth_graph(50, 25);
+        let dm = graph.nodes.iter_mut().find(|n| n.id == "depthmap").unwrap();
+        dm.params.insert("size".into(), serde_json::json!(1036.0));
+        let v2 = depth_recipe(&graph);
+        let input = depth_input_key(&graph, "img", None);
+        let v2_version = depth_version("img", v2, input);
+        let write = |version: u64, value: f32| {
+            let path = smart_raster_path(dir.path(), version);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, heeler_io::encode_png_raw(&ImageBuf::filled(4, 3, [value, value, value, 1.0])).unwrap()).unwrap();
+        };
+        write(v2_version, 0.4);
+        let plant = |session: &mut Session, graph: &UiGraph, base: Option<&Path>| {
+            let mut sources = HashMap::new();
+            plant_smart_rasters_whole(session, base, graph, "img", &mut sources, input, fullmatte::MatteTier::Auto, None);
+            sources.get("depthmap@depth").map(|s| s.version)
+        };
+        let mut session = Session::default();
+        assert_eq!(plant(&mut session, &graph, Some(dir.path())), Some(v2_version));
+        // Switched to DA3: its plane is not there, V2's holds, from the
+        // session and, after a relaunch, from the disk.
+        let dm = graph.nodes.iter_mut().find(|n| n.id == "depthmap").unwrap();
+        dm.params.insert("model".into(), serde_json::json!("da3_mono_large"));
+        let da3 = depth_recipe(&graph);
+        assert_eq!(da3.size, 1008);
+        assert_eq!(depth_other_model_versions("img", da3, input), vec![v2_version]);
+        assert_eq!(plant(&mut session, &graph, None), Some(v2_version), "from the session");
+        assert_eq!(plant(&mut Session::default(), &graph, Some(dir.path())), Some(v2_version), "from the disk");
+        // DA3 answers: its own plane plants.
+        let da3_version = depth_version("img", da3, input);
+        write(da3_version, 0.7);
+        assert_eq!(plant(&mut session, &graph, Some(dir.path())), Some(da3_version));
+        // Neither on disk nor held: nothing plants, as before.
+        assert_eq!(plant(&mut Session::default(), &depth_graph(10, 10), Some(dir.path())), None);
+    }
+
     /// The measured mark on the preview plant: a file's own depth pass with
     /// Edges and Flatten at zero plants measured; Edges or Flatten above
     /// zero smooth the plane and plant it plain; a photograph the model
@@ -37598,16 +37767,16 @@ mod file_depth_tests {
     #[test]
     fn depth_and_normals_runs_admit_their_metered_number() {
         let (w, h) = (2048, 1365);
-        let need = depth_run_bytes(w, h, 1036).unwrap();
+        let need = depth_run_bytes(heeler_vision::DepthModel::V2Small, w, h, 1036).unwrap();
         memory::with_budget(need - 1, || {
-            let err = match admit_depth_run(w, h, 1036) {
+            let err = match admit_depth_run(heeler_vision::DepthModel::V2Small, w, h, 1036) {
                 Err(e) => e,
                 Ok(_) => panic!("admitted one byte under the number"),
             };
             assert!(err.contains("depth map"), "the refusal should name itself: {err}");
         });
         memory::with_budget(need, || {
-            let job = admit_depth_run(w, h, 1036).expect("the metered run fits");
+            let job = admit_depth_run(heeler_vision::DepthModel::V2Small, w, h, 1036).expect("the metered run fits");
             assert_eq!(memory::budget().snapshot().reserved, need);
             drop(job);
             assert_eq!(memory::budget().snapshot().reserved, 0);
@@ -37629,12 +37798,18 @@ mod file_depth_tests {
     /// larger.
     #[test]
     fn the_depth_runs_reserve_follows_detail_and_the_larger_phase() {
-        let at = |work| depth_run_bytes(2048, 1365, work).unwrap();
+        use heeler_vision::DepthModel;
+        let at = |work| depth_run_bytes(DepthModel::V2Small, 2048, 1365, work).unwrap();
         assert!(at(518) < at(700) && at(700) < at(1036));
         let px = memory::bytes(2048, 1365, 1, 1).unwrap();
         let refine = px * (heeler_vision::DEPTH_REFINE_BYTES_PER_PIXEL as usize + 16);
-        let model = heeler_vision::depth_run_reserve(2048, 1365, 518) as usize;
+        let model = heeler_vision::depth_run_reserve(DepthModel::V2Small, 2048, 1365, 518) as usize;
         assert_eq!(at(518), px * 32 + model.max(refine));
+        // DA3 is charged its own metered run: more than V2 at the same
+        // reading, and Detail 1008 more than 504.
+        let da3 = |work| depth_run_bytes(DepthModel::Da3MonoLarge, 2048, 1365, work).unwrap();
+        assert!(da3(504) < da3(1008));
+        assert!(da3(504) > at(518) && da3(1008) > at(1036));
     }
 
     #[test]

@@ -9,6 +9,7 @@
 // standardizes everything inside the border.
 import type { CSSProperties } from "react";
 import type { SmartModelStatus } from "../bridge";
+import { useDownloadPercent } from "./modelconsentparts";
 
 export function ModelConsentCard({
   title,
@@ -34,6 +35,7 @@ export function ModelConsentCard({
   /** an optional second button, e.g. smart selection's NOT NOW */
   secondary?: { label: string; testid: string; onClick: () => void };
 }) {
+  const percent = useDownloadPercent(model.id, downloading);
   return (
     <div
       data-testid={`${testid}-consent`}
@@ -66,7 +68,7 @@ export function ModelConsentCard({
           style={{ fontSize: 15, padding: "4px 16px" }}
           onClick={onDownload}
         >
-          {downloading ? "DOWNLOADING…" : "DOWNLOAD"}
+          {downloading ? (percent === null ? "DOWNLOADING…" : `DOWNLOADING ${percent}%`) : "DOWNLOAD"}
         </button>
         {secondary && (
           <button
@@ -79,6 +81,18 @@ export function ModelConsentCard({
           </button>
         )}
       </div>
+      {downloading && percent !== null && (
+        <div
+          data-testid={`${testid}-progress`}
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+          style={{ height: 3, background: "var(--line-4)", marginTop: 10 }}
+        >
+          <div style={{ width: `${percent}%`, height: "100%", background: "var(--text-body)" }} />
+        </div>
+      )}
     </div>
   );
 }

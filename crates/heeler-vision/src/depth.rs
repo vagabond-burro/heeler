@@ -1,15 +1,21 @@
-//! Monocular depth (Depth Anything V2 Small): the scene's near-to-far
-//! ordering from one photograph, no depth sensor required. RELATIVE
-//! depth only - the model ranks distances, it does not measure them -
-//! which is exactly what the depth tools need: fog thickens with
-//! farness, relighting shades a heightfield, depth of field blurs away
-//! from a focal plane, and a depth-range selection slices the scene.
-//! None of them care what a meter is.
+//! Monocular depth: the scene's near-to-far ordering from one
+//! photograph, no depth sensor required. RELATIVE depth only - the
+//! model ranks distances, it does not measure them - which is exactly
+//! what the depth tools need: fog thickens with farness, relighting
+//! shades a heightfield, depth of field blurs away from a focal plane,
+//! and a depth-range selection slices the scene. None of them care
+//! what a meter is.
+//!
+//! Two models answer (DepthModel): Depth Anything V2 Small, small and
+//! fast and the only one on iOS, and Depth Anything 3 Mono Large,
+//! which spends four times the time on relief inside a subject (a
+//! face, a beak, a wing edge). Both exports answer inverse depth
+//! (disparity, big = near) under the same names, so one reading serves
+//! both.
 //!
 //! The persisted plane is FARNESS: 0 is the nearest thing in frame,
-//! 1 the farthest, min-max normalized per photograph. The model's raw
-//! output is inverse depth (disparity, big = near); the flip happens
-//! here so every consumer reads the same word.
+//! 1 the farthest, min-max normalized per photograph. The flip from
+//! disparity happens here so every consumer reads the same word.
 
 use rayon::prelude::*;
 use std::path::Path;
@@ -17,17 +23,82 @@ use std::path::Path;
 use ort::session::Session;
 use ort::value::Tensor;
 
-use crate::models::{model_paths, ModelSpec};
+use crate::models::{model_paths, ModelSpec, DEPTH_ANYTHING, DEPTH_ANYTHING_3_MONO};
 use crate::pre::{resize_exact_rgb, resize_plane};
 use crate::VisionError;
 
+/// The depth model a photograph's Depth Map reads with. The id is what
+/// the section's `model` parameter stores; a missing or unknown one is
+/// V2, which is what every photograph before the choice existed used.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum DepthModel {
+    #[default]
+    V2Small,
+    Da3MonoLarge,
+}
+
+impl DepthModel {
+    pub const ALL: [DepthModel; 2] = [DepthModel::V2Small, DepthModel::Da3MonoLarge];
+
+    /// The `model` parameter's word for it.
+    pub fn id(self) -> &'static str {
+        match self {
+            DepthModel::V2Small => "v2_small",
+            DepthModel::Da3MonoLarge => "da3_mono_large",
+        }
+    }
+
+    /// The model a stored id asks for here. iOS has V2 only: a
+    /// photograph set to DA3 on the desktop reads with V2 there, and
+    /// the stored id is left as it is, so the desktop finds DA3 again.
+    pub fn from_id(id: &str) -> DepthModel {
+        if cfg!(target_os = "ios") {
+            return DepthModel::V2Small;
+        }
+        DepthModel::ALL.into_iter().find(|m| m.id() == id).unwrap_or_default()
+    }
+
+    pub fn spec(self) -> &'static ModelSpec {
+        match self {
+            DepthModel::V2Small => &DEPTH_ANYTHING,
+            DepthModel::Da3MonoLarge => &DEPTH_ANYTHING_3_MONO,
+        }
+    }
+
+    /// The Detail sizes on the long edge, the model's own first. V2 was
+    /// distilled at 518; DA3 works at 504, and twice that is its finer
+    /// step (both multiples of the ViT's 14 px patch).
+    pub fn sizes(self) -> &'static [u16] {
+        match self {
+            DepthModel::V2Small => &[518, 700, 1036],
+            DepthModel::Da3MonoLarge => &[504, 1008],
+        }
+    }
+
+    /// The model's own working size, its first Detail.
+    pub fn native(self) -> usize {
+        self.sizes()[0] as usize
+    }
+
+    /// The Detail size nearest `size` among this model's, so a V2 size
+    /// carried over to DA3 (or back) lands on the model's own step.
+    pub fn snap_size(self, size: f64) -> u16 {
+        let sizes = self.sizes();
+        sizes
+            .iter()
+            .copied()
+            .min_by(|a, b| ((*a as f64) - size).abs().partial_cmp(&((*b as f64) - size).abs()).unwrap())
+            .unwrap_or(sizes[0])
+    }
+}
+
 /// The working budget: the long side lands here before inference. The
 /// export's ViT patches are 14px, so both sides snap to /14. 518 is
-/// the size the model was distilled at; bigger buys detail slowly and
-/// costs attention quadratically.
+/// the size V2 was distilled at; bigger buys detail slowly and costs
+/// attention quadratically.
 const WORK: usize = 518;
 
-/// The transient working set of one depth run, as a function of the
+/// The transient working set of one V2 depth run, as a function of the
 /// tokens the model reads ((rw/14)*(rh/14) at the working size), not of
 /// the photograph's pixels: the input is resized before the model sees
 /// it. Metered 2026-10-28 on a Mac16,5 (48 GiB, release build, real
@@ -44,65 +115,116 @@ pub const DEPTH_RUN_FIXED_BYTES: u64 = 165 << 20;
 pub const DEPTH_RUN_BYTES_PER_TOKEN: u64 = 140 << 10;
 pub const DEPTH_RUN_BYTES_PER_TOKEN_SQUARED: u64 = 47;
 
+/// The same terms for Depth Anything 3 Mono Large (the int8 export),
+/// metered the same way on the same machine, 2026-10-28, two runs a
+/// case agreeing within 11 MB: 901 MB at 648 tokens, 995 at 864, 1226
+/// at 1296 (Detail 504 on a square photograph), 2502 at 2592, 3670 at
+/// 3456 (1008 on a 3:2 photograph) and 6886 at 5184 (1008 square).
+/// Twenty-four ViT-L layers make the squared term four times V2's; the
+/// fit is 674 MiB + 206 KiB a token + 202 bytes a token squared, within
+/// 33 MB of every point, with the same quarter margin.
+pub const DA3_RUN_FIXED_BYTES: u64 = 674 << 20;
+pub const DA3_RUN_BYTES_PER_TOKEN: u64 = 206 << 10;
+pub const DA3_RUN_BYTES_PER_TOKEN_SQUARED: u64 = 202;
+
 /// What refine_depth draws a pixel: the guide, its moments and the
 /// filter's planes. Metered with the run above, full Edges and Flatten:
 /// 158 to 160 bytes a pixel at 0.7, 2.8 and 4.2 megapixels, no fixed
 /// term; a quarter margin over 160.
 pub const DEPTH_REFINE_BYTES_PER_PIXEL: u64 = 200;
 
-/// The working size depth_at reads (w, h) at for a Detail of `work`.
-fn depth_work_size(w: usize, h: usize, work: usize) -> (usize, usize) {
-    let work = work.clamp(WORK, 1036);
+/// The working size a model reads (w, h) at for a Detail of `work`.
+fn depth_work_size(model: DepthModel, w: usize, h: usize, work: usize) -> (usize, usize) {
+    let sizes = model.sizes();
+    let work = work.clamp(sizes[0] as usize, sizes[sizes.len() - 1] as usize);
     let scale = work as f32 / w.max(h).max(1) as f32;
     let snap = |v: f32| (((v * scale).round() as usize).div_ceil(14) * 14).max(14);
     (snap(w as f32), snap(h as f32))
 }
 
-/// The reserve for one depth run over a (w, h) photograph at Detail
-/// `work`, saturating rather than wrapping.
-pub fn depth_run_reserve(w: usize, h: usize, work: usize) -> u64 {
-    let (rw, rh) = depth_work_size(w, h, work);
+/// The reserve for one depth run with `model` over a (w, h) photograph
+/// at Detail `work`, saturating rather than wrapping.
+pub fn depth_run_reserve(model: DepthModel, w: usize, h: usize, work: usize) -> u64 {
+    let (rw, rh) = depth_work_size(model, w, h, work);
     let tokens = ((rw / 14) * (rh / 14)) as u64;
-    DEPTH_RUN_FIXED_BYTES
-        .saturating_add(tokens.saturating_mul(DEPTH_RUN_BYTES_PER_TOKEN))
-        .saturating_add(tokens.saturating_mul(tokens).saturating_mul(DEPTH_RUN_BYTES_PER_TOKEN_SQUARED))
+    let (fixed, per, sq) = match model {
+        DepthModel::V2Small => (DEPTH_RUN_FIXED_BYTES, DEPTH_RUN_BYTES_PER_TOKEN, DEPTH_RUN_BYTES_PER_TOKEN_SQUARED),
+        DepthModel::Da3MonoLarge => (DA3_RUN_FIXED_BYTES, DA3_RUN_BYTES_PER_TOKEN, DA3_RUN_BYTES_PER_TOKEN_SQUARED),
+    };
+    fixed
+        .saturating_add(tokens.saturating_mul(per))
+        .saturating_add(tokens.saturating_mul(tokens).saturating_mul(sq))
         .saturating_mul(5)
         / 4
 }
 
 pub struct DepthEstimator {
     session: Session,
+    model: DepthModel,
 }
 
 fn inference(e: ort::Error) -> VisionError {
     VisionError::Inference(e.to_string())
 }
 
+/// DA3's sky: a model trained on metric scenes answers a sky with
+/// whatever depth its training left there, often nearer than the
+/// mountains under it. Its own sky plane marks the sky, and the sky
+/// takes the far end of everything else, as the model's own mono
+/// pipeline does (the 99th percentile of depth, here the 1st of
+/// disparity). Only when both sky and ground have more than ten pixels.
+fn sky_to_far(disp: &mut [f32], sky: &[f32]) {
+    const SKY: f32 = 0.3;
+    let ground: Vec<f32> = disp.iter().zip(sky).filter(|(_, s)| **s <= SKY).map(|(d, _)| *d).collect();
+    let skies = disp.len() - ground.len();
+    if skies <= 10 || ground.len() <= 10 {
+        return;
+    }
+    let mut ground = ground;
+    let k = ((ground.len() - 1) as f32 * 0.01).round() as usize;
+    let (_, far, _) = ground.select_nth_unstable_by(k, |a, b| a.total_cmp(b));
+    let far = *far;
+    for (d, s) in disp.iter_mut().zip(sky) {
+        if *s > SKY {
+            *d = far;
+        }
+    }
+}
+
 impl DepthEstimator {
+    /// Loads the model `spec` names (DEPTH_ANYTHING or
+    /// DEPTH_ANYTHING_3_MONO).
     pub fn load(base: &Path, spec: &ModelSpec) -> Result<DepthEstimator, VisionError> {
+        let model = DepthModel::ALL.into_iter().find(|m| m.spec().id == spec.id).unwrap_or_default();
         let paths = model_paths(base, spec);
         let session = Session::builder()
             .map_err(inference)?
             .commit_from_file(&paths[0])
             .map_err(inference)?;
-        Ok(DepthEstimator { session })
+        Ok(DepthEstimator { session, model })
+    }
+
+    pub fn model(&self) -> DepthModel {
+        self.model
     }
 
     /// RGB HWC f32 0..255 at (w, h) in; the 0..1 farness plane at
     /// (w, h) out (0 near, 1 far, min-max normalized). Read at the
     /// model's own working size.
     pub fn depth(&mut self, rgb: &[f32], w: usize, h: usize) -> Result<Vec<f32>, VisionError> {
-        self.depth_at(rgb, w, h, WORK)
+        let work = if self.model == DepthModel::V2Small { WORK } else { self.model.native() };
+        self.depth_at(rgb, w, h, work)
     }
 
     /// The same, read at a chosen working size on the long edge (the
-    /// Depth Map section's Detail): 518 is the model's own, 700 and
-    /// 1036 buy finer edges at attention's quadratic price.
+    /// Depth Map section's Detail): the model's own first, then finer
+    /// edges at attention's quadratic price. A size outside the model's
+    /// range is clamped into it.
     pub fn depth_at(&mut self, rgb: &[f32], w: usize, h: usize, work: usize) -> Result<Vec<f32>, VisionError> {
         assert_eq!(rgb.len(), w * h * 3, "HWC RGB expected");
-        let (rw, rh) = depth_work_size(w, h, work);
+        let (rw, rh) = depth_work_size(self.model, w, h, work);
         let small = resize_exact_rgb(rgb, w, h, rw, rh);
-        // ImageNet normalization, CHW: the export's own preprocessing.
+        // ImageNet normalization, CHW: both exports' own preprocessing.
         const MEAN: [f32; 3] = [0.485, 0.456, 0.406];
         const STD: [f32; 3] = [0.229, 0.224, 0.225];
         let mut chw = vec![0.0f32; 3 * rw * rh];
@@ -122,7 +244,11 @@ impl DepthEstimator {
         // [1, H, W] (some exports say [1, 1, H, W]); read the last two.
         let dw = shape[shape.len() - 1] as usize;
         let dh = shape[shape.len() - 2] as usize;
-        let plane: Vec<f32> = disp[..dw * dh].to_vec();
+        let mut plane: Vec<f32> = disp[..dw * dh].to_vec();
+        if self.model == DepthModel::Da3MonoLarge {
+            let (_, sky) = outputs["sky"].try_extract_tensor::<f32>().map_err(inference)?;
+            sky_to_far(&mut plane, &sky[..dw * dh]);
+        }
         let (lo, hi) = plane.iter().fold((f32::MAX, f32::MIN), |(lo, hi), v| {
             (lo.min(*v), hi.max(*v))
         });
@@ -586,6 +712,45 @@ mod tests {
     /// Gated like the other model tests: the contract, not the
     /// quality - a synthetic frame has no truthful depth to assert.
     /// Shape, range, and that the model actually ranked something.
+    /// DA3's sky goes to the far end of the ground: a sky the model
+    /// answered nearer than the mountains under it reads farthest, and a
+    /// frame with no sky (or almost nothing but) is left as it came.
+    #[test]
+    fn da3s_sky_takes_the_far_end_of_the_ground() {
+        // Disparity: ground 1.0 (near) to 0.2 (far), sky answered at 0.8.
+        let mut disp: Vec<f32> = (0..100).map(|i| 1.0 - 0.8 * i as f32 / 99.0).collect();
+        disp.extend(std::iter::repeat_n(0.8f32, 50));
+        let mut sky = vec![0.0f32; 100];
+        sky.extend(std::iter::repeat_n(0.9f32, 50));
+        let mut sent = disp.clone();
+        sky_to_far(&mut sent, &sky);
+        let ground_far = 1.0 - 0.8 * 98.0 / 99.0; // the 1st percentile of 100
+        assert!(sent[100..].iter().all(|v| (*v - ground_far).abs() < 1e-6), "{:?}", &sent[100..103]);
+        assert_eq!(&sent[..100], &disp[..100], "the ground is untouched");
+        // Ten sky pixels or fewer: no sky step.
+        let mut few = disp[..110].to_vec();
+        sky_to_far(&mut few, &sky[..110]);
+        assert_eq!(few, disp[..110].to_vec());
+    }
+
+    /// Each model reads at its own sizes: DA3 at 504 and 1008, V2 at 518
+    /// to 1036, a Detail outside the range clamped into it, both sides
+    /// multiples of the ViT's 14 px patch; and the id round-trips with
+    /// V2 for anything unknown.
+    #[test]
+    fn each_model_reads_at_its_own_sizes() {
+        assert_eq!(depth_work_size(DepthModel::Da3MonoLarge, 3000, 2000, 504), (504, 336));
+        assert_eq!(depth_work_size(DepthModel::Da3MonoLarge, 3000, 2000, 1036), (1008, 672));
+        assert_eq!(depth_work_size(DepthModel::Da3MonoLarge, 3000, 2000, 518), (518, 350));
+        assert_eq!(depth_work_size(DepthModel::V2Small, 3000, 2000, 504), (518, 350));
+        for m in DepthModel::ALL {
+            assert_eq!(DepthModel::from_id(m.id()), m);
+            assert_eq!(m.snap_size(m.native() as f64) as usize, m.native());
+        }
+        assert_eq!(DepthModel::from_id(""), DepthModel::V2Small);
+        assert!(depth_run_reserve(DepthModel::Da3MonoLarge, 3000, 2000, 1008) > depth_run_reserve(DepthModel::V2Small, 3000, 2000, 1036));
+    }
+
     #[test]
     fn gated_depth_speaks_a_normalized_farness_plane() {
         let Ok(base) = std::env::var("HEELER_VISION_MODELS") else {
@@ -593,10 +758,7 @@ mod tests {
             return;
         };
         let base = std::path::PathBuf::from(base);
-        if !crate::models::installed(&base, &crate::models::DEPTH_ANYTHING) {
-            eprintln!("skipped: depth model not installed under {base:?}");
-            return;
-        }
+
         let (w, h) = (320usize, 240usize);
         // A ground plane receding to a horizon under a flat sky: the
         // one synthetic scene a depth model should rank sensibly.
@@ -617,20 +779,27 @@ mod tests {
                 }
             }
         }
-        let mut est = DepthEstimator::load(&base, &crate::models::DEPTH_ANYTHING).unwrap();
-        let t0 = std::time::Instant::now();
-        let far = est.depth(&rgb, w, h).unwrap();
-        eprintln!("depth: {}ms at {w}x{h}", t0.elapsed().as_millis());
-        assert_eq!(far.len(), w * h);
-        assert!(far.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v)));
-        let (lo, hi) = far.iter().fold((1.0f32, 0.0f32), |(l, u), v| (l.min(*v), u.max(*v)));
-        assert!(hi - lo > 0.5, "min-max normalized: the frame must span depth: {lo}..{hi}");
-        // The bottom edge of a receding ground plane is nearer than
-        // the horizon line above it.
-        let bottom: f32 = (0..w).map(|x| far[(h - 4) * w + x]).sum::<f32>() / w as f32;
-        let mid: f32 = (0..w).map(|x| far[(h / 2 + 6) * w + x]).sum::<f32>() / w as f32;
-        eprintln!("bottom farness {bottom:.2}, horizon farness {mid:.2}");
-        assert!(bottom < mid, "the near ground must rank nearer than the horizon");
+        for model in DepthModel::ALL {
+            if !crate::models::installed(&base, model.spec()) {
+                eprintln!("skipped {model:?}: not installed under {base:?}");
+                continue;
+            }
+            let mut est = DepthEstimator::load(&base, model.spec()).unwrap();
+            assert_eq!(est.model(), model);
+            let t0 = std::time::Instant::now();
+            let far = est.depth(&rgb, w, h).unwrap();
+            eprintln!("{model:?} depth: {}ms at {w}x{h}", t0.elapsed().as_millis());
+            assert_eq!(far.len(), w * h);
+            assert!(far.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v)));
+            let (lo, hi) = far.iter().fold((1.0f32, 0.0f32), |(l, u), v| (l.min(*v), u.max(*v)));
+            assert!(hi - lo > 0.5, "min-max normalized: the frame must span depth: {lo}..{hi}");
+            // The bottom edge of a receding ground plane is nearer than
+            // the horizon line above it.
+            let bottom: f32 = (0..w).map(|x| far[(h - 4) * w + x]).sum::<f32>() / w as f32;
+            let mid: f32 = (0..w).map(|x| far[(h / 2 + 6) * w + x]).sum::<f32>() / w as f32;
+            eprintln!("bottom farness {bottom:.2}, horizon farness {mid:.2}");
+            assert!(bottom < mid, "{model:?}: the near ground must rank nearer than the horizon");
+        }
     }
 
     /// A gray step with the plane's cliff stretched into a ramp: the
@@ -881,7 +1050,8 @@ mod tests {
         let far: Vec<f32> = (0..w * h).map(|i| (i % 97) as f32 / 97.0).collect();
         let reserve = match parts[0] {
             "refine" => (w * h) as u64 * DEPTH_REFINE_BYTES_PER_PIXEL,
-            "depth" => depth_run_reserve(w, h, num(3)),
+            "depth" => depth_run_reserve(DepthModel::V2Small, w, h, num(3)),
+            "da3" => depth_run_reserve(DepthModel::Da3MonoLarge, w, h, num(3)),
             _ => crate::normals_run_reserve(w, h),
         };
         let held = match parts[0] {
@@ -891,8 +1061,9 @@ mod tests {
                 drop(out);
                 held
             }
-            "depth" => {
-                let mut est = DepthEstimator::load(&base, &crate::models::DEPTH_ANYTHING).expect("load");
+            "depth" | "da3" => {
+                let model = if parts[0] == "da3" { DepthModel::Da3MonoLarge } else { DepthModel::V2Small };
+                let mut est = DepthEstimator::load(&base, model.spec()).expect("load");
                 let out = est.depth_at(&input, w, h, num(3)).expect("run");
                 let held = rss();
                 drop(out);

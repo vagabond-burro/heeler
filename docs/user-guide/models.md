@@ -12,6 +12,7 @@ The smart selection tools, the depth tools, Noise Reduction's Model method and t
 | LaMa | Remove and the Finish Fill layer | 208 MB |
 | ViTMatte | Selection Polish | 104 MB |
 | Depth Anything V2 Small | Fog, Depth Lighting, Depth of Field, depth masks and depth-range selections | 99 MB |
+| Depth Anything 3 Mono Large | The Depth Map's larger model, for relief inside a subject (optional, desktop) | 433 MB |
 | MoGe-2 ViT-S | Depth Lighting's Model normals (optional) | 141 MB |
 | SCUNet | Noise Reduction's Model method | 77 MB |
 | Florence-2 base | Select by text, and the assistant: what is in the photograph and where (optional) | 970 MB |

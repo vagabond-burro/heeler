@@ -27,7 +27,7 @@ const MASK_CHIP: React.CSSProperties = {
 import { SourceMenuRow } from "./sourcemenus";
 import { SOURCE_MENU_ROWS } from "./sourcemenusparts";
 import { ProfileMenuRow, ToneCurveBlock } from "./tonecurve";
-import { capturePreset, maskBrushTarget, maskOverlayRgb, DEPTH_SIZES, snapDepthSize, MODEL_DENOISE_ID, denoiseMethodIsModel, denoiseSectionOn, depthMapMissing, maskViewOverriddenBy, maskPreviewNode, depthMaskShown, maskOverlayWanted, DEPTH_EXPORT_CONVENTION } from "../state";
+import { capturePreset, maskBrushTarget, maskOverlayRgb, MODEL_DENOISE_ID, denoiseMethodIsModel, denoiseSectionOn, depthMapMissing, maskViewOverriddenBy, maskPreviewNode, depthMaskShown, maskOverlayWanted, DEPTH_EXPORT_CONVENTION } from "../state";
 import { useDenoiseStatus, useFullDenoiseStatus, requestFullDenoise, retryDenoise, denoiseMark } from "./denoisetoolparts";
 import { TrackSlider, ValueField } from "./track";
 // Re-exported from its new home so artlayers' import keeps working;
@@ -99,7 +99,7 @@ import { GrainFilmRow, GrainFrameRow } from "./grainfilm";
 import { DepthPickButton, DepthShape } from "./depthband";
 import { SectionWidgets } from "./sectionface";
 import { SectionLooks } from "./sectionlooks";
-import { DepthProgressBar, NormalsChoice } from "./depthtool";
+import { DepthModelChoice, DepthProgressBar, NormalsChoice } from "./depthtool";
 import { depthFromFile } from "./depthtoolparts";
 import { ObjectMattePanel } from "./mattetool";
 import { TetherTab } from "./tether";
@@ -5636,7 +5636,7 @@ menu"). The graph inspector's Source node draws the same rows.*/}
                 {sec.grainFilmWidget && <GrainFrameRow grain={node} dispatch={dispatch} />}
                 {sec.grainFilmWidget && <GrainFilmRow grain={node} nodes={state.nodes} dispatch={dispatch} />}
                 {sec.depthTools && sec.depthTools !== "halation" && (
-                  <div style={{ display: "flex", gap: 6, margin: "2px 0 6px", alignItems: "center" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "2px 0 6px", alignItems: "center" }}>
                     {/* The View depth eye sits on EVERY section that reads the map, Depth Map
 included: (2026-09-05) wants it in reach while editing, and wants the
 eye to say "this section uses the depth map". A deliberate exception to
@@ -5666,7 +5666,6 @@ the one-seat rule.*/}
                     {sec.depthTools === "depthmap" &&
                       (() => {
                         const n = sec.node(state);
-                        const size = snapDepthSize(n?.params.size);
                         // A photograph whose file carries its own depth
                         // (an OpenEXR Z or mist pass) is read, not
                         // modeled: exact at every size, so Detail has
@@ -5685,37 +5684,7 @@ the one-seat rule.*/}
                             </span>
                           );
                         }
-                        return (
-                          <div
-                            className="zoom-seg"
-                            role="group"
-                            aria-label="Depth detail"
-                            style={{ border: "1px solid var(--line-4)" }}
-                          >
-                            {DEPTH_SIZES.map((s) => (
-                              <button
-                                key={s}
-                                data-testid={`depth-size-${s}`}
-                                data-active={size === s || undefined}
-                                aria-pressed={size === s}
-                                data-hint={
-                                  s === 518
-                                    ? "Read the scene at the model's own size, 518 px: fastest, the detail every other setting starts from"
-                                    : s === 700
-                                      ? "Read the scene at 700 px: finer edges, about twice the time"
-                                      : "Read the scene at 1036 px: the finest edges, about four times the time and memory"
-                                }
-                                style={{ fontSize: 9, padding: "2px 7px" }}
-                                onClick={() => {
-                                  if (!n) return;
-                                  dispatch({ type: "set_param", id: n.id, param: "size", value: s });
-                                }}
-                              >
-                                {s}
-                              </button>
-                            ))}
-                          </div>
-                        );
+                        return n ? <DepthModelChoice node={n} state={state} dispatch={dispatch} /> : null;
                       })()}
                     {sec.depthTools === "depthmap" && (
                       <button

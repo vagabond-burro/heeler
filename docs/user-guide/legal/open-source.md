@@ -308,10 +308,19 @@ and can be installed, updated or removed from Preferences (see
   Depth Lighting, Depth of Field, and depth-range selections), © the
   Depth Anything authors, under the **Apache License 2.0**: code and
   weights alike; ONNX packaging by the Hugging Face onnx-community.
-  Only the Small variant is used: the Base and Large weights carry a
-  non-commercial (CC-BY-NC) license and are deliberately not offered.
-  The plane is relative depth computed from your photograph, on your
-  machine.
+  Only the Small variant of V2 is used: V2's Base and Large weights
+  carry a non-commercial (CC-BY-NC) license and are deliberately not
+  offered. The plane is relative depth computed from your photograph,
+  on your machine.
+- **Depth Anything 3 Mono Large** (DA3MONO-LARGE, the Depth Map's
+  larger model, on the desktop), © ByteDance Ltd. and the Depth
+  Anything 3 authors, under the **Apache License 2.0**: code and the
+  DA3MONO-LARGE weights alike. No ONNX build of it is published, so
+  the file Heeler downloads is Heeler's own export of the published
+  weights, with the transformer's weights stored at 8-bit precision;
+  that change is stated where the file is mirrored. Only this
+  monocular model is offered: the larger multi-view Depth Anything 3
+  models carry a non-commercial (CC-BY-NC) license and are not.
 - **MoGe-2 ViT-S** (the surface normals behind Depth Lighting's
   Model choice), © Microsoft Corporation and the MoGe authors, under
   the **MIT license**: code and weights alike, and the ONNX export is
