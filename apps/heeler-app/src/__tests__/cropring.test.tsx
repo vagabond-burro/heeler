@@ -10,9 +10,9 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { initialState, NEUTRAL_NODES, NEUTRAL_WIRES } from "../data";
 import { cropIsInside } from "../cropfit";
 import { noteSourceSize } from "../framemap";
-import { cropNode, reduce, type Command, type State } from "../state";
+import { cropNode, cropTurnFrom, reduce, type Command, type State } from "../state";
 import { CropOverlay } from "../ui/overlays";
-import { ringAngle, ringStep } from "../ui/overlaysparts";
+import { ringAngle, ringStep, turnClip } from "../ui/overlaysparts";
 
 afterEach(() => cleanup());
 
@@ -199,5 +199,44 @@ describe("the rotation ring", () => {
     turn(15);
     fireEvent.mouseUp(window);
     expect(rect(view.state)).toEqual({ crop_x: 0, crop_y: 0, crop_w: 1, crop_h: 1 });
+  });
+});
+
+describe("a turn of the ring holds the engine's frames", () => {
+  // "In the crop tool, the canvas is very laggy when rotating": each move
+  // asked the engine for a whole new frame. While the ring turns, the
+  // pump waits (cropTurnFrom) and the viewer turns the frame on screen.
+  it("marks the turn with the angle it began from, and only the turn", () => {
+    const view = mount(false);
+    view.state = { ...view.state, tool: "crop" };
+    turn(10);
+    expect(view.sent[0]).toEqual({ type: "begin_gesture", key: "crop.batch", cropTurnFrom: 0 });
+    const turning = { ...view.state, tool: "crop" as const };
+    expect(cropTurnFrom(turning)).toBe(0);
+    expect(angleOf(turning)).toBeCloseTo(10, 1);
+    fireEvent.mouseUp(window);
+    expect(cropTurnFrom({ ...view.state, tool: "crop" })).toBeNull();
+    // A drag of the box is not a turn: its frames cost nothing.
+    fireEvent.mouseDown(screen.getByTestId("crop-handle-br"), { button: 0, buttons: 1, clientX: 400, clientY: 300 });
+    expect(cropTurnFrom({ ...view.state, tool: "crop" })).toBeNull();
+    fireEvent.mouseUp(window);
+    // Nor is a turn with the crop tool put down.
+    turn(5);
+    expect(cropTurnFrom({ ...view.state, tool: "none" })).toBeNull();
+    fireEvent.mouseUp(window);
+  });
+
+  it("clips the turned frame to the box it stood in", () => {
+    const pts = (clip: string) => clip.slice(8, -1).split(", ").map((p) => p.split(" ").map((v) => parseFloat(v)));
+    expect(pts(turnClip(400, 300, 0))).toEqual([[0, 0], [400, 0], [400, 300], [0, 300]]);
+    // A corner carried back by the turn lands on the box's own corner
+    // once the turn is applied.
+    const deg = 12;
+    const a = (deg * Math.PI) / 180;
+    for (const [[x, y], [bx, by]] of pts(turnClip(400, 300, deg)).map((p, i) => [p, [[0, 0], [400, 0], [400, 300], [0, 300]][i]])) {
+      const [dx, dy] = [x - 200, y - 150];
+      expect(200 + Math.cos(a) * dx - Math.sin(a) * dy).toBeCloseTo(bx, 1);
+      expect(150 + Math.sin(a) * dx + Math.cos(a) * dy).toBeCloseTo(by, 1);
+    }
   });
 });

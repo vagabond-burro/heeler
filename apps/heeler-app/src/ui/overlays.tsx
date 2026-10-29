@@ -714,7 +714,7 @@ export function CropOverlay({
     e.stopPropagation();
     e.preventDefault();
     const r = rectRef.current.getBoundingClientRect();
-    dispatch({ type: "begin_gesture", key: `${node.id}.batch` });
+    dispatch({ type: "begin_gesture", key: `${node.id}.batch`, cropTurnFrom: angle });
     turning.current = {
       center: { x: r.left + r.width / 2, y: r.top + r.height / 2 },
       last: { x: e.clientX, y: e.clientY },

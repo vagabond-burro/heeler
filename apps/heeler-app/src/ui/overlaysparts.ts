@@ -421,3 +421,17 @@ export function framePoint(
   const [w, h] = frameScreenSize(el, view);
   return [rx / w + 0.5, ry / h + 0.5];
 }
+
+/** The clip that keeps a `w` by `h` box turned `deg` about its center
+ * inside the box it stood in: the box's corners carried back by the
+ * turn, as a clip-path polygon in the turned element's own pixels. */
+export function turnClip(w: number, h: number, deg: number): string {
+  const a = (deg * Math.PI) / 180;
+  const [c, s] = [Math.cos(a), Math.sin(a)];
+  const corners: [number, number][] = [[0, 0], [w, 0], [w, h], [0, h]];
+  const points = corners.map(([x, y]) => {
+    const [dx, dy] = [x - w / 2, y - h / 2];
+    return `${(w / 2 + c * dx + s * dy).toFixed(2)}px ${(h / 2 - s * dx + c * dy).toFixed(2)}px`;
+  });
+  return `polygon(${points.join(", ")})`;
+}

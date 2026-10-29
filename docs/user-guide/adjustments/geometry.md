@@ -19,7 +19,7 @@ With the crop tool up, the crop wears a dashed ring about its center. Drag along
 - Hold `Option` (`Alt` on Windows) for fine control: the picture turns a tenth as far as the pointer.
 - Double-click the ring to put the picture level again.
 
-The ring writes the same angle as the **Straighten** row, so the two always agree, and it stops at the same 45° either way; quarter turns stay with **Rotate**. A whole drag is one undo step. With **Stay inside picture** on, the crop shrinks as you turn so no empty corner shows, and turning back gives back the crop you started with (see [Crop to picture](#crop-to-picture)).
+The ring writes the same angle as the **Straighten** row, so the two always agree, and it stops at the same 45° either way; quarter turns stay with **Rotate**. A whole drag is one undo step. While you turn, the picture on screen turns with the pointer at once and its empty corners are approximate; your edits render at the new angle when you let go. With **Stay inside picture** on, the crop shrinks as you turn so no empty corner shows, and turning back gives back the crop you started with (see [Crop to picture](#crop-to-picture)).
 
 ## Crop ratios
 

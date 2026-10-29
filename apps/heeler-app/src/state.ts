@@ -4564,6 +4564,10 @@ export interface State {
   gesture: string | null;
   /** Async picker ownership, not serialized into a saved graph. */
   gestureOwner?: number;
+  /** The crop's angle when a turn of its ring began, while that turn is
+   * the gesture (cropTurnFrom): the engine is not asked for frames
+   * until it ends, and the viewer turns the frame it has on screen. */
+  cropTurnFrom?: number | null;
   pickerEpoch?: number;
   /** Per-arm disarm counts: a completed pick ends only the sessions that
    * aimed through ITS dropper, never an unrelated read still in flight. */
@@ -5060,7 +5064,7 @@ export type Command =
   | { type: "switch_take"; takeId: string }
   | { type: "delete_take"; takeId: string }
   | { type: "jump_history"; index: number }
-  | { type: "begin_gesture"; key: string; owner?: number }
+  | { type: "begin_gesture"; key: string; owner?: number; cropTurnFrom?: number }
   | { type: "end_gesture"; owner?: number }
   | { type: "clear_history" }
   | { type: "toggle_console" }
@@ -7957,6 +7961,18 @@ export function photoLineWidth(s: State, id = s.activeImage): number {
 
 /** How thick this photograph's overlay lines draw, in pixels: its own
  * thickness where set, the preference otherwise. */
+/** The angle the crop had when a turn of its rotation ring began, while
+ * that turn is the gesture in hand; null otherwise. A turn is the one
+ * crop drag that changes the graph the engine is sent (the box drags
+ * leave the uncropped preview as it is), and a new angle upstream of
+ * every node missed every cache, so each frame of the turn was a whole
+ * render behind the pointer ("the canvas is very laggy when rotating").
+ * While it holds, the render pump waits and the viewer turns the frame
+ * on screen by the difference; the engine renders once on release. */
+export function cropTurnFrom(s: State): number | null {
+  return s.tool === "crop" && s.gesture !== null && typeof s.cropTurnFrom === "number" ? s.cropTurnFrom : null;
+}
+
 export function shapeLineWidth(s: State): number {
   return photoLineWidth(s) || s.prefs.shapeLineWidth;
 }
@@ -20804,7 +20820,7 @@ function reduceInner(s: State, cmd: Command): State {
       };
     }
     case "begin_gesture":
-      return { ...s, gesture: cmd.key, gesturePushed: false, gestureOwner: cmd.owner };
+      return { ...s, gesture: cmd.key, gesturePushed: false, gestureOwner: cmd.owner, cropTurnFrom: cmd.cropTurnFrom ?? null };
     case "end_gesture":
       if (cmd.owner !== undefined && s.gestureOwner !== cmd.owner) return s;
       return { ...s, gesture: null, gesturePushed: false, gestureOwner: undefined };

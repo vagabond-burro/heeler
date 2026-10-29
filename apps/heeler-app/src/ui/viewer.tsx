@@ -9,7 +9,7 @@ import { usePickSessions } from "../picksession";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Command, CurveChannel, NodeCard, State, Take } from "../state";
-import { activeStackMerge, inspectDocked, pickMaskNode, antsSources, artLayerName, artMaskNode, chainTerminalId, frameLook, renderedSource, mainConversion, previewTarget, shapeLineWidth, transformDragOf, isPlacedLayer, layerFlipBlocked, photoTurn } from "../state";
+import { activeStackMerge, cropTurnFrom, inspectDocked, pickMaskNode, antsSources, artLayerName, artMaskNode, chainTerminalId, frameLook, renderedSource, mainConversion, previewTarget, shapeLineWidth, transformDragOf, isPlacedLayer, layerFlipBlocked, photoTurn } from "../state";
 import { XformIcon } from "./panelicons";
 import { maskBrushTarget, maskOverlayRgb, BRUSH_TIPS, MULTI_MAX, POLISH_MODES, SELECT_OPS, activeSelectionMask, applyPick, artFindLayer, artToolbarVisible, cropNode, cropToPicture, fitCropToAspect, keepCropInside, layerQuad, multiGrid, transformBox, toolNode } from "../state";
 import { OpIcon } from "./selecticons";
@@ -41,7 +41,7 @@ import { EQ_PICK_GRAB, TONE_EQ_DOMAIN, TONE_EQ_Y, storedCurve, storedEqPoints, R
 import { PICK_CURSOR, dropperCursor } from "./cursors";
 import { pickedCurvePoint } from "./editorsparts";
 import { BrushOverlay, CropOverlay, LinearOverlay, RadialOverlay, StraightenOverlay, TransformOverlay, type LiveQuad } from "./overlays";
-import { IDENTITY_VIEW, norm } from "./overlaysparts";
+import { IDENTITY_VIEW, norm, turnClip } from "./overlaysparts";
 import { SplitCompare, SplitControls } from "./splitview";
 import { TransformPreview } from "./transformpreview";
 import { GridWarpOverlay, GridWarpPreview } from "./gridwarp";
@@ -1046,6 +1046,13 @@ export function Viewer({
           : null
       : fitted;
   const { base, stageScale } = layoutSplit(fitBase, knownFrame, state.view.zoomScale, dpr);
+  // A turn of the crop's ring: the engine holds its frames until the
+  // turn ends (cropTurnFrom), so the frame on screen turns by the angle
+  // gathered since it began, about its center, clipped to the
+  // photograph's box as the engine's frame would be.
+  const turnFrom = cropTurnFrom(state);
+  const turnBy = turnFrom === null ? 0 : (cropNode(state).params.angle ?? 0) - turnFrom;
+  const turnStyle: React.CSSProperties = turnBy === 0 ? {} : { transform: `rotate(${turnBy}deg)`, transformOrigin: "50% 50%", clipPath: base ? turnClip(base.w, base.h, turnBy) : undefined };
   // The zoomScale that is true 1:1 from where this view stands: 1 at
   // 100%, the frame over the fit box from Fit. The wheel lands on it
   // exactly, as it lands on 1 (zoom_viewer).
@@ -1775,6 +1782,7 @@ existing stack").*/}
                 objectFit: "contain",
                 boxShadow: "0 0 0 1px #1c1b1a",
                 filter,
+                ...turnStyle,
               }}
             />
             {/* The sharp slice over the soft base: at 1:1 the base img

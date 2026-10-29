@@ -95,6 +95,7 @@ import { loadRecipeFiles, moveCatalogRecipes, runRecipeOps } from "./recipefiles
 import {
   compareTakeOf,
   cropPreviewGraph,
+  cropTurnFrom,
   paramRange,
   taggingTargets,
 } from "./state";
@@ -1418,6 +1419,13 @@ export function App() {
           // thumbnail holds; the read's settle wakes this effect again.
           if (snap.graphLoading === imageAtStart) {
             logDebug(() => `render pump: ${imageAtStart} waiting for its saved graph, nothing rendered`);
+            break;
+          }
+          // A turn of the crop's ring: no frames until it ends, the viewer
+          // turning the one on screen (cropTurnFrom). Its release wakes
+          // the pump again (gestureReleased).
+          if (cropTurnFrom(snap) !== null) {
+            logDebug("render pump: crop ring turning, frame held until release");
             break;
           }
           // Crop tool previews the UNCROPPED frame so the crop rectangle
