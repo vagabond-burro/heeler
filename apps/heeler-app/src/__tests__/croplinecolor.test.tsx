@@ -131,8 +131,24 @@ describe("the crop bar's line color swatch", () => {
     expect((panel.firstElementChild as HTMLElement).style.zoom).toBe("1.25");
     expect(panel.querySelector("[data-testid=crop-lines]")).not.toBeNull();
     expect(panel.querySelector("[data-testid=crop-line-width-row]")).not.toBeNull();
+    // Hue, Luma and Thickness share one grid: one name column, one track
+    // column, one number column, so their tracks line up.
+    const grid = screen.getByTestId("crop-lines");
+    expect(grid.style.display).toBe("grid");
+    for (const id of ["crop-line-hue", "crop-line-luma", "crop-line-width-track"]) {
+      expect(screen.getByTestId(id).closest(".strack-flex")?.parentElement).toBe(grid);
+    }
+    // The reset sits under Auto, an icon, and grays while the
+    // preference is already in use.
+    const reset = screen.getByTestId("crop-line-width-pref");
+    expect(reset).toHaveAttribute("aria-label", "Reset line thickness");
+    expect(reset.querySelector("svg")).not.toBeNull();
+    expect(reset).toBeDisabled();
+    fireEvent.keyDown(screen.getByTestId("crop-line-width-track"), { key: "ArrowRight" });
+    expect(view.sent).toContainEqual({ type: "set_photo_line_width", width: 3 });
+    expect(screen.getByTestId("crop-line-width-pref")).not.toBeDisabled();
     fireEvent.click(screen.getByTestId("crop-line-width-pref"));
-    expect(view.sent).toContainEqual({ type: "set_photo_line_width", width: 0 });
+    expect(view.sent[view.sent.length - 1]).toEqual({ type: "set_photo_line_width", width: 0 });
   });
 
   it("opens the picker on a click, and Escape or a press outside closes it", () => {

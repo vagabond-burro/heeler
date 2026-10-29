@@ -14,6 +14,7 @@ import { lineColorCss } from "../gridwarp";
 import { clampMenu, viewportSize, type MenuBox } from "./menupos";
 import { TrackSlider, ValueField } from "./track";
 import { resolveLineColor, useAutoLineColor } from "./linecolorparts";
+import { ResetIcon } from "./panelicons";
 
 type D = (cmd: Command) => void;
 
@@ -99,6 +100,135 @@ export function LinesRow({
 }
 
 const POPOVER_ZOOM = 1.25;
+
+/** The swatch popover's insides: Hue, Luma and Thickness on one grid,
+ * their names, tracks and numbers in shared columns so the three line
+ * up ("The sliders are all different widths and heights. They should
+ * be aligned"), with LINES, Auto and the thickness's reset stacked to
+ * their left. The same settings LinesRow and LineWidthRow write, and
+ * the same test ids. */
+function LinesPanel({
+  state,
+  lineColor,
+  dispatch,
+  previewUrl,
+  prefix,
+  subject,
+}: {
+  state: State;
+  lineColor: LineColorUi;
+  dispatch: D;
+  previewUrl: string | null;
+  prefix: string;
+  subject: string;
+}) {
+  const line = resolveLineColor(lineColor, useAutoLineColor(previewUrl));
+  const isAuto = lineColor.hue === null && lineColor.luma === null;
+  const width = shapeLineWidth(state);
+  const own = photoLineWidth(state) > 0;
+  const widthHint = `How thick the ${subject} draw on this photograph, in pixels; the preference sets it for every photograph`;
+  const name: React.CSSProperties = { fontSize: 11, color: "var(--text-ghost)" };
+  const number: React.CSSProperties = { fontSize: 11, textAlign: "right" };
+  const left: React.CSSProperties = { gridColumn: 1, justifySelf: "start" };
+  return (
+    <div
+      data-testid={`${prefix}-lines`}
+      style={{ display: "grid", gridTemplateColumns: "56px 58px minmax(80px, 1fr) 30px 14px", columnGap: 6, rowGap: 6, alignItems: "center", marginTop: 5 }}
+    >
+      <span style={{ ...left, ...name, letterSpacing: ".08em" }}>LINES</span>
+      <span style={{ ...name, gridColumn: 2 }}>Hue</span>
+      <div className="strack-flex">
+        <TrackSlider
+          label="Line hue"
+          value={line.hue}
+          lo={0}
+          hi={360}
+          step={1}
+          testid={`${prefix}-line-hue`}
+          hint={`Hue of the ${subject}, and of every tool's lines over the photograph. Automatic is the opposite of the photograph's average`}
+          onChange={(v) => dispatch({ type: "set_line_color", hue: v })}
+        />
+      </div>
+      <span className="tnum" data-testid={`${prefix}-line-hue-value`} style={number}>
+        {Math.round(line.hue)}
+      </span>
+      <span
+        data-testid={`${prefix}-line-swatch`}
+        data-hint={`The color the ${subject} are drawn in`}
+        style={{ width: 14, height: 14, borderRadius: 2, background: lineColorCss(line.hue, line.luma, line.sat, 1), boxShadow: "0 0 0 1px rgba(0,0,0,.5)" }}
+      />
+
+      <span style={{ ...name, gridColumn: 2 }}>Luma</span>
+      <div className="strack-flex">
+        <TrackSlider
+          label="Line luma"
+          value={line.luma}
+          lo={0}
+          hi={100}
+          step={1}
+          testid={`${prefix}-line-luma`}
+          hint={`Brightness of the ${subject}, and of every tool's lines over the photograph. Automatic is dark on a light photograph, light on a dark one`}
+          onChange={(v) => dispatch({ type: "set_line_color", luma: v })}
+        />
+      </div>
+      <span className="tnum" data-testid={`${prefix}-line-luma-value`} style={number}>
+        {Math.round(line.luma)}
+      </span>
+      <span />
+
+      <span data-testid={`${prefix}-line-width-row`} style={{ ...name, gridColumn: 2 }}>Thickness</span>
+      <div className="strack-flex">
+        <TrackSlider
+          label="Line thickness"
+          value={width}
+          lo={SHAPE_LINE_WIDTH_RANGE[0]}
+          hi={SHAPE_LINE_WIDTH_RANGE[1]}
+          step={1}
+          testid={`${prefix}-line-width-track`}
+          hint={widthHint}
+          onChange={(v) => dispatch({ type: "set_photo_line_width", width: v })}
+        />
+      </div>
+      <span style={number}>
+        <ValueField
+          param="Line thickness"
+          value={width}
+          lo={SHAPE_LINE_WIDTH_RANGE[0]}
+          hi={SHAPE_LINE_WIDTH_RANGE[1]}
+          step={1}
+          display={String}
+          testid={`${prefix}-line-width`}
+          hint={widthHint}
+          onCommit={(v) => dispatch({ type: "set_photo_line_width", width: v })}
+        />
+      </span>
+      <span />
+      {/* Last in the source so Tab runs Hue, Luma, Thickness, then these;
+          placed in the first column by row. */}
+      <button
+        className="chip"
+        data-testid={`${prefix}-line-auto`}
+        data-active={isAuto}
+        data-hint="Back to the automatic color: the opposite of the photograph's own average"
+        onClick={() => dispatch({ type: "set_line_color", hue: null, luma: null })}
+        style={{ ...chipStyle, ...left, gridRow: 2 }}
+      >
+        Auto
+      </button>
+      <button
+        className="chip"
+        data-testid={`${prefix}-line-width-pref`}
+        disabled={!own}
+        aria-label="Reset line thickness"
+        data-hint={own ? "Reset line thickness: back to the Preferences setting" : "Reset line thickness: already the Preferences setting"}
+        onClick={() => dispatch({ type: "set_photo_line_width", width: 0 })}
+        style={{ ...chipStyle, ...left, gridRow: 3, padding: "0 5px" }}
+      >
+        <ResetIcon />
+      </button>
+    </div>
+  );
+}
 
 /** The line color as one swatch, for a toolbar with no room for the
  * LINES row (the crop bar): it shows the color in use and opens the
@@ -204,8 +334,7 @@ export function LineColorSwatch({
       {/* Scaled inside the panel, not on it: zoom on the fixed panel
           would scale its left and top as well. */}
       <div style={{ zoom: POPOVER_ZOOM }}>
-        <LinesRow lineColor={lineColor} dispatch={dispatch} previewUrl={previewUrl} prefix={prefix} subject={subject} />
-        <LineWidthRow state={state} dispatch={dispatch} prefix={prefix} subject={subject} />
+        <LinesPanel state={state} lineColor={lineColor} dispatch={dispatch} previewUrl={previewUrl} prefix={prefix} subject={subject} />
       </div>
     </div>
   );
