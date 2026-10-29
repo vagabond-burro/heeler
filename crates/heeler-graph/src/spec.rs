@@ -1905,9 +1905,11 @@ impl Registry {
                 // The surface normals a render wrote into its own file, in place of the
                 // ones estimated from the depth map: auto uses them when the file also
                 // says which way its camera faces, camera takes the pass as camera space
-                // already, off shades from the depth map alone. The desktop plants the
-                // pass as a second raster, `{id}@normal`.
-                strict_choice("normals", "auto", &["auto", "camera", "off"]),
+                // already, model takes a normals model's answer for the photograph (the
+                // estimate stands in until it lands, or without the model), off shades
+                // from the depth map alone. The desktop plants either as a second
+                // raster, `{id}@normal`.
+                strict_choice("normals", "auto", &["auto", "camera", "model", "off"]),
                 // Levels on the plane as this section reads it (2026-09-13), the
                 // layers' Depth widget on the tool.
                 num("depth_black", 0.0, 0.0, 0.99),

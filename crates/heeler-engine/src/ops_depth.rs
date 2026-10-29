@@ -470,14 +470,17 @@ pub(crate) fn fog(node: &Node, inputs: &[(String, Value)]) -> Result<Value, Engi
     Ok(Value::Image(Arc::new(out)))
 }
 
-/// One synthetic light. Two kinds ("Light should have a type:
-/// point and directional"):
+/// One synthetic light. Three kinds ("Light should have a type:
+/// point and directional", and a spot since):
 /// - "directional": a sun - azimuth/elevation give the direction, the
 /// target (tx, ty) is the gizmo's anchor and the direction's origin;
 /// `sun_depth` is the plane it lands hardest on and `sun_reach` how
 /// far it carries along depth from there;
 /// - "point": a lamp IN the scene at (px, py), `height` above the
-/// heightfield, its push fading with `range`.
+/// heightfield, its push fading with `range`;
+/// - "spot": a lamp at (px, py, depth) aimed at (tx, ty, target_depth),
+/// lighting only inside its cone, its edge softened by `softness`, its
+/// push fading with `range` like the lamp's.
 ///
 /// Strength is signed either way: negative lights emit dark (the
 /// owner, from a node-based color grader).
@@ -513,6 +516,23 @@ struct KeyLightSpec {
     depth: f32,
     #[serde(default = "default_range")]
     range: f32,
+    /// What a spot points at: a place in the frame and a place along
+    /// the NEAR-FAR axis, 0 the nearest thing in frame, 100 the
+    /// farthest. A directional light's (tx, ty) is its gizmo's anchor,
+    /// which the engine never read and still does not.
+    #[serde(default = "default_half")]
+    tx: f32,
+    #[serde(default = "default_half")]
+    ty: f32,
+    #[serde(default = "default_height")]
+    target_depth: f32,
+    /// A spot's cone: its half angle in degrees, and how much of that
+    /// angle, 0 to 100, the edge takes to fade (0 a hard edge, 100 a
+    /// beam that fades from its axis out).
+    #[serde(default = "default_cone")]
+    cone: f32,
+    #[serde(default = "default_softness")]
+    softness: f32,
     /// A directional light's own place along the NEAR-FAR axis
     /// (2026-10-03: "We added a depth slider for point light but not
     /// directional. I think this was an oversight"): the plane it lands
@@ -634,6 +654,24 @@ fn default_height() -> f32 {
 fn default_range() -> f32 {
     50.0
 }
+fn default_cone() -> f32 {
+    25.0
+}
+fn default_softness() -> f32 {
+    30.0
+}
+
+/// A spot's cone as the cosines of its inner and outer half angles:
+/// full inside the inner, nothing past the outer, smooth between. The
+/// half angle runs 1 to 89 degrees; the softest edge leaves the inner
+/// angle at nothing, and the hardest still keeps a quarter degree of
+/// fade so the edge does not alias.
+fn spot_cone(cone: f32, softness: f32) -> (f32, f32) {
+    let outer = if cone.is_finite() { cone.clamp(1.0, 89.0) } else { default_cone() };
+    let soft = if softness.is_finite() { softness.clamp(0.0, 100.0) } else { default_softness() };
+    let inner = (outer * (1.0 - soft / 100.0)).min(outer - 0.25).max(0.0);
+    (inner.to_radians().cos(), outer.to_radians().cos())
+}
 
 /// Positioned lights over the 2.5D heightfield: normals from the
 /// nearness gradient, shading per light, anchored so flat ground
@@ -667,6 +705,11 @@ pub(crate) fn key_light(
             py: 0.5,
             depth: 50.0,
             range: 50.0,
+            tx: 0.5,
+            ty: 0.5,
+            target_depth: 50.0,
+            cone: default_cone(),
+            softness: default_softness(),
             sun_depth: 0.0,
             sun_reach: 50.0,
             on: true,
@@ -758,12 +801,56 @@ pub(crate) fn key_light(
         /// directional light always had, bit for bit.
         Directional { dir: [f32; 3], s: f32, tint: [f32; 3], plane: Option<(f32, f32)> },
         Point { pos: [f32; 3], range2: f32, s: f32, tint: [f32; 3] },
+        /// A lamp with a cone: `axis` the unit direction from `pos` to
+        /// its target, `cone` the cosines of its inner and outer edge.
+        Spot { pos: [f32; 3], axis: [f32; 3], cone: (f32, f32), range2: f32, s: f32, tint: [f32; 3] },
     }
     let rigs: Vec<Rig> = lights
         .iter()
         .map(|l| {
             let tint = tint_of(&l.color);
-            if l.kind == "point" {
+            if l.kind == "spot" {
+                // A JSON exponent past f32's range reads as infinity,
+                // and a huge finite one overflows the distance squared.
+                // Clamp user data to the controls' ranges (with generous
+                // room for an off-frame lamp) rather than panic the pixel
+                // workers or write NaN pixels.
+                let finite = |v: f32, default: f32| if v.is_finite() { v } else { default };
+                let range_px =
+                    (finite(l.range, default_range()).clamp(0.0, 100.0) / 100.0 * short * 1.2)
+                        .max(8.0);
+                // Both ends are HEIGHTFIELD levels, the lamp's rule, so
+                // Invert mirrors the spot and its target together. The
+                // spot stands where a lamp at the same depth would; its
+                // target lies ON its plane, so a spot aimed at a subject's
+                // depth meets the subject rather than a step in front.
+                let pos = [
+                    (finite(l.px, default_half()).clamp(-10.0, 10.0) - frame.roi[0]) * frame.w,
+                    (finite(l.py, default_half()).clamp(-10.0, 10.0) - frame.roi[1]) * frame.h,
+                    (1.0 - finite(l.depth, default_height()).clamp(0.0, 100.0) / 100.0) * z_scale
+                        + 0.2 * z_scale,
+                ];
+                let target = [
+                    (finite(l.tx, default_half()).clamp(-10.0, 10.0) - frame.roi[0]) * frame.w,
+                    (finite(l.ty, default_half()).clamp(-10.0, 10.0) - frame.roi[1]) * frame.h,
+                    (1.0 - finite(l.target_depth, default_height()).clamp(0.0, 100.0) / 100.0)
+                        * z_scale,
+                ];
+                let d = [target[0] - pos[0], target[1] - pos[1], target[2] - pos[2]];
+                let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+                // A target on the spot itself has no direction: it
+                // shines straight into the scene, away from the camera.
+                let axis = if len > 1e-3 { [d[0] / len, d[1] / len, d[2] / len] } else { [0.0, 0.0, -1.0] };
+                let s = finite(l.strength, 0.0).clamp(-100.0 * POWER_SCALE, 100.0 * POWER_SCALE);
+                Rig::Spot {
+                    pos,
+                    axis,
+                    cone: spot_cone(l.cone, l.softness),
+                    range2: range_px * range_px,
+                    s,
+                    tint,
+                }
+            } else if l.kind == "point" {
                 let range_px = (l.range / 100.0 * short * 1.2).max(8.0);
                 // The lamp keeps its HEIGHTFIELD level under Invert, so flipping the
                 // field mirrors the lamp to the other end of the scene: a lamp on the
@@ -858,6 +945,24 @@ pub(crate) fn key_light(
                         let dzw = 2.5 * dz;
                         let atten = range2 / (range2 + dx * dx + dy * dy + dzw * dzw);
                         push_gain(&mut gain, lambert * atten * s, tint);
+                    }
+                    Rig::Spot { pos, axis, cone, range2, s, tint } => {
+                        // The lamp's push, its Lambert and its falloff
+                        // with the depth axis weighed extra, inside the
+                        // cone alone: the angle off the axis is the
+                        // geometric one, from the spot to the pixel.
+                        let (dx, dy, dz) = (pos[0] - x as f32, pos[1] - (y + frame.y0) as f32, pos[2] - z);
+                        let dlen = (dx * dx + dy * dy + dz * dz).sqrt().max(1e-3);
+                        let (lx, ly, lz) = (dx / dlen, dy / dlen, dz / dlen);
+                        let off_axis = -(lx * axis[0] + ly * axis[1] + lz * axis[2]);
+                        let beam = crate::ops::smoothstep(cone.1, cone.0, off_axis);
+                        if beam <= 0.0 {
+                            continue;
+                        }
+                        let lambert = (nx * lx + ny * ly + nz * lz).max(0.0);
+                        let dzw = 2.5 * dz;
+                        let atten = range2 / (range2 + dx * dx + dy * dy + dzw * dzw);
+                        push_gain(&mut gain, lambert * atten * beam * s, tint);
                     }
                 }
             }
@@ -2990,7 +3095,7 @@ mod tests {
                 depth.set_pixel(x, y, [far, far, far, 1.0]);
             }
         }
-        let rig = r#"[{"kind":"point","px":0.45,"py":0.5,"depth":40,"range":60,"strength":-120},{"kind":"directional","azimuth":30,"elevation":40,"strength":80,"sun_depth":63,"sun_reach":21}]"#;
+        let rig = r#"[{"kind":"point","px":0.45,"py":0.5,"depth":40,"range":60,"strength":-120},{"kind":"directional","azimuth":30,"elevation":40,"strength":80,"sun_depth":63,"sun_reach":21},{"kind":"spot","px":0.7,"py":0.2,"depth":10,"tx":0.4,"ty":0.6,"target_depth":60,"cone":20,"softness":40,"range":70,"power":60}]"#;
         let mut node = make_node("heeler.key_light");
         node.params.insert("lights".into(), ParamValue::Text(rig.into()));
         node.params.insert("relief".into(), ParamValue::Number(40.0));
@@ -3902,6 +4007,158 @@ mod tests {
             "a fractional frame size keeps its fraction: {}",
             frame.w
         );
+    }
+
+    /// A flat plane at mid depth under one spot.
+    fn spot_on_flat(w: usize, h: usize, light: &str) -> ImageBuf {
+        let mut node = make_node("heeler.key_light");
+        node.params.insert("lights".into(), ParamValue::Text(format!("[{light}]")));
+        let inputs = vec![
+            ("in".to_string(), frame(w, h, 0.3)),
+            ("raster".to_string(), Value::Image(Arc::new(ImageBuf::filled(w, h, [0.5, 0.5, 0.5, 1.0])))),
+        ];
+        let out = key_light(&node, &inputs).unwrap();
+        out.as_image().unwrap().as_ref().clone()
+    }
+
+    /// A spot lights the disc its cone throws on the plane and nothing
+    /// past it: aimed straight into the scene from the near end, the
+    /// center brightens and a pixel well outside the cone keeps its value
+    /// to the bit.
+    #[test]
+    fn a_spot_lights_its_cone_and_nothing_outside_it() {
+        let (w, h) = (96usize, 64);
+        let img = spot_on_flat(w, h, r#"{"kind":"spot","px":0.5,"py":0.5,"depth":0,"tx":0.5,"ty":0.5,"target_depth":50,"cone":30,"softness":20,"range":100,"power":80}"#);
+        let center = img.pixel(w / 2, h / 2)[0];
+        assert!(center > 0.35, "the cone's center is lit: {center}");
+        assert_eq!(img.pixel(w / 2 + 40, h / 2)[0], 0.3, "past the cone, nothing");
+        assert_eq!(img.pixel(2, 2)[0], 0.3, "the corner is outside the cone");
+    }
+
+    /// Softness widens the edge's fade inward: the center is the same,
+    /// and a pixel just inside the hard spot's edge loses light.
+    #[test]
+    fn softness_fades_the_spots_edge_and_keeps_its_center() {
+        let (w, h) = (96usize, 64);
+        let spot = |softness: f32| {
+            spot_on_flat(w, h, &format!(r#"{{"kind":"spot","px":0.5,"py":0.5,"depth":0,"tx":0.5,"ty":0.5,"target_depth":50,"cone":30,"softness":{softness},"range":100,"power":80}}"#))
+        };
+        let (hard, soft) = (spot(0.0), spot(60.0));
+        let (c_hard, c_soft) = (hard.pixel(w / 2, h / 2)[0], soft.pixel(w / 2, h / 2)[0]);
+        assert!((c_hard - c_soft).abs() < 1e-6, "the center is inside both inner cones: {c_hard} vs {c_soft}");
+        // The hard spot's last lit pixel along the row.
+        let edge = (w / 2..w).take_while(|&x| hard.pixel(x, h / 2)[0] > 0.3).last().unwrap();
+        assert!(edge > w / 2 + 4, "the cone has width: {edge}");
+        let x = edge - 2;
+        assert!(soft.pixel(x, h / 2)[0] < hard.pixel(x, h / 2)[0] - 1e-3, "soft fades sooner: {} vs {}", soft.pixel(x, h / 2)[0], hard.pixel(x, h / 2)[0]);
+    }
+
+    /// The direction is the spot to its target: aimed to the right, the
+    /// right of the frame lights and the left does not.
+    #[test]
+    fn a_spot_points_at_its_target() {
+        let (w, h) = (96usize, 64);
+        let img = spot_on_flat(w, h, r#"{"kind":"spot","px":0.5,"py":0.5,"depth":0,"tx":0.8,"ty":0.5,"target_depth":50,"cone":15,"softness":20,"range":100,"power":80}"#);
+        let (left, right) = (img.pixel((0.2 * w as f32) as usize, h / 2)[0], img.pixel((0.8 * w as f32) as usize, h / 2)[0]);
+        assert!(right > 0.33, "the target is lit: {right}");
+        assert_eq!(left, 0.3, "the mirror of the target is not");
+        // A target on the spot itself has no direction and shines into
+        // the scene; it renders, and it lights the plane below it.
+        let img = spot_on_flat(w, h, r#"{"kind":"spot","px":0.5,"py":0.5,"depth":20,"tx":0.5,"ty":0.5,"target_depth":0,"cone":30,"power":80}"#);
+        assert!(img.pixel(w / 2, h / 2)[0] > 0.3);
+    }
+
+    /// JSON cannot spell NaN, but an exponent past f32's range becomes
+    /// infinity. A huge finite exponent overflows the geometry too.
+    #[test]
+    fn a_spot_with_out_of_range_fields_still_renders_finite_pixels() {
+        for exponent in ["1e39", "1e38"] {
+            let rig = format!(
+                r#"{{"kind":"spot","px":{exponent},"py":0.5,"depth":{exponent},"tx":0.5,"ty":{exponent},"target_depth":{exponent},"range":{exponent},"power":{exponent}}}"#
+            );
+            let img = spot_on_flat(96, 64, &rig);
+            assert!(img.data.iter().all(|v| v.is_finite()), "{exponent}");
+        }
+    }
+
+    /// A rig that never had a spot reads the same with the spot's fields
+    /// present: a directional light's (tx, ty) was always the gizmo's
+    /// anchor, and the spot's fields mean nothing to the other kinds.
+    #[test]
+    fn the_spots_fields_change_nothing_for_the_other_kinds() {
+        let (w, h) = (96usize, 64);
+        let mut depth = ImageBuf::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                let v = 0.2 + 0.6 * ((x as f32 / w as f32 - 0.5).powi(2) + (y as f32 / h as f32 - 0.5).powi(2)).sqrt();
+                depth.set_pixel(x, y, [v, v, v, 1.0]);
+            }
+        }
+        let depth = Value::Image(Arc::new(depth));
+        let render = |lights: &str| {
+            let mut node = make_node("heeler.key_light");
+            node.params.insert("lights".into(), ParamValue::Text(lights.into()));
+            let out = key_light(&node, &[("in".to_string(), frame(w, h, 0.3)), ("raster".to_string(), depth.clone())]).unwrap();
+            out.as_image().unwrap().data.clone()
+        };
+        let plain = render(r#"[{"kind":"directional","azimuth":20,"elevation":40,"power":60},{"kind":"point","px":0.3,"py":0.4,"depth":20,"range":40,"power":50}]"#);
+        let extra = render(r#"[{"kind":"directional","azimuth":20,"elevation":40,"power":60,"tx":0.2,"ty":0.9,"target_depth":10,"cone":60,"softness":0},{"kind":"point","px":0.3,"py":0.4,"depth":20,"range":40,"power":50,"tx":0.9,"ty":0.1,"cone":5}]"#);
+        assert!(plain.iter().zip(&extra).all(|(a, b)| a.to_bits() == b.to_bits()), "bit for bit");
+    }
+
+    /// The backlighting survey behind the spot's depth sliders: a
+    /// sphere over a far floor, on the measured contract and on the model
+    /// path, under spots in front of it, behind it, and behind it to one
+    /// side, aimed back toward the camera through it. Prints the gain at
+    /// the sphere's front, both rims and the floor beside it. Ignored: a
+    /// tool, not a check.
+    #[test]
+    #[ignore]
+    fn spot_backlight_survey() {
+        let (w, h) = (320usize, 240);
+        let (cx, cy, r) = (160.0f32, 120.0f32, 60.0f32);
+        let mut plane = ImageBuf::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                let r2 = ((x as f32 - cx) / r).powi(2) + ((y as f32 - cy) / r).powi(2);
+                let far = if r2 < 1.0 { 0.3 - 0.15 * (1.0 - r2).sqrt() } else { 0.9 };
+                plane.set_pixel(x, y, [far, far, far, 1.0]);
+            }
+        }
+        let plane = Value::Image(Arc::new(plane));
+        let lights = [
+            ("front, at the camera", r#"{"kind":"spot","px":0.5,"py":0.5,"depth":0,"tx":0.5,"ty":0.5,"target_depth":25,"cone":40,"range":100,"power":80}"#),
+            ("behind, on axis", r#"{"kind":"spot","px":0.5,"py":0.5,"depth":100,"tx":0.5,"ty":0.5,"target_depth":0,"cone":40,"range":100,"power":80}"#),
+            ("behind, to the right", r#"{"kind":"spot","px":0.75,"py":0.5,"depth":100,"tx":0.5,"ty":0.5,"target_depth":0,"cone":40,"range":100,"power":80}"#),
+            ("level with it, to the right", r#"{"kind":"spot","px":0.75,"py":0.5,"depth":25,"tx":0.5,"ty":0.5,"target_depth":25,"cone":40,"range":100,"power":80}"#),
+            ("sun from the right, elevation 5", r#"{"kind":"directional","azimuth":0,"elevation":5,"power":80}"#),
+        ];
+        for measured in [true, false] {
+            for relief in [30.0, 100.0] {
+                for ambient in [0.0, 50.0] {
+                    for (name, light) in lights {
+                        let mut node = make_node("heeler.key_light");
+                        node.params.insert("lights".into(), ParamValue::Text(format!("[{light}]")));
+                        set_num(&mut node, "relief", relief);
+                        set_num(&mut node, "ambient", ambient);
+                        if measured {
+                            set_num(&mut node, "depth_measured", 1.0);
+                        }
+                        let out = key_light(&node, &[("in".to_string(), frame(w, h, 0.3)), ("raster".to_string(), plane.clone())]).unwrap();
+                        let img = out.as_image().unwrap();
+                        let g = |x: f32| img.pixel(x as usize, cy as usize)[0] / 0.3;
+                        println!(
+                            "{} relief {relief:>3} ambient {ambient:>2} | {name:<32} front {:.3}  left rim {:.3}  right rim {:.3}  floor right {:.3}",
+                            if measured { "measured" } else { "model   " },
+                            g(cx),
+                            g(cx - 0.95 * r),
+                            g(cx + 0.95 * r),
+                            g(cx + 1.3 * r),
+                        );
+                    }
+                }
+            }
+        }
     }
 
     // The half-res gather approximation measurement that lived here

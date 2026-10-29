@@ -559,6 +559,7 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
     { id: "lama", label: "LaMa (inpainting)" },
     { id: "vitmatte", label: "ViTMatte (edge refinement)" },
     { id: "depth_anything_v2_small", label: "Depth Anything V2 Small (scene depth)" },
+    { id: "moge_2_vits_normal", label: "MoGe-2 ViT-S (surface normals)" },
     { id: "scunet_color_real_psnr", label: "SCUNet (noise reduction)" },
     { id: "florence_2_base", label: "Florence-2 base (what is in the picture)" },
   ];
@@ -571,7 +572,7 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
   // the earlier subject matte, is listed only while it is on disk, so it
   // can be removed but is never offered.
   const listed = (m: SmartModels) =>
-    [m.sam, m.samLegacy, m.matte, m.lite?.installed ? m.lite : undefined, m.fill, m.refine, m.depth, m.denoise, m.florence].filter(
+    [m.sam, m.samLegacy, m.matte, m.lite?.installed ? m.lite : undefined, m.fill, m.refine, m.depth, m.normals, m.denoise, m.florence].filter(
       (x): x is SmartModelStatus => !!x,
     );
   const rows = models

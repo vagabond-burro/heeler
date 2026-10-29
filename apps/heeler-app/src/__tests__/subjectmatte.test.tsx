@@ -17,12 +17,14 @@ const model = (id: string, installed: boolean, label = id, bytes = 1) => ({
   id, installed, label, license: "MIT", url: "https://example.test/m", bytes, version: "1",
 });
 const status = (): SmartModels => ({
-  sam: model("mobile_sam", false),
+  sam: model("sam2_1_hiera_tiny", false),
+  samLegacy: model("mobile_sam", false),
   matte: model("birefnet_dynamic", dynamicInstalled, "BiRefNet dynamic (subject matte)", 972_495_971),
   lite: model("birefnet_lite", liteInstalled, "BiRefNet Lite (subject matte)", 224_005_088),
   fill: model("lama", false),
   refine: model("vitmatte", false),
   depth: model("depth_anything_v2_small", false),
+  normals: model("moge_2_vits_normal", false),
   denoise: model("scunet_color_real_psnr", false),
   florence: model("florence_2_base", false),
 });

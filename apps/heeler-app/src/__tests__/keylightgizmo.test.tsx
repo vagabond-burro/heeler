@@ -8,7 +8,7 @@ import { initialState } from "../data";
 import { reduce, toolNode, type Command, type State } from "../state";
 import { choose, menuRows, menuValue } from "./menuhelp";
 import { DofFocusOverlay, KeyLightControls, KeyLightGizmo } from "../ui/keylightgizmo";
-import { lightsOf } from "../ui/keylightgizmoparts";
+import { lightsOf, spotFootprint, type KeyLight } from "../ui/keylightgizmoparts";
 
 vi.mock("../bridge", async (importOriginal) => {
   const real = await importOriginal<typeof import("../bridge")>();
@@ -197,6 +197,86 @@ describe("the light rig", () => {
     >;
     expect((JSON.parse(del.value) as unknown[]).length).toBe(1);
     expect(got).toContainEqual({ type: "select_keylight", index: null });
+  });
+});
+
+describe("the spot", () => {
+  const SPOT =
+    '[{"kind":"spot","px":0.2,"py":0.3,"depth":90,"tx":0.5,"ty":0.5,"target_depth":20,"cone":30,"softness":40,"range":60,"power":70}]';
+
+  it("wears a lamp disc, a target diamond and its cone's footprint; either end drags", () => {
+    const s = run(initialState(), { type: "set_text_param", id: "keylight", param: "lights", value: SPOT });
+    const node = toolNode(s, "keylight")!;
+    const got: Command[] = [];
+    render(<KeyLightGizmo state={s} dispatch={(c) => got.push(c)} node={node} norm={norm} />);
+    expect(screen.getByTestId("keylight-handle-0").title).toContain("(spot)");
+    expect(screen.getByTestId("keylight-cone-0")).toBeTruthy();
+    screen
+      .getByTestId("keylight-target-0")
+      .dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 50 }));
+    window.dispatchEvent(new MouseEvent("pointermove", { clientX: 160, clientY: 20 }));
+    window.dispatchEvent(new MouseEvent("pointerup", {}));
+    const aimed = JSON.parse((got.find((c) => c.type === "set_text_param") as { value: string }).value)[0];
+    expect(aimed).toMatchObject({ kind: "spot", px: 0.2, py: 0.3, target_depth: 20 });
+    expect(aimed.tx).toBeCloseTo(0.8, 5);
+    expect(aimed.ty).toBeCloseTo(0.2, 5);
+    got.length = 0;
+    screen
+      .getByTestId("keylight-handle-0")
+      .dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 40, clientY: 30 }));
+    window.dispatchEvent(new MouseEvent("pointermove", { clientX: 20, clientY: 80 }));
+    window.dispatchEvent(new MouseEvent("pointerup", {}));
+    const moved = JSON.parse((got.find((c) => c.type === "set_text_param") as { value: string }).value)[0];
+    expect(moved.px).toBeCloseTo(0.1, 5);
+    expect(moved.py).toBeCloseTo(0.8, 5);
+    expect(moved).toMatchObject({ tx: 0.5, ty: 0.5 });
+  });
+
+  it("the panel gives it Depth, Target depth, Cone, Softness and Reach, and a third kind button", () => {
+    let s = run(initialState(), { type: "set_text_param", id: "keylight", param: "lights", value: SPOT });
+    s = { ...s, keyLightSel: 0 };
+    const got: Command[] = [];
+    render(<KeyLightControls state={s} dispatch={(c) => got.push(c)} node={toolNode(s, "keylight")!} />);
+    const button = screen.getByTestId("keylight-kind-spot");
+    expect(button.getAttribute("aria-label")).toBe("Spot light");
+    expect(button).toHaveAttribute("aria-pressed", "true");
+    const value = (id: string) => (screen.getByTestId(`value-keylight-sel-${id}`) as HTMLInputElement).value;
+    expect([value("depth"), value("target-depth"), value("cone"), value("softness"), value("range")]).toEqual(["90", "20", "30", "40", "60"]);
+    expect(screen.getByTestId("keylight-sel-target-depth-from-scene")).toBeInTheDocument();
+    expect(screen.queryByTestId("value-keylight-sel-elevation")).not.toBeInTheDocument();
+    const field = screen.getByTestId("value-keylight-sel-cone") as HTMLInputElement;
+    fireEvent.change(field, { target: { value: "120" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    const write = JSON.parse((got.find((c) => c.type === "set_text_param") as { value: string }).value)[0];
+    expect(write.cone).toBe(89);
+  });
+
+  it("a directional light turns into a spot at its handle, aimed at its target and plane", () => {
+    let s = run(initialState(), {
+      type: "set_text_param",
+      id: "keylight",
+      param: "lights",
+      value: '[{"kind":"directional","azimuth":0,"elevation":5,"power":40,"tx":0.4,"ty":0.6,"sun_depth":35}]',
+    });
+    s = { ...s, keyLightSel: 0 };
+    const got: Command[] = [];
+    render(<KeyLightControls state={s} dispatch={(c) => got.push(c)} node={toolNode(s, "keylight")!} />);
+    fireEvent.click(screen.getByTestId("keylight-kind-spot"));
+    const spot = JSON.parse((got.find((c) => c.type === "set_text_param") as { value: string }).value)[0];
+    expect(spot).toMatchObject({ kind: "spot", tx: 0.4, ty: 0.6, target_depth: 35 });
+    expect(spot.px).toBeCloseTo(0.82, 5);
+    expect(spot.py).toBeCloseTo(0.6, 5);
+  });
+
+  it("aimed straight into the scene, the footprint is the circle the cone throws on the target's plane", () => {
+    const l = { ...lightsOf(toolNode(initialState(), "keylight")!)[0], kind: "spot", px: 0.5, py: 0.5, tx: 0.5, ty: 0.5, depth: 0, target_depth: 50, cone: 30 } as KeyLight;
+    const [w, h] = [400, 200];
+    // The engine's heights: 1.2 x 0.6 of the short side for the spot,
+    // 0.5 x it for the target, so 0.7 x 0.6 x 200 = 84 px apart.
+    const radius = 84 * Math.tan(Math.PI / 6);
+    for (const [x, y] of spotFootprint(l, w, h, 30)) {
+      expect(Math.hypot(x * w - 200, y * h - 100)).toBeCloseTo(radius, 3);
+    }
   });
 });
 

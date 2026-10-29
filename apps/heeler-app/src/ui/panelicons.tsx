@@ -270,6 +270,17 @@ export function PointLightIcon() {
   );
 }
 
+/** A spot: a lamp with a cone of light leaving it one way, drawn as the
+ * disc with the cone opening down and to the right. */
+export function SpotLightIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+      <circle cx="4.5" cy="4.5" r="2.2" />
+      <path d="M6.6 5.6l7 3.4M5.6 6.6l3.4 7M10.4 13.2a4.6 4.6 0 0 0 2.8-2.8" />
+    </svg>
+  );
+}
+
 /** A plain plus: add one more of what the row lists (Add shape, when
  * its row has no room for the label). */
 export function AddIcon({ size = 10 }: { size?: number }) {

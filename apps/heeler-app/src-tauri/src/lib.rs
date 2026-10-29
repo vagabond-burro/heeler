@@ -112,8 +112,6 @@ pub struct Session {
     pub inpaint: Option<heeler_vision::Inpaint>,
     /// The ViTMatte refiner (P4 Selection Polish), same lazy bargain.
     pub refiner: Option<heeler_vision::Refiner>,
-    /// The depth model's session, same lazy bargain.
-    pub depth: Option<heeler_vision::DepthEstimator>,
     /// Which file a photograph's depth raster was read from, by
     /// `image_id|version`: a photograph whose depth comes from its own
     /// file (an OpenEXR pass) is re-read when the file changes, and
@@ -3072,8 +3070,33 @@ fn plant_smart_rasters_whole(
                 continue;
             }
             let key = format!("{image_id}|{}@normal", n.id);
-            let want = normals_want(image_id, &path, &mode);
             let slot = format!("{}@normal", n.id);
+            // The Model normals: planted once surface_normals has put
+            // them on disk, and until then nothing, so the lights shade
+            // from the depth map's estimate meanwhile, as they do on a
+            // machine without the model.
+            if mode == "model" {
+                let source_key =
+                    source_version_key_in_session(session, image_id, source_opts_of(graph));
+                let want = model_normals_want(&source_key);
+                if let Some((raster, version)) = session.smart_rasters.get(&key).cloned() {
+                    if version == want {
+                        sources.insert(slot, SourceImage { image: raster, version, measured: false });
+                        continue;
+                    }
+                }
+                if let Some(base) = disk_base {
+                    if let Ok(bytes) = std::fs::read(smart_raster_lookup(base, want)) {
+                        if let Ok(img) = heeler_io::decode_png_raw(&bytes) {
+                            let arc = Arc::new(img);
+                            session.smart_rasters.insert(key, (arc.clone(), want));
+                            sources.insert(slot, SourceImage { image: arc, version: want, measured: false });
+                        }
+                    }
+                }
+                continue;
+            }
+            let want = normals_want(image_id, &path, &mode);
             if let Some((raster, version)) = session.smart_rasters.get(&key).cloned() {
                 if version == want {
                     if raster.width > 0 {
@@ -3417,6 +3440,8 @@ pub struct SmartModels {
     /// Depth Anything V2 Small: the scene-depth model behind Fog,
     /// Key Light, Depth of Field, and depth-range selections.
     pub depth: SmartModelStatus,
+    /// MoGe-2 ViT-S: Depth Lighting's Model normals.
+    pub normals: SmartModelStatus,
     /// SCUNet: Noise Reduction's Model method.
     pub denoise: SmartModelStatus,
     /// Florence-2: what is in the picture, for the assistant.
@@ -3434,6 +3459,7 @@ async fn smart_model_status(app: tauri::AppHandle) -> Result<SmartModels, String
         fill: model_status_of(&base, &heeler_vision::LAMA),
         refine: model_status_of(&base, &heeler_vision::VITMATTE),
         depth: model_status_of(&base, &heeler_vision::DEPTH_ANYTHING),
+        normals: model_status_of(&base, &heeler_vision::MOGE_2_VITS),
         denoise: model_status_of(&base, &heeler_vision::SCUNET),
         florence: model_status_of(&base, &heeler_vision::FLORENCE_2),
     })
@@ -3451,6 +3477,7 @@ async fn smart_model_download(app: tauri::AppHandle, model: Option<String>) -> R
         Some("lama") => &heeler_vision::LAMA,
         Some("vitmatte") => &heeler_vision::VITMATTE,
         Some("depth_anything_v2_small") => &heeler_vision::DEPTH_ANYTHING,
+        Some("moge_2_vits_normal") => &heeler_vision::MOGE_2_VITS,
         Some("scunet_color_real_psnr") => &heeler_vision::SCUNET,
         Some("florence_2_base") => &heeler_vision::FLORENCE_2,
         Some("mobile_sam") => &heeler_vision::MOBILE_SAM,
@@ -3491,6 +3518,8 @@ async fn smart_model_remove(app: tauri::AppHandle, model: Option<String>) -> Res
         }
         Some("depth_anything_v2_small") => heeler_vision::remove_model(&base, &heeler_vision::DEPTH_ANYTHING)
             .map_err(|e| e.to_string()),
+        Some("moge_2_vits_normal") => heeler_vision::remove_model(&base, &heeler_vision::MOGE_2_VITS)
+            .map_err(|e| e.to_string()),
         Some("scunet_color_real_psnr") => {
             heeler_vision::remove_model(&base, &heeler_vision::SCUNET).map_err(|e| e.to_string())
         }
@@ -3509,6 +3538,7 @@ async fn smart_model_remove(app: tauri::AppHandle, model: Option<String>) -> Res
             heeler_vision::remove_model(&base, &heeler_vision::LAMA).map_err(|e| e.to_string())?;
             heeler_vision::remove_model(&base, &heeler_vision::VITMATTE).map_err(|e| e.to_string())?;
             heeler_vision::remove_model(&base, &heeler_vision::DEPTH_ANYTHING).map_err(|e| e.to_string())?;
+            heeler_vision::remove_model(&base, &heeler_vision::MOGE_2_VITS).map_err(|e| e.to_string())?;
             heeler_vision::remove_model(&base, &heeler_vision::SCUNET).map_err(|e| e.to_string())?;
             heeler_vision::remove_model(&base, &heeler_vision::FLORENCE_2).map_err(|e| e.to_string())
         }
@@ -3527,7 +3557,6 @@ pub(crate) fn drop_model_sessions(app: &tauri::AppHandle) -> Result<(), String> 
         s.matting = None;
         s.inpaint = None;
         s.refiner = None;
-        s.depth = None;
         s.denoise_revision = None;
         s.florence_verified = false;
         s.florence_answers.clear();
@@ -3537,8 +3566,8 @@ pub(crate) fn drop_model_sessions(app: &tauri::AppHandle) -> Result<(), String> 
 }
 
 /// A download changed what is on disk: the memoized model revision
-/// is stale. No denoise or Florence-2 session is held, so there is
-/// nothing else to drop; Florence-2's verification and answers go.
+/// is stale. No denoise, depth, normals or Florence-2 session is held,
+/// so there is nothing else to drop; Florence-2's verification and answers go.
 fn note_models_changed(app: &tauri::AppHandle) {
     let _ = with_session(app, |s| {
         s.denoise_revision = None;
@@ -3753,10 +3782,10 @@ async fn florence_cancel() -> Result<(), String> {
     Ok(())
 }
 
-/// The nine models Preferences can relocate, in one list so status,
+/// The ten models Preferences can relocate, in one list so status,
 /// removal, moving and the update check can never disagree about what
 /// exists.
-pub(crate) const RELOCATABLE_MODELS: [&heeler_vision::ModelSpec; 9] = [
+pub(crate) const RELOCATABLE_MODELS: [&heeler_vision::ModelSpec; 10] = [
     &heeler_vision::SAM2_1_TINY,
     &heeler_vision::MOBILE_SAM,
     &heeler_vision::BIREFNET_DYNAMIC,
@@ -3764,6 +3793,7 @@ pub(crate) const RELOCATABLE_MODELS: [&heeler_vision::ModelSpec; 9] = [
     &heeler_vision::LAMA,
     &heeler_vision::VITMATTE,
     &heeler_vision::DEPTH_ANYTHING,
+    &heeler_vision::MOGE_2_VITS,
     &heeler_vision::SCUNET,
     &heeler_vision::FLORENCE_2,
 ];
@@ -6431,7 +6461,7 @@ fn file_passes_of(path: &Path) -> Option<FilePasses> {
     None
 }
 
-/// Depth Lighting's `normals` choice: auto, camera or off.
+/// Depth Lighting's `normals` choice: auto, camera, model or off.
 fn normals_mode(n: &UiNode) -> String {
     n.params.get("normals").and_then(|v| v.as_str()).unwrap_or("auto").to_string()
 }
@@ -6483,6 +6513,46 @@ fn normals_want(image_id: &str, path: &Path, mode: &str) -> u64 {
     fnv1a64(format!("normals|{image_id}|{mode}|{:016x}", file_stamp(path)).as_bytes())
 }
 
+/// The Model normals' version: one raster per source pixels and model
+/// revision. Develop options, a replaced file and a stack or panorama's
+/// recipe generation all change the photograph the model reads, so they
+/// all change this key. Every crop is still cut from that raster at
+/// planting.
+fn model_normals_want(source_key: &str) -> u64 {
+    fnv1a64(
+        format!(
+            "normals|{source_key}|{}|{}|model",
+            heeler_vision::MOGE_2_VITS.id,
+            heeler_vision::MOGE_2_VITS.version
+        )
+        .as_bytes(),
+    )
+}
+
+/// Whether the Model normals on disk will plant: a file that is there
+/// but cut short or damaged would otherwise answer "cached" forever
+/// while the lights shade from the estimate, so it is read again.
+fn model_normals_cached(path: &Path) -> bool {
+    std::fs::read(path)
+        .ok()
+        .and_then(|bytes| heeler_io::decode_png_raw(&bytes).ok())
+        .is_some_and(|img| img.width > 0 && img.height > 0)
+}
+
+/// The model's normals packed as the raster Depth Lighting is fed, the
+/// file pass's packing: (n + 1) / 2 in RGB, alpha 1, mid gray where the
+/// model saw no surface.
+fn pack_normals(normals: &[[f32; 3]], w: usize, h: usize) -> ImageBuf {
+    let mut out = ImageBuf::new(w, h);
+    for (i, n) in normals.iter().enumerate() {
+        out.data[i * 4] = (n[0] + 1.0) * 0.5;
+        out.data[i * 4 + 1] = (n[1] + 1.0) * 0.5;
+        out.data[i * 4 + 2] = (n[2] + 1.0) * 0.5;
+        out.data[i * 4 + 3] = 1.0;
+    }
+    out
+}
+
 /// The export's Depth Lighting normals read again at its own size,
 /// beside the mattes.
 fn normals_for_export(
@@ -6496,6 +6566,12 @@ fn normals_for_export(
     let mut full_sources: HashMap<String, SourceImage> = HashMap::new();
     for n in graph.nodes.iter().filter(|n| n.node_type == "heeler.key_light" && sources.contains_key(&format!("{}@normal", n.id))) {
         let mode = normals_mode(n);
+        // The model's normals are the model's size whatever the export's;
+        // the planted raster is already all there is, and is cut to the
+        // export's frame with the rest.
+        if mode == "model" {
+            continue;
+        }
         let Some(raster) = normals_raster(path, &mode, full.width.max(full.height)) else { continue };
         full_sources.insert(format!("{}@normal", n.id), SourceImage { image: Arc::new(raster), version: normals_want(image_id, path, &mode), measured: false });
     }
@@ -7172,6 +7248,44 @@ fn depth_map_input_frame(
     }
 }
 
+/// One Depth Lighting model run at a time, the depth map's or the
+/// normals': choosing Model on a new photograph asks for both at once,
+/// and two runs side by side would split the CPU and add their working
+/// sets. A poisoned lock (a refusal panic mid-run) is not a reason to
+/// refuse every later run.
+fn lighting_model_run_lock() -> std::sync::MutexGuard<'static, ()> {
+    static RUN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    RUN.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// One depth_map run over a (w, h) preview at Detail `work`: the frame
+/// the model reads, its display-encoded copy and the model's plane (32
+/// bytes a pixel, held throughout), then the larger of the model's run
+/// and the refinement with the raster it encodes (16 bytes a pixel
+/// more), which never overlap: the session is dropped before the
+/// refinement starts. The model's terms are metered in heeler-vision.
+fn depth_run_bytes(w: usize, h: usize, work: usize) -> Result<usize, String> {
+    let model = usize::try_from(heeler_vision::depth_run_reserve(w, h, work)).map_err(|e| e.to_string())?;
+    let refine = memory::bytes(w, h, 1, heeler_vision::DEPTH_REFINE_BYTES_PER_PIXEL as usize + 16).map_err(|e| e.to_string())?;
+    memory::sum([memory::bytes(w, h, 1, 32).map_err(|e| e.to_string())?, model.max(refine)]).map_err(|e| e.to_string())
+}
+
+fn admit_depth_run(w: usize, h: usize, work: usize) -> Result<Job, String> {
+    Job::admit(depth_run_bytes(w, h, work)?, "depth map model and refinement").map_err(|e| e.to_string())
+}
+
+/// One surface_normals run over a (w, h) preview: the display-encoded
+/// copy the model reads (12 bytes a pixel) and the model's metered run.
+/// The answer is at the model's working size, inside its reserve.
+fn normals_run_bytes(w: usize, h: usize) -> Result<usize, String> {
+    let model = usize::try_from(heeler_vision::normals_run_reserve(w, h)).map_err(|e| e.to_string())?;
+    memory::sum([memory::bytes(w, h, 1, 12).map_err(|e| e.to_string())?, model]).map_err(|e| e.to_string())
+}
+
+fn admit_normals_run(w: usize, h: usize) -> Result<Job, String> {
+    Job::admit(normals_run_bytes(w, h)?, "surface normals model").map_err(|e| e.to_string())
+}
+
 /// Computes the photograph's farness plane (Depth Anything V2 Small)
 /// and persists it under the shared depth version; every fog, key
 /// light, and depth-of-field node plants from it. Runs once per
@@ -7217,6 +7331,8 @@ async fn depth_map(
         }
         let opts = source_opts_of(&graph);
         let source = preview_source(&app, &image_id, opts)?;
+        let _run = lighting_model_run_lock();
+        let _job = admit_depth_run(source.width, source.height, recipe.size as usize)?;
         // 26.3 Phase 10.2: the model reads what is wired into the node,
         // rendered through the executor at this preview size, never the
         // raw decode behind the node's back. An unwired node, a file's
@@ -7271,20 +7387,13 @@ async fn depth_map(
                 far
             }
             None => {
-                let mut est = with_session(&app, |s| Ok(s.depth.take()))?;
-                if est.is_none() {
-                    est = Some(
-                        heeler_vision::DepthEstimator::load(&base, &heeler_vision::DEPTH_ANYTHING)
-                            .map_err(|e| e.to_string())?,
-                    );
-                }
-                let mut est = est.expect("just loaded");
-                let far = est.depth_at(&rgb, w, h, recipe.size as usize).map_err(|e| e.to_string());
-                with_session(&app, |s| {
-                    s.depth = Some(est);
-                    Ok(())
-                })?;
-                let far = far?;
+                // Loaded for this run and dropped after it: a held
+                // session keeps its whole working set, 2.2 GB at Detail
+                // 1036, and a load costs about 60 ms.
+                let mut est = heeler_vision::DepthEstimator::load(&base, &heeler_vision::DEPTH_ANYTHING)
+                    .map_err(|e| e.to_string())?;
+                let far = est.depth_at(&rgb, w, h, recipe.size as usize).map_err(|e| e.to_string())?;
+                drop(est);
                 // The raw answer is kept beside the refined plane, so the export can
                 // refine it again at full size and a settings change costs a filter
                 // pass, not the model. 16 bits, not 8: the key light DIFFERENTIATES
@@ -7309,6 +7418,50 @@ async fn depth_map(
             version: format!("{version:016x}"),
             work: if file_depth.is_some() { "file" } else if ran_model { "model" } else { "refine" },
         })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Computes the photograph's surface normals (MoGe-2 ViT-S) for Depth
+/// Lighting's Model choice and persists them as the raster planting
+/// reads; a no-op when it already exists. Read from the photograph
+/// itself, whole, as a file's normals pass is: every crop is cut from
+/// it at planting. The answer's `work` is "model" or "cached".
+#[tauri::command]
+async fn surface_normals(app: tauri::AppHandle, graph: UiGraph, image_id: String) -> Result<DepthMapAnswer, String> {
+    let base = vision_base(&app)?;
+    if !heeler_vision::installed(&base, &heeler_vision::MOGE_2_VITS) {
+        return Err("model not installed".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let opts = source_opts_of(&graph);
+        let source_key = with_session(&app, |s| {
+            Ok(source_version_key_in_session(s, &image_id, opts))
+        })?;
+        let version = model_normals_want(&source_key);
+        let path = smart_raster_path(&base, version);
+        if model_normals_cached(&path) {
+            return Ok(DepthMapAnswer { version: format!("{version:016x}"), work: "cached" });
+        }
+        let source = preview_source(&app, &image_id, opts)?;
+        let (w, h) = (source.width, source.height);
+        let _run = lighting_model_run_lock();
+        let _job = admit_normals_run(w, h)?;
+        let mut rgb = vec![0.0f32; w * h * 3];
+        for (i, px) in source.data.chunks(4).enumerate() {
+            for c in 0..3 {
+                rgb[i * 3 + c] = heeler_engine::ops::to_display(px[c].max(0.0)).min(1.0) * 255.0;
+            }
+        }
+        // Loaded for this run and dropped after it, as the depth model
+        // is: a held session keeps 0.7 to 0.9 GB, a load costs 150 ms.
+        let mut est = heeler_vision::NormalEstimator::load(&base, &heeler_vision::MOGE_2_VITS).map_err(|e| e.to_string())?;
+        let (normals, nw, nh) = est.normals(&rgb, w, h).map_err(|e| e.to_string())?;
+        drop(est);
+        let bytes = heeler_io::encode_png16_raw(&pack_normals(&normals, nw, nh)).map_err(|e| e.to_string())?;
+        write_denoise_cache_file(&path, &bytes).map_err(|e| format!("normals raster persist failed: {e}"))?;
+        Ok(DepthMapAnswer { version: format!("{version:016x}"), work: "model" })
     })
     .await
     .map_err(|e| e.to_string())?
@@ -23185,6 +23338,7 @@ pub fn run() {
             polish_matte_full,
             polish_matte_full_cancel,
             depth_map,
+            surface_normals,
             depth_at,
             depth_forget,
             file_passes,
@@ -37405,6 +37559,123 @@ mod file_depth_tests {
         assert_eq!(r.pixel(0, 0), [0.5, 0.5, 1.0, 1.0]);
         assert!(normals_raster(&with, "off", 2).is_none());
         assert_ne!(normals_want("img", &with, "auto"), normals_want("img", &with, "camera"));
+    }
+
+    /// Depth Lighting's Model normals plant only what surface_normals
+    /// put on disk, for any photograph: nothing before (the depth map's
+    /// estimate stands in), the packed raster after, and nothing again
+    /// once the choice moves off Model.
+    /// Both Depth Lighting models admit their metered run: one byte
+    /// under is refused in words naming the run, the number itself is
+    /// admitted, and the reservation is gone when the job drops.
+    #[test]
+    fn depth_and_normals_runs_admit_their_metered_number() {
+        let (w, h) = (2048, 1365);
+        let need = depth_run_bytes(w, h, 1036).unwrap();
+        memory::with_budget(need - 1, || {
+            let err = match admit_depth_run(w, h, 1036) {
+                Err(e) => e,
+                Ok(_) => panic!("admitted one byte under the number"),
+            };
+            assert!(err.contains("depth map"), "the refusal should name itself: {err}");
+        });
+        memory::with_budget(need, || {
+            let job = admit_depth_run(w, h, 1036).expect("the metered run fits");
+            assert_eq!(memory::budget().snapshot().reserved, need);
+            drop(job);
+            assert_eq!(memory::budget().snapshot().reserved, 0);
+        });
+        let need = normals_run_bytes(w, h).unwrap();
+        memory::with_budget(need - 1, || {
+            let err = match admit_normals_run(w, h) {
+                Err(e) => e,
+                Ok(_) => panic!("admitted one byte under the number"),
+            };
+            assert!(err.contains("surface normals"), "the refusal should name itself: {err}");
+        });
+        memory::with_budget(need, || assert!(admit_normals_run(w, h).is_ok()));
+    }
+
+    /// Detail grows the depth run's reserve, and the model's run and
+    /// the refinement are charged as the larger of the two, never both:
+    /// at the preview's 2048 edge and Detail 518 the refinement is the
+    /// larger.
+    #[test]
+    fn the_depth_runs_reserve_follows_detail_and_the_larger_phase() {
+        let at = |work| depth_run_bytes(2048, 1365, work).unwrap();
+        assert!(at(518) < at(700) && at(700) < at(1036));
+        let px = memory::bytes(2048, 1365, 1, 1).unwrap();
+        let refine = px * (heeler_vision::DEPTH_REFINE_BYTES_PER_PIXEL as usize + 16);
+        let model = heeler_vision::depth_run_reserve(2048, 1365, 518) as usize;
+        assert_eq!(at(518), px * 32 + model.max(refine));
+    }
+
+    #[test]
+    fn model_normals_plant_from_disk_once_they_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        let jpg = dir.path().join("photo.jpg");
+        std::fs::write(&jpg, b"not even an image").unwrap();
+        let graph = |mode: &str| -> UiGraph {
+            serde_json::from_value(serde_json::json!({
+                "graph_id":"normals", "nodes":[
+                    {"id":"src","type":"heeler.image_source","enabled":true,"params":{}},
+                    {"id":"kl","type":"heeler.key_light","enabled":true,"params":{"normals":mode}},
+                    {"id":"output","type":"heeler.output","enabled":true,"params":{}}
+                ], "connections":[
+                    {"from":["src","out"],"to":["kl","in"]},
+                    {"from":["kl","out"],"to":["output","in"]}
+                ]
+            })).unwrap()
+        };
+        let mut session = Session::default();
+        session.paths.insert("img".into(), jpg);
+        let plant = |session: &mut Session, mode: &str| {
+            let mut sources = HashMap::new();
+            plant_smart_rasters_whole(session, Some(dir.path()), &graph(mode), "img", &mut sources, None, fullmatte::MatteTier::Auto, None);
+            sources.remove("kl@normal")
+        };
+        assert!(plant(&mut session, "model").is_none(), "nothing until the model has answered");
+        let raster = pack_normals(&[[0.0, 0.0, 1.0], [0.0; 3]], 2, 1);
+        assert_eq!(raster.pixel(0, 0), [0.5, 0.5, 1.0, 1.0]);
+        assert_eq!(raster.pixel(1, 0), [0.5, 0.5, 0.5, 1.0], "no surface packs to mid gray");
+        let source_key =
+            source_version_key_in_session(&session, "img", source_opts_of(&graph("model")));
+        let out = smart_raster_path(dir.path(), model_normals_want(&source_key));
+        std::fs::create_dir_all(out.parent().unwrap()).unwrap();
+        std::fs::write(&out, heeler_io::encode_png16_raw(&raster).unwrap()).unwrap();
+        assert!(model_normals_cached(&out));
+        // A file cut short is not a cache hit: the desktop reads the
+        // photograph again rather than answer "cached" forever.
+        let whole = std::fs::read(&out).unwrap();
+        std::fs::write(&out, &whole[..whole.len() / 2]).unwrap();
+        assert!(!model_normals_cached(&out));
+        assert!(plant(&mut session, "model").is_none(), "a damaged raster does not plant");
+        std::fs::write(&out, &whole).unwrap();
+        let planted = plant(&mut session, "model").expect("the model's normals plant");
+        assert_eq!((planted.image.width, planted.image.height), (2, 1));
+        assert!(plant(&mut session, "off").is_none());
+        assert!(plant(&mut session, "auto").is_none(), "a photograph has no pass for auto to read");
+        // A develop change is another photograph to the model. The old
+        // raster stays on disk for a switch back, but cannot plant here.
+        let mut changed = graph("model");
+        changed.nodes[0]
+            .params
+            .insert("camera_wb".into(), serde_json::json!(0));
+        let mut sources = HashMap::new();
+        plant_smart_rasters_whole(
+            &mut session,
+            Some(dir.path()),
+            &changed,
+            "img",
+            &mut sources,
+            None,
+            fullmatte::MatteTier::Auto,
+            None,
+        );
+        assert!(!sources.contains_key("kl@normal"));
+        // So is a stack or panorama recipe rewrite at unchanged options.
+        *session.recipe_gen.entry("img".into()).or_insert(0) += 1;
+        assert!(plant(&mut session, "model").is_none());
     }
 
     #[test]
