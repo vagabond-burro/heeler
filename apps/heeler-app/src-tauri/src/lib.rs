@@ -10311,8 +10311,9 @@ macro_rules! debug_log {
 /// own scale (Frame::aspect, the latest review's R1), which placed its
 /// frames up to a few pixels off, nor one whose seams ran down the
 /// middle of each overlap instead of where the frames agree, nor one
-/// painted as pinholes from a lens the database could have undone.
-const PANO_SOLVE: &str = "register2048-aspect-seams-lens";
+/// painted as pinholes from a lens the database could have undone, nor
+/// one whose seams kept a moving subject from each frame that saw it.
+const PANO_SOLVE: &str = "register2048-aspect-seams-lens-moved";
 
 /// The proxy-cache tier of a full-size stitch.
 fn pano_full_tier(image_id: &str, opts: heeler_io::RawSourceOpts) -> String {

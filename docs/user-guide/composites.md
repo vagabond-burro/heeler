@@ -20,7 +20,7 @@ Turn **Auto-crop** off and the panorama shows its whole canvas, empty edges incl
 
 ### Seams
 
-Where two frames overlap, each part of the overlap comes from one of them, and the join is blended so it does not show. The join runs where the two frames agree: through sky, grass or anything that stayed still, and around anything that moved between the shots. Someone walking through the overlap appears whole, in the place one frame caught them, or not at all; they are not cut in half or left as a faint double. When the frames agree everywhere the seam runs down the middle of the overlap, where each frame is at its sharpest.
+Where two frames overlap, each part of the overlap comes from one of them, and the join is blended so it does not show. The join runs where the two frames agree: through sky, grass or anything that stayed still, and around anything that moved between the shots. Someone walking through the overlap appears whole, in the place one frame caught them, or not at all; they are not cut in half or left as a faint double. A car that drove on between the shots is taken from one frame for both of the places the frames caught it, so it appears once, not twice. When the frames agree everywhere the seam runs down the middle of the overlap, where each frame is at its sharpest.
 
 ## The recipe file
 

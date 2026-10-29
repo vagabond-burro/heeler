@@ -856,15 +856,59 @@ mod tests {
             (shown, ghost)
         };
         let cut = stitch(&[first], &[second], true);
+        let mut whole = 0;
         for (name, region) in [("first", &r1), ("second", &r2)] {
             let (shown, ghost) = judge(&cut, region);
             assert!(shown < 0.03 || shown > 0.97, "the {name} figure is sliced: {:.0}% shown", shown * 100.0);
             assert!(ghost < 0.06, "the {name} figure left a ghost {ghost} strong");
+            whole += usize::from(shown > 0.97);
         }
+        // One walker, so at most one figure: each place from the frame that
+        // caught them there is the same person twice.
+        assert!(whole <= 1, "the walker shows twice");
         let old = stitch(&[first], &[second], false);
         let (shown, ghost) = judge(&old, &r1);
         assert!(shown > 0.1 && shown < 0.9, "the middle seam should slice the first figure: {:.0}% shown", shown * 100.0);
         assert!(ghost > 0.15, "and leave the rest of it as a ghost: {ghost}");
+    }
+
+    /// The walker caught on each frame's own side of the overlap, as a car
+    /// driving across a pan is: each place is nearer the middle of the
+    /// frame that saw someone there, and the frames agree on the ground
+    /// between. A cut free to choose per place takes each from its own
+    /// frame and runs between them, and the walker shows twice
+    /// (2026-10-29, a white car on a road in a three-frame pan).
+    #[test]
+    fn a_walker_caught_on_each_side_of_the_overlap_shows_once() {
+        let (a, b) = (cam(300.0, [0.0, -0.25, 0.0]), cam(300.0, [0.0, 0.25, 0.0]));
+        // Frame a looks at yaw +0.25 and caught the walker on its side;
+        // frame b looks at -0.25 and caught them on the other.
+        let (in_a, in_b) = ((0.10, 0.14), (-0.14, -0.10));
+        let opts = CompositeOpts { surface: Surface::Cylindrical, gain_compensation: false, ..Default::default() };
+        let stitch = |fa: &[(f64, f64)], fb: &[(f64, f64)]| {
+            let (ia, ib) = (render_with(&a, 360, 180, fa), render_with(&b, 360, 180, fb));
+            composite(&[Frame::new(&ia, a), Frame::new(&ib, b)], &opts).unwrap()
+        };
+        let clean = stitch(&[], &[]);
+        let place = |f: (f64, f64)| {
+            let with = stitch(&[f], &[f]);
+            (0..clean.width * clean.height).filter(|&p| with.data[p * 4] - with.data[p * 4 + 1] > 0.4).collect::<Vec<_>>()
+        };
+        let (ra, rb) = (place(in_a), place(in_b));
+        assert!(ra.len() > 200 && rb.len() > 200, "figures of {} and {} pixels", ra.len(), rb.len());
+        let out = stitch(&[in_a], &[in_b]);
+        let mut whole = 0;
+        for (name, region) in [("frame a's", &ra), ("frame b's", &rb)] {
+            // The figure by its color: red well above green, which the
+            // scene's grays never are, however bright.
+            let figure = |p: usize| out.data[p * 4] - out.data[p * 4 + 1] > 0.4;
+            let shown = region.iter().filter(|&&p| figure(p)).count() as f32 / region.len() as f32;
+            let ghost = region.iter().filter(|&&p| !figure(p)).map(|&p| (out.data[p * 4] - clean.data[p * 4]).abs()).fold(0.0f32, f32::max);
+            assert!(shown < 0.03 || shown > 0.97, "{name} figure is sliced: {:.0}% shown", shown * 100.0);
+            assert!(ghost < 0.06, "{name} figure left a ghost {ghost} strong");
+            whole += usize::from(shown > 0.97);
+        }
+        assert!(whole <= 1, "the walker shows twice");
     }
 
     #[test]

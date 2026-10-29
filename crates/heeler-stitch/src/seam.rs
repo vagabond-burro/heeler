@@ -31,8 +31,9 @@ pub(crate) const SEAM_CELLS: usize = 1 << 19;
 /// Working memory per reduced cell, besides the frames' own reduced
 /// copies: the overlap index and clearance passes, the graph's four links
 /// and two terminals, its index, level and edge pointer, the flow's queue
-/// and path, and the reduced ownership.
-const CELL_BYTES: usize = 88;
+/// and path, the reduced ownership, and which cells moved and which
+/// side of the free cut each fell on.
+const CELL_BYTES: usize = 90;
 /// Fixed-point scale for link costs, which the flow keeps as integers
 /// so it terminates exactly.
 const QUANT: f32 = 256.0;
@@ -57,6 +58,11 @@ const SEAM_CLEARANCE: usize = 8;
 /// Weak: enough to keep an overlap where nothing differs as it was
 /// (down the middle), never enough to drag the seam through a subject.
 const CENTRE_PULL: f32 = 0.02;
+/// How far apart, as the sum of three channels' differences, a cell's
+/// two frames are where something moved between them. Frames of one
+/// still scene differ by a few hundredths after the blend's exposure
+/// match; a car on a road, a walker against grass, by tenths or more.
+const MOVED: f32 = 0.2;
 
 /// Bytes the seam finder holds for a canvas of `width` by `height` from
 /// `frames` frames, on top of bytes_per_pixel's workspace.
@@ -392,44 +398,80 @@ pub(crate) fn seam_ownership(warps: &[Warped], width: usize, height: usize, stop
             // The colors the composite has so far, against this frame's.
             let held = |c: usize| cells[owner[c] as usize].rgb[c];
             let differ = clearance(&overlap, &index, rw, rh, SEAM_CLEARANCE.div_ceil(s), |c| l1(held(c), frame.rgb[c]));
-            let mut g = Graph::new(overlap.len());
-            for (i, &c) in overlap.iter().enumerate() {
-                let (a, b) = (held(c), frame.rgb[c]);
-                let (wa, wb) = (cells[owner[c] as usize].weight[c], frame.weight[c]);
-                for (d, q) in neighbors(c, rw, rh).into_iter().enumerate() {
-                    let Some(q) = q else { continue };
-                    if index[q] != NONE {
-                        // Each pair once, from its left or upper end.
-                        if d == 1 || d == 3 {
-                            let (qa, qb) = (held(q), frame.rgb[q]);
-                            let apart = differ[i] + differ[index[q] as usize];
-                            let edge = (luma(a) - luma(qa)).abs() + (luma(b) - luma(qb)).abs();
-                            let cost = apart / (1.0 + EDGE_RELIEF * edge) + SEAM_FLOOR;
-                            let c = ((cost * QUANT).round() as i32).clamp(1, TIE);
-                            g.link(i, d, index[q] as usize, c, c);
+            // Where the frames disagree outright, something moved between
+            // the shots. A cut free to choose per place keeps it where each
+            // frame saw it, the earlier frame's place from the earlier frame
+            // and the later one's from the later, and the seam runs cheaply
+            // between them over ground both agree on: the subject twice.
+            let moved: Vec<bool> = overlap.iter().map(|&c| l1(held(c), frame.rgb[c]) > MOVED).collect();
+            // The graph, with every moved cell held to one side when `pin`
+            // says which: Some(true) the composite's, Some(false) this frame's.
+            let build = |pin: Option<bool>| {
+                let mut g = Graph::new(overlap.len());
+                for (i, &c) in overlap.iter().enumerate() {
+                    let (a, b) = (held(c), frame.rgb[c]);
+                    let (wa, wb) = (cells[owner[c] as usize].weight[c], frame.weight[c]);
+                    for (d, q) in neighbors(c, rw, rh).into_iter().enumerate() {
+                        let Some(q) = q else { continue };
+                        if index[q] != NONE {
+                            // Each pair once, from its left or upper end.
+                            if d == 1 || d == 3 {
+                                let (qa, qb) = (held(q), frame.rgb[q]);
+                                let apart = differ[i] + differ[index[q] as usize];
+                                let edge = (luma(a) - luma(qa)).abs() + (luma(b) - luma(qb)).abs();
+                                let cost = apart / (1.0 + EDGE_RELIEF * edge) + SEAM_FLOOR;
+                                let c = ((cost * QUANT).round() as i32).clamp(1, TIE);
+                                g.link(i, d, index[q] as usize, c, c);
+                            }
+                        } else if owner[q] >= 0 && frame.weight[q] <= 0.0 {
+                            // Beside what only the composite has: stays.
+                            g.tie_source(i, TIE);
+                        } else if owner[q] < 0 && frame.weight[q] > 0.0 {
+                            // Beside what only this frame has: joins it.
+                            g.tie_sink(i, TIE);
                         }
-                    } else if owner[q] >= 0 && frame.weight[q] <= 0.0 {
-                        // Beside what only the composite has: stays.
+                    }
+                    if wb < MARGIN_WEIGHT {
                         g.tie_source(i, TIE);
-                    } else if owner[q] < 0 && frame.weight[q] > 0.0 {
-                        // Beside what only this frame has: joins it.
+                    } else if wa < MARGIN_WEIGHT {
                         g.tie_sink(i, TIE);
                     }
+                    let pull = (CENTRE_PULL * (wa - wb).abs() / (wa + wb).max(1e-6) * QUANT).round() as i32;
+                    if wa > wb {
+                        g.tie_source(i, pull);
+                    } else {
+                        g.tie_sink(i, pull);
+                    }
+                    match pin {
+                        Some(true) if moved[i] => g.tie_source(i, TIE),
+                        Some(false) if moved[i] => g.tie_sink(i, TIE),
+                        _ => {}
+                    }
                 }
-                if wb < MARGIN_WEIGHT {
-                    g.tie_source(i, TIE);
-                } else if wa < MARGIN_WEIGHT {
-                    g.tie_sink(i, TIE);
-                }
-                let pull = (CENTRE_PULL * (wa - wb).abs() / (wa + wb).max(1e-6) * QUANT).round() as i32;
-                if wa > wb {
-                    g.tie_source(i, pull);
-                } else {
-                    g.tie_sink(i, pull);
+                g
+            };
+            let mut g = build(None);
+            let free = g.max_flow(stop)?;
+            let mut keep = g.source_side();
+            drop(g);
+            let split = |keep: &[bool]| moved.iter().zip(keep).any(|(&m, &k)| m && k) && moved.iter().zip(keep).any(|(&m, &k)| m && !k);
+            if split(&keep) {
+                // Every moved cell from one frame instead, whichever costs
+                // less: the subject once, where that frame saw it, or not
+                // at all. A side that cuts a hard tie the free cut did not
+                // is no choice; with neither, the free cut stands. (A thin
+                // overlap can hold cells tied hard both ways, which every
+                // cut pays for alike.)
+                let mut best = free.saturating_add(TIE as i64);
+                for side in [true, false] {
+                    let mut g = build(Some(side));
+                    let flow = g.max_flow(stop)?;
+                    if flow < best {
+                        best = flow;
+                        keep = g.source_side();
+                    }
                 }
             }
-            g.max_flow(stop)?;
-            let keep = g.source_side();
             for (i, &c) in overlap.iter().enumerate() {
                 if !keep[i] {
                     owner[c] = k as i32;
