@@ -13,6 +13,8 @@
 //!
 //! Each returns the frame, ImageWidth by ImageLength, row by row.
 
+use std::sync::atomic::AtomicBool;
+
 /// An SRW frame in one of Samsung's compressed codings: the compression,
 /// a 32770 frame's row offsets (where in the file, how many bytes) and
 /// the samples' depth.
@@ -24,11 +26,11 @@ pub struct Samsung {
 }
 
 /// The frame of `strip` coded as `s` says.
-pub fn decode(bytes: &[u8], strip: &[u8], s: &Samsung, width: usize, height: usize) -> Result<Vec<u16>, String> {
+pub fn decode(bytes: &[u8], strip: &[u8], s: &Samsung, width: usize, height: usize, stop: Option<&AtomicBool>) -> Result<Vec<u16>, String> {
     match s.compression {
-        32770 => decode_32770(strip, bytes.get(s.rows.0..s.rows.0 + s.rows.1).ok_or("SRW row offsets past the end of the file")?, width, height),
-        32772 => decode_32772(strip, width, height),
-        32773 => decode_32773(strip, width, height, s.bits),
+        32770 => decode_32770(strip, bytes.get(s.rows.0..s.rows.0 + s.rows.1).ok_or("SRW row offsets past the end of the file")?, width, height, stop),
+        32772 => decode_32772(strip, width, height, stop),
+        32773 => decode_32773(strip, width, height, s.bits, stop),
         _ => Err("a Samsung coding not read here".into()),
     }
 }
@@ -122,7 +124,7 @@ const CODE_32772: [(u32, u32, u32); 13] = [
 ///
 /// Inputs: the strip (StripOffsets, StripByteCounts) and the frame's
 /// ImageWidth and ImageLength.
-pub fn decode_32772(data: &[u8], width: usize, height: usize) -> Result<Vec<u16>, String> {
+pub fn decode_32772(data: &[u8], width: usize, height: usize, stop: Option<&AtomicBool>) -> Result<Vec<u16>, String> {
     let mut table = vec![(0u8, 0u8); 1024];
     for &(len, code, class) in &CODE_32772 {
         let shift = 10 - len;
@@ -133,6 +135,7 @@ pub fn decode_32772(data: &[u8], width: usize, height: usize) -> Result<Vec<u16>
     let mut out = vec![0u16; width * height];
     let mut b = MsbBits::new(data);
     for r in 0..height {
+        crate::stopped(stop).map_err(|e| e.to_string())?;
         for c in 0..width {
             let (len, class) = table[b.peek(10) as usize];
             if len == 0 {
@@ -231,7 +234,7 @@ fn signed(v: u32, k: u32) -> i32 {
 ///
 /// Inputs: the strip (StripOffsets, StripByteCounts), the row offsets
 /// (0xA010, 0xA011), ImageWidth and ImageLength (both even).
-pub fn decode_32770(data: &[u8], row_offsets: &[u8], width: usize, height: usize) -> Result<Vec<u16>, String> {
+pub fn decode_32770(data: &[u8], row_offsets: &[u8], width: usize, height: usize, stop: Option<&AtomicBool>) -> Result<Vec<u16>, String> {
     if width % 2 != 0 || height % 2 != 0 {
         return Err("a 32770 frame of odd size".into());
     }
@@ -241,6 +244,7 @@ pub fn decode_32770(data: &[u8], row_offsets: &[u8], width: usize, height: usize
     let offset = |r: usize| u32::from_le_bytes(row_offsets[r * 4..r * 4 + 4].try_into().unwrap()) as usize;
     let mut coded = vec![0u16; width * height];
     for r in 0..height {
+        crate::stopped(stop).map_err(|e| e.to_string())?;
         let at = offset(r);
         if at >= data.len() {
             return Err(format!("32770 row {r} starts past the strip"));
@@ -293,6 +297,7 @@ pub fn decode_32770(data: &[u8], row_offsets: &[u8], width: usize, height: usize
     }
     let mut out = vec![0u16; width * height];
     for r in 0..height {
+        crate::stopped(stop).map_err(|e| e.to_string())?;
         for c in 0..width {
             out[(r & !1 | c & 1) * width + (c & !1 | r & 1)] = coded[r * width + c];
         }
@@ -340,7 +345,7 @@ pub fn decode_32770(data: &[u8], row_offsets: &[u8], width: usize, height: usize
 ///
 /// Inputs: the strip (StripOffsets, StripByteCounts), ImageWidth,
 /// ImageLength and BitsPerSample.
-pub fn decode_32773(data: &[u8], width: usize, height: usize, bits: u32) -> Result<Vec<u16>, String> {
+pub fn decode_32773(data: &[u8], width: usize, height: usize, bits: u32, stop: Option<&AtomicBool>) -> Result<Vec<u16>, String> {
     if data.len() < 16 || (data[0] != 0x4b && data[0] != 0x45) {
         return Err("a 32773 strip of a kind not read here".into());
     }
@@ -358,6 +363,7 @@ pub fn decode_32773(data: &[u8], width: usize, height: usize, bits: u32) -> Resu
     let mut out = vec![0u16; width * height];
     let mut at = 16usize;
     for r in 0..height {
+        crate::stopped(stop).map_err(|e| e.to_string())?;
         if at > data.len() {
             return Err(format!("32773 row {r} starts past the strip"));
         }

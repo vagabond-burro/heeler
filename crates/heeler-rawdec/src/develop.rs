@@ -12,7 +12,7 @@
 //! specification's model for the shot's white (or, for the comparisons,
 //! LibRaw's daylight matrix).
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 
 use heeler_engine::memory;
 use rayon::prelude::*;
@@ -20,7 +20,7 @@ use rayon::prelude::*;
 use crate::ahd::{self, Mosaic, Out};
 use crate::dng::{Coding, Dng, Format};
 use crate::gain_map::{self, PixelGains};
-use crate::{Error, Opts};
+use crate::{stopped, Error, Opts};
 
 /// LibRaw's default threshold for lowering the white level to the
 /// frame's brightest sample.
@@ -410,7 +410,7 @@ impl Plan {
         // A pixel shift file holds four samples a pixel to blend (three
         // to clip), beyond the one counted.
         let shifted = if matches!(self.dng.coding, Coding::SonyArq(_)) { memory::bytes(self.width, self.height, 3, 2)? } else { 0 };
-        memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES, self.pixel_gains(half).bytes(), frame, unstretched, unturned, shifted])
+        memory::sum([memory::bytes(self.width, self.height, 1, 2)?, memory::bytes(ow, oh, 3, 2)?, working, TABLES, self.pixel_gains_bytes(half), frame, unstretched, unturned, shifted])
     }
 
     /// The image the stage 3 opcodes see: the active area, or at half size
@@ -430,10 +430,19 @@ impl Plan {
     }
 
     /// OpcodeList3 worked out for the develop's image: one plane for a
-    /// monochrome frame, three for the rest.
+    /// monochrome frame, three for the rest. At half size each pixel is a
+    /// 2 by 2 block of the active area, the maps' areas and pitches in the
+    /// active area's rows and columns.
     pub fn pixel_gains(&self, half: bool) -> PixelGains {
         let (w, h) = self.stage3_size(half);
-        PixelGains::new(&self.stage3, w as u32, h as u32, if self.mono() { 1 } else { 3 })
+        let (full, scale) = ((self.width as u32, self.height as u32), if half && (w, h) != (self.width, self.height) { 2 } else { 1 });
+        PixelGains::scaled(&self.stage3, w as u32, h as u32, if self.mono() { 1 } else { 3 }, scale, full)
+    }
+
+    /// What pixel_gains holds, without building it.
+    fn pixel_gains_bytes(&self, half: bool) -> usize {
+        let (w, h) = self.stage3_size(half);
+        PixelGains::bytes(&self.stage3, w as u32, h as u32, if self.mono() { 1 } else { 3 })
     }
 
     /// Whether the unpack reads each piece's code stream across the cores
@@ -476,14 +485,14 @@ impl Plan {
     /// the frame, measured as the most any file of the two corpora held
     /// (a counting allocator around each develop, every camera at both
     /// sizes) and a quarter more. A Huffman stream read across the cores
-    /// keeps each piece's differences once for each of its codes, four
-    /// bytes each with room for two a byte of the stream, beside the
-    /// differences in order; C-RAW's wavelet keeps its bands in 32 bits;
+    /// keeps each piece's differences once for each of its codes, beside
+    /// the differences in order (Nikon's in 16 bits, Pentax's in 32);
+    /// C-RAW's wavelet keeps its bands in 32 bits;
     /// a three-color image is read whole, then copied to its area.
     fn unpack_bytes(&self) -> Result<usize, memory::MemoryError> {
         let per_pixel = match &self.dng.coding {
-            Coding::NikonHuffman(_) => 34,
-            Coding::Pentax(_) => 23,
+            Coding::NikonHuffman(_) => 13,
+            Coding::Pentax(_) => 13,
             Coding::CrxWavelet(_) => 20,
             Coding::KodakSmall(..) => 12,
             Coding::CanonCrw(_) => 9,
@@ -579,9 +588,6 @@ pub struct Image {
     pub headroom: f32,
 }
 
-fn stopped(stop: Option<&AtomicBool>) -> Result<(), Error> {
-    if stop.is_some_and(|s| s.load(Ordering::Relaxed)) { Err(Error::Canceled) } else { Ok(()) }
-}
 
 /// Writes `samples`, which start at raw image row `r` and column `c`, into
 /// the active area's mosaic: the part inside it, through the
@@ -682,7 +688,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         let (at, len) = d.pieces.spans[0];
         let tile = bytes.get(at..at + len).ok_or(Error::Corrupt("a tile past the end of the file"))?;
         stopped(stop)?;
-        let samples = crate::vc5::decode(tile, d.width, d.height, d.cfa == [0, 1, 1, 2])?;
+        let samples = crate::vc5::decode_until(tile, d.width, d.height, d.cfa == [0, 1, 1, 2], stop)?;
         stopped(stop)?;
         (0..d.height).into_par_iter().for_each(|r| put_run(out, p, r, 0, &samples[r * d.width..(r + 1) * d.width], lin));
         return Ok(cfa);
@@ -755,7 +761,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         // The samples run on across the piece's rows, a JPEG line covering
         // one row, two, or half of one.
         let (mut tr, mut tc) = (0usize, 0usize);
-        crate::ljpeg::decode(data, |_, line| {
+        crate::ljpeg::decode_until(data, stop, |_, line| {
             let mut rest = line;
             while !rest.is_empty() {
                 let n = rest.len().min(pw - tc);
@@ -796,7 +802,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         // column of every second row of its tile.
         planes.par_iter().try_for_each(|pl| -> Result<(), Error> {
             stopped(stop)?;
-            crate::crx::decode_plane(&bytes[pl.at..pl.at + pl.len], pl.width, pl.height, d.bits, |y, line| {
+            crate::crx::decode_plane(&bytes[pl.at..pl.at + pl.len], pl.width, pl.height, d.bits, stop, |y, line| {
                 put_sites(out, p, pl.y0 + 2 * y + pl.site.0, pl.x0 + pl.site.1, line);
             })
         })?;
@@ -823,7 +829,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
                     stopped(stop)?;
                     let tiles = bands_of(plane)?;
                     let bands = tiles.first().ok_or(Error::Corrupt("an encoding-3 C-RAW frame without a tile"))?;
-                    crate::crx_more::rebuild_plane(bands, w.width, w.height, d.bits, w.low_lossless[plane], &crate::crx_more::map_steps(map, quants(plane)))
+                    crate::crx_more::rebuild_plane(bands, w.width, w.height, d.bits, w.low_lossless[plane], &crate::crx_more::map_steps(map, quants(plane)), stop)
                 })
                 .collect::<Result<_, _>>()?;
             let sites = crate::crx_more::ycc_sites([&planes[0], &planes[1], &planes[2], &planes[3]], d.bits);
@@ -843,8 +849,8 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
             let plane = match &w.map {
                 // The second version: each coefficient's step from the
                 // tile's map of quantizers and its band's record.
-                Some(map) => crate::crx::reconstruct_plane_with(&tiles, w.width, w.height, w.tile, d.bits, &crate::crx_more::map_steps(map, quants(site)))?,
-                None => crate::crx::reconstruct_plane(&tiles, w.width, w.height, w.tile, d.bits)?,
+                Some(map) => crate::crx::reconstruct_plane_with(&tiles, w.width, w.height, w.tile, d.bits, &crate::crx_more::map_steps(map, quants(site)), stop)?,
+                None => crate::crx::reconstruct_plane(&tiles, w.width, w.height, w.tile, d.bits, stop)?,
             };
             let (dy, dx) = (site >> 1, site & 1);
             for y in 0..w.height {
@@ -875,7 +881,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         // Blocks of columns across the cores; rows below the image area
         // are not decoded.
         stopped(stop)?;
-        crate::fuji::decode(bytes, f, d.height.min(p.top + p.height), |r, line| put_run(out, p, r, 0, line, lin))?;
+        crate::fuji::decode(bytes, f, d.height.min(p.top + p.height), stop, |r, line| put_run(out, p, r, 0, line, lin))?;
         return Ok(cfa);
     }
     if let Coding::Headerless(layout) = &d.coding {
@@ -890,7 +896,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         // image area are not decoded.
         let (at, len) = d.pieces.spans[0];
         stopped(stop)?;
-        crate::iiq::decode(&bytes[at..at + len], d.width, d.height.min(p.top + p.height), p1, |r, line| put_run(out, p, r, 0, line, lin))?;
+        crate::iiq::decode(&bytes[at..at + len], d.width, d.height.min(p.top + p.height), p1, stop, |r, line| put_run(out, p, r, 0, line, lin))?;
         return Ok(cfa);
     }
     if let Coding::Pentax(code) = &d.coding {
@@ -910,7 +916,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         let rows = d.height.min(p.top + p.height);
         let put = |r: usize, line: &[u16]| put_run(out, p, r, 0, line, lin);
         match layout {
-            crate::orf::Olympus::Compressed(header) => crate::orf::decode(data, header, d.width, rows, put)?,
+            crate::orf::Olympus::Compressed(header) => crate::orf::decode(data, header, d.width, rows, stop, put)?,
             crate::orf::Olympus::Padded => crate::orf::decode_padded(data, d.width, rows, put)?,
             crate::orf::Olympus::Words => crate::orf::decode_words(data, d.width, rows, put)?,
             crate::orf::Olympus::Fields(per_strip) => crate::orf::decode_fields(bytes, &d.pieces.spans, d.width, d.height, rows, per_strip, put)?,
@@ -922,7 +928,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         // area are not decoded.
         stopped(stop)?;
         let rows = if coding.rows > 0 { coding.rows } else { d.height };
-        crate::rw2::decode(bytes, &d.pieces.spans, d.width, rows.min(p.top + p.height), coding, |r, c, line| put_run(out, p, r, c, line, lin))?;
+        crate::rw2::decode(bytes, &d.pieces.spans, d.width, rows.min(p.top + p.height), coding, stop, |r, c, line| put_run(out, p, r, c, line, lin))?;
         return Ok(cfa);
     }
     if let Coding::Hasselblad(h) = &d.coding {
@@ -930,7 +936,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         let data = &bytes[at..at + len];
         stopped(stop)?;
         if h.compressed {
-            crate::hasselblad::decode(data, d.width, d.height.min(p.top + p.height), h.offset, |r, line| put_run(out, p, r, 0, line, lin))?;
+            crate::hasselblad::decode(data, d.width, d.height.min(p.top + p.height), h.offset, stop, |r, line| put_run(out, p, r, 0, line, lin))?;
         } else {
             if len < d.width * d.height * 2 {
                 return Err(Error::Corrupt("a Hasselblad strip shorter than its frame"));
@@ -950,9 +956,9 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         let data = &bytes[at..at + len];
         stopped(stop)?;
         let mut samples = memory::vector(d.width * d.height, 0u16, "RAW lossless JPEG samples")?;
-        if crate::ljpeg::decode_intervals(data, &mut samples)?.is_none() && crate::ljpeg::decode_parallel(data, &mut samples)?.is_none() {
+        if crate::ljpeg::decode_intervals_until(data, &mut samples, stop)?.is_none() && crate::ljpeg::decode_parallel_until(data, &mut samples, stop)?.is_none() {
             let mut k = 0;
-            crate::ljpeg::decode(data, |_, line| {
+            crate::ljpeg::decode_until(data, stop, |_, line| {
                 let end = (k + line.len()).min(samples.len());
                 samples[k..end].copy_from_slice(&line[..end - k]);
                 k = end;
@@ -1015,7 +1021,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         // Decoded whole (srw_codec.rs), then each row.
         let (at, len) = d.pieces.spans[0];
         stopped(stop)?;
-        let frame = crate::srw_codec::decode(bytes, &bytes[at..at + len], sc, d.width, d.height).map_err(|_| Error::Corrupt("a Samsung frame that does not decode"))?;
+        let frame = crate::srw_codec::decode(bytes, &bytes[at..at + len], sc, d.width, d.height, stop).map_err(|_| stopped(stop).err().unwrap_or(Error::Corrupt("a Samsung frame that does not decode")))?;
         stopped(stop)?;
         frame.par_chunks(d.width).enumerate().for_each(|(r, row)| put_run(out, p, r, 0, row, lin));
         return Ok(cfa);
@@ -1043,9 +1049,9 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         let data = &bytes[at..at + len];
         stopped(stop)?;
         let mut samples = memory::vector(d.width * d.height, 0u16, "RAW lossless JPEG samples")?;
-        if crate::ljpeg::decode_intervals(data, &mut samples)?.is_none() && crate::ljpeg::decode_parallel(data, &mut samples)?.is_none() {
+        if crate::ljpeg::decode_intervals_until(data, &mut samples, stop)?.is_none() && crate::ljpeg::decode_parallel_until(data, &mut samples, stop)?.is_none() {
             let mut k = 0;
-            crate::ljpeg::decode(data, |_, line| {
+            crate::ljpeg::decode_until(data, stop, |_, line| {
                 let end = (k + line.len()).min(samples.len());
                 samples[k..end].copy_from_slice(&line[..end - k]);
                 k = end;
@@ -1088,7 +1094,7 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         for (i, &(at, len)) in d.pieces.spans.iter().enumerate() {
             stopped(stop)?;
             let data = &bytes[at..at + len];
-            if crate::ljpeg::decode_intervals(data, &mut samples)?.is_none() && crate::ljpeg::decode_parallel(data, &mut samples)?.is_none() {
+            if crate::ljpeg::decode_intervals_until(data, &mut samples, stop)?.is_none() && crate::ljpeg::decode_parallel_until(data, &mut samples, stop)?.is_none() {
                 decode_piece(i, data)?;
                 continue;
             }
@@ -1240,7 +1246,7 @@ pub fn unpack_calibrated(bytes: &[u8], p: &Plan, cal: &crate::iiq_cal::Calibrati
     stopped(stop)?;
     // The CFA's colors at the frame's top left.
     let colors: [u8; 4] = std::array::from_fn(|k| p.pattern[((k >> 1) + p.top) & 1][((k & 1) + p.left) & 1] as u8);
-    crate::iiq_cal::apply(cal, &mut frame, fw, fh, colors);
+    crate::iiq_cal::apply(cal, &mut frame, fw, fh, colors, stop)?;
     let mut cfa = memory::vector(p.width * p.height, 0u16, "RAW mosaic")?;
     cfa.par_chunks_mut(p.width).enumerate().for_each(|(r, row)| {
         let at = (p.top + r) * fw + p.left;

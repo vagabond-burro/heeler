@@ -94,6 +94,9 @@
 //! by iiq_quarters.rs's rules in step 2's place, found closely but not to
 //! the bit.
 
+use std::sync::atomic::AtomicBool;
+
+use heeler_engine::memory::{self, MemoryError};
 use rayon::prelude::*;
 
 /// One entry of the defect list.
@@ -239,9 +242,31 @@ fn grid(block: &[u8], at: usize, len: usize, planes: usize, float: bool) -> Opti
     Some(Grid { left: left as i64, top: top as i64, width, height, step_x, step_y, nodes_x, nodes_y, planes, gains, tag: 0 })
 }
 
+/// The first `n` rows' or columns' black offsets at `at`, two signed
+/// 16-bit values each (rows and columns past them take 0); None where
+/// they run past the end of the file, or (with `refused` set) where the
+/// memory for them is refused. Never more than the file's bytes there,
+/// whatever height or width the file states.
+fn offsets(bytes: &[u8], at: usize, n: usize, refused: &mut Option<MemoryError>) -> Option<Vec<[i32; 2]>> {
+    if at.checked_add(n.checked_mul(4)?).is_none_or(|end| end > bytes.len()) {
+        return None;
+    }
+    let mut out = memory::vector(n, [0i32; 2], "RAW black offsets").map_err(|e| *refused = Some(e)).ok()?;
+    for (i, v) in out.iter_mut().enumerate() {
+        *v = [0, 1].map(|k| u16le(bytes, at + 4 * i + 2 * k).unwrap_or(0) as i16 as i32);
+    }
+    Some(out)
+}
+
 /// The calibration of an IIQ, given the whole file; None where the file
 /// has none or one of the kind not read here.
-pub fn read(bytes: &[u8]) -> Option<Calibration> {
+pub fn read(bytes: &[u8]) -> Result<Option<Calibration>, MemoryError> {
+    let mut refused = None;
+    let cal = parse(bytes, &mut refused);
+    refused.map_or(Ok(cal), Err)
+}
+
+fn parse(bytes: &[u8], refused: &mut Option<MemoryError>) -> Option<Calibration> {
     let dir = container(bytes)?;
     let get = |tag: u32| dir.iter().find(|e| e.0 == tag).map(|e| (e.1, e.2, e.3));
     let value = |tag: u32| get(tag).map(|e| e.2);
@@ -250,26 +275,16 @@ pub fn read(bytes: &[u8]) -> Option<Calibration> {
     let split = value(0x0222).map(|v| v as usize);
     // The offsets are not applied to frames of coding 6.
     let coded_6 = value(0x010e) == Some(6);
-    let mut row_black = vec![[0i32; 2]; height];
-    if let (Some((_, count, at)), false) = (get(0x0223), coded_6) {
-        let at = 8 + at as usize;
-        for (r, rb) in row_black.iter_mut().enumerate().take((count as usize / 4).min(height)) {
-            for (k, v) in rb.iter_mut().enumerate() {
-                *v = u16le(bytes, at + 4 * r + 2 * k)? as i16 as i32;
-            }
-        }
-    }
+    let row_black = match (get(0x0223), coded_6) {
+        (Some((_, count, at)), false) => offsets(bytes, 8 + at as usize, (count as usize / 4).min(height), refused)?,
+        _ => Vec::new(),
+    };
     let split_row = value(0x0224).map(|v| v as usize);
     let width = value(0x0108)? as usize;
-    let mut col_black = vec![[0i32; 2]; width];
-    if let (Some((_, count, at)), false) = (get(0x0225), coded_6) {
-        let at = 8 + at as usize;
-        for (c, cb) in col_black.iter_mut().enumerate().take((count as usize / 4).min(width)) {
-            for (k, v) in cb.iter_mut().enumerate() {
-                *v = u16le(bytes, at + 4 * c + 2 * k)? as i16 as i32;
-            }
-        }
-    }
+    let col_black = match (get(0x0225), coded_6) {
+        (Some((_, count, at)), false) => offsets(bytes, 8 + at as usize, (count as usize / 4).min(width), refused)?,
+        _ => Vec::new(),
+    };
     let (_, len, at) = get(0x0110)?;
     let start = 8 + at as usize;
     let block = bytes.get(start..start + len as usize)?;
@@ -420,8 +435,9 @@ fn grid_row(g: &Grid, plane: usize, y: usize, x0: usize, out: &mut [f32]) {
 /// units: LibRaw's raw frame) in place: afterwards LibRaw's area of it is
 /// LibRaw's loaded image, black level 0. `colors` are the CFA colors (0
 /// red, 1 green, 2 blue) at frame (0, 0), (0, 1), (1, 0) and (1, 1). Across
-/// the cores but for the defects (a few thousand, in turn).
-pub fn apply(cal: &Calibration, frame: &mut [u16], width: usize, height: usize, colors: [u8; 4]) {
+/// the cores but for the defects (a few thousand, in turn). Canceled
+/// between defects and between rows once `stop` is set.
+pub fn apply(cal: &Calibration, frame: &mut [u16], width: usize, height: usize, colors: [u8; 4], stop: Option<&AtomicBool>) -> Result<(), crate::Error> {
     assert!(frame.len() >= width * height);
     let color = |x: usize, y: usize| colors[(y & 1) * 2 + (x & 1)];
     let green_on_red = |x: usize, y: usize| color(x, y) == 1 && colors[(y & 1) * 2 + ((x & 1) ^ 1)] == 0;
@@ -434,6 +450,7 @@ pub fn apply(cal: &Calibration, frame: &mut [u16], width: usize, height: usize, 
         const RING: [(i64, i64); 8] = [(-2, -2), (-2, 0), (-2, 2), (0, -2), (0, 2), (2, -2), (2, 0), (2, 2)];
         const GREEN: [(i64, i64); 8] = [(-1, -1), (-1, 1), (1, -1), (1, 1), (-2, 0), (0, -2), (0, 2), (2, 0)];
         for d in &cal.defects {
+            crate::stopped(stop)?;
             match *d {
                 Defect::Pixel(x, y) => {
                     if x < 2 || y < 2 || x + 2 >= width || y + 2 >= height {
@@ -460,7 +477,8 @@ pub fn apply(cal: &Calibration, frame: &mut [u16], width: usize, height: usize, 
     for (&(x, y), &v) in &fixed {
         by_row[y].push((x, v));
     }
-    frame[..width * height].par_chunks_mut(width).zip(by_row.par_iter()).enumerate().for_each(|(y, (row, fixes))| {
+    frame[..width * height].par_chunks_mut(width).zip(by_row.par_iter()).enumerate().try_for_each(|(y, (row, fixes))| {
+        crate::stopped(stop)?;
         let mut v: Vec<i32> = row.iter().enumerate().map(|(x, &a)| cal.value(a, x, y)).collect();
         for &(x, val) in fixes {
             v[x] = val;
@@ -469,7 +487,8 @@ pub fn apply(cal: &Calibration, frame: &mut [u16], width: usize, height: usize, 
         for (o, val) in row.iter_mut().zip(&v) {
             *o = (*val).clamp(0, 65535) as u16;
         }
-    });
+        Ok(())
+    })
 }
 
 /// Step 6 on frame row `y`: `v` (the whole row) times each grid's gains.

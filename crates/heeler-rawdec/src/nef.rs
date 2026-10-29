@@ -464,7 +464,9 @@ pub fn decode(data: &[u8], width: usize, height: usize, h: &Huffman, line: impl 
     if let Some((from, t)) = &later {
         codes.push((*from, t));
     }
-    let diff = |sym: u8, r: &mut crate::huffman::Reader| -> Result<i32, Error> {
+    // A difference is under 2^15 either way (its category at most 15), so
+    // 16 bits hold it.
+    let diff = |sym: u8, r: &mut crate::huffman::Reader| -> Result<i16, Error> {
         let (cat, shl) = ((sym & 15) as u32, (sym >> 4) as u32);
         if cat == 0 {
             return Ok(0);
@@ -476,7 +478,7 @@ pub fn decode(data: &[u8], width: usize, height: usize, h: &Huffman, line: impl 
         let v = r.peek(n) as i32;
         r.skip(n);
         let d = ((v << 1) + 1) << shl >> 1;
-        Ok(if d & (1 << (cat - 1)) == 0 { d - (1 << cat) + i32::from(shl == 0) } else { d })
+        Ok((if d & (1 << (cat - 1)) == 0 { d - (1 << cat) + i32::from(shl == 0) } else { d }) as i16)
     };
     let piece = (data.len() / (rayon::current_num_threads() * 4)).max(1 << 16);
     let d = crate::huffman::parallel(data, &codes, width * height, piece, &diff).map_err(|e| match e {
@@ -488,7 +490,7 @@ pub fn decode(data: &[u8], width: usize, height: usize, h: &Huffman, line: impl 
     let first: Vec<[i32; 2]> = (0..height)
         .map(|y| {
             for c in 0..2 {
-                seeds[y & 1][c] += d[y * width + c];
+                seeds[y & 1][c] += d[y * width + c] as i32;
             }
             seeds[y & 1]
         })
@@ -499,7 +501,7 @@ pub fn decode(data: &[u8], width: usize, height: usize, h: &Huffman, line: impl 
             let mut left = first[y];
             for (x, (o, &dx)) in row.iter_mut().zip(&d[y * width..(y + 1) * width]).enumerate() {
                 if x >= 2 {
-                    left[x & 1] += dx;
+                    left[x & 1] += dx as i32;
                 }
                 *o = left[x & 1].clamp(0, 0x3fff) as u16;
             }

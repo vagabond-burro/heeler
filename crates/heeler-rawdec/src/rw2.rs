@@ -47,6 +47,8 @@
 //! its neighbors before the develop, as LibRaw fills it
 //! (develop::fill_zeros).
 
+use std::sync::atomic::AtomicBool;
+
 use rayon::prelude::*;
 
 use crate::dng::{Coding, Dng, Format, Pieces};
@@ -507,11 +509,12 @@ impl<'a> Bits<'a> {
 
 /// One RawFormat 8 tile of `width` samples by `rows`, handing each row to
 /// `put`.
-fn tile_8(data: &[u8], width: usize, rows: usize, h: &Huffman, put: &impl Fn(usize, &[u16])) -> Result<(), Error> {
+fn tile_8(data: &[u8], width: usize, rows: usize, h: &Huffman, stop: Option<&AtomicBool>, put: &impl Fn(usize, &[u16])) -> Result<(), Error> {
     let mut bits = Bits::new(data);
     let mut lines = [vec![0u16; width], vec![0u16; width]];
     let mut first = [0i32; 4];
     for r in (0..rows).step_by(2) {
+        crate::stopped(stop)?;
         let mut last = first;
         for c in (0..width).step_by(2) {
             for (q, v) in last.iter_mut().enumerate() {
@@ -553,15 +556,16 @@ fn tile_8(data: &[u8], width: usize, rows: usize, h: &Huffman, put: &impl Fn(usi
 /// Decodes the frame's first `rows` rows of `width` samples from `bytes`
 /// at the spans parse found, handing each row's run from a column to
 /// `put`, across the cores.
-pub fn decode(bytes: &[u8], spans: &[(usize, usize)], width: usize, rows: usize, coding: &Panasonic, put: impl Fn(usize, usize, &[u16]) + Sync) -> Result<(), Error> {
+pub fn decode(bytes: &[u8], spans: &[(usize, usize)], width: usize, rows: usize, coding: &Panasonic, stop: Option<&AtomicBool>, put: impl Fn(usize, usize, &[u16]) + Sync) -> Result<(), Error> {
     if coding.version == 8 {
         let h = Huffman::new(&coding.code).ok_or(Error::Corrupt("a RawFormat 8 code"))?;
         return coding.tiles.par_iter().zip(spans).try_for_each(|(&(x, y, w, th), &(at, len))| {
+            crate::stopped(stop)?;
             if y >= rows {
                 return Ok(());
             }
             let data = bytes.get(at..at + len).ok_or(Error::Corrupt("RW2 samples past the end of the file"))?;
-            tile_8(data, w, th.min(rows - y), &h, &|r, line| put(y + r, x, line))
+            tile_8(data, w, th.min(rows - y), &h, stop, &|r, line| put(y + r, x, line))
         });
     }
     let &(at, len) = spans.first().ok_or(Error::Corrupt("no RW2 samples"))?;
@@ -571,18 +575,20 @@ pub fn decode(bytes: &[u8], spans: &[(usize, usize)], width: usize, rows: usize,
         if data.len() < width * rows * 2 {
             return Err(Error::Corrupt("RW2 samples that end early"));
         }
-        (0..rows).into_par_iter().for_each(|r| {
+        return (0..rows).into_par_iter().try_for_each(|r| {
+            crate::stopped(stop)?;
             let line: Vec<u16> = data[r * width * 2..(r + 1) * width * 2].chunks_exact(2).map(|w| u16::from_le_bytes([w[0], w[1]]) >> 4).collect();
             put(r, 0, &line);
+            Ok(())
         });
-        return Ok(());
     }
     let per = coding.per_packet();
     let packets = width / per;
     if width % per != 0 || data.len() < coding.span(packets * rows) {
         return Err(Error::Corrupt("RW2 samples that end early"));
     }
-    (0..rows).into_par_iter().for_each(|r| {
+    (0..rows).into_par_iter().try_for_each(|r| {
+        crate::stopped(stop)?;
         let mut line = vec![0u16; width];
         for (k, out) in line.chunks_exact_mut(per).enumerate() {
             let p = packet(data, r * packets + k, coding.turned());
@@ -593,8 +599,8 @@ pub fn decode(bytes: &[u8], spans: &[(usize, usize)], width: usize, rows: usize,
             }
         }
         put(r, 0, &line);
-    });
-    Ok(())
+        Ok(())
+    })
 }
 
 #[cfg(test)]
@@ -703,9 +709,9 @@ mod tests {
         let bytes: Vec<u8> = stream.chunks(8).map(|b| b.iter().enumerate().fold(0u8, |a, (i, &v)| a | (v as u8) << i)).collect();
         let h = Huffman::new(&CODE_8).unwrap();
         let got = std::sync::Mutex::new(vec![Vec::new(); rows]);
-        tile_8(&bytes, w, rows, &h, &|r, line| got.lock().unwrap()[r] = line.to_vec()).unwrap();
+        tile_8(&bytes, w, rows, &h, None, &|r, line| got.lock().unwrap()[r] = line.to_vec()).unwrap();
         assert_eq!(got.into_inner().unwrap(), frame);
-        assert!(tile_8(&bytes[..bytes.len() / 2], w, rows, &h, &|_, _| {}).is_err());
+        assert!(tile_8(&bytes[..bytes.len() / 2], w, rows, &h, None, &|_, _| {}).is_err());
     }
 
     #[test]

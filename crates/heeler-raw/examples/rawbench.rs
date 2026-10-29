@@ -5,8 +5,9 @@
 //!   cargo run --release -p heeler-raw --example rawbench -- [options] [paths]
 //!
 //! With no paths it walks the corpus at HEELER_RAW_CORPUS (a tree of
-//! maker/camera/file, the sample archive's layout), skipping AppleDouble
-//! `._` files and the manifest. Options:
+//! maker/camera/file, the sample archive's layout; several trees joined
+//! as PATH joins them), skipping AppleDouble `._` files and the manifest.
+//! Options:
 //!
 //!   --decoder libraw|rust   which develop to time (libraw); rust needs
 //!                           the rust-decoder feature and skips the
@@ -70,13 +71,13 @@ fn main() {
             _ => a.paths.push(arg.into()),
         }
     }
-    let root = std::env::var_os("HEELER_RAW_CORPUS").map(PathBuf::from);
+    let roots: Vec<PathBuf> = std::env::var_os("HEELER_RAW_CORPUS").map(|v| std::env::split_paths(&v).collect()).unwrap_or_default();
     let files = if a.paths.is_empty() {
-        let Some(root) = root.as_deref() else {
+        if roots.is_empty() {
             eprintln!("no paths given and HEELER_RAW_CORPUS is not set");
             std::process::exit(2);
-        };
-        corpus(root, &a)
+        }
+        roots.iter().flat_map(|root| corpus(root, &a)).collect()
     } else {
         a.paths.clone()
     };
@@ -89,7 +90,7 @@ fn main() {
     let mut rows = Vec::new();
     for (i, path) in files.iter().enumerate() {
         let Ok(bytes) = std::fs::read(path) else { continue };
-        let rel = root.as_deref().and_then(|r| path.strip_prefix(r).ok()).unwrap_or(path);
+        let rel = roots.iter().find_map(|r| path.strip_prefix(r).ok()).unwrap_or(path);
         let parts: Vec<String> = rel.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
         let (maker, camera) = if parts.len() >= 3 { (parts[parts.len() - 3].clone(), parts[parts.len() - 2].clone()) } else { (String::new(), String::new()) };
         let opts = DevelopOpts { half_size: a.half, ..DevelopOpts::default() };

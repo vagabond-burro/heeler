@@ -60,7 +60,7 @@ pub mod vc5;
 pub mod xtrans;
 mod verified;
 
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub use develop::{Image, Plan, Times};
 
@@ -153,6 +153,14 @@ pub fn camera_key(p: &Plan) -> (&'static str, String, String) {
 /// Develops `bytes`, stopping with Canceled once `stop` is set.
 pub fn develop(bytes: &[u8], opts: &Opts, stop: Option<&AtomicBool>) -> Result<(Image, Times), Error> {
     develop::develop(bytes, opts, stop)
+}
+
+/// Canceled once `stop` is set: what the develop checks between its
+/// stages, and a decoder between its rows, tiles or packets (one relaxed
+/// load each, nothing a decode's speed shows).
+#[inline]
+pub(crate) fn stopped(stop: Option<&AtomicBool>) -> Result<(), Error> {
+    if stop.is_some_and(|s| s.load(Ordering::Relaxed)) { Err(Error::Canceled) } else { Ok(()) }
 }
 
 #[derive(Debug, thiserror::Error)]

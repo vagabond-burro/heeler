@@ -186,7 +186,7 @@ pub fn frame(bytes: &[u8]) -> Result<(usize, usize, Vec<u16>), Error> {
     let out = std::sync::Mutex::new(vec![0u16; w * h]);
     let put = |r: usize, line: &[u16]| out.lock().unwrap()[r * w..(r + 1) * w].copy_from_slice(&line[..w]);
     match &s.coding {
-        Coding::Fuji(f) => crate::fuji::decode(bytes, f, h, put)?,
+        Coding::Fuji(f) => crate::fuji::decode(bytes, f, h, None, put)?,
         Coding::Headerless(l) => crate::headerless::decode(bytes, w, h, h, l, put)?,
         _ => {
             let row = w * 3 / 2;

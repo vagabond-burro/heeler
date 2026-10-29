@@ -40,6 +40,7 @@
 //! parallel, each output row from its own inputs, so the result is the
 //! same however the work is split.
 
+use std::sync::atomic::AtomicBool;
 use std::sync::OnceLock;
 
 use heeler_engine::memory;
@@ -53,12 +54,18 @@ use crate::Error;
 /// DNG's: a bitstream naming another size is refused before it sizes an
 /// allocation.
 pub fn decode(tile: &[u8], width: usize, height: usize, rggb: bool) -> Result<Vec<u16>, Error> {
+    decode_until(tile, width, height, rggb, None)
+}
+
+/// `decode`, Canceled between segments and between blocks of rows once
+/// `stop` is set.
+pub fn decode_until(tile: &[u8], width: usize, height: usize, rggb: bool, stop: Option<&AtomicBool>) -> Result<Vec<u16>, Error> {
     if width == 0 || height == 0 {
         return Err(Error::Corrupt("an empty VC-5 image"));
     }
     let mut decoder = Decoder::new(tile, width, height);
-    decoder.parse()?;
-    decoder.finish(rggb)
+    decoder.parse(stop)?;
+    decoder.finish(rggb, stop)
 }
 
 /// The start of every VC-5 bitstream, "VC-5".
@@ -456,12 +463,13 @@ impl<'a> Decoder<'a> {
     }
 
     /// Reads segments until every channel's largest wavelet is complete.
-    fn parse(&mut self) -> Result<(), Error> {
+    fn parse(&mut self, stop: Option<&AtomicBool>) -> Result<(), Error> {
         let marker = (self.bits.get(16) << 16) | self.bits.get(16);
         if marker != START_MARKER {
             return Err(Error::Corrupt("no VC-5 start marker"));
         }
         loop {
+            crate::stopped(stop)?;
             let tag = self.bits.get(16) as u16 as i16;
             let value = self.bits.get(16) as u16 as i16;
             // A stream that ran out decodes zeros, never the picture.
@@ -755,7 +763,7 @@ impl<'a> Decoder<'a> {
     /// The image: each channel's largest wavelet inverted into its
     /// component array, rows at a time, and the four recombined into the
     /// Bayer samples.
-    fn finish(self, rggb: bool) -> Result<Vec<u16>, Error> {
+    fn finish(self, rggb: bool, stop: Option<&AtomicBool>) -> Result<Vec<u16>, Error> {
         if self.channel_count != MAX_CHANNELS {
             return Err(Error::Unsupported("a VC-5 image of other than four channels"));
         }
@@ -776,7 +784,8 @@ impl<'a> Decoder<'a> {
         let iw = bands[0].width;
         let mut out = memory::vector(width * height, 0u16, "VC-5 image")?;
         // Each input row makes two component rows, so four image rows.
-        out.par_chunks_mut(4 * width * BLOCK).enumerate().for_each(|(k, chunk)| {
+        out.par_chunks_mut(4 * width * BLOCK).enumerate().try_for_each(|(k, chunk)| {
+            crate::stopped(stop)?;
             let mut scratch: Vec<Scratch> = (0..MAX_CHANNELS).map(|_| Scratch::new(iw)).collect();
             let mut rows = vec![[vec![0i16; cw], vec![0i16; cw]]; MAX_CHANNELS];
             for (j, quad) in chunk.chunks_mut(4 * width).enumerate() {
@@ -796,7 +805,8 @@ impl<'a> Decoder<'a> {
                     pack(row(0), row(1), row(2), row(3), pair, rggb, shift, curve);
                 }
             }
-        });
+            Ok::<(), Error>(())
+        })?;
         Ok(out)
     }
 }

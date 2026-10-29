@@ -282,7 +282,18 @@ pub struct PixelGains {
 
 impl PixelGains {
     pub fn new(ops: &[Stage3], width: u32, height: u32, planes: usize) -> PixelGains {
+        PixelGains::scaled(ops, width, height, planes, 1, (width, height))
+    }
+
+    /// For an image each of whose pixels stands for `scale` by `scale` of
+    /// the stage 3 image, `full` in size (a half-size develop, scale 2): a
+    /// map's area and pitch are in the full image's rows and columns, and
+    /// a pixel takes the map where any of the rows and columns it stands
+    /// for does. Where the map is in the grid is read from the pixel's
+    /// place in its own image, as at scale 1.
+    pub fn scaled(ops: &[Stage3], width: u32, height: u32, planes: usize, scale: u32, full: (u32, u32)) -> PixelGains {
         let (w, h) = (width as usize, height as usize);
+        let scale = scale.max(1);
         let ops = ops
             .iter()
             .filter_map(|op| match op {
@@ -292,13 +303,14 @@ impl PixelGains {
                     if first >= last {
                         return None;
                     }
-                    let place = |n: usize, lo: u32, hi: u32, pitch: u32, origin: f64, spacing: f64, points: u32| -> Vec<Option<(usize, f64)>> {
-                        (0..n as u32)
-                            .map(|i| (i >= lo && i < hi.min(n as u32) && (i - lo) % pitch == 0).then(|| GainMap::locate(i as f64 / n.max(1) as f64, origin, spacing, points)))
+                    let place = |n: usize, whole: u32, lo: u32, hi: u32, pitch: u32, origin: f64, spacing: f64, points: u32| -> Vec<Option<(usize, f64)>> {
+                        let covered = |j: u64| j >= lo as u64 && j < hi.min(whole) as u64 && (j - lo as u64) % pitch as u64 == 0;
+                        (0..n as u64)
+                            .map(|i| (0..scale as u64).any(|k| covered(i * scale as u64 + k)).then(|| GainMap::locate(i as f64 / n.max(1) as f64, origin, spacing, points)))
                             .collect()
                     };
-                    let rows = place(h, map.top, map.bottom, map.row_pitch, map.origin_v, map.spacing_v, map.points_v);
-                    let cols = place(w, map.left, map.right, map.col_pitch, map.origin_h, map.spacing_h, map.points_h);
+                    let rows = place(h, full.1, map.top, map.bottom, map.row_pitch, map.origin_v, map.spacing_v, map.points_v);
+                    let cols = place(w, full.0, map.left, map.right, map.col_pitch, map.origin_h, map.spacing_h, map.points_h);
                     Some(Prepared::Gain { map: map.clone(), first, last, rows, cols })
                 }
                 Stage3::Vignette(v) => {
@@ -318,15 +330,22 @@ impl PixelGains {
         self.ops.is_empty()
     }
 
-    /// The bytes the tables hold.
-    pub fn bytes(&self) -> usize {
-        self.ops
-            .iter()
+    /// The bytes `PixelGains::new` would hold for the same arguments,
+    /// worked out without building its tables: for a develop's admission,
+    /// before anything is held.
+    pub fn bytes(ops: &[Stage3], width: u32, height: u32, planes: usize) -> usize {
+        let (w, h) = (width as usize, height as usize);
+        ops.iter()
             .map(|op| match op {
-                Prepared::Gain { map, rows, cols, .. } => map.gains.len() * 4 + (rows.len() + cols.len()) * 24,
-                Prepared::Vignette { dx2, .. } => dx2.len() * 8,
+                Stage3::Gain(map) if (map.plane as usize) < (map.plane as usize + map.planes as usize).min(planes) => map.gains.len().saturating_mul(4).saturating_add(w.saturating_add(h).saturating_mul(24)),
+                Stage3::Gain(_) => 0,
+                Stage3::Vignette(v) => {
+                    let (cx, cy) = (v.cx * w as f64, v.cy * h as f64);
+                    let far = [(0.0, 0.0), (w as f64, 0.0), (0.0, h as f64), (w as f64, h as f64)].iter().map(|(x, y)| (x - cx).powi(2) + (y - cy).powi(2)).fold(0.0, f64::max);
+                    if far > 0.0 { w.saturating_mul(8) } else { 0 }
+                }
             })
-            .sum()
+            .fold(0usize, usize::saturating_add)
     }
 
     /// Scales pixel (row, col)'s color planes by each opcode's gain in
@@ -560,5 +579,53 @@ mod tests {
         let ops = parse_list3(&list(&[gain_map_opcode([0, 0, 1, 1], [1, 1], [1, 1], &[2.0])]));
         apply_rgb(&ops, &mut Rgb { data: &mut data, stride: 4, planes: 3, width: 1, height: 1 });
         assert_eq!(data, vec![65535, 60000, 60000, 60000]);
+    }
+
+    #[test]
+    fn the_admitted_bytes_are_what_the_built_tables_hold() {
+        // What PixelGains::new holds, measured from what it built.
+        let held = |g: &PixelGains| -> usize {
+            g.ops
+                .iter()
+                .map(|op| match op {
+                    Prepared::Gain { map, rows, cols, .. } => map.gains.len() * 4 + (rows.len() + cols.len()) * 24,
+                    Prepared::Vignette { dx2, .. } => dx2.len() * 8,
+                })
+                .sum()
+        };
+        let mut other_plane = gain_map_opcode([0, 0, 2, 3], [1, 1], [2, 2], &[1.5; 4]);
+        other_plane[16 + 16..16 + 20].copy_from_slice(&3u32.to_be_bytes());
+        let ops = parse_list3(&list(&[
+            vignette_opcode([1.0, 0.0, 0.0, 0.0, 0.0], 0.5, 0.5),
+            gain_map_opcode([0, 0, 4, 4], [1, 1], [2, 3], &[2.0; 6]),
+            other_plane,
+        ]));
+        for (w, h, planes) in [(640, 480, 3), (7, 5, 1), (0, 0, 3), (1, 1, 3), (9, 4, 4), (9, 4, 0)] {
+            assert_eq!(PixelGains::bytes(&ops, w, h, planes), held(&PixelGains::new(&ops, w, h, planes)), "{w} by {h}, {planes}");
+            // A half-size develop's tables are its own size's.
+            assert_eq!(PixelGains::bytes(&ops, w, h, planes), held(&PixelGains::scaled(&ops, w, h, planes, 2, (2 * w + 1, 2 * h))), "{w} by {h}, {planes} at half size");
+        }
+    }
+
+    #[test]
+    fn at_half_size_a_map_reaches_the_blocks_its_full_size_rows_and_columns_fall_in() {
+        // A 40 by 30 image, a map of gain 2 from row 5 and column 8, and one
+        // on every second row from row 1 (pitch 2).
+        let offset = parse_list3(&list(&[gain_map_opcode([5, 8, 30, 40], [1, 1], [1, 1], &[2.0])]));
+        let half = PixelGains::scaled(&offset, 20, 15, 3, 2, (40, 30));
+        let gain = |g: &PixelGains, r, c| {
+            let mut px = [1000u16; 3];
+            g.apply(r, c, &mut px);
+            px[0]
+        };
+        // Block row 2 holds rows 4 and 5, block column 4 columns 8 and 9.
+        assert_eq!((gain(&half, 1, 10), gain(&half, 2, 10)), (1000, 2000));
+        assert_eq!((gain(&half, 7, 3), gain(&half, 7, 4)), (1000, 2000));
+        let pitched = parse_list3(&list(&[gain_map_opcode([1, 0, 30, 40], [2, 1], [1, 1], &[2.0])]));
+        let half = PixelGains::scaled(&pitched, 20, 15, 3, 2, (40, 30));
+        assert!((0..15).all(|r| gain(&half, r, 0) == 2000));
+        // At full size, scale 1 is new's.
+        let full = PixelGains::scaled(&offset, 40, 30, 3, 1, (40, 30));
+        assert_eq!((gain(&full, 4, 10), gain(&full, 5, 10), gain(&full, 5, 7)), (1000, 2000, 1000));
     }
 }

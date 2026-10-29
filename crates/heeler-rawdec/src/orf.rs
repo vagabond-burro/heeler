@@ -33,6 +33,8 @@
 //! the camera (geometry.rs). The image area, CFA colors and white level
 //! come from geometry.rs, the calibrations from cameras.rs.
 
+use std::sync::atomic::AtomicBool;
+
 use crate::dng::{Coding, Dng, Format, Pieces};
 use crate::tiff::{Entry, Ifd, Tiff};
 use crate::Error;
@@ -327,14 +329,16 @@ impl<'a> Bits<'a> {
 /// does not, whichever of w and n lies farther from nw.
 ///
 /// The bits are read on a thread of their own, a row at a time, while the
-/// predictions are made on this one.
-pub fn decode(data: &[u8], header: usize, width: usize, rows: usize, put: impl Fn(usize, &[u16])) -> Result<(), Error> {
+/// predictions are made on this one; the reader stops with Canceled once
+/// `stop` is set.
+pub fn decode(data: &[u8], header: usize, width: usize, rows: usize, stop: Option<&AtomicBool>, put: impl Fn(usize, &[u16])) -> Result<(), Error> {
     let data = data.get(header..).unwrap_or(&[]);
     std::thread::scope(|scope| {
         let (rows_out, rows_in) = std::sync::mpsc::sync_channel::<Vec<i32>>(16);
         let reader = scope.spawn(move || -> Result<(), Error> {
             let mut bits = Bits { d: data, at: 0, buf: 0, n: 0 };
             for _ in 0..rows {
+                crate::stopped(stop)?;
                 let mut row = vec![0i32; width];
                 read_row(&mut bits, &mut row);
                 if bits.overrun() {
@@ -540,15 +544,38 @@ mod tests {
         let frame: Vec<Vec<u16>> = (0..rows).map(|r| (0..width).map(|c| (200 + 13 * r + 7 * c + (r * c * 37) % 50 + if r == 3 && c == 5 { 3000 } else { 0 }) as u16).collect()).collect();
         let data = code(&frame);
         let got = std::cell::RefCell::new(Vec::new());
-        decode(&data, 7, width, rows, |_, line| got.borrow_mut().push(line.to_vec())).unwrap();
+        decode(&data, 7, width, rows, None, |_, line| got.borrow_mut().push(line.to_vec())).unwrap();
         assert_eq!(got.into_inner(), frame);
+    }
+
+    #[test]
+    fn a_cancel_stops_the_reader_and_is_reported() {
+        // More rows than the channel holds, so a cancel finds the reader
+        // waiting on a full channel.
+        let (width, rows) = (16, 64);
+        let frame: Vec<Vec<u16>> = (0..rows).map(|r| (0..width).map(|c| (500 + 7 * r + 3 * c) as u16).collect()).collect();
+        let data = code(&frame);
+        let stop = AtomicBool::new(true);
+        let seen = std::cell::Cell::new(0);
+        assert!(matches!(decode(&data, 7, width, rows, Some(&stop), |_, _| seen.set(seen.get() + 1)), Err(Error::Canceled)));
+        assert_eq!(seen.get(), 0, "canceled before it began");
+        let stop = AtomicBool::new(false);
+        let r = decode(&data, 7, width, rows, Some(&stop), |r, _| {
+            seen.set(r + 1);
+            if r == 2 {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                stop.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+        });
+        assert!(matches!(r, Err(Error::Canceled)), "{r:?}");
+        assert!(seen.get() < rows, "canceled partway");
     }
 
     #[test]
     fn a_short_stream_is_refused() {
         let frame: Vec<Vec<u16>> = (0..8).map(|r| (0..16).map(|c| (900 + 61 * r + 29 * c) as u16).collect()).collect();
         let data = code(&frame);
-        assert!(decode(&data[..data.len() / 3], 7, 16, 8, |_, _| {}).is_err());
+        assert!(decode(&data[..data.len() / 3], 7, 16, 8, None, |_, _| {}).is_err());
     }
 
     #[test]

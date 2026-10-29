@@ -28,6 +28,8 @@
 //! which takes the black level off; LibRaw's white level is then 65532
 //! less it.
 
+use std::sync::atomic::AtomicBool;
+
 use rayon::prelude::*;
 
 use crate::dng::{Coding, Dng, Format, Pieces};
@@ -156,8 +158,10 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         Some(1) => 6,
         _ => return Err(Error::Unsupported("a Phase One orientation not read here")),
     };
-    let cal = crate::iiq_cal::read(bytes).ok_or(Error::Unsupported("a Phase One calibration not read here"))?;
+    // The camera's own frame size first, so the calibration's tables are
+    // held for a frame it has.
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
+    let cal = crate::iiq_cal::read(bytes)?.ok_or(Error::Unsupported("a Phase One calibration not read here"))?;
     // LibRaw's white level once the calibration has taken the black off:
     // 65532 less it, or the back's own where that is lower (a Leaf Credo
     // 40's samples are 14 bits: 16383, where 64508 developed it two stops
@@ -269,14 +273,15 @@ fn row_3(data: &[u8], width: usize, shift: u32, line: &mut [u16]) {
 }
 
 /// Decodes the first `rows` rows of `width` samples, handing each row to
-/// `put`, across the cores.
-pub fn decode(data: &[u8], width: usize, rows: usize, p1: &PhaseOne, put: impl Fn(usize, &[u16]) + Sync) -> Result<(), Error> {
+/// `put`, across the cores; Canceled between rows once `stop` is set.
+pub fn decode(data: &[u8], width: usize, rows: usize, p1: &PhaseOne, stop: Option<&AtomicBool>, put: impl Fn(usize, &[u16]) + Sync) -> Result<(), Error> {
     if p1.coding == 0 {
         let frame = crate::iiq_s::decode_0(data, width, rows).ok_or(Error::Corrupt("IIQ samples shorter than the frame"))?;
         frame.par_chunks(width).enumerate().for_each(|(r, line)| put(r, line));
         return Ok(());
     }
     (0..rows).into_par_iter().try_for_each(|r| {
+        crate::stopped(stop)?;
         let at = *p1.rows.get(r).ok_or(Error::Corrupt("an IIQ row past its offsets"))?;
         let mut line = vec![0u16; width];
         let row = data.get(at..).ok_or(Error::Corrupt("an IIQ row past its samples"))?;
