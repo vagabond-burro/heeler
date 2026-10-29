@@ -156,6 +156,7 @@ import { canRedo, canUndo, redo, undo } from "../libraryundo";
 import { folderBehind, isWithin, leaveCollection, onFolderLeft, openCollection } from "./collectionnav";
 import { expandAllChildren, expandedPaths, listIntoTree, newFolderIn, refreshFolder, stopExpanding, treeContains } from "./foldertree";
 import { type D, askForgetMissingTrashed, askTrash, editCollectionMembership, flagSelection, leafName, mergeSelection, openFolderPlain, openFolderRemembering, rateSelection, refreshLibrary, relinkFrom, renameFolderTo, revealActiveThumb, stitchSelection, treeKeys, visibleFolderPaths } from "./chromeparts";
+import { NAVIGATOR_CORNERS } from "./viewaidsparts";
 export { GroupGlyph };
 
 function Star({ on }: { on: boolean }) {
@@ -1754,9 +1755,15 @@ export function MenuBar({ state, dispatch }: { state: State; dispatch: D }) {
       items: [
         item("Expand All Sections", () => runCommand("view.sections.expand", state, dispatch), "menu-view-sections-expand", false, "view.sections.expand", "Opens every adjustment section, the ones the filter chips leave out too; sections hidden in Preferences stay hidden. Option-click a closed section to do the same."),
         item("Collapse All Sections", () => runCommand("view.sections.collapse", state, dispatch), "menu-view-sections-collapse", false, "view.sections.collapse", "Folds every adjustment section, the ones the filter chips leave out too; sections hidden in Preferences stay hidden. Option-click an open section to do the same."),
-        // The canvas header's two viewing aids, here too so their keys
-        // have a menu to show in.
+        // The two viewing aids. The Navigator lives here alone (the canvas
+        // header keeps only the Loupe's button), its corner in the fold-out
+        // under it.
         check("Navigator", state.prefs.navigatorOn, () => runCommand("view.navigator", state, dispatch), "menu-view-navigator", "A map of the whole photograph in a corner of the canvas while it is zoomed past the canvas; drag its rectangle to move the view", "view.navigator"),
+        <SubMenu key="navigator-position" label="Navigator Position" testid="menu-view-navigator-position" hint="Which corner of the canvas the Navigator draws in">
+          {NAVIGATOR_CORNERS.map((c) =>
+            check(c.label, state.prefs.navigatorCorner === c.id, () => dispatch({ type: "set_prefs", prefs: { navigatorCorner: c.id } }), `menu-view-navigator-${c.id}`, `The Navigator in the canvas's ${c.label.toLowerCase()} corner`),
+          )}
+        </SubMenu>,
         check("Loupe", state.prefs.loupeOn, () => runCommand("view.loupe", state, dispatch), "menu-view-loupe", "A magnifying glass under the pointer; while it is up the wheel and the zoom keys change its magnification", "view.loupe"),
       ],
     },

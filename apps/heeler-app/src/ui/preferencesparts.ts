@@ -117,7 +117,7 @@ export const SETTINGS = [
     id: "navigator-size",
     category: "interface",
     label: "Navigator size",
-    description: "Sets how large the canvas's Navigator draws, as a percent of the canvas; it shows while the Navigator button is on and the photograph is zoomed past the canvas.",
+    description: "Sets how large the canvas's Navigator draws, as a percent of the canvas; it shows while View > Navigator is on and the photograph is zoomed past the canvas.",
   },
   {
     id: "wheel-zoom-direction",

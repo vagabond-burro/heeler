@@ -137,7 +137,8 @@ For operations on existing nodes, use the graph context menu. See [Graph canvas]
 - **Expand All Sections** opens every adjustment section, the ones the filter chips leave out too; sections hidden in Preferences stay hidden. Option-clicking (Alt-clicking on Windows) a closed section header does the same.
 - **Collapse All Sections** folds every adjustment section, the ones the filter chips leave out too; sections hidden in Preferences stay hidden. Option-clicking (Alt-clicking on Windows) an open section header does the same.
 
-- **Navigator** shows or hides the canvas's map of the whole photograph, the toolbar's Navigator button; see [Navigator and Loupe](image-viewport.md#navigator-and-loupe).
+- **Navigator** shows or hides the canvas's map of the whole photograph; see [Navigator and Loupe](image-viewport.md#navigator-and-loupe).
+- **Navigator Position** chooses the canvas corner the Navigator draws in: **Top Left**, **Top Right**, **Bottom Left** or **Bottom Right**.
 - **Loupe** (`L`) shows or hides the magnifying glass under the pointer, the toolbar's Loupe button. While it is up, the zoom keys change its magnification and `Cmd+Shift+=` and `Cmd+Shift+-` (`Ctrl+Shift+=` and `Ctrl+Shift+-` on Windows) its size, and `Esc` puts it down.
 
 Option-Shift-click (Alt+Shift-click on Windows) limits the gesture to sections with the same on/off state. Both commands appear in Find a Control and accept custom shortcuts. These actions do not change undo history.

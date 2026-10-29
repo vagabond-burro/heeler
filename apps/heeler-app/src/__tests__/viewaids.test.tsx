@@ -47,7 +47,7 @@ const zoomed = (over: Partial<StageView> = {}): StageView => ({
 });
 
 describe("the header toggles", () => {
-  it("turn each aid on and off, lit while on", () => {
+  it("keep only the Loupe's button, lit while on", () => {
     let s = initialState();
     const sent: Command[] = [];
     const dispatch = (c: Command) => {
@@ -55,17 +55,13 @@ describe("the header toggles", () => {
       s = reduce(s, c);
     };
     const { rerender } = render(<ViewAidButtons state={s} dispatch={dispatch} />);
-    expect(screen.getByTestId("btn-navigator")).toHaveAttribute("data-active", "false");
+    // The Navigator is the View menu's alone.
+    expect(screen.queryByTestId("btn-navigator")).toBeNull();
     expect(screen.getByTestId("btn-loupe")).toHaveAttribute("data-active", "false");
-    fireEvent.click(screen.getByTestId("btn-navigator"));
     fireEvent.click(screen.getByTestId("btn-loupe"));
     rerender(<ViewAidButtons state={s} dispatch={dispatch} />);
-    expect(screen.getByTestId("btn-navigator")).toHaveAttribute("data-active", "true");
     expect(screen.getByTestId("btn-loupe")).toHaveAttribute("data-active", "true");
-    expect(sent).toEqual([
-      { type: "set_prefs", prefs: { navigatorOn: true } },
-      { type: "set_prefs", prefs: { loupeOn: true } },
-    ]);
+    expect(sent).toEqual([{ type: "set_prefs", prefs: { loupeOn: true } }]);
     fireEvent.click(screen.getByTestId("btn-loupe"));
     expect(s.prefs.loupeOn).toBe(false);
   });
@@ -73,7 +69,6 @@ describe("the header toggles", () => {
   it("name the Loupe's key in its hint, through the live binding", () => {
     render(<ViewAidButtons state={initialState()} dispatch={vi.fn()} />);
     expect(screen.getByTestId("btn-loupe")).toHaveAttribute("data-hint-cmd", "view.loupe");
-    expect(screen.getByTestId("btn-navigator")).toHaveAttribute("data-hint-cmd", "view.navigator");
   });
 
   it("persist with the settings, corner, size, magnification and radius too", () => {
@@ -94,38 +89,7 @@ describe("the header toggles", () => {
   });
 });
 
-describe("the Navigator's corner menu", () => {
-  it("opens on a right-click and sets the corner", () => {
-    const dispatch = vi.fn();
-    render(<ViewAidButtons state={initialState()} dispatch={dispatch} />);
-    expect(screen.queryByTestId("navigator-corner-menu")).toBeNull();
-    fireEvent.contextMenu(screen.getByTestId("btn-navigator"));
-    const menu = screen.getByTestId("navigator-corner-menu");
-    expect([...menu.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Top Left", "Top Right", "Bottom Left", "Bottom Right"]);
-    expect(screen.getByTestId("navigator-corner-br")).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(screen.getByTestId("navigator-corner-tr"));
-    expect(dispatch).toHaveBeenCalledWith({ type: "set_prefs", prefs: { navigatorCorner: "tr" } });
-    expect(screen.queryByTestId("navigator-corner-menu")).toBeNull();
-    // A right-click does not toggle the Navigator itself.
-    expect(dispatch).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId("btn-navigator")).toHaveFocus();
-  });
-
-  it("opens from the keyboard, moves through its choices and returns focus", () => {
-    render(<ViewAidButtons state={initialState()} dispatch={vi.fn()} />);
-    const button = screen.getByTestId("btn-navigator");
-    fireEvent.keyDown(button, { key: "ArrowDown" });
-    const menu = screen.getByTestId("navigator-corner-menu");
-    expect(screen.getByTestId("navigator-corner-br")).toHaveFocus();
-    fireEvent.keyDown(menu, { key: "ArrowUp" });
-    expect(screen.getByTestId("navigator-corner-bl")).toHaveFocus();
-    fireEvent.keyDown(menu, { key: "Home" });
-    expect(screen.getByTestId("navigator-corner-tl")).toHaveFocus();
-    fireEvent.keyDown(menu, { key: "Escape" });
-    expect(screen.queryByTestId("navigator-corner-menu")).toBeNull();
-    expect(button).toHaveFocus();
-  });
-
+describe("the Navigator's corner", () => {
   it("puts the Navigator in that corner", () => {
     for (const corner of ["tl", "tr", "bl", "br"] as const) {
       cleanup();

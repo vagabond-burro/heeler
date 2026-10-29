@@ -1,15 +1,12 @@
-// The canvas header's Navigator and Loupe: their buttons, the corner
-// menu, and the two views they put over the canvas. The math is in
+// The canvas header's Loupe button, and the two views the Navigator
+// and the Loupe put over the canvas. The math is in
 // viewaidsparts.ts.
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import type { Command, State } from "../state";
-import { useDismiss } from "./hooks";
 import { isPrimaryPress } from "./pointerguard";
 import { modLabel } from "../platform";
-import { MENU_LIST_SURFACE } from "./menufieldparts";
 import {
-  NAVIGATOR_CORNERS,
   insideQuad,
   loupeLabel,
   navigatorBox,
@@ -22,109 +19,11 @@ import {
 
 type D = React.Dispatch<Command>;
 
-/** The two header buttons, side by side. A right-click on the
- * Navigator's opens its corner menu. */
+/** The header's Loupe button. The Navigator has no button of its own:
+ * the View menu turns it on and places it. */
 export function ViewAidButtons({ state, dispatch }: { state: State; dispatch: D }) {
-  const [menu, setMenu] = useState(false);
-  const root = useDismiss<HTMLDivElement>(menu, () => setMenu(false));
-  const navigatorButton = useRef<HTMLButtonElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const corner = NAVIGATOR_CORNERS.find((c) => c.id === state.prefs.navigatorCorner) ?? NAVIGATOR_CORNERS[3];
-  const closeMenu = () => {
-    setMenu(false);
-    navigatorButton.current?.focus();
-  };
-  useEffect(() => {
-    if (!menu) return;
-    const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("[role=menuitemradio]") ?? []);
-    (items.find((item) => item.dataset.active) ?? items[0])?.focus();
-  }, [menu]);
-  const menuKeys = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("[role=menuitemradio]") ?? []);
-    const at = items.indexOf(document.activeElement as HTMLButtonElement);
-    const go = (i: number) => {
-      e.preventDefault();
-      items[Math.max(0, Math.min(items.length - 1, i))]?.focus();
-    };
-    if (e.key === "ArrowDown") go(at + 1);
-    else if (e.key === "ArrowUp") go(at - 1);
-    else if (e.key === "Home") go(0);
-    else if (e.key === "End") go(items.length - 1);
-    else if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      closeMenu();
-    } else if (e.key === "Tab") setMenu(false);
-  };
   return (
     <>
-      <div ref={root} style={{ position: "relative", display: "inline-flex" }}>
-        <button
-          ref={navigatorButton}
-          data-active={state.prefs.navigatorOn}
-          onClick={() => dispatch({ type: "set_prefs", prefs: { navigatorOn: !state.prefs.navigatorOn } })}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            setMenu(true);
-          }}
-          onKeyDown={(e) => {
-            if (e.key !== "ArrowDown" && e.key !== "ContextMenu") return;
-            e.preventDefault();
-            setMenu(true);
-          }}
-          data-testid="btn-navigator"
-          aria-label="Navigator"
-          aria-pressed={state.prefs.navigatorOn}
-          aria-haspopup="menu"
-          aria-expanded={menu}
-          data-hint={`Navigator: a map of the whole photograph in the ${corner.label.toLowerCase()} corner while it is zoomed past the canvas; drag its rectangle to move the view. Right-click or press Down to choose the corner`}
-          data-hint-cmd="view.navigator"
-          style={{ display: "inline-flex", alignItems: "center" }}
-        >
-          {/* A frame with the view's rectangle inside it. */}
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden focusable="false">
-            <rect x="3" y="5" width="18" height="14" />
-            <rect x="11" y="10" width="7" height="6" fill="currentColor" stroke="none" />
-          </svg>
-        </button>
-        {menu && (
-          <div
-            ref={menuRef}
-            data-testid="navigator-corner-menu"
-            role="menu"
-            aria-label="Navigator corner"
-            onKeyDown={menuKeys}
-            onMouseDown={(e) => e.stopPropagation()}
-            style={{ position: "absolute", top: "calc(100% + 5px)", left: 0, zIndex: 80, ...MENU_LIST_SURFACE, maxHeight: undefined, minWidth: 128 }}
-          >
-            {NAVIGATOR_CORNERS.map((c) => (
-              <button
-                key={c.id}
-                role="menuitemradio"
-                aria-checked={c.id === corner.id}
-                tabIndex={-1}
-                data-testid={`navigator-corner-${c.id}`}
-                data-active={c.id === corner.id || undefined}
-                onClick={() => {
-                  dispatch({ type: "set_prefs", prefs: { navigatorCorner: c.id } });
-                  closeMenu();
-                }}
-                style={{
-                  all: "unset",
-                  cursor: "pointer",
-                  fontSize: 11.5,
-                  padding: "4px 8px",
-                  whiteSpace: "nowrap",
-                  display: "block",
-                  color: c.id === corner.id ? "var(--accent)" : "var(--text-body)",
-                }}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
       <button
         data-active={state.prefs.loupeOn}
         onClick={() => dispatch({ type: "set_prefs", prefs: { loupeOn: !state.prefs.loupeOn } })}
