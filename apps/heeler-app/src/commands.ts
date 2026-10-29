@@ -16,6 +16,7 @@ import { SECTIONS } from "./ui/simpledata";
 import { NAV_START } from "./keynav";
 import { BAKE_DIALOG_BACKUP_LINE, bakeBackupNotice } from "./bakedbackups";
 import { redo, undo } from "./libraryundo";
+import { LOUPE_RADIUS_STEP, clampLoupeRadius, loupeMagStep } from "./ui/viewaidsparts";
 
 type D = React.Dispatch<Command>;
 
@@ -349,11 +350,32 @@ export function runCommand(
       return true;
 
     case "view.zoom.in":
-      dispatch({ type: "zoom_step", dir: 1 });
+    case "view.zoom.out": {
+      const dir = id === "view.zoom.in" ? 1 : -1;
+      // The Loupe up takes the zoom keys, as it takes the wheel: the
+      // canvas stays where it is and the glass magnifies more or less.
+      if (state.prefs.loupeOn) {
+        const next = loupeMagStep(state.prefs.loupeMagnification, dir);
+        if (next !== state.prefs.loupeMagnification) dispatch({ type: "set_prefs", prefs: { loupeMagnification: next } });
+        return true;
+      }
+      dispatch({ type: "zoom_step", dir });
       return true;
-    case "view.zoom.out":
-      dispatch({ type: "zoom_step", dir: -1 });
+    }
+    case "view.navigator":
+      dispatch({ type: "set_prefs", prefs: { navigatorOn: !state.prefs.navigatorOn } });
       return true;
+    case "view.loupe":
+      dispatch({ type: "set_prefs", prefs: { loupeOn: !state.prefs.loupeOn } });
+      return true;
+    case "view.loupe.bigger":
+    case "view.loupe.smaller": {
+      if (!state.prefs.loupeOn) return false;
+      const f = id === "view.loupe.bigger" ? LOUPE_RADIUS_STEP : 1 / LOUPE_RADIUS_STEP;
+      const next = clampLoupeRadius(state.prefs.loupeRadius * f);
+      if (next !== state.prefs.loupeRadius) dispatch({ type: "set_prefs", prefs: { loupeRadius: next } });
+      return true;
+    }
     case "view.zoom.fit":
     // The develop-scoped one-letter flavor: same Fit, reached by F,
     // where Graph and Canvas give F to Frame Nodes instead.

@@ -35,6 +35,7 @@ const FILES = [
   "smarttool.tsx",
   "splitview.tsx",
   "viewer.tsx",
+  "viewaids.tsx",
 ];
 
 /** Handlers that are not tool actions, by their exact expression. */

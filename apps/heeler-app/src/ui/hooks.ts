@@ -17,6 +17,9 @@ export interface ViewportNav {
   rotationStep?: number;
   /** flips which wheel direction zooms in (Preferences) */
   invertZoom?: boolean;
+  /** a first look at each wheel event; true means it was handled (the
+   * viewer's Loupe takes the zoom and Ctrl+scroll while it is up) */
+  claimWheel?: (e: WheelEvent) => boolean;
 }
 
 const ZOOM_RATE = 0.0015;
@@ -89,6 +92,7 @@ export function useViewportNav<T extends HTMLElement>(nav: ViewportNav) {
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      if (latest.current.claimWheel?.(e)) return;
       const mac = isMac();
       const alt = e.altKey || (!mac && e.metaKey);
       const vpan = mac ? e.metaKey : e.ctrlKey;

@@ -56,6 +56,7 @@ import { fitLayout, type FoldablePanel, type LayoutFit } from "./layoutfit";
 import { logDebug } from "./log";
 import { addColorSet, listColorSets, removeColorSet } from "./colorsets";
 import { arrange } from "./ui/arrange";
+import { clampLoupeMag, clampLoupeRadius, clampNavigatorSize, isNavigatorCorner, type NavigatorCorner } from "./ui/viewaidsparts";
 import { experimentalEnabled } from "./features";
 import registryDefaultsJson from "./registry-defaults.json";
 import { lookById, type SectionLook } from "./sectionlooks";
@@ -165,6 +166,17 @@ export interface Prefs {
    * empty corner shows, and a crop drag stops at the picture's edge.
    * Off, the crop stays where it is put. */
   cropStayInside: boolean;
+  /** the canvas header's Navigator: a thumbnail of the whole frame with
+   * the view's rectangle on it, shown while the photograph is bigger
+   * than the canvas; its corner and its size, a percent of the canvas */
+  navigatorOn: boolean;
+  navigatorCorner: NavigatorCorner;
+  navigatorSize: number;
+  /** the canvas header's Loupe: a magnifying glass under the pointer,
+   * its magnification over the canvas and its radius in screen pixels */
+  loupeOn: boolean;
+  loupeMagnification: number;
+  loupeRadius: number;
   /** wheel zoom sensitivity, expressed as the exponent rate per delta */
   viewerZoomRate: number;
   /** degrees applied by one wheel rotation step */
@@ -279,6 +291,12 @@ export const DEFAULT_PREFS: Prefs = {
   hiddenSections: [],
   cropRatios: [],
   cropStayInside: true,
+  navigatorOn: false,
+  navigatorCorner: "br",
+  navigatorSize: 20,
+  loupeOn: false,
+  loupeMagnification: 3,
+  loupeRadius: 90,
   viewerZoomRate: 0.0015,
   viewerRotationStep: 2,
   previewEdge: 2048,
@@ -5546,6 +5564,7 @@ export type Command =
   | { type: "zoom_viewer"; factor: number; cx?: number; cy?: number; unit?: number }
   | { type: "zoom_step"; dir: 1 | -1 }
   | { type: "pan_viewer"; dx: number; dy: number }
+  | { type: "set_viewer_pan"; x: number; y: number }
   | { type: "set_graph_popped_out"; out: boolean }
   | { type: "set_inspector_home"; home: "main" | "graph" }
   | { type: "toggle_canvas_nodes" }
@@ -13682,6 +13701,7 @@ const REDUCE_DEBUG_QUIET = new Set([
   "zoom_viewer",
   "zoom_step",
   "pan_viewer",
+  "set_viewer_pan",
   "zoom_graph",
   "pan_graph",
   "set_split_pos",
@@ -20378,6 +20398,12 @@ function reduceInner(s: State, cmd: Command): State {
           : DEFAULT_PREFS.hiddenSections,
         cropRatios: savedCropRatios(merged.cropRatios),
         cropStayInside: typeof merged.cropStayInside === "boolean" ? merged.cropStayInside : true,
+        navigatorOn: merged.navigatorOn === true,
+        navigatorCorner: isNavigatorCorner(merged.navigatorCorner) ? merged.navigatorCorner : DEFAULT_PREFS.navigatorCorner,
+        navigatorSize: clampNavigatorSize(merged.navigatorSize),
+        loupeOn: merged.loupeOn === true,
+        loupeMagnification: clampLoupeMag(merged.loupeMagnification),
+        loupeRadius: clampLoupeRadius(merged.loupeRadius),
         maskOverlayColor: MASK_OVERLAY_COLORS.some((color) => color.id === merged.maskOverlayColor)
           ? merged.maskOverlayColor
           : DEFAULT_PREFS.maskOverlayColor,
@@ -22010,6 +22036,11 @@ function reduceInner(s: State, cmd: Command): State {
         ...s,
         view: { ...s.view, pan: { x: s.view.pan.x + cmd.dx, y: s.view.pan.y + cmd.dy } },
       };
+    case "set_viewer_pan":
+      // The Navigator's drag: where the view should be, not how far it
+      // moved, so moves that land between two renders cannot add up.
+      if (!Number.isFinite(cmd.x) || !Number.isFinite(cmd.y)) return s;
+      return { ...s, view: { ...s.view, pan: { x: cmd.x, y: cmd.y } } };
     case "rotate_view":
       // Wraps, so spinning one way forever behaves.
       return { ...s, view: { ...s.view, viewRotation: (s.view.viewRotation + cmd.delta) % 360 } };

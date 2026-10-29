@@ -1,4 +1,5 @@
 import { modLabel } from "../platform";
+import { NAVIGATOR_SIZE_RANGE, clampNavigatorSize } from "./viewaidsparts";
 import { useDialogFocus } from "./dialogfocus";
 import { EyeOffIcon, MaskEyeIcon, PinIcon } from "./panelicons";
 import { SECTIONS, hiddenSectionCount, sectionHidden } from "./simpledata";
@@ -1252,6 +1253,24 @@ function SettingsCategory({
                 hi={15}
                 suffix="°"
                 onChange={(value) => setPref({ viewerRotationStep: clampViewerRotationStep(value) })}
+              />
+            }
+          />
+          <SettingBlock
+            id="navigator-size"
+            landing={landing}
+            control={
+              <NumericSetting
+                id="navigator-size"
+                landing={landing}
+                label="Size"
+                testid="prefs-navigator-size"
+                value={clampNavigatorSize(state.prefs.navigatorSize)}
+                lo={NAVIGATOR_SIZE_RANGE[0]}
+                hi={NAVIGATOR_SIZE_RANGE[1]}
+                suffix="%"
+                step={1}
+                onChange={(value) => setPref({ navigatorSize: clampNavigatorSize(value) })}
               />
             }
           />
