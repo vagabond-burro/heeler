@@ -42,9 +42,10 @@ signatures each need one thing from the photograph first:
   If the plane was not there yet, the aperture still lands and the same
   chip reads **Focus at the plane's median** until a focus is set, by
   that click or by Set focus. Nothing is written behind your back.
-- **The flare** needs a flaring light. The Lens Flare dials answer only
-  lights in the Depth Lighting rig with flare on, so while no light
-  flares the **Add a flaring light** chip shows: one click adds one
+- **The flare** needs a flaring light. With Lens Flare's Rig lights alone,
+  the dials answer only lights in the Depth Lighting rig with flare on, so
+  while no light flares (and Bright spots is off) the **Add a flaring
+  light** chip shows: one click adds one
   light at the frame's brightest point with its flare on, building
   Depth Lighting first if the photograph has none. It does not relight
   the scene.

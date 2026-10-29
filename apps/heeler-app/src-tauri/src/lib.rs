@@ -7331,6 +7331,59 @@ fn depth_map_input_frame(
     }
 }
 
+/// Lens Flare's Bright spots for a photograph: the sources found in
+/// what the flare node's input wire carries at preview size (the
+/// scene-linear frame before the Tone Profile, with the photograph's
+/// own framing), at the engine's fixed working size and in full-frame
+/// coordinates. Found once per input and dials: the input's render key
+/// and the dials key a session cache, so asking again after an edit
+/// downstream of the flare (or none at all) answers without a render.
+/// The panel writes the answer onto the node, so the fit view, 1:1
+/// slices and the export all draw this one list.
+#[tauri::command]
+async fn flare_spots(app: tauri::AppHandle, graph: UiGraph, image_id: String, node_id: String) -> Result<Vec<heeler_engine::BrightSpot>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let node = graph.nodes.iter().find(|n| n.id == node_id && n.node_type == "heeler.flare").ok_or("no flare node")?;
+        let dials = heeler_engine::SpotDials::of(&node.params);
+        let opts = source_opts_of(&graph);
+        let source = preview_source(&app, &image_id, opts)?;
+        let registry = Registry::builtin();
+        let (mut sources, scaled) = preview_sources_for(&app, &graph, &image_id, primary_scale_of(&app, &image_id, &graph, &source, false))?;
+        let g = build_graph(&scaled, &registry).map_err(|e| e.to_string())?;
+        let conn = g.incoming(&node_id, "in").ok_or("the flare node is not wired")?.clone();
+        let version = preview_source_version(&app, &image_id, opts, &source);
+        for n in graph.nodes.iter().filter(|n| n.node_type == "heeler.image_source" || n.node_type == "heeler.group") {
+            sources.insert(n.id.clone(), SourceImage { image: source.clone(), version, measured: false });
+        }
+        let input = Executor::key_of(&g, &conn.from.0, &sources).map_err(|e| e.to_string())?;
+        let key = fnv1a64(format!("flare_spots|{input:016x}|{}|{}|{:.3}|{:.3}", conn.from.1, dials.count, dials.threshold, dials.min_size).as_bytes());
+        if let Some(found) = flare_spot_cache().lock().map_err(|_| "flare cache poisoned")?.get(&key) {
+            return Ok(found.clone());
+        }
+        let mut exec = Executor::new();
+        let frame = match exec.render_connection(&g, &conn, &sources).map_err(|e| e.to_string())? {
+            Value::Image(img) => img,
+            Value::Mask(_) => return Err("the flare's input is not a picture".into()),
+        };
+        let found = heeler_engine::find_bright_spots(&frame, dials);
+        let mut cache = flare_spot_cache().lock().map_err(|_| "flare cache poisoned")?;
+        // A session's worth of photographs and dials; past that, start
+        // over rather than keep an order.
+        if cache.len() > 256 {
+            cache.clear();
+        }
+        cache.insert(key, found.clone());
+        Ok(found)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn flare_spot_cache() -> &'static Mutex<HashMap<u64, Vec<heeler_engine::BrightSpot>>> {
+    static CACHE: std::sync::OnceLock<Mutex<HashMap<u64, Vec<heeler_engine::BrightSpot>>>> = std::sync::OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 /// One Depth Lighting model run at a time, the depth map's or the
 /// normals': choosing Model on a new photograph asks for both at once,
 /// and two runs side by side would split the CPU and add their working
@@ -23597,6 +23650,7 @@ pub fn run() {
             polish_matte_full_cancel,
             depth_map,
             depth_subject,
+            flare_spots,
             surface_normals,
             depth_at,
             depth_forget,

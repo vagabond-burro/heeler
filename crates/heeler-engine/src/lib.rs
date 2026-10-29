@@ -16,6 +16,7 @@ pub mod cut;
 pub mod ops;
 mod ops_depth;
 mod ops_flare;
+pub mod flare_spots;
 mod ops_halation;
 mod ops_detail;
 mod ops_detail_eq;
@@ -67,6 +68,7 @@ pub use ops_recolor::{recolor_pairs_active, recolor_uses_smoothed_lookup, recolo
 pub use separation::{collision_overlay, GRAY_BIN_PERCENT, GRAY_NEAR_DEFAULT};
 pub use ops::{black_white_hue_gate, black_white_neutral_floor, black_white_saturation, black_white_wants_depth, BW_NEUTRAL_DEFAULT};
 pub use ops_flare::flare_wants_depth;
+pub use flare_spots::{find_bright_spots, BrightSpot, SpotDials};
 pub use ops_halation::halation_wants_depth;
 
 /// Bench handle for the shared gaussian kernel, so the detail bench can

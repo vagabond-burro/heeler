@@ -24,6 +24,12 @@
 //! the source's visibility alone. Without a plane the flare renders in
 //! full.
 //!
+//! Sources: the rig's lights (Rig lights, the switch every flare
+//! before 2026.7 had on) and the photograph's own bright spots (Bright
+//! spots, flare_spots.rs), either or both. A found source is a point
+//! light at its centroid that reads its depth off the plane there, so
+//! occlusion and the veil's depth treat it as they treat a rig lamp.
+//!
 //! Everything is analytic and measured in fractions of the FULL
 //! frame's short side, so the same numbers draw the same flare at fit
 //! size, at 1:1 in a sharp slice (the roi_* params map the patch), and
@@ -34,6 +40,7 @@ use heeler_graph::Node;
 
 use crate::buffers::{ImageBuf, Value};
 use crate::executor::EngineError;
+use crate::flare_spots::{spot_is_off, BrightSpot, MAX_SPOTS};
 use crate::ops::{image_input, p, to_scene};
 use crate::ops_depth::{depth_plane, depth_plane_at};
 use crate::ops_retouch::{ParsedStops, Stop};
@@ -201,7 +208,13 @@ pub(crate) fn flare(node: &Node, inputs: &[(String, Value)]) -> Result<Value, En
         .and_then(|raw| serde_json::from_str::<Vec<FlareLight>>(raw).ok())
         .unwrap_or_default();
     lights.retain(|l| l.on && l.flare && l.flare_strength > 0.0);
-    if lights.is_empty() || intensity <= 0.0 {
+    // The source choice: a document from before it has neither param
+    // and opens as Rig lights alone, so its flare does not change.
+    if p(&node.params, "rig", 1.0) < 0.5 {
+        lights.clear();
+    }
+    let spots = found_spots(node);
+    if (lights.is_empty() && spots.is_empty()) || intensity <= 0.0 {
         return Ok(Value::Image(src.clone()));
     }
     let (w, h) = (src.width, src.height);
@@ -266,14 +279,11 @@ pub(crate) fn flare(node: &Node, inputs: &[(String, Value)]) -> Result<Value, En
         /// the light's farness 0..1, for the per-pixel cut
         depth: f32,
     }
-    let mut ready: Vec<Ready> = Vec::new();
-    for l in &lights {
-        let (npos, depth) = light_position(l, aspect);
-        let pos = to_px(npos);
-        // Visibility: the share of the core disc that is nearer to the
-        // camera than the light is hidden. Sampled on a grid over the
-        // disc, inside the frame only; a light wholly off-frame is
-        // never occluded by what is in it.
+    // Visibility: the share of the core disc that is nearer to the
+    // camera than the light is hidden. Sampled on a grid over the
+    // disc, inside the frame only; a light wholly off-frame is never
+    // occluded by what is in it.
+    let visibility = |pos: [f32; 2], depth: f32| -> f32 {
         let mut vis = 1.0;
         if let (Some(pl), true) = (plane.as_ref(), occlusion > 0.0) {
             let mut seen = 0.0f32;
@@ -303,14 +313,45 @@ pub(crate) fn flare(node: &Node, inputs: &[(String, Value)]) -> Result<Value, En
                 vis = 1.0 - occlusion * (1.0 - raw);
             }
         }
-        let gain = intensity * (l.flare_strength / 100.0) * vis;
+        vis
+    };
+    let warm = |mut tint: [f32; 3]| -> [f32; 3] {
+        tint[0] *= 1.0 + 0.25 * temp;
+        tint[2] *= 1.0 - 0.25 * temp;
+        tint
+    };
+    let mut ready: Vec<Ready> = Vec::new();
+    for l in &lights {
+        let (npos, depth) = light_position(l, aspect);
+        let pos = to_px(npos);
+        let gain = intensity * (l.flare_strength / 100.0) * visibility(pos, depth);
         if gain <= 0.0 {
             continue;
         }
-        let mut tint = tint_of(&l.color);
-        tint[0] *= 1.0 + 0.25 * temp;
-        tint[2] *= 1.0 - 0.25 * temp;
-        ready.push(Ready { pos, tint, gain, depth });
+        ready.push(Ready { pos, tint: warm(tint_of(&l.color)), gain, depth });
+    }
+    // The found sources: point lights at their centroids, as strong as
+    // their energy says and Spot strength scales against the rig.
+    let spot_strength = p(&node.params, "spot_strength", 100.0) / 100.0;
+    for s in &spots {
+        let pos = to_px([s.x, s.y]);
+        // Its depth is the plane's at the centroid, set a softness's
+        // width (and a hair) nearer than the surface it was read on, so
+        // the lamp's own surroundings do not half hide it and a pole in
+        // front still does. No plane (or a slice that does not hold the
+        // centroid): behind everything, so it renders in full, as a rig
+        // light without a plane does.
+        let inside = pos[0] >= 0.0 && pos[1] >= 0.0 && pos[0] < fw as f32 && pos[1] < fh as f32;
+        let far = plane.as_ref().filter(|_| inside).and_then(|pl| {
+            let (x, y) = (pos[0] as usize, pos[1] as usize);
+            if fh == h { Some(pl[y * w + x]) } else { depth_plane_at(inputs, fw, fh, x, y) }
+        });
+        let depth = far.map_or(1.0, |f| (f - occlusion_soft - 0.02).max(0.0));
+        let gain = intensity * spot_strength * s.strength * visibility(pos, depth);
+        if gain <= 0.0 {
+            continue;
+        }
+        ready.push(Ready { pos, tint: warm(s.color.map(|c| c.max(0.0))), gain, depth });
     }
     if ready.is_empty() {
         return Ok(Value::Image(src.clone()));
@@ -443,6 +484,21 @@ pub(crate) fn flare(node: &Node, inputs: &[(String, Value)]) -> Result<Value, En
             }
         });
     Ok(Value::Image(Arc::new(out)))
+}
+
+/// The found sources the node draws: its `spots` (the desktop writes
+/// what flare_spots found there) without the ones the panel switched
+/// off, while Bright spots is on.
+fn found_spots(node: &Node) -> Vec<BrightSpot> {
+    if p(&node.params, "bright", 0.0) < 0.5 {
+        return Vec::new();
+    }
+    let text = |k: &str| node.params.get(k).and_then(|v| v.as_str()).unwrap_or("");
+    let mut spots: Vec<BrightSpot> = serde_json::from_str(text("spots")).unwrap_or_default();
+    let off: Vec<[f32; 2]> = serde_json::from_str(text("spots_off")).unwrap_or_default();
+    spots.retain(|s| s.strength > 0.0 && !spot_is_off(s, &off));
+    spots.truncate(MAX_SPOTS);
+    spots
 }
 
 /// Whether a flare node's rig and dials want the depth plane: the
@@ -728,5 +784,124 @@ mod tests {
         let a = run_on(&node, frame(50, 40, 0.2)).unwrap();
         let b = run_on(&node, frame(50, 40, 0.2)).unwrap();
         assert_eq!(a.as_image().unwrap().data, b.as_image().unwrap().data);
+    }
+
+    fn spot(x: f32, y: f32) -> String {
+        format!(r#"[{{"x":{x},"y":{y},"strength":1,"color":[1,1,1]}}]"#)
+    }
+
+    /// Bright spots on, no rig at all: the found source flares. Off, or
+    /// the source switched off in the list, it does not.
+    #[test]
+    fn a_found_source_flares_without_a_rig() {
+        let img = frame(48, 32, 0.1);
+        let mut node = make_node("heeler.flare");
+        set_text(&mut node, "spots", &spot(0.4, 0.5));
+        let lit = |node: &Node| -> f32 { added(run_on(node, img.clone()).unwrap().as_image().unwrap(), 0.1, 19, 16) };
+        assert!(lit(&node).abs() < 1e-6, "Bright spots off: nothing");
+        set_num(&mut node, "bright", 1.0);
+        assert!(lit(&node) > 0.5, "Bright spots on: the source's core {}", lit(&node));
+        // Switched off at (nearly) its position: gone.
+        let mut off = node.clone();
+        set_text(&mut off, "spots_off", "[[0.405,0.497]]");
+        assert_eq!(run_on(&off, img.clone()).unwrap().as_image().unwrap().data, img.data);
+        // Spot strength scales it.
+        let mut half = node.clone();
+        set_num(&mut half, "spot_strength", 50.0);
+        assert!((lit(&half) - lit(&node) / 2.0).abs() < 1e-4);
+        // Rig lights off drops the rig, not the found sources.
+        set_text(&mut node, "lights", &rig(0.8, 0.5, 100.0));
+        set_num(&mut node, "rig", 0.0);
+        let out = run_on(&node, img.clone()).unwrap();
+        assert!(added(out.as_image().unwrap(), 0.1, 38, 16) < added(out.as_image().unwrap(), 0.1, 19, 16) * 0.2);
+    }
+
+    /// A document from before the source choice has neither switch: its
+    /// rig flares exactly as before and stored spots draw nothing.
+    #[test]
+    fn a_document_without_the_source_params_opens_as_rig_lights_only() {
+        let img = frame(48, 32, 0.1);
+        let mut old = make_node("heeler.flare");
+        set_text(&mut old, "lights", &rig(0.5, 0.5, 100.0));
+        let before = run_on(&old, img.clone()).unwrap().as_image().unwrap().clone();
+        for k in ["rig", "bright", "spot_threshold", "spot_count", "spot_min_size", "spot_strength", "spots", "spots_off"] {
+            old.params.remove(k);
+        }
+        let opened = run_on(&old, img.clone()).unwrap();
+        assert_eq!(opened.as_image().unwrap().data, before.data);
+        set_text(&mut old, "spots", &spot(0.2, 0.2));
+        assert_eq!(run_on(&old, img).unwrap().as_image().unwrap().data, before.data);
+    }
+
+    /// Occlusion at a found source reads the plane the way it does for a
+    /// rig light: the source takes the plane's depth at its centroid (a
+    /// hair nearer), so a pole nearer than the lamp over half its disc
+    /// takes half the light, exactly as a rig lamp at that depth.
+    #[test]
+    fn a_found_source_is_occluded_like_a_rig_light_at_its_planes_depth() {
+        let img = frame(48, 48, 0.1);
+        let mut plane = ImageBuf::filled(48, 48, [0.9, 0.9, 0.9, 1.0]);
+        for y in 0..48 {
+            for x in 0..23 {
+                plane.set_pixel(x, y, [0.2, 0.2, 0.2, 1.0]);
+            }
+        }
+        let render = |node: &Node, pl: Option<&ImageBuf>| -> ImageBuf {
+            let mut inputs = vec![("in".to_string(), Value::Image(Arc::new(img.clone())))];
+            if let Some(p) = pl {
+                inputs.push(("raster".to_string(), Value::Image(Arc::new(p.clone()))));
+            }
+            crate::ops::execute(node, &inputs).unwrap().as_image().unwrap().as_ref().clone()
+        };
+        let mut found = make_node("heeler.flare");
+        set_num(&mut found, "occlusion_soft", 0.0);
+        set_num(&mut found, "veil", 0.0);
+        set_num(&mut found, "rig", 0.0);
+        set_num(&mut found, "bright", 1.0);
+        set_text(&mut found, "spots", &spot(0.5, 0.5));
+        let mut lamp = make_node("heeler.flare");
+        set_num(&mut lamp, "occlusion_soft", 0.0);
+        set_num(&mut lamp, "veil", 0.0);
+        // The plane reads 0.9 at the centroid; the source sits 0.02 nearer.
+        set_text(&mut lamp, "lights", &rig(0.5, 0.5, 88.0));
+        let open = render(&found, None);
+        let cut = render(&found, Some(&plane));
+        let rig_cut = render(&lamp, Some(&plane));
+        let (a, b) = (cut.pixel(26, 24)[1] - 0.1, open.pixel(26, 24)[1] - 0.1);
+        assert!(b > 0.1 && a < b * 0.9, "the pole takes part of the light: {a} vs {b}");
+        assert!((cut.pixel(10, 24)[1] - 0.1).abs() < 1e-4, "and the glow over the pole is cut");
+        for (a, b) in cut.data.iter().zip(&rig_cut.data) {
+            assert!((a - b).abs() < 1e-4, "found source and rig lamp read the plane alike: {a} vs {b}");
+        }
+    }
+
+    /// A 1:1 slice draws a found source as the whole frame does: the
+    /// spots are full-frame, the patch maps them.
+    #[test]
+    fn a_slice_draws_the_found_sources_the_whole_frame_does() {
+        let setup = || {
+            let mut node = make_node("heeler.flare");
+            set_num(&mut node, "bright", 1.0);
+            set_text(&mut node, "spots", r#"[{"x":0.3,"y":0.4,"strength":1,"color":[1,0.8,0.5]},{"x":0.7,"y":0.7,"strength":0.5,"color":[1,1,1]}]"#);
+            set_num(&mut node, "rays", 6.0);
+            set_num(&mut node, "ghosts", 3.0);
+            node
+        };
+        let whole = run_on(&setup(), frame(80, 60, 0.1)).unwrap().as_image().unwrap().clone();
+        let mut patch_node = setup();
+        for (k, v) in [("roi_x", 0.5), ("roi_y", 0.5), ("roi_w", 0.5), ("roi_h", 0.5)] {
+            set_num(&mut patch_node, k, v);
+        }
+        let patch = run_on(&patch_node, frame(40, 30, 0.1)).unwrap();
+        let patch = patch.as_image().unwrap();
+        for y in 0..30 {
+            for x in 0..40 {
+                let a = whole.pixel(x + 40, y + 30);
+                let b = patch.pixel(x, y);
+                for c in 0..3 {
+                    assert!((a[c] - b[c]).abs() < 1e-4, "patch drifted at {x},{y}: {a:?} vs {b:?}");
+                }
+            }
+        }
     }
 }

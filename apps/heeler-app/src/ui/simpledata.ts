@@ -277,6 +277,12 @@ export interface SectionWidgetSeats {
   after?: SectionWidgetKind[];
 }
 
+/** Lens Flare's Bright spots rows show while the section's flare
+ * finds the photograph's own sources. */
+function flareFindsSpots(s: State): boolean {
+  return ((toolNode(s, "flare")?.params.bright as number) ?? 0) >= 0.5;
+}
+
 /** Every widget a section draws, wherever it sits: before or after its
  * rows, or with one of them. */
 export function sectionWidgetKinds(sec: SectionSpec): SectionWidgetKind[] {
@@ -556,7 +562,7 @@ export const SECTION_BLURBS: Record<string, string> = {
   "Depth Map": "How the depth every depth tool reads is drawn from the photograph: Fog, Depth Lighting, Depth of Field, Recolor and Lens Character all share it",
   "Depth Lighting": "Relight the scene by its depth: suns and lamps, colored, bright or dark, with a rig in the viewer",
   "Depth of Field": "Focus that falls off with distance: pick the focal plane, open the aperture, and shape the lens's character",
-  "Lens Flare": "The lens's flare for the rig's lights: glow, rays, aperture ghosts, streak and veil, hidden by what stands in front of the light",
+  "Lens Flare": "The lens's flare for the rig's lights or the photograph's own bright spots: glow, rays, aperture ghosts, streak and veil, hidden by what stands in front of the light",
   Halation: "Highlights bleed a colored mist into their dark surroundings, the film's own glow: what blooms, how far, what color, and a wider bloom with it",
   Geometry: "The frame itself: straighten, aspect, and the crop box",
   Lens: "The lens's corrections: distortion, color fringing at edges, and vignette",
@@ -656,6 +662,10 @@ export const ROW_TIPS: Record<string, string> = {
   "Depth of Field|Swirl": "Discs stretch around the frame's center the farther out they sit: the spinning field of a Petzval or a Helios",
   "Lens Flare|Intensity": "How bright the whole flare is; each light's own flare strength multiplies it",
   "Lens Flare|Temp": "Warms (right) or cools (left) every element of the flare",
+  "Lens Flare|Threshold": "How bright a spot must be to flare, in stops above the photograph's middle; raise it until only the real lights are left",
+  "Lens Flare|Sources": "The most bright spots that flare, the brightest first",
+  "Lens Flare|Min size": "Ignores spots narrower than this share of the frame's short side: the small glints off chrome and water",
+  "Lens Flare|Spot strength": "How strongly the photograph's bright spots flare, against the rig's lights",
   "Lens Flare|Size": "The source glow's radius, as a share of the frame's short side",
   "Lens Flare|Falloff": "How the glow falls off: a hard disc on the left, a haze on the right",
   "Lens Flare|Rays": "How many diffraction rays the star has; a real aperture makes twice as many as it has sides",
@@ -1270,6 +1280,12 @@ export const SECTIONS: SectionSpec[] = [
     rows: [
       { label: "Intensity", param: "intensity", centered: false },
       { label: "Temp", param: "temp" },
+      // Finding the photograph's own sources, while Bright spots is on:
+      // about the photograph, so the presets leave them alone.
+      { label: "Threshold", param: "spot_threshold", centered: false, heading: "Bright spots", when: flareFindsSpots },
+      { label: "Sources", param: "spot_count", centered: false, when: flareFindsSpots },
+      { label: "Min size", param: "spot_min_size", centered: false, when: flareFindsSpots },
+      { label: "Spot strength", param: "spot_strength", centered: false, when: flareFindsSpots },
       { label: "Size", param: "size", centered: false, heading: "Source" },
       { label: "Falloff", param: "softness", centered: false },
       { label: "Rays", param: "rays", centered: false, heading: "Rays" },

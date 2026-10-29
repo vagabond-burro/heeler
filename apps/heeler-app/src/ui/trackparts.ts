@@ -18,6 +18,9 @@ export const UNSIGNED = new Set([
   "red_gain",
   "green_gain",
   "blue_gain",
+  // Lens Flare's Bright spots: a count and a strength.
+  "spot_count",
+  "spot_strength",
 ]);
 
 /** How a value reads beside its slider, per param family. */
@@ -32,6 +35,9 @@ export function fmt(param: string, v: number): string {
     param.startsWith("crop_")
   )
     return v.toFixed(2);
+  // Lens Flare's Bright spots: stops over the median and a share of
+  // the short side, both finer than a whole unit.
+  if (param === "spot_threshold" || param === "spot_min_size") return v.toFixed(1);
   if (param === "angle")
     return (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "°";
   const r = Math.round(v);

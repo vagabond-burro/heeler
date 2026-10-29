@@ -2001,6 +2001,18 @@ impl Registry {
                 num("veil_depth", 0.0, -100.0, 100.0),
                 num("occlusion", 100.0, 0.0, 100.0),
                 num("occlusion_soft", 30.0, 0.0, 100.0),
+                // The sources: the rig's lights (on, so a document from
+                // before the choice flares as it did) and the
+                // photograph's own bright spots, found at a threshold in
+                // stops over the frame's median, the brightest N, none
+                // narrower than Min size (percent of the short side),
+                // scaled by Spot strength against the rig.
+                num("rig", 1.0, 0.0, 1.0),
+                num("bright", 0.0, 0.0, 1.0),
+                num("spot_threshold", 5.0, 0.0, 12.0),
+                num("spot_count", 6.0, 1.0, 16.0),
+                num("spot_min_size", 0.5, 0.0, 10.0),
+                num("spot_strength", 100.0, 0.0, 300.0),
                 // The patch of the full frame this render is (the ROI
                 // splice writes these; whole frame otherwise).
                 num("roi_x", 0.0, 0.0, 1.0),
@@ -2010,6 +2022,11 @@ impl Registry {
                 // The rig, mirrored from Depth Lighting by the panel,
                 // with each light's flare toggle and strength.
                 text("lights", "[]"),
+                // The found sources, as the desktop's detection wrote
+                // them (full-frame centroids, strength, color), and the
+                // positions the panel switched off.
+                text("spots", "[]"),
+                text("spots_off", "[]"),
                 text("streak_color", "#5aa0ff"),
                 // The ribbon: the gradient layer's stop list, from the
                 // source (0) to the streak's end (100); empty means the

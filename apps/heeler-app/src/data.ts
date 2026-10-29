@@ -373,8 +373,8 @@ export const SAMPLE_NODES: NodeCard[] = [
     // Off in the demo like every paid depth tool, and inert anyway
     // until a light in the rig flares.
     enabled: false,
-    params: { intensity: 100, temp: 0, size: 5, softness: 40, rays: 14, ray_length: 25, ray_softness: 25, rotation: 0, ghosts: 2, ghost_spacing: 90, ghost_size: 4, blades: 7, dispersion: 20, ghost_opacity: 35, anamorphic: 0, streak_size: 1.5, streak_length: 60, streak_taper: 30, streak_angle: 0, streak_offset: 0, streak_shift: 0, streak_noise: 0, veil: 10, veil_radius: 35, veil_depth: 0, occlusion: 100, occlusion_soft: 30 },
-    textParams: { lights: "[]", streak_color: "#5aa0ff", streak_stops: "", preset: "prime" },
+    params: { intensity: 100, temp: 0, size: 5, softness: 40, rays: 14, ray_length: 25, ray_softness: 25, rotation: 0, ghosts: 2, ghost_spacing: 90, ghost_size: 4, blades: 7, dispersion: 20, ghost_opacity: 35, anamorphic: 0, streak_size: 1.5, streak_length: 60, streak_taper: 30, streak_angle: 0, streak_offset: 0, streak_shift: 0, streak_noise: 0, veil: 10, veil_radius: 35, veil_depth: 0, occlusion: 100, occlusion_soft: 30, rig: 1, bright: 0, spot_threshold: 5, spot_count: 6, spot_min_size: 0.5, spot_strength: 100 },
+    textParams: { lights: "[]", streak_color: "#5aa0ff", streak_stops: "", preset: "prime", spots: "[]", spots_off: "[]" },
     hasIn: true,
     hasOut: true,
   },
