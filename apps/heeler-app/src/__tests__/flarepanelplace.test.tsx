@@ -30,26 +30,44 @@ it("puts the flare's lens and sources before its first slider", () => {
   expect(between).toEqual([]);
 });
 
-it("shows at most five found sources and scrolls the rest, so the list never pushes the dials down", async () => {
-  // "Make sure the SOURCES list is scrollable with only up to 5 sources
-  // visible, we don't need this list to grow and push rest of the
-  // controls down"
+it("lists the rig's lights and the found spots as one list, five rows showing and the rest scrolling", async () => {
+  // "it shows up to 5 sources then the rest has to scroll. I see 6": one
+  // light and five spots showed as six rows, each kind capped on its own.
   const { FlarePanel } = await import("../ui/flare");
   const { writeSpots } = await import("../ui/flareparts");
+  const rig = JSON.stringify([{ kind: "directional", azimuth: 30, elevation: 40, strength: 50, on: true, flare: false, flare_strength: 100 }]);
   const fresh: State = { ...initialState(), nodes: structuredClone(NEUTRAL_NODES), wires: structuredClone(NEUTRAL_WIRES), sectionsClosed: [] };
-  let s = reduce(fresh, { type: "set_category", title: "Lens Flare", on: true });
-  const node = s.nodes.find((n) => n.type === "heeler.flare")!;
-  const spots = Array.from({ length: 16 }, (_, i) => ({ x: 0.05 + i * 0.05, y: 0.5, strength: 1 - i * 0.05, color: [1, 0.9, 0.8] as [number, number, number], size: 0.01 }));
-  s = reduce(s, { type: "set_param", id: node.id, param: "bright", value: 1 });
-  s = reduce(s, { type: "set_text_param", id: node.id, param: "spots", value: writeSpots(spots) });
-  render(<FlarePanel state={s} dispatch={() => {}} node={s.nodes.find((n) => n.id === node.id)!} />);
-  const list = screen.getByTestId("flare-spots-list");
-  expect(list.querySelectorAll('[data-testid^="flare-spot-"]')).toHaveLength(16);
-  // Five 16 px rows and four 2 px gaps.
-  expect(list.style.maxHeight).toBe("88px");
+  let s = reduce(reduce(fresh, { type: "set_category", title: "Depth Lighting", on: true }), { type: "set_category", title: "Lens Flare", on: true });
+  const flare = s.nodes.find((n) => n.type === "heeler.flare")!;
+  const key = s.nodes.find((n) => n.type === "heeler.key_light")!;
+  const spots = Array.from({ length: 6 }, (_, i) => ({ x: 0.1 + i * 0.1, y: 0.5, strength: 1 - i * 0.1, color: [1, 0.9, 0.8] as [number, number, number], size: 0.01 }));
+  s = {
+    ...s,
+    nodes: s.nodes.map((n) =>
+      n.id === key.id
+        ? { ...n, enabled: true, textParams: { ...n.textParams, lights: rig } }
+        : n.id === flare.id
+          ? { ...n, params: { ...n.params, rig: 1, bright: 1 }, textParams: { ...n.textParams, spots: writeSpots(spots) } }
+          : n,
+    ),
+  };
+  render(<FlarePanel state={s} dispatch={() => {}} node={s.nodes.find((n) => n.id === flare.id)!} />);
+  const list = screen.getByTestId("flare-sources-list");
+  // Every source is in the one list: the light first, then the spots.
+  const rows = [...list.children] as HTMLElement[];
+  expect(rows).toHaveLength(7);
+  expect(rows[0].contains(screen.getByTestId("flare-light-0"))).toBe(true);
+  expect(rows[6].contains(screen.getByTestId("flare-spot-5"))).toBe(true);
+  // Five 18 px rows (the chip's own height) and four 2 px gaps show;
+  // the rest scroll.
+  expect(list.style.maxHeight).toBe("98px");
   expect(list.style.overflowY).toBe("auto");
-  const row = screen.getByTestId("flare-spot-0").parentElement!;
-  expect(row.style.height).toBe("16px");
+  for (const r of rows) {
+    expect(r.style.height).toBe("18px");
+    expect(r.style.flex).toBe("0 0 auto");
+  }
+  expect(screen.queryByTestId("flare-spots-list")).toBeNull();
+  expect(screen.queryByTestId("flare-lights-list")).toBeNull();
 });
 
 it("draws no rig flare while Depth Lighting is off: none sent to the engine, none listed", async () => {

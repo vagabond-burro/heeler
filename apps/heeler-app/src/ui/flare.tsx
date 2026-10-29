@@ -22,14 +22,17 @@ type D = React.Dispatch<Command>;
  * and scrolling past that, so sixteen found spots do not push the dials
  * down the panel (2026-10-29: "only up to 5 sources visible, we don't
  * need this list to grow and push rest of the controls down"). Every
- * row is 16 px with 2 px between, so five rows are 88 px exactly. */
+ * row is 18 px, the height its chip draws at (a row set to 16 grew to
+ * the chip's 18 and showed four and a half), with 2 px between, so five
+ * rows are 98 px exactly. */
 const SOURCE_ROWS = 5;
-const SOURCE_ROW: React.CSSProperties = { display: "flex", alignItems: "center", gap: 6, fontSize: 10, height: 16, flex: "none" };
+const SOURCE_ROW_PX = 18;
+const SOURCE_ROW: React.CSSProperties = { display: "flex", alignItems: "center", gap: 6, fontSize: 10, height: SOURCE_ROW_PX, minHeight: SOURCE_ROW_PX, flex: "none" };
 const SOURCE_LIST: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: 2,
-  maxHeight: SOURCE_ROWS * 16 + (SOURCE_ROWS - 1) * 2,
+  maxHeight: SOURCE_ROWS * SOURCE_ROW_PX + (SOURCE_ROWS - 1) * 2,
   overflowY: "auto",
   overscrollBehavior: "contain",
 };
@@ -81,6 +84,8 @@ export function FlarePanel({ state, dispatch, node }: { state: State; dispatch: 
   // Rig lights alone.
   const rigOn = ((node.params.rig as number) ?? 1) >= 0.5;
   const brightOn = ((node.params.bright as number) ?? 0) >= 0.5;
+  // The rig's lights are listed while they can flare.
+  const showRig = rigOn && !!keylight && lights.length > 0 && relightOn;
   const spots = readSpots(node.textParams?.spots);
   const spotsOff = readSpotsOff(node.textParams?.spots_off);
   return (
@@ -136,56 +141,52 @@ export function FlarePanel({ state, dispatch, node }: { state: State; dispatch: 
           Rig Lights should show anything if Depth Lighting isn't turned
           on"); the status line says why, as Rig lights is chosen and as
           the section is switched on (RIG_OFF_NOTICE). */}
-      {!rigOn || (lights.length > 0 && keylight && !relightOn) ? null : lights.length === 0 || !keylight ? (
+      {rigOn && (lights.length === 0 || !keylight) && (
         <div data-testid="flare-no-lights" style={{ fontSize: 9, color: "var(--text-faint)", lineHeight: 1.5 }}>
           No light to flare: add one in Depth Lighting.
         </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <div data-testid="flare-lights-list" style={SOURCE_LIST}>
-          {lights.map((l, i) => (
-            <div key={i} style={SOURCE_ROW}>
-              <button
-                className="chip"
-                data-testid={`flare-light-${i}`}
-                aria-pressed={l.flare}
-                data-hint={l.flare ? "This light flares; click to stop it" : "Let this light flare"}
-                style={{ fontSize: 9, padding: "0 6px", color: l.flare ? "var(--accent)" : "var(--text-ghost)" }}
-                onClick={() =>
-                  writeLights(dispatch, keylight, lights.map((k, j) => (j === i ? { ...k, flare: !k.flare } : k)))
-                }
-              >
-                {l.flare ? "\u25cf" : "\u25cb"}
-              </button>
-              <span style={{ color: l.on ? "var(--text-body)" : "var(--text-ghost)" }}>
-                {`Light ${i + 1} · ${l.kind}${l.on ? "" : " (off)"}`}
-              </span>
-            </div>
-          ))}
-          </div>
-          {flaring === 0 && !brightOn && (
-            <div data-testid="flare-none-flaring" style={{ fontSize: 9, color: "var(--text-faint)", lineHeight: 1.5 }}>
-              No light is flaring: switch one on above.
-            </div>
-          )}
+      )}
+      {showRig && flaring === 0 && !brightOn && (
+        <div data-testid="flare-none-flaring" style={{ fontSize: 9, color: "var(--text-faint)", lineHeight: 1.5 }}>
+          No light is flaring: switch one on below.
         </div>
       )}
-      {/* The found sources, brightest first, one switch each: a
-          source that should not flare is dropped here without raising
-          the threshold, and stays off as the dials move (keyed by where
-          it is). */}
-      {brightOn && (
-        <div data-testid="flare-spots" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {spots.length === 0 ? (
-            <div data-testid="flare-no-spots" style={{ fontSize: 9, color: "var(--text-faint)", lineHeight: 1.5 }}>
-              No bright spot found: lower Threshold or Min size.
-            </div>
-          ) : (
-            <div data-testid="flare-spots-list" style={SOURCE_LIST}>
-            {spots.map((sp, i) => {
+      {brightOn && spots.length === 0 && (
+        <div data-testid="flare-no-spots" style={{ fontSize: 9, color: "var(--text-faint)", lineHeight: 1.5 }}>
+          No bright spot found: lower Threshold or Min size.
+        </div>
+      )}
+      {/* One list of what flares, the rig's lights then the found spots,
+          brightest first, one switch each: five rows show and the rest
+          scroll (2026-10-29: "it shows up to 5 sources then the rest has
+          to scroll"; the lights and the spots were capped as two lists,
+          six rows between them). A spot switched off stays off as the
+          dials move (keyed by where it is). */}
+      {(showRig || (brightOn && spots.length > 0)) && (
+        <div data-testid="flare-sources-list" style={SOURCE_LIST}>
+          {showRig &&
+            lights.map((l, i) => (
+              <div key={`light-${i}`} style={SOURCE_ROW}>
+                <button
+                  className="chip"
+                  data-testid={`flare-light-${i}`}
+                  aria-pressed={l.flare}
+                  data-hint={l.flare ? "This light flares; click to stop it" : "Let this light flare"}
+                  style={{ fontSize: 9, padding: "0 6px", color: l.flare ? "var(--accent)" : "var(--text-ghost)" }}
+                  onClick={() => writeLights(dispatch, keylight!, lights.map((k, j) => (j === i ? { ...k, flare: !k.flare } : k)))}
+                >
+                  {l.flare ? "\u25cf" : "\u25cb"}
+                </button>
+                <span style={{ color: l.on ? "var(--text-body)" : "var(--text-ghost)" }}>
+                  {`Light ${i + 1} · ${l.kind}${l.on ? "" : " (off)"}`}
+                </span>
+              </div>
+            ))}
+          {brightOn &&
+            spots.map((sp, i) => {
               const on = !spotIsOff(sp, spotsOff);
               return (
-                <div key={`${sp.x},${sp.y}`} style={SOURCE_ROW}>
+                <div key={`spot-${sp.x},${sp.y}`} style={SOURCE_ROW}>
                   <button
                     className="chip"
                     data-testid={`flare-spot-${i}`}
@@ -204,6 +205,7 @@ export function FlarePanel({ state, dispatch, node }: { state: State; dispatch: 
                       width: 8,
                       height: 8,
                       borderRadius: 4,
+                      flex: "none",
                       background: `rgb(${sp.color.map((c) => Math.round(255 * Math.pow(Math.max(0, Math.min(1, c)), 1 / 2.2))).join(",")})`,
                     }}
                   />
@@ -213,8 +215,6 @@ export function FlarePanel({ state, dispatch, node }: { state: State; dispatch: 
                 </div>
               );
             })}
-            </div>
-          )}
         </div>
       )}
       {/* One aperture per lens: when Depth of Field is on and disagrees,
