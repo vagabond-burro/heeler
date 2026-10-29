@@ -18,10 +18,13 @@ import {
   insideQuad,
   loupeLabel,
   loupeMagStep,
+  loupeSliceRect,
+  loupeSpan,
   loupeWheel,
   navigatorBox,
   overflowsStage,
   panToCenter,
+  sliceCovers,
   stageToFrame,
   viewCenter,
   viewQuad,
@@ -437,6 +440,175 @@ describe("the Loupe's canvas lifecycle", () => {
     act(() => nextStage.dispatchEvent(new MouseEvent("pointermove", { clientX: 500, clientY: 350, bubbles: true })));
     h.flush();
     expect(screen.getByTestId("loupe").style.transform).toBe("translate(310px, 210px)");
+  });
+});
+
+describe("the Loupe's own full-resolution slice", () => {
+  // "when I zoom in I am seeing the lower resolution proxy's pixels. So
+  // if I zoom in 100% I am actually not seeing the full res details."
+  it("finds the spot and the span under the glass, and asks for twice that", () => {
+    // The frame drawn 2000 by 1000, its middle at (400, 300); the glass
+    // 90 across at 3x covers 30 drawn pixels each way.
+    const span = loupeSpan({ x: 400, y: 300 }, 400, 300, 0, 2000, 1000, 90, 3)!;
+    expect(span.u).toBeCloseTo(0.5);
+    expect(span.v).toBeCloseTo(0.5);
+    expect(span.hu).toBeCloseTo(0.015);
+    expect(span.hv).toBeCloseTo(0.03);
+    const rect = loupeSliceRect(span)!;
+    expect(sliceCovers(rect, span)).toBe(true);
+    // Twice the glass each way, on the engine's least side of a
+    // twentieth, so a small move stays inside.
+    expect(rect[2]).toBeGreaterThanOrEqual(0.05);
+    expect(rect[3]).toBeGreaterThanOrEqual(0.12);
+    expect(sliceCovers(rect, { ...span, u: span.u + span.hu })).toBe(true);
+    expect(sliceCovers(rect, { ...span, u: span.u + 0.1 })).toBe(false);
+    // At an edge it stays on the frame; off the frame there is nothing to ask.
+    const edge = loupeSliceRect({ u: 0.99, v: 0.01, hu: 0.02, hv: 0.02 })!;
+    expect(edge[0] + edge[2]).toBeLessThanOrEqual(1);
+    expect(edge[1]).toBe(0);
+    expect(loupeSliceRect({ u: 1.5, v: 0.5, hu: 0.02, hv: 0.02 })).toBeNull();
+    // A turned frame: the glass's bounding box in frame space.
+    const turned = loupeSpan({ x: 400, y: 300 }, 400, 300, 45, 2000, 1000, 90, 3)!;
+    expect(turned.hu).toBeCloseTo((30 * Math.SQRT2) / 2000);
+    // The viewer's own 1:1 slice can cover it already.
+    expect(sliceCovers([0.25, 0.25, 0.5, 0.5], span)).toBe(true);
+    expect(sliceCovers(null, span)).toBe(false);
+  });
+
+  const rect = (left: number, top: number, width: number, height: number) =>
+    ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+
+  function harness(natural = 1000) {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const frames = new Map<number, FrameRequestCallback>();
+    let next = 0;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.set(++next, callback);
+      return next;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => frames.delete(id));
+    const flush = () => {
+      const callbacks = [...frames.values()];
+      frames.clear();
+      act(() => callbacks.forEach((callback) => callback(0)));
+    };
+    const drawn: unknown[] = [];
+    const ctx = {
+      filter: "none", imageSmoothingEnabled: true,
+      setTransform: vi.fn(), clearRect: vi.fn(), fillRect: vi.fn(), translate: vi.fn(), scale: vi.fn(), rotate: vi.fn(),
+      drawImage: vi.fn((im: unknown) => drawn.push(im)),
+    } as unknown as CanvasRenderingContext2D;
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ctx);
+    // A decoded slice: the test DOM loads nothing.
+    vi.stubGlobal("Image", class { src = ""; complete = true; naturalWidth = 400; decode() { return Promise.resolve(); } });
+    const stage = document.createElement("div");
+    stage.getBoundingClientRect = () => rect(0, 0, 800, 600);
+    const frame = document.createElement("div");
+    frame.getBoundingClientRect = () => rect(-600, -200, 2000, 1000);
+    const img = document.createElement("img");
+    Object.defineProperties(img, { complete: { value: true }, naturalWidth: { value: natural } });
+    const asks: { rect: number[]; token: string; resolve: (v: { url: string; rect: [number, number, number, number] } | null) => void }[] = [];
+    const requestSlice = vi.fn((r: [number, number, number, number], token: string) => new Promise<{ url: string; rect: [number, number, number, number] } | null>((resolve) => asks.push({ rect: r, token, resolve })));
+    const cancelSlice = vi.fn();
+    const element = (key = "a", on = true) => (
+      <Loupe
+        stageRef={{ current: stage }} frameRef={{ current: frame }} imgRef={{ current: img }} patchRef={{ current: null }}
+        patchRect={null} view={zoomed()} mag={3} radius={90} truePct={null} frameWidth={4000}
+        requestSlice={requestSlice} cancelSlice={cancelSlice} sliceOn={on} sliceKey={key}
+      />
+    );
+    const move = (x: number, y: number) => {
+      act(() => stage.dispatchEvent(new MouseEvent("pointermove", { clientX: x, clientY: y, bubbles: true })));
+      flush();
+    };
+    const wait = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+    return { element, move, wait, flush, asks, requestSlice, cancelSlice, drawn, img };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("asks once the pointer pauses over reduced pixels, draws the slice, and keeps it while the glass stays inside", async () => {
+    const h = harness();
+    render(h.element());
+    h.move(400, 300);
+    expect(h.requestSlice).not.toHaveBeenCalled();
+    // Moved on to another slice's worth: the wait starts over, nothing
+    // is sent. (A move that wants the same slice keeps the wait.)
+    h.wait(80);
+    h.move(460, 300);
+    h.wait(80);
+    expect(h.requestSlice).not.toHaveBeenCalled();
+    h.wait(60);
+    expect(h.requestSlice).toHaveBeenCalledTimes(1);
+    const ask = h.asks[0];
+    expect(ask.token).toMatch(/^loupe:/);
+    expect(sliceCovers(ask.rect as [number, number, number, number], loupeSpan({ x: 460, y: 300 }, 400, 300, 0, 2000, 1000, 90, 3)!)).toBe(true);
+    await act(async () => ask.resolve({ url: "blob:slice", rect: ask.rect as [number, number, number, number] }));
+    h.drawn.length = 0;
+    h.flush();
+    // The reduced frame, then the slice over it.
+    expect(h.drawn).toHaveLength(2);
+    expect((h.drawn[1] as { src: string }).src).toBe("blob:slice");
+    // A small move stays on the slice: nothing more is asked.
+    h.move(468, 305);
+    h.wait(500);
+    expect(h.requestSlice).toHaveBeenCalledTimes(1);
+    // Off it, a new one, and the old is no longer the one asked for.
+    h.move(700, 300);
+    h.wait(200);
+    expect(h.requestSlice).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks again after an edit, and the old slice is not drawn meanwhile", async () => {
+    const h = harness();
+    const { rerender } = render(h.element("a"));
+    h.move(400, 300);
+    h.wait(150);
+    await act(async () => h.asks[0].resolve({ url: "blob:old", rect: h.asks[0].rect as [number, number, number, number] }));
+    rerender(h.element("b"));
+    h.drawn.length = 0;
+    h.flush();
+    expect(h.drawn).toHaveLength(1);
+    h.wait(150);
+    expect(h.requestSlice).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels a slice still rendering when the glass moves off it", () => {
+    const h = harness();
+    render(h.element());
+    h.move(400, 300);
+    h.wait(150);
+    h.move(750, 500);
+    expect(h.cancelSlice).toHaveBeenCalledWith(h.asks[0].token);
+  });
+
+  it("asks for nothing over the full frame, while slices are off, or again after a refusal", async () => {
+    let h = harness(4000);
+    render(h.element());
+    h.move(400, 300);
+    h.wait(500);
+    expect(h.requestSlice).not.toHaveBeenCalled();
+    cleanup();
+    vi.restoreAllMocks();
+    h = harness();
+    render(h.element("a", false));
+    h.move(400, 300);
+    h.wait(500);
+    expect(h.requestSlice).not.toHaveBeenCalled();
+    cleanup();
+    vi.restoreAllMocks();
+    h = harness();
+    render(h.element());
+    h.move(400, 300);
+    h.wait(150);
+    await act(async () => h.asks[0].resolve(null));
+    h.move(401, 300);
+    h.wait(500);
+    expect(h.requestSlice).toHaveBeenCalledTimes(1);
   });
 });
 

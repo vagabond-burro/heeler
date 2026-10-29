@@ -30,7 +30,7 @@ Two viewing aids help you find your way around a photograph zoomed in close. Bot
 - `Shift`+scroll, middle-drag and `Space`-drag still pan the canvas, and the rotation combinations still turn it.
 - `Esc` puts the Loupe down. An armed picker goes first, and a tool under the Loupe waits for the next `Esc`.
 
-The Loupe shows the pixels the viewer already has: the frame on screen, and at 1:1 the sharp full-resolution slice where it covers the spot, so a Loupe over a photograph at 100% shows its real pixels, drawn as squares past one photograph pixel per screen pixel. It never asks for a render of its own. Clicks, drags and every tool work through it exactly as they do without it; it steps aside over the toolbar, the floating bars and the Navigator. The magnification and size are kept from one launch to the next.
+The Loupe shows the photograph's full-resolution pixels, drawn as squares past one photograph pixel per screen pixel. Where the canvas shows a reduced preview (at Fit, say), the glass shows that at once, and when the pointer pauses it asks for a full-resolution render of the area around it and sharpens when that arrives. The area is about twice the glass's width each way, so small moves stay sharp; moving further, or changing an edit, asks again. The first sharp view of a RAW photograph waits for its full-resolution develop, as the first zoom to 100% does. At 1:1 the canvas's own sharp pixels serve it with no render of its own. Clicks, drags and every tool work through it exactly as they do without it; it steps aside over the toolbar, the floating bars and the Navigator. The magnification and size are kept from one launch to the next.
 
 ## Before/after and split view
 

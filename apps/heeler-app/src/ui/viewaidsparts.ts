@@ -161,3 +161,73 @@ export function loupeLabel(mag: number, truePct: number | null): string {
   const m = mag >= 10 ? Math.round(mag) : Math.round(mag * 10) / 10;
   return truePct !== null && Number.isFinite(truePct) ? `${m}× · ${Math.round(truePct * mag)}%` : `${m}×`;
 }
+
+/** A frame-space box, normalized: x, y, width, height. */
+export type FrameRect = [number, number, number, number];
+
+/** The part of the frame the Loupe's glass shows, normalized: centered
+ * on (u, v), its half spans hu and hv. */
+export interface LoupeSpan {
+  u: number;
+  v: number;
+  hu: number;
+  hv: number;
+}
+
+/** Where the pointer sits on the frame and how much of it the glass
+ * covers, from the stage geometry the glass draws with: the frame's
+ * on-screen middle (fx, fy), its turn, its drawn size (w, h, before the
+ * magnification) and the glass's radius and magnification. A turned
+ * frame gets the glass's bounding box in frame space. */
+export function loupeSpan(
+  p: { x: number; y: number },
+  fx: number,
+  fy: number,
+  rotationDeg: number,
+  w: number,
+  h: number,
+  radius: number,
+  mag: number,
+): LoupeSpan | null {
+  if (!(w > 0) || !(h > 0) || !(mag > 0)) return null;
+  const rad = (rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const dx = p.x - fx;
+  const dy = p.y - fy;
+  const ux = dx * cos + dy * sin;
+  const uy = -dx * sin + dy * cos;
+  const reach = (radius / mag) * (Math.abs(cos) + Math.abs(sin));
+  return { u: ux / w + 0.5, v: uy / h + 0.5, hu: reach / w, hv: reach / h };
+}
+
+/** Whether a slice of the frame holds everything the glass shows (the
+ * part of it on the frame). */
+export function sliceCovers(rect: FrameRect | null, s: LoupeSpan): boolean {
+  if (!rect) return false;
+  const x0 = Math.max(0, s.u - s.hu);
+  const y0 = Math.max(0, s.v - s.hv);
+  const x1 = Math.min(1, s.u + s.hu);
+  const y1 = Math.min(1, s.v + s.hv);
+  if (x1 <= x0 || y1 <= y0) return true;
+  const e = 1e-6;
+  return rect[0] <= x0 + e && rect[1] <= y0 + e && rect[0] + rect[2] >= x1 - e && rect[1] + rect[3] >= y1 - e;
+}
+
+/** The slice the Loupe asks the engine for: the glass's span, twice
+ * over each way so a small move stays inside it, on a 1/128 grid so a
+ * still hand asks for the same slice, and no smaller than the engine
+ * cuts (a twentieth of each side). Null where the glass is off the
+ * frame. */
+export function loupeSliceRect(s: LoupeSpan): FrameRect | null {
+  if (s.u + s.hu <= 0 || s.u - s.hu >= 1 || s.v + s.hv <= 0 || s.v - s.hv >= 1) return null;
+  const q = (n: number) => Math.round(n * 128) / 128;
+  const side = (c: number, half: number): [number, number] => {
+    const span = Math.min(1, Math.max(0.05, half * 4));
+    const start = Math.min(1 - span, Math.max(0, q(c - span / 2)));
+    return [start, Math.min(1 - start, q(span + 1 / 128))];
+  };
+  const [x, w] = side(s.u, s.hu);
+  const [y, h] = side(s.v, s.hv);
+  return [x, y, w, h];
+}

@@ -9,11 +9,15 @@ import { modLabel } from "../platform";
 import {
   insideQuad,
   loupeLabel,
+  loupeSliceRect,
+  loupeSpan,
   navigatorBox,
   overflowsStage,
   panToCenter,
+  sliceCovers,
   viewCenter,
   viewQuad,
+  type FrameRect,
   type StageView,
 } from "./viewaidsparts";
 
@@ -169,8 +173,13 @@ export function Navigator({
 /** The Loupe: a round glass that follows the pointer over the canvas
  * and shows what is under it magnified. Drawn on a canvas from the
  * pixels the viewer already holds (the frame on screen, and the sharp
- * 1:1 slice where it covers the spot), so it costs no render of its
- * own. It takes no pointer events: every click and every tool lands on
+ * 1:1 slice where it covers the spot). Where those are a reduced
+ * preview's pixels, a pause of the pointer asks the engine for its own
+ * full-resolution slice around the glass ("when I zoom in I am seeing
+ * the lower resolution proxy's pixels"), twice the glass's span so a
+ * small move stays inside it; the reduced pixels show meanwhile, and a
+ * move off the slice, an edit or another photograph asks again. It
+ * takes no pointer events: every click and every tool lands on
  * the canvas beneath it exactly as without it. Drawn imperatively on
  * each move, as the header readout is, so following the pointer never
  * re-renders the viewer. */
@@ -186,6 +195,10 @@ export function Loupe({
   truePct,
   frameWidth,
   filter,
+  requestSlice,
+  cancelSlice,
+  sliceOn = false,
+  sliceKey = "",
 }: {
   stageRef: React.RefObject<HTMLDivElement | null>;
   frameRef: React.RefObject<HTMLDivElement | null>;
@@ -200,13 +213,68 @@ export function Loupe({
   /** the photograph's full width in pixels, once known */
   frameWidth: number | null;
   filter?: string;
+  /** a full-resolution render of part of the frame, normalized, and
+   * the part the engine cut (renderRoi) */
+  requestSlice?: (rect: FrameRect, token: string) => Promise<{ url: string; rect: FrameRect } | null>;
+  cancelSlice?: (token: string) => void;
+  /** whether slices may be asked for now: an engine, no gesture */
+  sliceOn?: boolean;
+  /** what a slice's pixels depend on (the photograph, the edit, the
+   * view): a slice made under another key is not drawn */
+  sliceKey?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const pointer = useRef<{ x: number; y: number } | null>(null);
-  const props = useRef({ view, mag, radius, patchRect, frameWidth, filter });
-  props.current = { view, mag, radius, patchRect, frameWidth, filter };
+  const props = useRef({ view, mag, radius, patchRect, frameWidth, filter, requestSlice, cancelSlice, sliceOn, sliceKey });
+  props.current = { view, mag, radius, patchRect, frameWidth, filter, requestSlice, cancelSlice, sliceOn, sliceKey };
   const frame = useRef(0);
+  // The glass's own sharp slice, decoded, and the one being asked for:
+  // its rect and key, the timer that waits for the pointer to pause and
+  // the engine call's token once it is sent.
+  const slice = useRef<{ key: string; rect: FrameRect; img: HTMLImageElement } | null>(null);
+  const pending = useRef<{ sig: string; timer: number | undefined; token: string | null } | null>(null);
+  // The last slice the engine would not cut (one so near the whole
+  // frame it renders the frame instead, or a failure): not asked again
+  // on every move.
+  const refused = useRef<string | null>(null);
+  const dropPending = () => {
+    const q = pending.current;
+    if (!q) return;
+    window.clearTimeout(q.timer);
+    if (q.token) props.current.cancelSlice?.(q.token);
+    pending.current = null;
+  };
+  const askSlice = (rect: FrameRect, key: string) => {
+    const sig = `${rect.join(",")}|${key}`;
+    if (pending.current?.sig === sig || refused.current === sig) return;
+    dropPending();
+    const q: { sig: string; timer: number | undefined; token: string | null } = { sig, timer: undefined, token: null };
+    pending.current = q;
+    q.timer = window.setTimeout(() => {
+      const ask = props.current.requestSlice;
+      if (!ask || pending.current !== q) return;
+      const token = `loupe:${crypto.randomUUID()}`;
+      q.token = token;
+      void ask(rect, token).then(async (got) => {
+        if (pending.current !== q) return;
+        pending.current = null;
+        if (!got) {
+          refused.current = sig;
+          return;
+        }
+        const im = new Image();
+        im.src = got.url;
+        try {
+          await im.decode();
+        } catch {
+          // decode() missing (test DOM) or refusing: drawn once loaded.
+        }
+        slice.current = { key, rect: got.rect, img: im };
+        schedule();
+      });
+    }, 120);
+  };
 
   const draw = () => {
     frame.current = 0;
@@ -217,9 +285,10 @@ export function Loupe({
     if (!wrap || !canvas || !stage) return;
     if (!p) {
       wrap.style.display = "none";
+      if (pending.current && !pending.current.token) dropPending();
       return;
     }
-    const { view: v, mag: m, radius: r, patchRect: pr, frameWidth: fw, filter: f } = props.current;
+    const { view: v, mag: m, radius: r, patchRect: pr, frameWidth: fw, filter: f, sliceOn: on, sliceKey: key } = props.current;
     wrap.style.display = "block";
     wrap.style.transform = `translate(${p.x - r}px, ${p.y - r}px)`;
     const dpr = window.devicePixelRatio || 1;
@@ -268,9 +337,29 @@ export function Loupe({
         ctx.imageSmoothingEnabled = !square(patch.naturalWidth, dw * pr[2], (fw ?? Infinity) * pr[2]);
         ctx.drawImage(patch, -dw / 2 + pr[0] * dw, -dh / 2 + pr[1] * dh, pr[2] * dw, pr[3] * dh);
       }
+      const own = slice.current;
+      if (own && own.key === key && own.img.complete && own.img.naturalWidth > 0) {
+        const sr2 = own.rect;
+        // The engine's own pixels: the thumbnail's approximation is not theirs.
+        if ("filter" in ctx) ctx.filter = "none";
+        ctx.imageSmoothingEnabled = !square(own.img.naturalWidth, dw * sr2[2], (fw ?? Infinity) * sr2[2]);
+        ctx.drawImage(own.img, -dw / 2 + sr2[0] * dw, -dh / 2 + sr2[1] * dh, sr2[2] * dw, sr2[3] * dh);
+      }
     } catch {
       // An image the canvas refuses leaves the glass dark, never broken.
     }
+    // Real pixels under the whole glass already (the frame is the full
+    // one, or a slice covers it): nothing to ask for. Otherwise a pause
+    // here asks for a slice around it.
+    const span = loupeSpan(p, fx, fy, v.rotation, v.base.w * v.scale, v.base.h * v.scale, r, m);
+    const full = fw !== null && nat >= fw * 0.98;
+    const own = slice.current && slice.current.key === key ? slice.current.rect : null;
+    if (!on || !span || full || sliceCovers(pr, span) || sliceCovers(own, span)) {
+      if (pending.current && !pending.current.token) dropPending();
+      return;
+    }
+    const want = loupeSliceRect(span);
+    if (want) askSlice(want, key);
   };
   const schedule = () => {
     if (!frame.current) frame.current = window.requestAnimationFrame(draw);
@@ -308,6 +397,8 @@ export function Loupe({
       frame.current = 0;
     };
   });
+  // Put away, the glass leaves nothing queued behind the engine lock.
+  useEffect(() => () => dropPending(), []);
   // A wheel tick, a pan or a new frame under a still pointer redraws.
   // Decoding finishes after that render, so the images get a load redraw
   // too, especially the sharp patch arriving under a stationary pointer.

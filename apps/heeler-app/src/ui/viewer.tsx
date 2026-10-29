@@ -4235,6 +4235,10 @@ softness it was pretending not to be related to.*/}
                 truePct={truePct}
                 frameWidth={knownFrame ? knownFrame[0] : null}
                 filter={filter}
+                requestSlice={(rect, token) => renderRoi(state, rect, token).then((p) => (p ? { url: p.url, rect: p.rect } : null))}
+                cancelSlice={(token) => void cancelRender(token)}
+                sliceOn={isTauri() && !state.gesture && !state.compare && state.lookPreview === null}
+                sliceKey={`${state.activeImage}|${state.renderVersion}|${state.previewNonce}|${currentMask ?? ""}|${currentLook}`}
               />
             )}
           </>
