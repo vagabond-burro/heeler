@@ -48,16 +48,19 @@ const GIVEN_NEAR = 0.02;
  * chose a crop. `fresh` says the photograph had no edits when it was
  * opened. With no starting crop to give (the option off, or nothing to
  * cut away), a crop this module gave goes back to the full frame.
- * `switchedOff`: the user just turned Auto-crop off, so a crop that is
- * the rectangle the stitch fills goes too, though it was given before
- * the app last started and this module has no record of it. */
+ * `switched`: the user just turned Auto-crop on (true) or off (false).
+ * Turned off, a crop that is the rectangle the stitch fills goes too,
+ * though it was given before the app last started and this module has
+ * no record of it. Turned on, an uncropped panorama takes the crop even
+ * when it has been edited: switching it on is asking for it. */
 export async function offerPanoCrop(
   image: string,
   current: () => State,
   dispatch: (c: Command) => void,
   fresh: boolean,
-  switchedOff = false,
+  switched?: boolean,
 ): Promise<void> {
+  const switchedOff = switched === false;
   const request = (requested.get(image) ?? 0) + 1;
   requested.set(image, request);
   const rect = await panoAutoCrop(image);
@@ -90,7 +93,7 @@ export async function offerPanoCrop(
   }
   // Fresh at opening is not enough: the answer can take minutes, and an
   // edit made meanwhile means somebody has edited it after all.
-  const untouched = fresh && !(s.images.find((i) => i.id === image)?.edited ?? false);
+  const untouched = switched === true || (fresh && !(s.images.find((i) => i.id === image)?.edited ?? false));
   if (!(ours || (untouched && same(now, FULL)))) return;
   given.set(image, rect);
   if (!same(now, rect)) dispatch(setCrop(s, rect));

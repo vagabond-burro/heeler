@@ -2955,7 +2955,7 @@ export function PanoPanel({ state, dispatch }: { state: State; dispatch: D }) {
         dispatch({ type: "resume_pano_stitch", image });
         // A new stitch has new edges; a starting crop nobody has
         // touched since follows them, and one switched off goes.
-        void offerPanoCrop(image, () => stateRef.current, dispatch, false, c.auto_crop === false);
+        void offerPanoCrop(image, () => stateRef.current, dispatch, false, c.auto_crop);
       })
       .catch((e) => logMsg("error", `Panorama update failed: ${String(e)}`))
       .finally(() => setBusy(false));

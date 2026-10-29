@@ -103,7 +103,7 @@ it("switching the option off takes out a starting crop given before the app last
   const doc = opened();
   doc.dispatch({ type: "set_params", id: cropNode(doc.get()).id, values: { crop_x: 0.012, crop_y: 0.083, crop_w: 0.965, crop_h: 0.796 } });
   backend.crop.mockImplementation(async (_id: string, evenOff?: boolean) => (evenOff ? CROP : null));
-  await offerPanoCrop("pan", doc.get, doc.dispatch, false, true);
+  await offerPanoCrop("pan", doc.get, doc.dispatch, false, false);
   expect(backend.crop).toHaveBeenLastCalledWith("pan", true);
   expect(crop(doc.get())).toEqual([0, 0, 1, 1]);
 });
@@ -112,11 +112,33 @@ it("switching the option off leaves a crop the user drew", async () => {
   const doc = opened();
   doc.dispatch({ type: "set_params", id: cropNode(doc.get()).id, values: { crop_x: 0.2, crop_y: 0.1, crop_w: 0.5, crop_h: 0.6 } });
   backend.crop.mockImplementation(async (_id: string, evenOff?: boolean) => (evenOff ? CROP : null));
-  await offerPanoCrop("pan", doc.get, doc.dispatch, false, true);
+  await offerPanoCrop("pan", doc.get, doc.dispatch, false, false);
   expect(crop(doc.get())).toEqual([0.2, 0.1, 0.5, 0.6]);
   // A re-stitch with the option off asks nothing more and changes nothing.
   backend.crop.mockClear();
   await offerPanoCrop("pan", doc.get, doc.dispatch, false);
   expect(backend.crop).toHaveBeenCalledTimes(1);
+  expect(crop(doc.get())).toEqual([0.2, 0.1, 0.5, 0.6]);
+});
+
+it("switching the option back on crops an edited panorama that has no crop", async () => {
+  // Switched off, the crop went and the panorama counts as edited; on
+  // again, it should take the crop back (2026-10-29: "when I turn it back
+  // on it does not restitch and crop").
+  const doc = opened();
+  await offerPanoCrop("pan", doc.get, doc.dispatch, true);
+  backend.crop.mockResolvedValue(null);
+  await offerPanoCrop("pan", doc.get, doc.dispatch, false, false);
+  expect(crop(doc.get())).toEqual([0, 0, 1, 1]);
+  forgetPanoCrops();
+  backend.crop.mockResolvedValue(CROP);
+  await offerPanoCrop("pan", doc.get, doc.dispatch, false, true);
+  expect(crop(doc.get())).toEqual(CROP);
+});
+
+it("switching the option on leaves a crop the user drew", async () => {
+  const doc = opened();
+  doc.dispatch({ type: "set_params", id: cropNode(doc.get()).id, values: { crop_x: 0.2, crop_y: 0.1, crop_w: 0.5, crop_h: 0.6 } });
+  await offerPanoCrop("pan", doc.get, doc.dispatch, false, true);
   expect(crop(doc.get())).toEqual([0.2, 0.1, 0.5, 0.6]);
 });
