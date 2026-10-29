@@ -51,7 +51,9 @@ section, above the dials. The list shows five lights or spots at a time and
 scrolls for the rest.
 
 - **Sources** chooses where the flare comes from. **Rig lights** flares the
-  Depth Lighting lights with their flare switch on. **Bright spots** finds the
+  Depth Lighting lights with their flare switch on, while Depth Lighting is on;
+  with it off they do not flare, and the status line says so when you switch
+  Lens Flare on or choose Rig lights. **Bright spots** finds the
   photograph's own light sources, street lamps, headlights, a sun in frame, and
   flares them with no Depth Lighting and no lights placed. Both can be on.
   A flare from an earlier version opens with Rig lights alone and looks as it

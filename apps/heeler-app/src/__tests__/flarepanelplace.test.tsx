@@ -4,10 +4,10 @@
 // raised every dial and saw nothing ("Just had to FIND the right
 // control!").
 
-import { render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { expect, it } from "vitest";
 import { initialState, NEUTRAL_NODES, NEUTRAL_WIRES } from "../data";
-import { reduce, type State } from "../state";
+import { RIG_OFF_NOTICE, reduce, type Command, type State } from "../state";
 import { SimplePanel } from "../ui/simple";
 
 it("puts the flare's lens and sources before its first slider", () => {
@@ -50,4 +50,55 @@ it("shows at most five found sources and scrolls the rest, so the list never pus
   expect(list.style.overflowY).toBe("auto");
   const row = screen.getByTestId("flare-spot-0").parentElement!;
   expect(row.style.height).toBe("16px");
+});
+
+it("draws no rig flare while Depth Lighting is off: none sent to the engine, none listed", async () => {
+  // "I don't think Rig Lights should show anything if Depth Lighting
+  // isn't turned on"
+  const { serializeGraph } = await import("../bridge");
+  const { FlarePanel } = await import("../ui/flare");
+  const rig = JSON.stringify([{ kind: "point", px: 0.5, py: 0.5, depth: 30, range: 50, strength: 50, on: true, flare: true, flare_strength: 100 }]);
+  const fresh: State = { ...initialState(), nodes: structuredClone(NEUTRAL_NODES), wires: structuredClone(NEUTRAL_WIRES), sectionsClosed: [] };
+  const s = reduce(reduce(fresh, { type: "set_category", title: "Depth Lighting", on: true }), { type: "set_category", title: "Lens Flare", on: true });
+  const flare = s.nodes.find((n) => n.type === "heeler.flare")!;
+  const key = s.nodes.find((n) => n.type === "heeler.key_light")!;
+  const withRig = (on: boolean): State => ({
+    ...s,
+    nodes: s.nodes.map((n) =>
+      n.id === key.id ? { ...n, enabled: on, textParams: { ...n.textParams, lights: rig } } : n.id === flare.id ? { ...n, textParams: { ...n.textParams, lights: rig } } : n,
+    ),
+  });
+  const sent = (st: State) => serializeGraph(st).nodes.find((n) => n.id === flare.id)!.params.lights;
+  expect(sent(withRig(true))).toBe(rig);
+  expect(sent(withRig(false))).toBe("[]");
+  // The panel lists nothing for the rig and keeps no note of its own:
+  // the status line says why, as Rig lights is chosen ("should be moved
+  // to the status line and only appear when either Lens Flare is first
+  // turned on and or Rig lights is activated").
+  const off = withRig(false);
+  const noRig = { ...off, nodes: off.nodes.map((n) => (n.id === flare.id ? { ...n, params: { ...n.params, rig: 0 } } : n)) };
+  const sentCmds: Command[] = [];
+  render(<FlarePanel state={noRig} dispatch={(c) => sentCmds.push(c)} node={noRig.nodes.find((n) => n.id === flare.id)!} />);
+  expect(screen.queryByTestId("flare-relight-off")).toBeNull();
+  expect(screen.queryByTestId("flare-light-0")).toBeNull();
+  fireEvent.click(screen.getByTestId("flare-source-rig"));
+  expect(sentCmds).toContainEqual({ type: "set_notice", text: RIG_OFF_NOTICE });
+  // Turning Rig lights off says nothing.
+  sentCmds.length = 0;
+  cleanup();
+  render(<FlarePanel state={off} dispatch={(c) => sentCmds.push(c)} node={off.nodes.find((n) => n.id === flare.id)!} />);
+  expect(screen.queryByTestId("flare-light-0")).toBeNull();
+  fireEvent.click(screen.getByTestId("flare-source-rig"));
+  expect(sentCmds.some((c) => c.type === "set_notice")).toBe(false);
+});
+
+it("says so on the status line as Lens Flare is switched on with Depth Lighting off, and not with it on", () => {
+  const fresh: State = { ...initialState(), nodes: structuredClone(NEUTRAL_NODES), wires: structuredClone(NEUTRAL_WIRES), sectionsClosed: [] };
+  const on = reduce(fresh, { type: "set_category", title: "Lens Flare", on: true });
+  expect(on.notice?.text).toBe(RIG_OFF_NOTICE);
+  const lit = reduce(reduce({ ...fresh, notice: null }, { type: "set_category", title: "Depth Lighting", on: true }), { type: "set_category", title: "Lens Flare", on: true });
+  expect(lit.notice?.text ?? "").not.toBe(RIG_OFF_NOTICE);
+  // Switching it off says nothing.
+  const off = reduce({ ...on, notice: null }, { type: "set_category", title: "Lens Flare", on: false });
+  expect(off.notice).toBeNull();
 });

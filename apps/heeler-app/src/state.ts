@@ -13903,6 +13903,11 @@ function syncToolGroups(prev: State, next: State, cmd: Command): State {
   return changed ? { ...next, nodes } : next;
 }
 
+/** What the status line says when Lens Flare's Rig lights cannot flare
+ * because Depth Lighting is off: shown as Lens Flare is switched on and
+ * as Rig lights is chosen, not standing in the panel. */
+export const RIG_OFF_NOTICE = "Lens Flare: Depth Lighting is off, so its lights do not flare. Switch it on, or choose Bright spots";
+
 export function reduce(s: State, cmd: Command): State {
   return inspectMakesRoom(s, endLibraryRedo(s, reduceWith(s, cmd, true), cmd));
 }
@@ -19706,9 +19711,21 @@ function reduceInner(s: State, cmd: Command): State {
           );
         }
       }
+      // Lens Flare switched on to flare a rig that cannot (Depth Lighting
+      // off) says so once, on the status line (2026-10-29: the note moved
+      // there, "only appear when either Lens Flare is first turned on and
+      // or Rig lights is activated").
+      const flareNode = nodes.find((n) => n.id === "flare");
+      const rigDark =
+        cmd.title === "Lens Flare" &&
+        cmd.on &&
+        !!flareNode &&
+        ((flareNode.params.rig as number) ?? 1) >= 0.5 &&
+        !nodes.some((n) => n.type === "heeler.key_light" && n.enabled);
       return withUndo({
         nodes,
         wires,
+        ...(rigDark ? { notice: { text: RIG_OFF_NOTICE, at: Date.now() } } : {}),
         // "when a user turns on a category it should auto open." Turning
         // something on and being shown nothing is the switch not answering. A
         // preference now, off by default: the owner came to prefer a section that

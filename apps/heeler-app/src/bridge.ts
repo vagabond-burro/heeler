@@ -4900,6 +4900,12 @@ function serializeEditorGraph(
   const developsRendered = (n: NodeCard): boolean => !!opts.renderedSource && profileDevelops(n);
   const placePad = placePads(nodes, wires);
   const clipPlace = clipPlacements(nodes, wires, placePad);
+  // The rig only flares while Depth Lighting is on (2026-10-29: "I don't
+  // think Rig Lights should show anything if Depth Lighting isn't turned
+  // on"): the flare keeps a mirror of the rig's lights, and with Depth
+  // Lighting off it is sent without them, so a preview and an export
+  // both draw no rig flare. Bright spots are the flare's own.
+  const rigLive = nodes.some((n) => n.type === "heeler.key_light" && n.enabled);
   return {
     schema_version: 1,
     graph_id: graphId,
@@ -4923,6 +4929,7 @@ function serializeEditorGraph(
         ...(n.type === "heeler.export_layer" && (n.textParams?.source ?? "").startsWith("finish:")
           ? { group: finishGroupOf.get(n.textParams!.source!.slice("finish:".length)) ?? "" }
           : {}),
+        ...(n.type === "heeler.flare" && !rigLive ? { lights: "[]" } : {}),
         ...(clipPlace.has(n.id) ? { clip_place: clipPlace.get(n.id)! } : {}),
         // The room an image layer's own warp gave its picture, so the
         // placement puts the margin outside the corners (placePads).

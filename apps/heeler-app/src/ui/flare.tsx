@@ -9,7 +9,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { flareSpots, imageMetadata, serializeGraph } from "../bridge";
 import { reportToolError } from "./hints";
-import { FLARE_PRESETS, suggestFlarePreset, toolNode, type Command, type NodeCard, type State } from "../state";
+import { FLARE_PRESETS, RIG_OFF_NOTICE, suggestFlarePreset, toolNode, type Command, type NodeCard, type State } from "../state";
 import { lightsOf, writeLights } from "./keylightgizmoparts";
 import { RibbonEditor } from "./ribbon";
 import type { GradStop } from "./gradientstopsparts";
@@ -122,13 +122,21 @@ export function FlarePanel({ state, dispatch, node }: { state: State; dispatch: 
             data-active={on}
             data-hint={on ? `${what}. Click to stop them flaring` : `Flare from ${what.charAt(0).toLowerCase()}${what.slice(1)}`}
             style={{ fontSize: 9, padding: "0 6px" }}
-            onClick={() => dispatch({ type: "set_param", id: node.id, param, value: on ? 0 : 1 })}
+            onClick={() => {
+              dispatch({ type: "set_param", id: node.id, param, value: on ? 0 : 1 });
+              if (param === "rig" && !on && !relightOn) dispatch({ type: "set_notice", text: RIG_OFF_NOTICE });
+            }}
           >
             {label}
           </button>
         ))}
       </div>
-      {!rigOn ? null : lights.length === 0 || !keylight ? (
+      {/* The rig flares only while Depth Lighting is on, so with it off
+          its lights are not listed as flaring (2026-10-29: "I don't think
+          Rig Lights should show anything if Depth Lighting isn't turned
+          on"); the status line says why, as Rig lights is chosen and as
+          the section is switched on (RIG_OFF_NOTICE). */}
+      {!rigOn || (lights.length > 0 && keylight && !relightOn) ? null : lights.length === 0 || !keylight ? (
         <div data-testid="flare-no-lights" style={{ fontSize: 9, color: "var(--text-faint)", lineHeight: 1.5 }}>
           No light to flare: add one in Depth Lighting.
         </div>
@@ -158,11 +166,6 @@ export function FlarePanel({ state, dispatch, node }: { state: State; dispatch: 
           {flaring === 0 && !brightOn && (
             <div data-testid="flare-none-flaring" style={{ fontSize: 9, color: "var(--text-faint)", lineHeight: 1.5 }}>
               No light is flaring: switch one on above.
-            </div>
-          )}
-          {flaring > 0 && !relightOn && (
-            <div data-testid="flare-relight-off" style={{ fontSize: 9, color: "var(--text-faint)", lineHeight: 1.5 }}>
-              Depth Lighting is off: its lights do not relight the scene, but they still flare here.
             </div>
           )}
         </div>
