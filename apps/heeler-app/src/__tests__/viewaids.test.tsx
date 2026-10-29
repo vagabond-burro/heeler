@@ -11,7 +11,7 @@ import { COMMANDS, bindingMap, conflicts } from "../hotkeys";
 import { runCommand } from "../commands";
 import { uiSettingsCommands, uiSettingsSnapshot } from "../settings";
 import { Viewer } from "../ui/viewer";
-import { Navigator, ViewAidButtons } from "../ui/viewaids";
+import { Loupe, Navigator, ViewAidButtons } from "../ui/viewaids";
 import {
   LOUPE_MAG_RANGE,
   LOUPE_RADIUS_RANGE,
@@ -30,6 +30,7 @@ import {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -107,6 +108,22 @@ describe("the Navigator's corner menu", () => {
     expect(screen.queryByTestId("navigator-corner-menu")).toBeNull();
     // A right-click does not toggle the Navigator itself.
     expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("btn-navigator")).toHaveFocus();
+  });
+
+  it("opens from the keyboard, moves through its choices and returns focus", () => {
+    render(<ViewAidButtons state={initialState()} dispatch={vi.fn()} />);
+    const button = screen.getByTestId("btn-navigator");
+    fireEvent.keyDown(button, { key: "ArrowDown" });
+    const menu = screen.getByTestId("navigator-corner-menu");
+    expect(screen.getByTestId("navigator-corner-br")).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+    expect(screen.getByTestId("navigator-corner-bl")).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "Home" });
+    expect(screen.getByTestId("navigator-corner-tl")).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "Escape" });
+    expect(screen.queryByTestId("navigator-corner-menu")).toBeNull();
+    expect(button).toHaveFocus();
   });
 
   it("puts the Navigator in that corner", () => {
@@ -171,6 +188,8 @@ describe("the Navigator's rectangle", () => {
   it("sizes the thumbnail to the frame's shape inside the percent", () => {
     expect(navigatorBox({ w: 800, h: 600 }, 2, 25)).toEqual({ w: 200, h: 100 });
     expect(navigatorBox({ w: 800, h: 600 }, 0.5, 25)).toEqual({ w: 75, h: 150 });
+    expect(navigatorBox({ w: 0, h: 0 }, 2, 25)).toEqual({ w: 0, h: 0 });
+    expect(navigatorBox({ w: 800, h: 0 }, 2, 25)).toEqual({ w: 0, h: 0 });
   });
 });
 
@@ -183,11 +202,12 @@ describe("dragging on the Navigator", () => {
     });
   const mount = (view: StageView) => {
     const dispatch = vi.fn();
-    render(<Navigator view={view} src="frame" corner="br" size={25} dispatch={dispatch} />);
+    const { rerender } = render(<Navigator view={view} src="frame" corner="br" size={25} dispatch={dispatch} />);
     const nav = screen.getByTestId("navigator");
     // The thumbnail: 200 x 100 at (500, 400).
     nav.getBoundingClientRect = () => ({ left: 500, top: 400, width: 200, height: 100, right: 700, bottom: 500, x: 500, y: 400, toJSON: () => ({}) });
-    return { nav, dispatch };
+    const update = (next: StageView, src = "frame") => rerender(<Navigator view={next} src={src} corner="br" size={25} dispatch={dispatch} />);
+    return { nav, dispatch, update };
   };
 
   it("pans the canvas with the rectangle, from where it was grabbed", () => {
@@ -199,11 +219,11 @@ describe("dragging on the Navigator", () => {
     // ...the press alone moves nothing.
     expect(dispatch).toHaveBeenLastCalledWith({ type: "set_viewer_pan", x: expect.closeTo(0), y: expect.closeTo(0) });
     // Drag 20 thumbnail px right: a tenth of the frame, 200 screen px.
-    press(window, "pointermove", { clientX: 610, clientY: 450 });
+    press(window, "pointermove", { buttons: 1, clientX: 610, clientY: 450 });
     expect(dispatch).toHaveBeenLastCalledWith({ type: "set_viewer_pan", x: expect.closeTo(-200), y: expect.closeTo(0) });
     press(window, "pointerup", {});
     dispatch.mockClear();
-    press(window, "pointermove", { clientX: 650, clientY: 450 });
+    press(window, "pointermove", { buttons: 1, clientX: 650, clientY: 450 });
     expect(dispatch).not.toHaveBeenCalled();
   });
 
@@ -215,9 +235,43 @@ describe("dragging on the Navigator", () => {
     press(window, "pointerup", {});
   });
 
-  it("lands the pan on the view without adding up", () => {
-    const s = reduce(reduce(initialState(), { type: "set_viewer_pan", x: 120, y: -40 }), { type: "set_viewer_pan", x: 130, y: -40 });
+  it("stops when a lost release leaves no primary button held", () => {
+    const { nav, dispatch } = mount(zoomed());
+    press(nav, "pointerdown", { button: 0, clientX: 590, clientY: 450 });
+    dispatch.mockClear();
+    press(window, "pointermove", { buttons: 0, clientX: 610, clientY: 450 });
+    press(window, "pointermove", { buttons: 1, clientX: 620, clientY: 450 });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("stops on blur, when Fit hides it and when the photograph changes", () => {
+    const { nav, dispatch, update } = mount(zoomed());
+    press(nav, "pointerdown", { button: 0, clientX: 590, clientY: 450 });
+    dispatch.mockClear();
+    press(window, "blur", {});
+    press(window, "pointermove", { buttons: 1, clientX: 610, clientY: 450 });
+    expect(dispatch).not.toHaveBeenCalled();
+
+    press(nav, "pointerdown", { button: 0, clientX: 590, clientY: 450 });
+    dispatch.mockClear();
+    update(zoomed({ scale: 0.8 }));
+    press(window, "pointermove", { buttons: 1, clientX: 610, clientY: 450 });
+    expect(dispatch).not.toHaveBeenCalled();
+
+    update(zoomed());
+    press(nav, "pointerdown", { button: 0, clientX: 590, clientY: 450 });
+    dispatch.mockClear();
+    update(zoomed(), "next-frame");
+    press(window, "pointermove", { buttons: 1, clientX: 610, clientY: 450 });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("lands the pan on the view without adding up or making history", () => {
+    const before = initialState();
+    let s = reduce(reduce(before, { type: "set_viewer_pan", x: 120, y: -40 }), { type: "set_viewer_pan", x: 130, y: -40 });
     expect(s.view.pan).toEqual({ x: 130, y: -40 });
+    s = reduce(s, { type: "set_prefs", prefs: { navigatorOn: true, loupeOn: true } });
+    expect(s.undoStack).toBe(before.undoStack);
   });
 });
 
@@ -292,6 +346,16 @@ describe("the Loupe and the wheel", () => {
     expect(s.prefs.loupeRadius).toBe(LOUPE_RADIUS_RANGE[0]);
   });
 
+  it("claims wheel ticks at its ends without writing an unchanged preference", () => {
+    stubStage();
+    const s = withPrefs({ loupeOn: true, loupeMagnification: LOUPE_MAG_RANGE[1], loupeRadius: LOUPE_RADIUS_RANGE[1] });
+    const dispatch = mountViewer(s);
+    dispatch.mockClear();
+    fireEvent.wheel(screen.getByTestId("viewer-stage"), { deltaY: -100 });
+    fireEvent.wheel(screen.getByTestId("viewer-stage"), { deltaY: -100, ...(navigator.platform.startsWith("Mac") ? { metaKey: true } : { ctrlKey: true }) });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it("prints its magnification, and what that is in photograph pixels", () => {
     expect(loupeLabel(3, null)).toBe("3×");
     expect(loupeLabel(2.46, 50)).toBe("2.5× · 123%");
@@ -302,6 +366,113 @@ describe("the Loupe and the wheel", () => {
     stubStage();
     mountViewer(withPrefs({ loupeOn: true }));
     expect(screen.getByTestId("loupe").style.pointerEvents).toBe("none");
+  });
+});
+
+describe("the Loupe's canvas lifecycle", () => {
+  const rect = (left: number, top: number, width: number, height: number) =>
+    ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+
+  function harness() {
+    const pending = new Map<number, FrameRequestCallback>();
+    let next = 0;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      pending.set(++next, callback);
+      return next;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => pending.delete(id));
+    const flush = () => {
+      const callbacks = [...pending.values()];
+      pending.clear();
+      act(() => callbacks.forEach((callback) => callback(0)));
+    };
+    const ctx = {
+      filter: "none",
+      imageSmoothingEnabled: true,
+      setTransform: vi.fn(),
+      clearRect: vi.fn(),
+      fillRect: vi.fn(),
+      translate: vi.fn(),
+      scale: vi.fn(),
+      rotate: vi.fn(),
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D;
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ctx);
+    const stage = document.createElement("div");
+    stage.getBoundingClientRect = () => rect(0, 0, 800, 600);
+    const frame = document.createElement("div");
+    frame.getBoundingClientRect = () => rect(200, 150, 400, 200);
+    const img = document.createElement("img");
+    const patch = document.createElement("img");
+    const stageRef = { current: stage };
+    const frameRef = { current: frame };
+    const imgRef = { current: img };
+    const patchRef = { current: patch };
+    const element = (filter = "none", currentStage = stage) => (
+      <Loupe
+        stageRef={{ current: currentStage }}
+        frameRef={frameRef}
+        imgRef={imgRef}
+        patchRef={patchRef}
+        patchRect={[0.25, 0.25, 0.5, 0.5]}
+        view={zoomed()}
+        mag={3}
+        radius={90}
+        truePct={200}
+        frameWidth={1000}
+        filter={filter}
+      />
+    );
+    return { pending, flush, ctx, stage, frame, img, patch, stageRef, element };
+  }
+
+  it("clears an old filter and sizes its backing store for the display", () => {
+    vi.stubGlobal("devicePixelRatio", 2);
+    const h = harness();
+    Object.defineProperties(h.img, { complete: { configurable: true, value: true }, naturalWidth: { configurable: true, value: 1000 } });
+    const { rerender } = render(h.element("brightness(1.2)"));
+    h.flush();
+    act(() => h.stage.dispatchEvent(new MouseEvent("pointermove", { clientX: 400, clientY: 300, bubbles: true })));
+    h.flush();
+    expect(h.ctx.filter).toBe("brightness(1.2)");
+    expect((screen.getByTestId("loupe-glass") as HTMLCanvasElement).width).toBe(360);
+    rerender(h.element());
+    h.flush();
+    expect(h.ctx.filter).toBe("none");
+  });
+
+  it("redraws a stationary pointer when the frame and sharp patch decode", () => {
+    const h = harness();
+    Object.defineProperties(h.img, { complete: { configurable: true, value: false }, naturalWidth: { configurable: true, value: 0 } });
+    Object.defineProperties(h.patch, { complete: { configurable: true, value: false }, naturalWidth: { configurable: true, value: 0 } });
+    render(h.element());
+    act(() => h.stage.dispatchEvent(new MouseEvent("pointermove", { clientX: 400, clientY: 300, bubbles: true })));
+    h.flush();
+    expect(h.ctx.drawImage).not.toHaveBeenCalled();
+    Object.defineProperties(h.img, { complete: { configurable: true, value: true }, naturalWidth: { configurable: true, value: 1000 } });
+    fireEvent.load(h.img);
+    h.flush();
+    expect(h.ctx.drawImage).toHaveBeenCalledTimes(1);
+    Object.defineProperties(h.patch, { complete: { configurable: true, value: true }, naturalWidth: { configurable: true, value: 500 } });
+    fireEvent.load(h.patch);
+    h.flush();
+    // One draw for the base and one for the sharp patch.
+    expect(h.ctx.drawImage).toHaveBeenCalledTimes(3);
+  });
+
+  it("moves its native listeners when the stage element changes", () => {
+    const h = harness();
+    const nextStage = document.createElement("div");
+    nextStage.getBoundingClientRect = () => rect(100, 50, 800, 600);
+    const { rerender } = render(h.element());
+    h.flush();
+    rerender(h.element("none", nextStage));
+    h.flush();
+    act(() => h.stage.dispatchEvent(new MouseEvent("pointermove", { clientX: 400, clientY: 300, bubbles: true })));
+    expect(h.pending.size).toBe(0);
+    act(() => nextStage.dispatchEvent(new MouseEvent("pointermove", { clientX: 500, clientY: 350, bubbles: true })));
+    h.flush();
+    expect(screen.getByTestId("loupe").style.transform).toBe("translate(310px, 210px)");
   });
 });
 
@@ -341,6 +512,14 @@ describe("the Loupe's keys", () => {
     expect(run("view.loupe.bigger", s).out.prefs.loupeRadius).toBeGreaterThan(90);
     expect(run("view.loupe.smaller", s).out.prefs.loupeRadius).toBeLessThan(90);
     expect(run("view.loupe.bigger", initialState()).handled).toBe(false);
+  });
+
+  it("does not dispatch at the magnification or radius limit", () => {
+    const s = withPrefs({ loupeOn: true, loupeMagnification: LOUPE_MAG_RANGE[1], loupeRadius: LOUPE_RADIUS_RANGE[1] });
+    const dispatch = vi.fn();
+    expect(runCommand("view.zoom.in", s, dispatch)).toBe(true);
+    expect(runCommand("view.loupe.bigger", s, dispatch)).toBe(true);
+    expect(dispatch).not.toHaveBeenCalled();
   });
 });
 

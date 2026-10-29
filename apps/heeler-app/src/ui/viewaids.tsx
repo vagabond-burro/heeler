@@ -27,22 +27,57 @@ type D = React.Dispatch<Command>;
 export function ViewAidButtons({ state, dispatch }: { state: State; dispatch: D }) {
   const [menu, setMenu] = useState(false);
   const root = useDismiss<HTMLDivElement>(menu, () => setMenu(false));
+  const navigatorButton = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const corner = NAVIGATOR_CORNERS.find((c) => c.id === state.prefs.navigatorCorner) ?? NAVIGATOR_CORNERS[3];
+  const closeMenu = () => {
+    setMenu(false);
+    navigatorButton.current?.focus();
+  };
+  useEffect(() => {
+    if (!menu) return;
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("[role=menuitemradio]") ?? []);
+    (items.find((item) => item.dataset.active) ?? items[0])?.focus();
+  }, [menu]);
+  const menuKeys = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("[role=menuitemradio]") ?? []);
+    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    const go = (i: number) => {
+      e.preventDefault();
+      items[Math.max(0, Math.min(items.length - 1, i))]?.focus();
+    };
+    if (e.key === "ArrowDown") go(at + 1);
+    else if (e.key === "ArrowUp") go(at - 1);
+    else if (e.key === "Home") go(0);
+    else if (e.key === "End") go(items.length - 1);
+    else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeMenu();
+    } else if (e.key === "Tab") setMenu(false);
+  };
   return (
     <>
       <div ref={root} style={{ position: "relative", display: "inline-flex" }}>
         <button
+          ref={navigatorButton}
           data-active={state.prefs.navigatorOn}
           onClick={() => dispatch({ type: "set_prefs", prefs: { navigatorOn: !state.prefs.navigatorOn } })}
           onContextMenu={(e) => {
             e.preventDefault();
             setMenu(true);
           }}
+          onKeyDown={(e) => {
+            if (e.key !== "ArrowDown" && e.key !== "ContextMenu") return;
+            e.preventDefault();
+            setMenu(true);
+          }}
           data-testid="btn-navigator"
           aria-label="Navigator"
+          aria-pressed={state.prefs.navigatorOn}
           aria-haspopup="menu"
           aria-expanded={menu}
-          data-hint={`Navigator: a map of the whole photograph in the ${corner.label.toLowerCase()} corner while it is zoomed past the canvas; drag its rectangle to move the view. Right-click to choose the corner`}
+          data-hint={`Navigator: a map of the whole photograph in the ${corner.label.toLowerCase()} corner while it is zoomed past the canvas; drag its rectangle to move the view. Right-click or press Down to choose the corner`}
           data-hint-cmd="view.navigator"
           style={{ display: "inline-flex", alignItems: "center" }}
         >
@@ -54,9 +89,11 @@ export function ViewAidButtons({ state, dispatch }: { state: State; dispatch: D 
         </button>
         {menu && (
           <div
+            ref={menuRef}
             data-testid="navigator-corner-menu"
             role="menu"
             aria-label="Navigator corner"
+            onKeyDown={menuKeys}
             onMouseDown={(e) => e.stopPropagation()}
             style={{ position: "absolute", top: "calc(100% + 5px)", left: 0, zIndex: 80, ...MENU_LIST_SURFACE, maxHeight: undefined, minWidth: 128 }}
           >
@@ -65,11 +102,12 @@ export function ViewAidButtons({ state, dispatch }: { state: State; dispatch: D 
                 key={c.id}
                 role="menuitemradio"
                 aria-checked={c.id === corner.id}
+                tabIndex={-1}
                 data-testid={`navigator-corner-${c.id}`}
                 data-active={c.id === corner.id || undefined}
                 onClick={() => {
                   dispatch({ type: "set_prefs", prefs: { navigatorCorner: c.id } });
-                  setMenu(false);
+                  closeMenu();
                 }}
                 style={{
                   all: "unset",
@@ -92,6 +130,7 @@ export function ViewAidButtons({ state, dispatch }: { state: State; dispatch: D 
         onClick={() => dispatch({ type: "set_prefs", prefs: { loupeOn: !state.prefs.loupeOn } })}
         data-testid="btn-loupe"
         aria-label="Loupe"
+        aria-pressed={state.prefs.loupeOn}
         data-hint={`Loupe: a magnifying glass under the pointer. While it is up, scroll or the zoom keys change its magnification and ${modLabel("ctrl")}+scroll its size; clicks and tools work through it`}
         data-hint-cmd="view.loupe"
         style={{ display: "inline-flex", alignItems: "center" }}
@@ -129,7 +168,13 @@ export function Navigator({
 }) {
   const latest = useRef(view);
   latest.current = view;
-  if (!overflowsStage(view)) return null;
+  const endDrag = useRef<(() => void) | null>(null);
+  const shown = overflowsStage(view);
+  useEffect(() => {
+    if (!shown) endDrag.current?.();
+    return () => endDrag.current?.();
+  }, [shown, src]);
+  if (!shown) return null;
   const box = navigatorBox(view.stage, view.base.w / view.base.h, size);
   const quad = viewQuad(view);
   const at = (e: { clientX: number; clientY: number }, el: Element): [number, number] => {
@@ -140,26 +185,37 @@ export function Navigator({
     if (!isPrimaryPress(e)) return;
     e.preventDefault();
     e.stopPropagation();
+    endDrag.current?.();
     const el = e.currentTarget;
     const [px, py] = at(e, el);
     // Grabbed inside, the rectangle keeps the offset it was grabbed at;
     // outside, the view jumps to center on the press first.
     const [cx, cy] = viewCenter(latest.current);
     const grab: [number, number] = insideQuad(viewQuad(latest.current), px, py) ? [px - cx, py - cy] : [0, 0];
-    const move = (ev: { clientX: number; clientY: number }) => {
+    const panTo = (ev: { clientX: number; clientY: number }) => {
       const [x, y] = at(ev, el);
       const pan = panToCenter(latest.current, x - grab[0], y - grab[1]);
       dispatch({ type: "set_viewer_pan", x: pan.x, y: pan.y });
     };
-    move(e);
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
+      window.removeEventListener("blur", up);
+      if (endDrag.current === up) endDrag.current = null;
     };
+    const move = (ev: { clientX: number; clientY: number; buttons: number }) => {
+      // A release outside the window can take its pointerup with it. The
+      // next hover has no primary button, so it must not keep panning.
+      if ((ev.buttons & 1) === 0) up();
+      else panTo(ev);
+    };
+    panTo(e);
+    endDrag.current = up;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
+    window.addEventListener("blur", up);
   };
   const place: React.CSSProperties = {
     [corner[0] === "t" ? "top" : "bottom"]: NAV_MARGIN,
@@ -302,7 +358,10 @@ export function Loupe({
     const nat = img?.naturalWidth || 0;
     const square = (srcW: number, drawnW: number, full: number) => srcW > 0 && drawnW > srcW && fw !== null && srcW >= full * 0.98;
     ctx.imageSmoothingEnabled = !square(nat, dw, fw ?? Infinity);
-    if (f && f !== "none") ctx.filter = f;
+    // Canvas state survives a redraw. Clear an old approximation when
+    // the sharp frame that needs no filter replaces the thumbnail. Some
+    // canvas implementations have no filter property at all.
+    if ("filter" in ctx) ctx.filter = f || "none";
     try {
       if (img && img.complete && nat > 0) ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
       const patch = patchRef.current;
@@ -318,6 +377,8 @@ export function Loupe({
     if (!frame.current) frame.current = window.requestAnimationFrame(draw);
   };
 
+  // Rebind after each commit: a viewer variant can replace the stage
+  // element while keeping this aid mounted.
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
@@ -347,10 +408,21 @@ export function Loupe({
       if (frame.current) window.cancelAnimationFrame(frame.current);
       frame.current = 0;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  });
   // A wheel tick, a pan or a new frame under a still pointer redraws.
-  useEffect(schedule);
+  // Decoding finishes after that render, so the images get a load redraw
+  // too, especially the sharp patch arriving under a stationary pointer.
+  useEffect(() => {
+    schedule();
+    const img = imgRef.current;
+    const patch = patchRef.current;
+    img?.addEventListener("load", schedule);
+    patch?.addEventListener("load", schedule);
+    return () => {
+      img?.removeEventListener("load", schedule);
+      patch?.removeEventListener("load", schedule);
+    };
+  });
 
   return (
     <div

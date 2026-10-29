@@ -1178,13 +1178,11 @@ export function Viewer({
       ? (e) => {
           const op = loupeWheel(e, isMac(), state.prefs.viewerZoomRate, state.prefs.wheelZoomInverted);
           if (!op) return false;
-          dispatch({
-            type: "set_prefs",
-            prefs:
-              op.kind === "mag"
-                ? { loupeMagnification: clampLoupeMag(state.prefs.loupeMagnification * op.factor) }
-                : { loupeRadius: clampLoupeRadius(state.prefs.loupeRadius * op.factor) },
-          });
+          const key = op.kind === "mag" ? "loupeMagnification" : "loupeRadius";
+          const next = op.kind === "mag" ? clampLoupeMag(state.prefs.loupeMagnification * op.factor) : clampLoupeRadius(state.prefs.loupeRadius * op.factor);
+          // A wheel held at either end still claims the gesture, but an
+          // unchanged preference must not rerender and schedule a save.
+          if (next !== state.prefs[key]) dispatch({ type: "set_prefs", prefs: { [key]: next } });
           return true;
         }
       : undefined,

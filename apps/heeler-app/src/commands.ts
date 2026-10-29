@@ -355,7 +355,8 @@ export function runCommand(
       // The Loupe up takes the zoom keys, as it takes the wheel: the
       // canvas stays where it is and the glass magnifies more or less.
       if (state.prefs.loupeOn) {
-        dispatch({ type: "set_prefs", prefs: { loupeMagnification: loupeMagStep(state.prefs.loupeMagnification, dir) } });
+        const next = loupeMagStep(state.prefs.loupeMagnification, dir);
+        if (next !== state.prefs.loupeMagnification) dispatch({ type: "set_prefs", prefs: { loupeMagnification: next } });
         return true;
       }
       dispatch({ type: "zoom_step", dir });
@@ -371,7 +372,8 @@ export function runCommand(
     case "view.loupe.smaller": {
       if (!state.prefs.loupeOn) return false;
       const f = id === "view.loupe.bigger" ? LOUPE_RADIUS_STEP : 1 / LOUPE_RADIUS_STEP;
-      dispatch({ type: "set_prefs", prefs: { loupeRadius: clampLoupeRadius(state.prefs.loupeRadius * f) } });
+      const next = clampLoupeRadius(state.prefs.loupeRadius * f);
+      if (next !== state.prefs.loupeRadius) dispatch({ type: "set_prefs", prefs: { loupeRadius: next } });
       return true;
     }
     case "view.zoom.fit":

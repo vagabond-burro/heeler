@@ -112,7 +112,9 @@ export function insideQuad(q: [number, number][], x: number, y: number): boolean
 export function navigatorBox(stage: { w: number; h: number }, aspect: number, size: number): { w: number; h: number } {
   const bw = (stage.w * size) / 100;
   const bh = (stage.h * size) / 100;
-  if (!(aspect > 0)) return { w: bw, h: bh };
+  // A collapsed stage can report no content box during a resize.
+  if (!(bw > 0) || !(bh > 0)) return { w: 0, h: 0 };
+  if (!(aspect > 0) || !Number.isFinite(aspect)) return { w: bw, h: bh };
   return bw / bh > aspect ? { w: bh * aspect, h: bh } : { w: bw, h: bw / aspect };
 }
 
