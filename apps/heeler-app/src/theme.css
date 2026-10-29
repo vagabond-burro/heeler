@@ -66,7 +66,10 @@ lightest surface it can land on.*/
   --cat-masking-lt: #a992d8;
   --cat-utility: #5b7fb0;
   --cat-group: #c9a227;
-  --pick: #8fae76;
+  /* A pick should read at a glance on the thumbnail: the sage it was
+     sat too close to the gray of the empty marks ("The accent color
+     for picks is really weak"). */
+  --pick: #5fd36b;
   --reject: #b06a5c;
   --wire: #464b52;
   --slider-track: #24272b;
