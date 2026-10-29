@@ -39,13 +39,35 @@ Depth is inferred from the photograph, not reconstructed geometry. Watch silhoue
 
 ## Lens Flare
 
-The Lens Flare section, below Depth of Field, draws the lens's flare for the rig's lights: the
-source glow, diffraction rays, the chain of aperture ghosts across the frame,
+The Lens Flare section, below Depth of Field, draws the lens's flare for the rig's lights, the
+photograph's own bright spots, or both: the source glow, diffraction rays, the chain of aperture ghosts across the frame,
 an anamorphic streak, and the veiling glare that lifts the blacks around a
 bright source. Nothing is painted; every element is drawn from the light's
 position and the lens's character, so moving the light moves the flare and
 the flare renders fresh at every size, in the export included.
 
+- **Sources** chooses where the flare comes from. **Rig lights** flares the
+  Depth Lighting lights with their flare switch on. **Bright spots** finds the
+  photograph's own light sources, street lamps, headlights, a sun in frame, and
+  flares them with no Depth Lighting and no lights placed. Both can be on.
+  A flare from an earlier version opens with Rig lights alone and looks as it
+  did.
+- **Bright spots** has four dials of its own, shown while it is on.
+  **Threshold** is how bright a spot must be, in stops above the photograph's
+  middle brightness, so it means the same at any exposure: raise it until only
+  the real lights are left. **Sources** is the most spots that flare (1 to 16),
+  the brightest first, ranked by brightness times size. **Min size** ignores
+  spots narrower than a share of the frame's short side, the small glints off
+  chrome and water. **Spot strength** sets how strongly the found spots flare
+  against the rig's lights. The spots found are listed below the rig's lights,
+  brightest first, each with its own switch: switch off one that should not
+  flare, a white shirt or a patch of snow, without raising the threshold. A
+  spot switched off stays off while you move the dials. The spots are found
+  once per photograph, on the picture as it stands before the Tone Profile,
+  and found again when an edit before the flare changes it, so the flares sit
+  in the same places at every zoom and in the export. The lens presets never
+  change the Sources dials. Saturated highlights that are not lights are found
+  too; Min size, Threshold and the switches take care of them.
 - **Which lights flare** is chosen per light, in Depth Lighting's selected-light
   controls or in the Lens Flare section's list. In the rig, every flaring light
   shows a sun marker where its flare comes from, pinned to the frame edge when
@@ -70,7 +92,10 @@ the flare renders fresh at every size, in the export included.
   anything nearer than the light cuts the glow and rays at its silhouette, so
   a flare sits behind a person or a pole rather than being painted over them;
   the ghosts and the veil, which form inside the lens, are not cut. **Veil by
-  depth** lets the glare land on the far plane rather than the near one.
+  depth** lets the glare land on the far plane rather than the near one. A
+  bright spot takes the depth plane's depth where it was found, so a lamp
+  behind a pole loses its glow at the pole's edge just as a rig light does.
+  Without a depth map, every source flares in full.
 - When Depth of Field is on with a different blade count, the section says so
   and offers **Match**, so bokeh and ghosts share one aperture. It is a click,
   never automatic.

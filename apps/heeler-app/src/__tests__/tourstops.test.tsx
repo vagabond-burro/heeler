@@ -112,6 +112,10 @@ describe("the tour stops", () => {
     check(byArea("develop").filter((s) => !s.id.startsWith("bw.")), checked, missing);
     act(() => { fireEvent.click(screen.getByTestId("nr-method-model")); });
     check(byArea("develop").filter((s) => s.id.startsWith("control.noise-reduction.")), checked, missing);
+    // And Lens Flare's Bright spots, whose source-finding rows show
+    // while it is on.
+    act(() => { fireEvent.click(screen.getByTestId("flare-source-bright")); });
+    check(byArea("develop").filter((s) => s.id.startsWith("control.lens-flare.")), checked, missing);
     // The treatment's stops, then the mix it opens.
     check(byArea("develop").filter((s) => s.id.startsWith("bw.")), checked, missing);
     const bw = mainConversion(state().nodes);

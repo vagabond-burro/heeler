@@ -2399,6 +2399,31 @@ export async function depthMap(state: State): Promise<DepthMapAnswer> {
   });
 }
 
+/** One source Lens Flare's Bright spots found in the photograph: its
+ * centroid in full-frame normalized coordinates, its strength (0..1,
+ * the brightest is 1), its mean color with the largest channel at 1,
+ * and its width as a share of the short side. */
+export interface FlareSpot {
+  x: number;
+  y: number;
+  strength: number;
+  color: [number, number, number];
+  size: number;
+}
+
+/** Finds Lens Flare's Bright spots in what the flare node's input
+ * carries, at the engine's fixed working size; the desktop caches the
+ * answer by that input and the dials, so asking again costs a key. The
+ * browser build has no frame to search and finds none. */
+export async function flareSpots(state: State, nodeId: string): Promise<FlareSpot[]> {
+  if (!isTauri()) return [];
+  return await call<FlareSpot[]>("flare_spots", {
+    graph: serializeGraph(state),
+    imageId: state.activeImage,
+    nodeId,
+  });
+}
+
 /** Computes (or confirms) the subject matte the depth view's Subject
  * fit reads, on the frame the depth model reads: one subject matte run
  * the first time, a file stat after. "model not installed" when no

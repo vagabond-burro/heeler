@@ -788,8 +788,10 @@ export const PARAM_TEXT_DEFAULT: Record<string, Record<string, string>> = {
   // the Mask row's source. Reset empties all four.
   "heeler.recolor": { curves: "", surfaces: "", hue_hue_mode: "", by_mask: "", pairs: "" },
   // The flare's rig is mirrored from Depth Lighting and is not reset
-  // with the look; the streak color and the preset stamp are.
-  "heeler.flare": { streak_color: "#5aa0ff", streak_stops: "", preset: "" },
+  // with the look; the streak color and the preset stamp are, and so
+  // are the bright spots switched off. The found spots are what the
+  // photograph holds, not a setting, and stay.
+  "heeler.flare": { streak_color: "#5aa0ff", streak_stops: "", preset: "", spots_off: "[]" },
   "heeler.halation": { format: "35mm" },
   "heeler.sharpening": { mode: "vivid" },
   // The Sharpening group's Recipe switch (its mirror of the recipe).
@@ -2447,7 +2449,7 @@ export const NEUTRAL_PARAMS: Record<string, Record<string, number>> = {
   // The flare's "neutral" is its look at default: the node is inert
   // until a light in the rig flares, so these are starting dials, not
   // an identity the engine short-circuits on.
-  "heeler.flare": { intensity: 100, temp: 0, size: 6, softness: 50, rays: 0, ray_length: 30, ray_softness: 30, rotation: 0, ghosts: 0, ghost_spacing: 100, ghost_size: 6, blades: 7, dispersion: 30, ghost_opacity: 60, anamorphic: 0, streak_size: 1.5, streak_length: 60, streak_taper: 30, streak_angle: 0, streak_offset: 0, streak_shift: 0, streak_noise: 0, veil: 20, veil_radius: 40, veil_depth: 0, occlusion: 100, occlusion_soft: 30 },
+  "heeler.flare": { intensity: 100, temp: 0, size: 6, softness: 50, rays: 0, ray_length: 30, ray_softness: 30, rotation: 0, ghosts: 0, ghost_spacing: 100, ghost_size: 6, blades: 7, dispersion: 30, ghost_opacity: 60, anamorphic: 0, streak_size: 1.5, streak_length: 60, streak_taper: 30, streak_angle: 0, streak_offset: 0, streak_shift: 0, streak_noise: 0, veil: 20, veil_radius: 40, veil_depth: 0, occlusion: 100, occlusion_soft: 30, rig: 1, bright: 0, spot_threshold: 5, spot_count: 6, spot_min_size: 0.5, spot_strength: 100 },
   "heeler.black_white": { red: 30, green: 59, blue: 11, amount: 0, hue_curve_on: 1, ir_foliage: 2.4, ir_sky: -2.5, ir_water: -0.8, ir_skin: 0.6, neutral: 10 },
   // The print at rest: grade 2, no time, a glossy Dmax, a neutral base,
   // no toner. Not an exact identity (the paper's black is its own), so
@@ -5280,6 +5282,11 @@ export type Command =
   | { type: "polish_layer_mask_land"; seq: number; version?: string }
   | { type: "point_matte_at_bake"; id: string; version: string }
   | { type: "poke_render" }
+  /** Lens Flare's Bright spots, as the desktop found them in the
+   * flare's input for `image` (flare_spots): written onto the node so
+   * every render draws the one list. Not an undo step: it is what the
+   * photograph holds, not an edit; the dials that found it are. */
+  | { type: "flare_spots_found"; id: string; image: string; spots: string }
   /** `flavor`: the modifier click, which flips the app-wide mask
    * flavor (black and white or the red overlay) and shows the view in
    * it. `mask`: the eye sits in a layer's or a set's Depth mask block,
@@ -5915,6 +5922,12 @@ export const PARAM_RANGE: Record<string, [number, number]> = {
   veil_depth: [-100, 100],
   occlusion: [0, 100],
   occlusion_soft: [0, 100],
+  // Its Bright spots: the threshold in stops over the median, the most
+  // sources, the narrowest (percent of the short side), the strength.
+  spot_threshold: [0, 12],
+  spot_count: [1, 16],
+  spot_min_size: [0, 10],
+  spot_strength: [0, 300],
   // Depth of Field's disc character.
   bubble: [0, 100],
   squeeze: [-100, 100],
@@ -6823,6 +6836,10 @@ export function characterFlareDoor(s: State): LensCharacter | null {
   const dof = toolNode(s, "dof");
   const ch = LENS_CHARACTERS.find((c) => c.id === dof?.textParams?.character);
   if (!ch || !ch.writes["Lens Flare"]) return null;
+  // A flare finding the photograph's own bright spots needs no rig
+  // light to answer.
+  const flare = toolNode(s, "flare");
+  if (flare?.enabled && ((flare.params.bright as number) ?? 0) >= 0.5) return null;
   // A photograph with no Depth Lighting node has no rig at all, which
   // is exactly the case the door is for: the click builds the section.
   const keylight = s.nodes.find((n) => n.id === "keylight");
@@ -7508,6 +7525,9 @@ export function nodeWantsDepth(n: NodeCard): boolean {
     case "heeler.flare": {
       if (((n.params.intensity as number) ?? 100) <= 0) return false;
       if (((n.params.occlusion as number) ?? 100) <= 0 && ((n.params.veil_depth as number) ?? 0) === 0) return false;
+      // Bright spots read the plane at every found source, once found.
+      if (((n.params.bright as number) ?? 0) >= 0.5 && !["", "[]"].includes((n.textParams?.spots ?? "").replace(/\s/g, ""))) return true;
+      if (((n.params.rig as number) ?? 1) < 0.5) return false;
       try {
         return (JSON.parse(n.textParams?.lights ?? "[]") as { flare?: boolean; on?: boolean }[]).some(
           (l) => l.flare && l.on !== false,
@@ -12724,7 +12744,7 @@ const PARAM_RANGE_BY_TYPE: Record<string, Record<string, [number, number]>> = {
   "heeler.skin_soften": { softening: [0, 200], detail_back: [0, 200], strength: [0, 100] },
   // The tool groups' mirrors carry the same dials.
   "heeler.group": { radius: [0, 200], intensity: [0, 100], keep_color: [0, 100], softening: [0, 200], detail_back: [0, 200], strength: [0, 100] },
-  "heeler.flare": { intensity: [0, 300], temp: [-100, 100], size: [0, 30], softness: [0, 100], rays: [0, 32], ray_length: [0, 100], ray_softness: [0, 100], rotation: [0, 360], ghosts: [0, 16], ghost_spacing: [10, 200], ghost_size: [0, 30], blades: [3, 12], dispersion: [0, 100], ghost_opacity: [0, 100], anamorphic: [0, 100], streak_size: [0.2, 8], streak_length: [10, 300], streak_taper: [0, 100], streak_angle: [-90, 90], streak_offset: [-50, 50], streak_shift: [-50, 50], streak_noise: [0, 100], veil: [0, 100], veil_radius: [5, 100], veil_depth: [-100, 100], occlusion: [0, 100], occlusion_soft: [0, 100] },
+  "heeler.flare": { intensity: [0, 300], temp: [-100, 100], size: [0, 30], softness: [0, 100], rays: [0, 32], ray_length: [0, 100], ray_softness: [0, 100], rotation: [0, 360], ghosts: [0, 16], ghost_spacing: [10, 200], ghost_size: [0, 30], blades: [3, 12], dispersion: [0, 100], ghost_opacity: [0, 100], anamorphic: [0, 100], streak_size: [0.2, 8], streak_length: [10, 300], streak_taper: [0, 100], streak_angle: [-90, 90], streak_offset: [-50, 50], streak_shift: [-50, 50], streak_noise: [0, 100], veil: [0, 100], veil_radius: [5, 100], veil_depth: [-100, 100], occlusion: [0, 100], occlusion_soft: [0, 100], rig: [0, 1], bright: [0, 1], spot_threshold: [0, 12], spot_count: [1, 16], spot_min_size: [0, 10], spot_strength: [0, 300] },
   // The crop TOOL's aspect is a target ratio (0.1..10); the Geometry
   // slider's aspect is a bipolar squeeze. Same word, different physics.
   "heeler.crop_rotate": { aspect: [-100, 100] },
@@ -19212,6 +19232,19 @@ function reduceInner(s: State, cmd: Command): State {
     // and recompute only what it feeds.
     case "poke_render":
       return { ...s, renderVersion: s.renderVersion + 1, previewNonce: s.previewNonce + 1 };
+    case "flare_spots_found": {
+      // An answer for a photograph no longer open, or one the node
+      // already holds, changes nothing.
+      if (cmd.image !== s.activeImage) return s;
+      const flare = s.nodes.find((n) => n.id === cmd.id && n.type === "heeler.flare");
+      if (!flare || (flare.textParams?.spots ?? "[]") === cmd.spots) return s;
+      return {
+        ...s,
+        nodes: s.nodes.map((n) => (n.id === cmd.id ? { ...n, textParams: { ...n.textParams, spots: cmd.spots } } : n)),
+        // The sharp slice drew the old list.
+        view: { ...s.view, roiPatch: null },
+      };
+    }
     // The depth view: the farness plane AS the frame (the owner, from a
     // color grader: "you can view the scene as a depth map"). Session state
     // like maskView, never saved.

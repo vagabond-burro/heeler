@@ -242,11 +242,12 @@ It is optics, so it sits with the depth tools before the profile; a blur after g
 
 ### Lens Flare (`heeler.flare`)
 
-The lens's flare for the Depth Lighting rig's flaring lights: source glow, diffraction rays, aperture ghosts down the axis through the frame's center, the anamorphic streak with its color ribbon, and the veil. Added in scene-linear light after Depth of Field.
+The lens's flare for the Depth Lighting rig's flaring lights and the photograph's own bright spots: source glow, diffraction rays, aperture ghosts down the axis through the frame's center, the anamorphic streak with its color ribbon, and the veil. Added in scene-linear light after Depth of Field.
 
 - **Menu:** Detail > Depth > Lens Flare.
 - **Ports:** rgb in, mask in, rgb out.
 - **Intensity**, **Temp**, the **Source**, **Rays**, **Ghosts**, **Anamorphic** and **Veil** groups, **Occlusion** amount and softness, and the mirrored **Lights** rig with each light's flare switch and strength.
+- **Rig** and **Bright** choose the sources: the rig's lights, the photograph's own bright spots, or both. **Spot threshold** (stops above the frame's median), **Spot count**, **Spot min size** and **Spot strength** find and weigh the bright spots; **Spots** holds the ones found, in full-frame coordinates, and **Spots off** the positions switched off.
 
 Occlusion reads the depth plane two ways: the share of the source hidden by nearer scene dims the whole flare, and the core, rays and streak are cut per pixel where the scene is nearer than the light. Ghosts and veil form inside the lens and are not cut.
 

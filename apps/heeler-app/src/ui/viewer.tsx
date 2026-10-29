@@ -27,6 +27,7 @@ import { BlurToolButton } from "./blurtool";
 import { RemoveRunner, SmartClickOverlay, SmartSelectOverlay } from "./smarttool";
 import { ObjectPickOverlay } from "./mattetool";
 import { DepthRunner, NormalsRunner, SubjectFitRunner } from "./depthtool";
+import { FlareSpotsRunner } from "./flare";
 import { DenoiseRunner } from "./denoisetool";
 import { DofFocusOverlay, KeyLightGizmo } from "./keylightgizmo";
 import { ChartToolOverlay } from "./colorchecker";
@@ -3822,6 +3823,7 @@ asked for.*/}
             <DepthRunner state={state} dispatch={dispatch} />
             <NormalsRunner state={state} dispatch={dispatch} />
             <SubjectFitRunner state={state} dispatch={dispatch} />
+            <FlareSpotsRunner state={state} dispatch={dispatch} />
             <DenoiseRunner state={state} dispatch={dispatch} />
             {state.tool === "brush" &&
               (() => {
