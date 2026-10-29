@@ -1388,7 +1388,7 @@ export function maskViewOverriddenBy(s: State): string | null {
   if (!mask) return null;
   const shown = previewTarget(s);
   if (shown === mask || shown === null) return null;
-  if (shown === "__depth__") return "View depth";
+  if (shown.startsWith("__depth__")) return "View depth";
   if (shown === "__halation__") return "the halation view";
   if (shown.startsWith("__detaileq__")) return "the band view";
   if (shown.startsWith("__influence__")) return "the influence view";
@@ -1431,7 +1431,9 @@ export function previewTarget(s: State): string | null {
   // view: it is the most recent ask and it ends when the cursor leaves.
   if (s.zoneHover !== null) return `__zones__@${s.zoneHover}`;
   return s.depthView
-    ? "__depth__"
+    ? s.depthViewFit === "subject"
+      ? "__depth__@subject"
+      : "__depth__"
     : s.halationView
       ? "__halation__"
       : detailEqViewOn(s)
@@ -1525,7 +1527,7 @@ export function maskOverlayWanted(s: State): boolean {
   // The depth view honors it too (2026-09-29: "this is for any tool
   // that uses depth map and has the depth map preview"): the plane
   // tints the photograph instead of taking the frame.
-  if (previewTarget(s) === "__depth__") return true;
+  if (previewTarget(s)?.startsWith("__depth__")) return true;
   if (s.probeNode !== null && graphHasNode(s.nodes, s.probeNode)) return false;
   return maskPreviewNode(s) !== null;
 }
@@ -4210,6 +4212,11 @@ export interface State {
   maskView: boolean;
   /** The farness plane as the frame (session-only, like maskView). */
   depthView: boolean;
+  /** How the depth view spreads its grays: over the scene (absent), or
+   * over the subject's own depth, "subject", so relief inside a subject
+   * that spans a sliver of the scene shows. A view setting; the map the
+   * tools read is the same either way (session-only). */
+  depthViewFit?: "subject" | null;
   /** The separation view: the black and white conversion's gray
    * collisions painted over the dimmed frame (session-only). */
   collisionView: boolean;
@@ -5281,6 +5288,7 @@ export type Command =
    * black and white); a plain click there is View depth and never puts
    * that mask's eye down. */
   | { type: "toggle_depth_view"; flavor?: boolean; mask?: string }
+  | { type: "toggle_depth_view_subject" }
   | { type: "recompute_depth" }
   | { type: "depth_settled" }
   | { type: "file_passes_known"; image: string; passes: FilePasses | null }
@@ -19230,6 +19238,14 @@ function reduceInner(s: State, cmd: Command): State {
         return { ...s, ...views, maskRed: !s.maskRed, depthView: true };
       }
       return { ...s, ...views, depthView: !s.depthView };
+    }
+    case "toggle_depth_view_subject": {
+      // Fitting the view to the subject is a way of looking at the map,
+      // so asking for it brings the view up; asked again, the scene's
+      // grays come back and the view stays.
+      if (s.depthViewFit === "subject") return { ...s, depthViewFit: null };
+      const views = { halationView: false, collisionView: false, zonesView: false, detailEqView: null, influenceView: null };
+      return { ...s, ...views, depthView: true, depthViewFit: "subject" };
     }
     // The separation view: one frame view at a time, like the two
     // beside it.

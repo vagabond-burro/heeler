@@ -5644,6 +5644,27 @@ the one-seat rule.*/}
                     <DepthViewButton depthView={state.depthView} red={state.maskRed}
                       onToggle={(flavor) => dispatch({ type: "toggle_depth_view", flavor })}
                       testid={`depth-view-${sec.depthTools}`} />
+                    {/* The view fitted to the subject (2026-10-29: the owl's
+                        face read flat in a map whose grays spanned perch to
+                        background): its grays over the subject's own depth.
+                        The map the tools read is the same either way. */}
+                    {sec.depthTools === "depthmap" && (
+                      <button
+                        className="chip"
+                        data-testid="depth-view-subject"
+                        data-active={state.depthView && state.depthViewFit === "subject"}
+                        aria-pressed={state.depthView && state.depthViewFit === "subject"}
+                        data-hint={
+                          state.depthView && state.depthViewFit === "subject"
+                            ? "View depth over the subject's own depth: click for the whole scene's again"
+                            : "View depth over the subject's own depth, so the relief inside it shows (a face, a beak). Only the view changes; the map the tools read does not"
+                        }
+                        style={{ fontSize: 11, padding: "2px 8px" }}
+                        onClick={() => dispatch({ type: "toggle_depth_view_subject" })}
+                      >
+                        SUBJECT
+                      </button>
+                    )}
                     {/* The wire is the delivery (26.3 Phase 10.3): a
                         section asking for the plane with no wire to a
                         Depth Map renders flat, and says so here rather

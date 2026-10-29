@@ -2399,6 +2399,19 @@ export async function depthMap(state: State): Promise<DepthMapAnswer> {
   });
 }
 
+/** Computes (or confirms) the subject matte the depth view's Subject
+ * fit reads, on the frame the depth model reads: one subject matte run
+ * the first time, a file stat after. "model not installed" when no
+ * subject matte model is. */
+export async function depthSubject(state: State): Promise<DepthMapAnswer> {
+  if (!isTauri()) return { version: "mock-subject", work: "cached" };
+  const shown = state.tool === "crop" ? { ...state, ...cropPreviewGraph(state) } : state;
+  return await call("depth_subject", {
+    graph: serializeGraph(shown),
+    imageId: state.activeImage,
+  });
+}
+
 /** One matte refinement of a selection: ViTMatte resolves the
  * selection's edge against the photograph: hair, fur, the fine
  * boundary the classical polish cannot read. Resolves with the

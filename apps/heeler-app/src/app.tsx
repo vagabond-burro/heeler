@@ -1317,6 +1317,7 @@ export function App() {
         tool: state.tool,
         maskView: state.maskView,
         depthView: state.depthView,
+        depthViewFit: state.depthViewFit,
         halationView: state.halationView,
         detailEqView: state.detailEqView,
         influenceView: state.influenceView,

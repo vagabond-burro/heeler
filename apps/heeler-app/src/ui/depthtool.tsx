@@ -7,7 +7,7 @@
 // name, size, license, source, nothing fetched silently.
 
 import React, { useEffect, useRef, useState } from "react";
-import { depthMap, filePasses, modelsEpoch, onModelsChanged, smartModelDownload, smartModelStatus, surfaceNormals, type SmartModels } from "../bridge";
+import { depthMap, depthSubject, filePasses, modelsEpoch, onModelsChanged, smartModelDownload, smartModelStatus, surfaceNormals, type SmartModels } from "../bridge";
 import { logMsg } from "../log";
 import { reportToolError } from "./hints";
 import { MenuField } from "./menufield";
@@ -252,6 +252,80 @@ export function NormalsRunner({ state, dispatch }: { state: State; dispatch: D }
         void smartModelDownload("moge_2_vits_normal")
           .then(() => {
             logMsg("info", "MoGe-2 ViT-S installed");
+            setNeedModel(false);
+          })
+          .catch((err) => reportToolError("Download", err))
+          .finally(() => setDownloading(false));
+      }}
+    />
+  );
+}
+
+/** The subject matte the depth view's Subject fit stretches its grays
+ * to, read once per photograph and depth input while the fit is up,
+ * then a render poke so the view takes it. Until it lands, and on a
+ * machine without a subject matte model, the view shows the scene's
+ * grays. Consent before the download, as ever: BiRefNet Lite, the
+ * smaller of the two subject mattes. */
+export function SubjectFitRunner({ state, dispatch }: { state: State; dispatch: D }) {
+  const wanted = !!state.activeImage && state.depthView && state.depthViewFit === "subject";
+  // The matte lies on the frame the depth model reads: a new photograph
+  // or new geometry ahead of the Depth Map asks again (a file stat when
+  // it is already made), keyed as the depth runner keys the plane.
+  const mark = `${state.activeImage}|${depthGeometryKey(state)}|${state.depthEpoch}|models${modelsEpoch()}`;
+  const done = useRef<Record<string, boolean>>({});
+  const [busy, setBusy] = useState(false);
+  const [needModel, setNeedModel] = useState(false);
+  const [models, setModels] = useState<SmartModels | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  useEffect(() => onModelsChanged(() => setNeedModel(false)), []);
+  useEffect(() => {
+    if (!needModel) return;
+    let live = true;
+    void smartModelStatus().then((m) => {
+      if (live) setModels(m);
+    });
+    return () => {
+      live = false;
+    };
+  }, [needModel, downloading]);
+  useEffect(() => {
+    if (!wanted || busy || needModel || state.gesture !== null || done.current[mark]) return;
+    setBusy(true);
+    publishBusy("DEPTH · finding the subject");
+    void depthSubject(state)
+      .then((answer) => {
+        done.current[mark] = true;
+        if (answer.work === "model") dispatch({ type: "poke_render" });
+      })
+      .catch((err) => {
+        if (String(err).includes("model not installed")) {
+          setNeedModel(true);
+        } else {
+          done.current[mark] = true; // no retry loop on a broken photo
+          reportToolError("Depth subject", err);
+        }
+      })
+      .finally(() => {
+        publishBusy(null);
+        setBusy(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted, mark, busy, needModel, state.gesture]);
+  const model = models?.lite ?? models?.matte;
+  if (!wanted || !needModel || !model) return null;
+  return (
+    <ModelConsentCard
+      title="FITTING THE VIEW TO THE SUBJECT NEEDS THE SUBJECT MODEL"
+      model={model}
+      testid="depth-subject"
+      downloading={downloading}
+      place={{ position: "fixed", left: "50%", bottom: 76, transform: "translateX(-50%)", zIndex: 40 }}
+      onDownload={() => {
+        setDownloading(true);
+        void smartModelDownload(models?.lite ? "birefnet_lite" : "birefnet_dynamic")
+          .then(() => {
+            logMsg("info", "Subject matte model installed");
             setNeedModel(false);
           })
           .catch((err) => reportToolError("Download", err))

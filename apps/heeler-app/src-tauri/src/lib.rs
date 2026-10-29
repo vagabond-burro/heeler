@@ -7506,6 +7506,139 @@ async fn depth_map(
     .map_err(|e| e.to_string())?
 }
 
+/// The key of the subject matte the depth view fits its grays to: the
+/// photograph, the frame the depth model reads (its input key, as the
+/// plane's own version carries it) and the matte model.
+fn depth_subject_version(image_id: &str, input: Option<u64>, matte: &str) -> u64 {
+    let seat = match input {
+        Some(key) => format!("depthsubject|{image_id}|{matte}|i{key:016x}"),
+        None => format!("depthsubject|{image_id}|{matte}"),
+    };
+    fnv1a64(seat.as_bytes())
+}
+
+/// The subject's depth, from the 1st to the 99th percentile of the plane
+/// under the matte (where it is at least half on): what the depth view's
+/// Subject fit stretches to black and white, so relief inside a subject
+/// that spans a sliver of the scene's range shows ("I thought DA Large
+/// for depth maps would actually pull out details from the subject's
+/// face"). The matte is read at the plane's size whatever its own. None
+/// when the subject is under a five-hundredth of the frame or its depth
+/// is one value.
+fn subject_depth_range(plane: &ImageBuf, matte: &ImageBuf) -> Option<(f32, f32)> {
+    const BINS: usize = 4096;
+    let (w, h) = (plane.width, plane.height);
+    if w == 0 || h == 0 || matte.width == 0 || matte.height == 0 {
+        return None;
+    }
+    let mut hist = vec![0u32; BINS];
+    let mut n = 0u64;
+    for y in 0..h {
+        let my = (y * matte.height / h).min(matte.height - 1);
+        for x in 0..w {
+            let mx = (x * matte.width / w).min(matte.width - 1);
+            if matte.data[(my * matte.width + mx) * 4] < 0.5 {
+                continue;
+            }
+            let v = plane.data[(y * w + x) * 4].clamp(0.0, 1.0);
+            hist[((v * (BINS - 1) as f32).round() as usize).min(BINS - 1)] += 1;
+            n += 1;
+        }
+    }
+    if n * 500 < (w * h) as u64 {
+        return None;
+    }
+    let at = |q: f64| {
+        let want = (n as f64 * q).ceil().max(1.0) as u64;
+        let mut seen = 0u64;
+        for (i, c) in hist.iter().enumerate() {
+            seen += *c as u64;
+            if seen >= want {
+                return i as f32 / (BINS - 1) as f32;
+            }
+        }
+        1.0
+    };
+    let (lo, hi) = (at(0.01), at(0.99));
+    (hi - lo > 1e-3).then_some((lo, hi))
+}
+
+/// The plane stretched so `lo` is 0 and `hi` is 1, clamped.
+fn stretched_plane(plane: &ImageBuf, (lo, hi): (f32, f32)) -> ImageBuf {
+    let mut out = plane.clone();
+    let r = (hi - lo).max(1e-6);
+    for px in out.data.chunks_mut(4) {
+        for v in px.iter_mut().take(3) {
+            *v = ((*v - lo) / r).clamp(0.0, 1.0);
+        }
+    }
+    out
+}
+
+/// Computes the subject matte the depth view's Subject fit reads, on the
+/// frame the depth model reads, with the subject matte model (BiRefNet,
+/// dynamic where installed, else Lite), and persists it; a file stat
+/// when it already exists. "model not installed" when no matte model is.
+#[tauri::command]
+async fn depth_subject(app: tauri::AppHandle, graph: UiGraph, image_id: String) -> Result<DepthMapAnswer, String> {
+    let base = vision_base(&app)?;
+    let Some(spec) = subject_matte(&base) else {
+        return Err("model not installed".into());
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let input_key = with_session(&app, |s| Ok(depth_input_key_in_session(s, &graph, &image_id)))?;
+        let version = depth_subject_version(&image_id, input_key, spec.id);
+        let path = smart_raster_path(&base, version);
+        if path.exists() {
+            return Ok(DepthMapAnswer { version: format!("{version:016x}"), work: "cached" });
+        }
+        let opts = source_opts_of(&graph);
+        let source = preview_source(&app, &image_id, opts)?;
+        // The frame the depth model reads, so the matte lies on the
+        // plane pixel for pixel.
+        let frame = match input_key
+            .is_some()
+            .then(|| depth_map_input_frame(&app, &graph, &image_id, &source, opts))
+            .flatten()
+        {
+            Some(img) => img,
+            None => (*source).clone(),
+        };
+        let (w, h) = (frame.width, frame.height);
+        let mut rgb = vec![0.0f32; w * h * 3];
+        for (i, px) in frame.data.chunks(4).enumerate() {
+            for c in 0..3 {
+                rgb[i * 3 + c] = heeler_engine::ops::to_display(px[c].max(0.0)).min(1.0) * 255.0;
+            }
+        }
+        let _run = MATTING_RUN.lock().unwrap_or_else(|e| e.into_inner());
+        let mut matting = with_session(&app, |s| Ok(s.matting.take()))?.filter(|m| m.model() == spec.id);
+        let loading = matting.is_none();
+        let _paid = admit_matting_run(spec, loading, w, h)?;
+        if loading {
+            matting = Some(heeler_vision::Matting::load(&base, spec).map_err(|e| e.to_string())?);
+        }
+        let mut matting = matting.expect("just loaded");
+        let mask = matting.matte(&rgb, w, h);
+        with_session(&app, |s| {
+            s.matting = Some(matting);
+            Ok(())
+        })?;
+        let mask = mask.map_err(|e| e.to_string())?;
+        let mut raster = ImageBuf::new(w, h);
+        for (i, v) in mask.iter().enumerate() {
+            raster.data[i * 4..i * 4 + 3].fill(*v);
+            raster.data[i * 4 + 3] = 1.0;
+        }
+        let bytes = heeler_io::encode_png_raw(&raster).map_err(|e| e.to_string())?;
+        let _ = path.parent().map(std::fs::create_dir_all);
+        std::fs::write(&path, bytes).map_err(|e| format!("subject matte persist failed: {e}"))?;
+        Ok(DepthMapAnswer { version: format!("{version:016x}"), work: "model" })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Computes the photograph's surface normals (MoGe-2 ViT-S) for Depth
 /// Lighting's Model choice and persists them as the raster planting
 /// reads; a no-op when it already exists. Read from the photograph
@@ -18956,7 +19089,7 @@ fn render_preview_attempt(
         graph
     };
     let opts = source_opts_of(&graph);
-    let source_identity = if mask_node.as_deref() == Some("__depth__") { None } else {
+    let source_identity = if mask_node.as_deref().is_some_and(|m| m.starts_with("__depth__")) { None } else {
         settle_source_identity(&graph, &source_version_key(app, &image_id, opts))
     };
     // The gesture tier (see fast_preview_source): half the pixels on a
@@ -19050,7 +19183,11 @@ fn render_preview_attempt(
     // scene as a depth map"): the farness plane AS the frame, black near,
     // white far. Not a node in the graph - a pseudo target the frontend
     // names - so it short-circuits before the terminal logic.
-    let depth_view = mask_node.as_deref() == Some("__depth__");
+    let depth_view = mask_node.as_deref().is_some_and(|m| m == "__depth__" || m == "__depth__@subject");
+    // The view's Subject fit: its grays stretched to the subject's own
+    // depth (subject_depth_range), the map the tools read unchanged.
+    let depth_fit_subject = mask_node.as_deref() == Some("__depth__@subject");
+    let mut depth_subject_matte: Option<Arc<ImageBuf>> = None;
     // Halation's isolated-regions view: the halation node renders its
     // gated source as the frame. View state only: the flag rides the
     // render's own copy of the graph.
@@ -19159,6 +19296,31 @@ fn render_preview_attempt(
     let depth_frame: Option<Arc<ImageBuf>> = if depth_view {
         let (input, from_file) = with_session(app, |s| Ok((depth_input_key_in_session(s, &graph, &image_id), depth_from_file_in_session(s, &image_id))))?;
         depth_seat = depth_seat_geometry(&graph, input.filter(|_| !from_file));
+        // The subject matte the Subject fit reads, when the runner has
+        // made it (depth_subject); until then the view shows the scene.
+        if depth_fit_subject {
+            if let Some(base) = vision.as_deref() {
+                if let Some(spec) = subject_matte(base) {
+                    let want = depth_subject_version(&image_id, input, spec.id);
+                    let key = format!("{image_id}|__depth_subject__");
+                    let cached = with_session(app, |s| Ok(s.smart_rasters.get(&key).cloned()))?;
+                    depth_subject_matte = match cached {
+                        Some((r, v)) if v == want => Some(r),
+                        _ => std::fs::read(smart_raster_path(base, want))
+                            .ok()
+                            .and_then(|bytes| heeler_io::decode_png_raw(&bytes).ok())
+                            .map(|img| {
+                                let arc = Arc::new(img);
+                                let _ = with_session(app, |s| {
+                                    s.smart_rasters.insert(key.clone(), (arc.clone(), want));
+                                    Ok(())
+                                });
+                                arc
+                            }),
+                    };
+                }
+            }
+        }
         let want = depth_version(&image_id, depth_recipe(&graph), input);
         let key = format!("{image_id}|__depth__");
         let cached = with_session(app, |s| Ok(s.smart_rasters.get(&key).cloned()))?;
@@ -19187,6 +19349,12 @@ fn render_preview_attempt(
     let depth_value: Option<Value> = depth_frame.map(|raster| {
         let raster = match depth_levels(&graph) {
             Some(levels) => Arc::new(levelled_plane(&raster, levels)),
+            None => raster,
+        };
+        // Fitted to the subject: measured on the whole-frame plane,
+        // before any crop cuts it, so the range is the subject's whole.
+        let raster = match depth_subject_matte.as_deref().and_then(|m| subject_depth_range(&raster, m)) {
+            Some(range) => Arc::new(stretched_plane(&raster, range)),
             None => raster,
         };
         // The plane is whole-frame; the photograph on screen may be a
@@ -23428,6 +23596,7 @@ pub fn run() {
             polish_matte_full,
             polish_matte_full_cancel,
             depth_map,
+            depth_subject,
             surface_normals,
             depth_at,
             depth_forget,
@@ -24963,6 +25132,43 @@ mod tests {
     /// (inject_roi_frame), or the viewer rebuilds its 1:1 canvas around a
     /// few hundred pixels. And a crop the plane already carries (a wired
     /// Depth Map downstream of it) is not cut again.
+    #[test]
+    fn the_depth_views_subject_fit_stretches_the_subjects_own_depth() {
+        // A scene from 0 (near) to 1 (far) with a subject in the middle
+        // spanning only 0.60 to 0.64 of it: its relief is a sliver of the
+        // scene's grays until the fit stretches it to the whole range.
+        let (w, h) = (100, 50);
+        let mut plane = ImageBuf::new(w, h);
+        let mut matte = ImageBuf::new(w / 2, h / 2);
+        for y in 0..h {
+            for x in 0..w {
+                let inside = (30..70).contains(&x) && (10..40).contains(&y);
+                let v = if inside { 0.60 + 0.04 * (x - 30) as f32 / 39.0 } else { x as f32 / (w - 1) as f32 };
+                plane.data[(y * w + x) * 4..(y * w + x) * 4 + 3].fill(v);
+            }
+        }
+        for y in 0..h / 2 {
+            for x in 0..w / 2 {
+                let on = (15..35).contains(&x) && (5..20).contains(&y);
+                matte.data[(y * (w / 2) + x) * 4] = if on { 1.0 } else { 0.0 };
+            }
+        }
+        let (lo, hi) = subject_depth_range(&plane, &matte).expect("a subject");
+        assert!((lo - 0.60).abs() < 0.002 && (hi - 0.64).abs() < 0.002, "{lo} {hi}");
+        let out = stretched_plane(&plane, (lo, hi));
+        let at = |x: usize, y: usize| out.data[(y * w + x) * 4];
+        assert!(at(31, 20) < 0.1 && at(68, 20) > 0.9, "the subject spans black to white");
+        assert_eq!(at(0, 0), 0.0, "nearer than the subject clamps");
+        assert_eq!(at(99, 0), 1.0, "farther clamps");
+        // No subject, or a flat one: no fit.
+        assert!(subject_depth_range(&plane, &ImageBuf::new(10, 10)).is_none());
+        let flat = ImageBuf::new(w, h);
+        assert!(subject_depth_range(&flat, &matte).is_none());
+        // The matte is keyed to the frame the model reads and the model.
+        assert_ne!(depth_subject_version("a", Some(1), "birefnet_lite"), depth_subject_version("a", Some(2), "birefnet_lite"));
+        assert_ne!(depth_subject_version("a", None, "birefnet_lite"), depth_subject_version("a", None, "birefnet_dynamic"));
+    }
+
     #[test]
     fn a_depth_view_slice_reports_the_photographs_frame() {
         let node = |id: &str, ty: &str, params: &[(&str, f64)]| UiNode {
