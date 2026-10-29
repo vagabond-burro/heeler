@@ -39,7 +39,7 @@ const HEADER: &str = "\
 # opens. The user guide explains the fields: Source > Custom profiles.
 ";
 
-const ORDER: &[&str] = &["heeler_profile", "name", "interp", "points"];
+const ORDER: &[&str] = &["heeler_profile", "name", "interp", "points", "tangents", "handles"];
 
 /// One file in the profiles folder, as the menu lists it: the curve, as
 /// the JSON the node's `curve` param holds, or why it could not be read.
@@ -64,9 +64,18 @@ pub struct Imported {
 /// The curve held to four decimals, which is finer than a display value
 /// shows and keeps the file and the param short.
 fn rounded(mut c: ToneCurve) -> ToneCurve {
+    let r = |v: f32| (v * 1e4).round() / 1e4;
     for p in &mut c.points {
-        p[0] = (p[0] * 1e4).round() / 1e4;
-        p[1] = (p[1] * 1e4).round() / 1e4;
+        p[0] = r(p[0]);
+        p[1] = r(p[1]);
+    }
+    if let Some(t) = &mut c.tangents {
+        t.iter_mut().for_each(|v| *v = r(*v));
+    }
+    for h in c.handles.iter_mut().flatten().flatten() {
+        for v in [&mut h.l, &mut h.r].into_iter().flatten() {
+            *v = [r(v[0]), r(v[1])];
+        }
     }
     c
 }
@@ -74,12 +83,36 @@ fn rounded(mut c: ToneCurve) -> ToneCurve {
 /// The curve as a profile file.
 pub fn write_profile(c: &ToneCurve) -> String {
     let num = |x: f32| json!((x as f64 * 1e4).round() / 1e4);
-    let doc = json!({
+    let mut doc = json!({
         "heeler_profile": PROFILE_VERSION,
         "name": c.name,
         "interp": c.interp,
         "points": c.points.iter().map(|[x, y]| json!([num(*x), num(*y)])).collect::<Vec<_>>(),
     });
+    // A tangent curve's slopes and handles, only when it has them, so a
+    // smooth or linear profile's file reads as it always did.
+    if let Some(t) = &c.tangents {
+        doc["tangents"] = json!(t.iter().map(|v| num(*v)).collect::<Vec<_>>());
+    }
+    if let Some(h) = &c.handles {
+        let pair = |v: Option<[f32; 2]>| v.map(|[x, y]| json!([num(x), num(y)]));
+        doc["handles"] = json!(h
+            .iter()
+            .map(|p| match p {
+                Some(p) => {
+                    let mut o = serde_json::Map::new();
+                    if let Some(l) = pair(p.l) {
+                        o.insert("l".into(), l);
+                    }
+                    if let Some(r) = pair(p.r) {
+                        o.insert("r".into(), r);
+                    }
+                    Value::Object(o)
+                }
+                None => Value::Null,
+            })
+            .collect::<Vec<_>>());
+    }
     recipe_files::write_yaml_value(HEADER, &doc, ORDER)
 }
 
@@ -95,6 +128,8 @@ pub fn parse_profile(text: &str) -> Result<ToneCurve, String> {
         "name": name,
         "interp": doc.get("interp").cloned().unwrap_or(json!("smooth")),
         "points": doc.get("points").cloned().unwrap_or(Value::Null),
+        "tangents": doc.get("tangents").cloned().unwrap_or(Value::Null),
+        "handles": doc.get("handles").cloned().unwrap_or(Value::Null),
     }))
     .map_err(|e| format!("the points are not a list of [stops, display] pairs: {e}"))?;
     c.name = name.trim().to_string();
@@ -276,6 +311,26 @@ mod tests {
         save_profile(dir.path(), CURVE, "Soft Fade").unwrap();
         assert_eq!(list_profiles(dir.path()).len(), 1);
         assert!(save_profile(dir.path(), CURVE, "  ").is_err());
+    }
+
+    #[test]
+    fn a_tangent_profile_keeps_its_slopes_and_handles_through_its_file() {
+        let curve = r#"{"name":"Bent","interp":"tangent","points":[[-8,0],[0,0.46],[3,1]],"tangents":[0.02,0.123456,0.05],"handles":[null,{"l":[-1.5,-0.2],"r":[1.25,0.15]},{"l":[-0.5,0]}]}"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = save_profile(dir.path(), curve, "Bent").unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("interp: tangent"), "{text}");
+        let back = ToneCurve::from_json(list_profiles(dir.path())[0].curve.as_deref().unwrap()).unwrap();
+        assert_eq!(back.interp, "tangent");
+        assert_eq!(back.tangents, Some(vec![0.02, 0.1235, 0.05]));
+        let h = back.handles.unwrap();
+        assert_eq!(h[0], None);
+        assert_eq!(h[1].unwrap().l, Some([-1.5, -0.2]));
+        assert_eq!(h[1].unwrap().r, Some([1.25, 0.15]));
+        assert_eq!(h[2].unwrap().r, None);
+        // A smooth profile's file has neither line.
+        let smooth = std::fs::read_to_string(save_profile(dir.path(), CURVE, "Plain").unwrap()).unwrap();
+        assert!(!smooth.contains("tangents") && !smooth.contains("handles"), "{smooth}");
     }
 
     #[test]

@@ -6,7 +6,7 @@
 
 import { useRef, useState } from "react";
 import { toneProfileExport, toneProfileImport, toneProfileSave } from "../bridge";
-import type { Command, NodeCard } from "../state";
+import type { Command, CurveHandle, NodeCard } from "../state";
 import {
   AXIS_MAX,
   AXIS_MIN,
@@ -22,6 +22,7 @@ import {
   toneCurveJson,
   toneCurvePath,
   standardSeed,
+  toneTangents,
   useToneProfiles,
   useToneProfilesError,
   type ToneCurveDoc,
@@ -29,7 +30,8 @@ import {
 import { vtToDisplay } from "../viewtransform";
 import { modLabel } from "../platform";
 import { InterpCycle } from "./interpglyph";
-import { CURVE_POINT_CURSOR } from "./cursors";
+import { CURVE_POINT_CURSOR, CURVE_TANGENT_CURSOR } from "./cursors";
+import { monotoneTangents } from "../curvesampler";
 import { ResetIcon } from "./panelicons";
 import { SourceMenuRow } from "./sourcemenus";
 
@@ -157,10 +159,18 @@ export function ToneCurveBlock({ node, dispatch, width = 260 }: { node: NodeCard
             has (2026-10-29: "Why is tone profile curve not using the
             same smooth/linear buttons used on the curve editors?"). */}
         <InterpCycle
-          mode={curve.interp === "linear" ? "linear" : "smooth"}
-          modes={["smooth", "linear"]}
+          mode={curve.interp}
           testid="tone-curve-interp"
-          onChange={(m) => write({ ...curve, interp: m === "linear" ? "linear" : "smooth" })}
+          onChange={(m) =>
+            // Into Tangent, every point starts on the smooth curve's own
+            // slope and automatic, so the curve does not move until a
+            // handle does (Curves' entry into the mode).
+            write(
+              m === "tangent"
+                ? { ...curve, interp: m, tangents: toneTangents(curve), handles: curve.handles?.length === curve.points.length ? curve.handles : curve.points.map(() => null) }
+                : { ...curve, interp: m },
+            )
+          }
         />
         {/* Back to the curve Custom starts on, the name kept (2026-10-29:
             "Also need a reset on the curve"). One undo step. */}
@@ -207,7 +217,10 @@ export function ToneCurveBlock({ node, dispatch, width = 260 }: { node: NodeCard
       </div>
       <div style={{ fontSize: 11, color: "var(--text-ghost)", lineHeight: 1.5 }}>
         Scene light in stops around middle gray, left to right, against the display value. Drag a point; click to add one;
-        {` ${modLabel("ctrl")}`}-click one to remove it. The curve is saved in the document, so it renders the same without the profile file.
+        {` ${modLabel("ctrl")}`}-click one to remove it.
+        {curve.interp === "tangent" &&
+          ` In Tangent, drag a point's handles to steer and stretch its slope; ${modLabel("alt")}-click a handle to break the pair; ${modLabel("ctrl")}-click a handle or double-click its point to make it automatic again.`}
+        {" "}The curve is saved in the document, so it renders the same without the profile file.
         Toe and Highlight roll stand down: the curve is its own.
       </div>
     </div>
@@ -229,7 +242,34 @@ function ToneCurveEditor({
 }) {
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<number | null>(null);
+  const tanDrag = useRef<{ i: number; side: "l" | "r" } | null>(null);
   const pts = curve.points;
+  const tangentMode = curve.interp === "tangent";
+  const slopes = tangentMode ? toneTangents(curve) : [];
+  const handles = tangentMode && curve.handles?.length === pts.length ? curve.handles : pts.map(() => null);
+  /** The curve with its points replaced, tangent mode's lists kept in
+   * step: `keep` maps each new point to the old one it was, or -1 for a
+   * new point, which gets its chord's slope and is automatic. */
+  const withPoints = (next: [number, number][], keep: number[]): ToneCurveDoc => {
+    if (!tangentMode) return { ...curve, points: next };
+    const fresh = monotoneTangents(next);
+    return {
+      ...curve,
+      points: next,
+      tangents: keep.map((k, i) => (k >= 0 ? slopes[k] : fresh[i])),
+      handles: keep.map((k) => (k >= 0 ? handles[k] : null)),
+    };
+  };
+  /** A point's handles back to automatic: no vectors, the monotone slope. */
+  const automatic = (i: number) => {
+    const t = [...slopes];
+    t[i] = monotoneTangents(pts)[i] ?? 0;
+    const h = [...handles];
+    h[i] = null;
+    dispatch({ type: "begin_gesture", key: `${nodeId}.tone_curve` });
+    onChange({ ...curve, tangents: t, handles: h });
+    dispatch({ type: "end_gesture" });
+  };
   const lo = Math.min(AXIS_MIN, Math.floor(pts[0][0]));
   const hi = Math.max(AXIS_MAX, Math.ceil(pts[pts.length - 1][0]));
   const plotW = width - PAD.l - PAD.r;
@@ -304,9 +344,33 @@ function ToneCurveEditor({
     return best;
   };
   const finish = () => {
-    if (drag.current === null) return;
+    if (drag.current === null && tanDrag.current === null) return;
     drag.current = null;
+    tanDrag.current = null;
     dispatch({ type: "end_gesture" });
+  };
+  /** A handle dragged: the vector from its point to the pointer, in
+   * stops and display units, its run held to its own side so the curve
+   * cannot fold back through the point; the other side mirrors it,
+   * length and all, unless the pair is broken; the slope follows the
+   * dragged side. Curves' tangent drag, on this axis. */
+  const steered = (i: number, side: "l" | "r", e: { clientX: number; clientY: number }): ToneCurveDoc => {
+    const { r, sx, sy } = drawn();
+    const px = lo + (((e.clientX - r.left) / sx - PAD.l) / plotW) * (hi - lo);
+    const py = 1 - ((e.clientY - r.top) / sy - PAD.t) / plotH;
+    const [x0, y0] = pts[i];
+    let dx = px - x0;
+    const dy = py - y0;
+    dx = side === "r" ? Math.max(0.05, dx) : Math.min(-0.05, dx);
+    const v: [number, number] = [round4(dx), round4(dy)];
+    const cur: CurveHandle = { ...(handles[i] ?? {}) };
+    cur[side] = v;
+    if (!cur.broken) cur[side === "r" ? "l" : "r"] = [round4(-dx), round4(-dy)];
+    const h = [...handles];
+    h[i] = cur;
+    const t = [...slopes];
+    t[i] = round4(Math.min(20, Math.max(-20, dy / dx)));
+    return { ...curve, tangents: t, handles: h };
   };
 
   return (
@@ -327,7 +391,10 @@ function ToneCurveEditor({
           // Curves' grammar: the chord removes an inner point (the ends
           // hold the curve's reach), a plain press drags it.
           if (removeClick(e)) {
-            if (hit > 0 && hit < pts.length - 1) onChange({ ...curve, points: pts.filter((_, k) => k !== hit) });
+            if (hit > 0 && hit < pts.length - 1) {
+              const keep = pts.map((_, k) => k).filter((k) => k !== hit);
+              onChange(withPoints(keep.map((k) => pts[k]), keep));
+            }
             return;
           }
           drag.current = hit;
@@ -346,13 +413,19 @@ function ToneCurveEditor({
           return;
         }
         const added: [number, number] = [round4(x), round4(y)];
-        const next = [...pts, added].sort((a, b) => a[0] - b[0]);
-        drag.current = next.findIndex((p) => p[0] === round4(x));
+        const keep = [...pts.map((_, k) => k), -1].sort((a, b) => (a < 0 ? added : pts[a])[0] - (b < 0 ? added : pts[b])[0]);
+        const next = keep.map((k) => (k < 0 ? added : pts[k]));
+        drag.current = keep.indexOf(-1);
         dispatch({ type: "begin_gesture", key: `${nodeId}.tone_curve` });
         svg.current?.setPointerCapture(e.pointerId);
-        onChange({ ...curve, points: next });
+        onChange(withPoints(next, keep));
       }}
       onPointerMove={(e) => {
+        const t = tanDrag.current;
+        if (t) {
+          onChange(steered(t.i, t.side, e));
+          return;
+        }
         if (drag.current === null) return;
         onChange(moved(drag.current, at(e)));
       }}
@@ -379,6 +452,72 @@ function ToneCurveEditor({
       <path d={`M${xPx(lo)},${yPx(first[1])} L${xPx(first[0])},${yPx(first[1])}`} stroke="var(--accent)" strokeDasharray="3 3" fill="none" />
       <path d={`M${xPx(last[0])},${yPx(last[1])} L${xPx(hi)},${yPx(last[1])}`} stroke="var(--accent)" strokeDasharray="3 3" fill="none" />
       <path data-testid="tone-curve-path" d={body} stroke="var(--accent)" strokeWidth={1.5} fill="none" />
+      {/* Tangent mode's handles, under the points so the point stays the
+          easier grab where they meet: Curves' sticks, an automatic side
+          along the slope, a manual one at its true reach. An automatic
+          stick is Curves' 24 px only where there is room: never past
+          four tenths of the way to its neighbor, or on a curve with its
+          points close together (the Standard seed's are 20 px apart) one
+          point's handle lay on the next point and a press took the wrong
+          one. */}
+      {tangentMode &&
+        pts.map(([x, y], i) => {
+          const [cx, cy] = [xPx(x), yPx(y)];
+          const ux0 = plotW / (hi - lo);
+          const uy0 = -(slopes[i] ?? 0) * plotH;
+          const len = Math.hypot(ux0, uy0) || 1;
+          const h = handles[i];
+          const room = (k: number) => (pts[k] ? Math.hypot(xPx(pts[k][0]) - cx, yPx(pts[k][1]) - cy) * 0.4 : 24);
+          const end = (side: "l" | "r"): [number, number] => {
+            const v = h?.[side];
+            if (v) return [xPx(x + v[0]), yPx(y + v[1])];
+            const reach = Math.min(24, room(side === "l" ? i - 1 : i + 1));
+            const [ux, uy] = [(ux0 / len) * reach, (uy0 / len) * reach];
+            return side === "l" ? [cx - ux, cy - uy] : [cx + ux, cy + uy];
+          };
+          return (
+            <g key={`tan-${i}`} data-testid={`tone-curve-tangent-${i}`}>
+              {(["l", "r"] as const).map((side) => {
+                const [hx, hy] = end(side);
+                return (
+                  <g key={side}>
+                    <line x1={cx} y1={cy} x2={hx} y2={hy} stroke="var(--accent)" strokeWidth={1} opacity={0.55} />
+                    <rect
+                      x={hx - 3.2}
+                      y={hy - 3.2}
+                      width={6.4}
+                      height={6.4}
+                      fill={h?.broken ? "#a08048" : "#78838a"}
+                      stroke="#131211"
+                      strokeWidth={0.75}
+                      style={{ cursor: CURVE_TANGENT_CURSOR }}
+                      data-testid={`tone-curve-tangent-${i}-${side}`}
+                      onPointerDown={(e) => {
+                        if (e.button !== 0) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (e.ctrlKey) {
+                          automatic(i);
+                          return;
+                        }
+                        dispatch({ type: "begin_gesture", key: `${nodeId}.tone_curve` });
+                        if (e.altKey || e.metaKey) {
+                          // Broken, and kept broken between gestures;
+                          // CTRL-click is the way back.
+                          const nh = [...handles];
+                          nh[i] = { ...(nh[i] ?? {}), broken: true };
+                          onChange({ ...curve, tangents: slopes, handles: nh });
+                        }
+                        tanDrag.current = { i, side };
+                        svg.current?.setPointerCapture(e.pointerId);
+                      }}
+                    />
+                  </g>
+                );
+              })}
+            </g>
+          );
+        })}
       {pts.map(([x, y], i) => (
         <circle
           key={i}
@@ -390,6 +529,11 @@ function ToneCurveEditor({
           stroke="var(--accent)"
           strokeWidth={1.5}
           style={{ cursor: CURVE_POINT_CURSOR }}
+          onDoubleClick={(e) => {
+            // Curves' way back: a point's handles to automatic.
+            e.preventDefault();
+            if (tangentMode) automatic(i);
+          }}
         >
           <title>{`${x >= 0 ? "+" : ""}${x.toFixed(2)} stops: ${toneCurveAt(curve, x).toFixed(3)}`}</title>
         </circle>

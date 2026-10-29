@@ -14,9 +14,14 @@
 //! saw the profile file it was picked from:
 //! `{"name": "Soft", "interp": "smooth", "points": [[-8, 0], [0, 0.46], [2.47, 1]]}`.
 //! Smooth is the Curves node's monotone Hermite (no overshoot between
-//! points), linear is straight segments; past either end the end's
-//! value holds, so below the first point is that point's black and
-//! above the last that point's white.
+//! points), linear is straight segments, and tangent is Curves' tangent
+//! mode: the Hermite through each point's own slope (`tangents`), or,
+//! where a point carries handle vectors (`handles`, in stops and display
+//! units), the Bezier through them, so a handle's length shapes its
+//! segment as it does in Curves (2026-10-29: "could the tone curve
+//! support tangents like the other curve editors do?"). Past either end
+//! the end's value holds, so below the first point is that point's
+//! black and above the last that point's white.
 //!
 //! The imports (a 1D .cube, a two-column text file, a camera profile's
 //! ProfileToneCurve) all come down to a function from scene light to
@@ -24,7 +29,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::ops::{eval_curve_with, monotone_tangents, to_display, to_scene};
+use crate::ops::{eval_curve_with, eval_eq_points, monotone_tangents, to_display, to_scene, EqPoint};
 
 /// Scene middle gray, the axis's 0.
 pub const MIDDLE_GRAY: f32 = 0.18;
@@ -61,6 +66,32 @@ pub struct ToneCurve {
     pub interp: String,
     /// (stops, display) pairs, sorted by stops.
     pub points: Vec<[f32; 2]>,
+    /// Tangent mode's slope at each point, display per stop, parallel to
+    /// the points. Read only under "tangent"; a list of another length
+    /// is dropped, and the curve falls back to the monotone slopes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tangents: Option<Vec<f32>>,
+    /// Tangent mode's handle vectors, parallel to the points, null for
+    /// an automatic point. Preferred over the slopes where any point has
+    /// one, as in Curves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handles: Option<Vec<Option<ToneHandle>>>,
+}
+
+/// One point's handle pair: vectors from the point, in stops and display
+/// units, either side or both.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub struct ToneHandle {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub l: Option<[f32; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r: Option<[f32; 2]>,
+}
+
+/// How a checked curve is read between its points.
+enum Shape {
+    Through(Option<Vec<f32>>),
+    Handles(Vec<EqPoint>),
 }
 
 fn smooth() -> String {
@@ -82,8 +113,8 @@ impl ToneCurve {
 
     /// The same curve, sorted and held to its limits, or why it cannot be.
     pub fn checked(mut self) -> Result<Self, String> {
-        if self.interp != "smooth" && self.interp != "linear" {
-            return Err(format!("unknown interpolation \"{}\": smooth or linear", self.interp));
+        if self.interp != "smooth" && self.interp != "linear" && self.interp != "tangent" {
+            return Err(format!("unknown interpolation \"{}\": smooth, linear or tangent", self.interp));
         }
         if self.points.len() < 2 {
             return Err("a tone curve needs two points at least".into());
@@ -97,7 +128,26 @@ impl ToneCurve {
         if self.points.iter().any(|[x, _]| x.abs() > MAX_STOPS) {
             return Err(format!("a tone curve's points must sit within {MAX_STOPS} stops of middle gray"));
         }
-        self.points.sort_by(|a, b| a[0].total_cmp(&b[0]));
+        // Slopes and handles ride with their points through the sort; a
+        // list that does not match the points, or holds a number that is
+        // not one, is dropped rather than guessed at.
+        let n = self.points.len();
+        if self.interp != "tangent" {
+            self.tangents = None;
+            self.handles = None;
+        }
+        if self.tangents.as_ref().is_some_and(|t| t.len() != n || t.iter().any(|v| !v.is_finite())) {
+            self.tangents = None;
+        }
+        let finite = |v: &Option<[f32; 2]>| v.is_none_or(|[a, b]| a.is_finite() && b.is_finite());
+        if self.handles.as_ref().is_some_and(|h| h.len() != n || h.iter().flatten().any(|p| !finite(&p.l) || !finite(&p.r))) {
+            self.handles = None;
+        }
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by(|&a, &b| self.points[a][0].total_cmp(&self.points[b][0]));
+        self.points = order.iter().map(|&i| self.points[i]).collect();
+        self.tangents = self.tangents.take().map(|t| order.iter().map(|&i| t[i]).collect());
+        self.handles = self.handles.take().map(|h| order.iter().map(|&i| h[i]).collect());
         if self.points.windows(2).any(|w| w[1][0] - w[0][0] < 1e-4) {
             return Err("two points of the tone curve sit at the same stop".into());
         }
@@ -109,11 +159,33 @@ impl ToneCurve {
 
     /// The curve's display value at `stops`, held at the ends.
     pub fn eval(&self, stops: f32) -> f32 {
-        let tangents = (self.interp == "smooth").then(|| monotone_tangents(&self.points));
-        self.eval_with(tangents.as_deref(), stops)
+        self.eval_with(&self.shape(), stops)
     }
 
-    fn eval_with(&self, tangents: Option<&[f32]>, stops: f32) -> f32 {
+    /// Curves' choice, made once: tangent mode with a handle on any point
+    /// reads the handle vectors; tangent mode otherwise reads its slopes,
+    /// or the monotone ones without; smooth the monotone ones; linear
+    /// none.
+    fn shape(&self) -> Shape {
+        match self.interp.as_str() {
+            "linear" => Shape::Through(None),
+            "tangent" => {
+                if let Some(h) = self.handles.as_ref().filter(|h| h.iter().flatten().any(|p| p.l.is_some() || p.r.is_some())) {
+                    return Shape::Handles(
+                        self.points
+                            .iter()
+                            .zip(h)
+                            .map(|([x, y], p)| EqPoint { x: *x, y: *y, l: p.and_then(|p| p.l), r: p.and_then(|p| p.r) })
+                            .collect(),
+                    );
+                }
+                Shape::Through(Some(self.tangents.clone().unwrap_or_else(|| monotone_tangents(&self.points))))
+            }
+            _ => Shape::Through(Some(monotone_tangents(&self.points))),
+        }
+    }
+
+    fn eval_with(&self, shape: &Shape, stops: f32) -> f32 {
         let first = self.points[0];
         let last = self.points[self.points.len() - 1];
         if stops.is_nan() || stops <= first[0] {
@@ -122,16 +194,20 @@ impl ToneCurve {
         if stops >= last[0] {
             return last[1];
         }
-        eval_curve_with(&self.points, tangents, stops).clamp(0.0, 1.0)
+        match shape {
+            Shape::Through(tangents) => eval_curve_with(&self.points, tangents.as_deref(), stops),
+            Shape::Handles(eq) => eval_eq_points(eq, stops),
+        }
+        .clamp(0.0, 1.0)
     }
 
     /// The curve baked into a table for a render.
     pub fn table(&self) -> CurveTable {
-        let tangents = (self.interp == "smooth").then(|| monotone_tangents(&self.points));
+        let shape = self.shape();
         let lo = self.points[0][0];
         let hi = self.points[self.points.len() - 1][0];
         let step = (hi - lo) / (TABLE - 1) as f32;
-        let values = (0..TABLE).map(|i| self.eval_with(tangents.as_deref(), lo + step * i as f32)).collect();
+        let values = (0..TABLE).map(|i| self.eval_with(&shape, lo + step * i as f32)).collect();
         CurveTable { lo, step, values }
     }
 
@@ -151,7 +227,7 @@ impl ToneCurve {
             .into_iter()
             .map(|x| [x, f(MIDDLE_GRAY * x.exp2()).clamp(0.0, 1.0)])
             .collect();
-        ToneCurve { name: name.into(), interp: "smooth".into(), points }
+        ToneCurve { name: name.into(), interp: "smooth".into(), points, tangents: None, handles: None }
     }
 
     /// A camera profile's ProfileToneCurve: (input, output) pairs,
@@ -257,7 +333,7 @@ impl ToneCurve {
         }
         if pairs.len() <= 64 {
             let points = pairs.iter().map(|&(x, y)| [x, y]).collect();
-            return ToneCurve { name: name.into(), interp: "smooth".into(), points }.checked();
+            return ToneCurve { name: name.into(), interp: "smooth".into(), points, tangents: None, handles: None }.checked();
         }
         pairs.sort_by(|a, b| a.0.total_cmp(&b.0));
         let (lo, hi) = (pairs[0].0, pairs[pairs.len() - 1].0);
@@ -322,7 +398,7 @@ mod tests {
     use super::*;
 
     fn curve(points: &[[f32; 2]]) -> ToneCurve {
-        ToneCurve { name: "t".into(), interp: "smooth".into(), points: points.to_vec() }.checked().unwrap()
+        ToneCurve { name: "t".into(), interp: "smooth".into(), points: points.to_vec(), tangents: None, handles: None }.checked().unwrap()
     }
 
     #[test]
@@ -380,6 +456,65 @@ mod tests {
         c.interp = "linear".into();
         assert!((c.eval(-2.0) - 0.2).abs() < 1e-6);
         assert!((c.eval(2.0) - 0.7).abs() < 1e-6);
+    }
+
+    /// Tangent mode is Curves' (2026-10-29): the Hermite through each
+    /// point's own slope, the Bezier through handle vectors where any
+    /// point has one, the monotone slopes where neither is given; slopes
+    /// and handles travel with their points through the sort; a list of
+    /// the wrong length is dropped, never guessed at; and the other modes
+    /// keep neither.
+    #[test]
+    fn tangent_mode_reads_slopes_and_handles_as_curves_does() {
+        let pts = vec![[-4.0, 0.1], [0.0, 0.5], [4.0, 0.9]];
+        let tangent = |t: Option<Vec<f32>>, h: Option<Vec<Option<ToneHandle>>>| {
+            ToneCurve { name: "t".into(), interp: "tangent".into(), points: pts.clone(), tangents: t, handles: h }.checked().unwrap()
+        };
+        // No slopes: the smooth curve exactly.
+        let smooth = curve(&pts);
+        let bare = tangent(None, None);
+        for x in [-3.0, -1.0, 1.0, 3.5] {
+            assert!((bare.eval(x) - smooth.eval(x)).abs() < 1e-6);
+        }
+        // A flat slope at middle gray holds the curve level around it.
+        let flat = tangent(Some(vec![0.1, 0.0, 0.1]), None);
+        assert!((flat.eval(0.3) - 0.5).abs() < 0.01, "{}", flat.eval(0.3));
+        assert!((smooth.eval(0.3) - 0.5).abs() > 0.02);
+        // A long right handle on the first point bows its segment up
+        // further than a short one does: length shapes the curve.
+        let handle = |len: f32| Some(vec![Some(ToneHandle { l: None, r: Some([len, len * 0.2]) }), None, None]);
+        let long = tangent(None, handle(2.5));
+        let short = tangent(None, handle(0.5));
+        assert!(long.eval(-3.0) > short.eval(-3.0), "{} {}", long.eval(-3.0), short.eval(-3.0));
+        // All-automatic handles read as the slopes, as in Curves.
+        let auto = tangent(Some(vec![0.1, 0.0, 0.1]), Some(vec![None, None, None]));
+        assert!((auto.eval(0.3) - flat.eval(0.3)).abs() < 1e-6);
+        // Sorted together: the flat slope stays with middle gray.
+        let shuffled = ToneCurve {
+            name: "t".into(),
+            interp: "tangent".into(),
+            points: vec![[4.0, 0.9], [0.0, 0.5], [-4.0, 0.1]],
+            tangents: Some(vec![0.1, 0.0, 0.1]),
+            handles: None,
+        }
+        .checked()
+        .unwrap();
+        assert_eq!(shuffled.tangents.as_deref(), Some(&[0.1, 0.0, 0.1][..]));
+        // Wrong lengths and non-numbers are dropped.
+        assert_eq!(tangent(Some(vec![0.0]), None).tangents, None);
+        assert_eq!(tangent(Some(vec![0.0, f32::NAN, 0.0]), None).tangents, None);
+        assert_eq!(tangent(None, Some(vec![None])).handles, None);
+        // Smooth and linear carry neither, and a JSON round trip keeps them.
+        let mut smooth_with = tangent(Some(vec![0.1, 0.0, 0.1]), handle(1.0));
+        let json = smooth_with.to_json();
+        assert_eq!(ToneCurve::from_json(&json).unwrap(), smooth_with);
+        smooth_with.interp = "smooth".into();
+        let cleared = smooth_with.checked().unwrap();
+        assert_eq!((cleared.tangents, cleared.handles), (None, None));
+        assert!(!curve(&pts).to_json().contains("tangents"));
+        // The render's table reads the same curve.
+        let table = flat.table();
+        assert!((table.values[(4.3 / table.step) as usize] - flat.eval(-4.0 + 4.3)).abs() < 1e-3);
     }
 
     /// A camera profile's curve, linear both ways, comes back as half

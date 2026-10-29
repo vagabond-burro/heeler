@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const SAVED = JSON.stringify({ name: "Soft Fade", interp: "smooth", points: [[-8, 0.04], [0, 0.42], [3, 0.95]] });
@@ -26,6 +26,7 @@ import {
   curveBroken,
   parseToneCurve,
   toneCurveJson,
+  toneTangents,
   profileChoices,
   profileMenuValue,
   profilePick,
@@ -218,6 +219,112 @@ describe("Tone Profile: Custom", () => {
     expect(moved[2][0]).toBeCloseTo(before[2][0], 1);
     expect(moved[2][1]).toBeGreaterThan(before[2][1]);
     fireEvent(editor, new MouseEvent("pointerup", { bubbles: true }));
+  });
+
+  describe("Tangent mode", () => {
+    // "could the tone curve support tangents like the other curve editors do?"
+    const pts: [number, number][] = [[-8, 0], [-2, 0.2], [0, 0.46], [2, 0.8], [5, 1]];
+    const doc = (extra: object = {}) => toneCurveJson({ name: "T", interp: "tangent", points: pts, ...extra });
+
+    it("keeps its slopes and handles with their points, and drops lists that do not match", () => {
+      const back = parseToneCurve(doc({ tangents: [0, 0.1, 0.2, 0.1, 0], handles: [null, null, { l: [-1, -0.1], r: [1, 0.1] }, null, null] }))!;
+      expect(back.interp).toBe("tangent");
+      expect(back.tangents).toEqual([0, 0.1, 0.2, 0.1, 0]);
+      expect(back.handles![2]).toEqual({ l: [-1, -0.1], r: [1, 0.1] });
+      expect(parseToneCurve(doc({ tangents: [0, 1] }))!.tangents).toBeUndefined();
+      expect(parseToneCurve(doc({ handles: [null] }))!.handles).toBeUndefined();
+      // Smooth and linear carry neither.
+      expect(toneCurveJson({ name: "S", interp: "smooth", points: pts, tangents: [0, 0, 0, 0, 0] })).not.toContain("tangents");
+      // A handle's length shapes its segment: a long one bows it more.
+      const bow = (len: number) => parseToneCurve(doc({ handles: [null, null, { r: [len, len * 0.3] }, null, null] }))!;
+      expect(toneCurveAt(bow(1.6), 1)).toBeGreaterThan(toneCurveAt(bow(0.4), 1));
+    });
+
+    it("comes in on the smooth curve's slopes, every point automatic, the curve unmoved", () => {
+      const base = profileOf(initialState());
+      const smooth = { name: "S", interp: "smooth" as const, points: pts };
+      const dispatch = vi.fn();
+      render(<ToneCurveBlock node={{ ...base, textParams: { ...base.textParams, mode: "custom", curve: toneCurveJson(smooth) } }} dispatch={dispatch} />);
+      // Smooth, Linear, Tangent, as Curves cycles.
+      fireEvent.click(screen.getByTestId("tone-curve-interp"));
+      expect(parseToneCurve(dispatch.mock.calls[dispatch.mock.calls.length - 1][0].curve)!.interp).toBe("linear");
+      cleanup();
+      const linear = { ...smooth, interp: "linear" as const };
+      render(<ToneCurveBlock node={{ ...base, textParams: { ...base.textParams, mode: "custom", curve: toneCurveJson(linear) } }} dispatch={dispatch} />);
+      fireEvent.click(screen.getByTestId("tone-curve-interp"));
+      const tan = parseToneCurve(dispatch.mock.calls[dispatch.mock.calls.length - 1][0].curve)!;
+      expect(tan.interp).toBe("tangent");
+      expect(tan.handles).toEqual(pts.map(() => null));
+      for (const x of [-5, -1, 1, 3.5]) expect(toneCurveAt(tan, x)).toBeCloseTo(toneCurveAt(smooth, x), 6);
+    });
+
+    it("drags a handle like Curves: the pair mirrors, a broken pair does not, CTRL-click puts it back", () => {
+      const base = profileOf(initialState());
+      let curve = parseToneCurve(doc({ tangents: toneTangents({ name: "T", interp: "tangent", points: pts }), handles: pts.map(() => null) }))!;
+      const dispatch = vi.fn((c: { type: string; curve?: string }) => {
+        if (c.type === "set_tone_curve") curve = parseToneCurve(c.curve)!;
+      });
+      const node = () => ({ ...base, textParams: { ...base.textParams, mode: "custom", curve: toneCurveJson(curve) } });
+      const view = render(<ToneCurveBlock node={node()} dispatch={dispatch as never} />);
+      const editor = screen.getByTestId("tone-curve-editor") as unknown as SVGSVGElement;
+      editor.setPointerCapture = vi.fn();
+      const handle = screen.getByTestId("tone-curve-tangent-2-r");
+      fireEvent(handle, new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }));
+      expect(dispatch).toHaveBeenCalledWith({ type: "begin_gesture", key: `${base.id}.tone_curve` });
+      const p = screen.getByTestId("tone-curve-point-2");
+      // Out to the right and up from the point.
+      fireEvent(editor, new MouseEvent("pointermove", { bubbles: true, clientX: Number(p.getAttribute("cx")) + 40, clientY: Number(p.getAttribute("cy")) - 30 }));
+      fireEvent(editor, new MouseEvent("pointerup", { bubbles: true }));
+      const r = curve.handles![2]!.r!;
+      expect(r[0]).toBeGreaterThan(0);
+      expect(r[1]).toBeGreaterThan(0);
+      expect(curve.handles![2]!.l).toEqual([-r[0], -r[1]]);
+      expect(curve.tangents![2]).toBeCloseTo(r[1] / r[0], 3);
+      expect(curve.points).toEqual(pts);
+      // ALT-click breaks the pair: the left side stays where it was.
+      view.rerender(<ToneCurveBlock node={node()} dispatch={dispatch as never} />);
+      const left = curve.handles![2]!.l;
+      fireEvent(screen.getByTestId("tone-curve-tangent-2-r"), new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, altKey: true }));
+      view.rerender(<ToneCurveBlock node={node()} dispatch={dispatch as never} />);
+      fireEvent(editor, new MouseEvent("pointermove", { bubbles: true, clientX: Number(p.getAttribute("cx")) + 60, clientY: Number(p.getAttribute("cy")) }));
+      fireEvent(editor, new MouseEvent("pointerup", { bubbles: true }));
+      expect(curve.handles![2]!.broken).toBe(true);
+      expect(curve.handles![2]!.l).toEqual(left);
+      // CTRL-click on a handle: automatic again, on the monotone slope.
+      view.rerender(<ToneCurveBlock node={node()} dispatch={dispatch as never} />);
+      fireEvent(screen.getByTestId("tone-curve-tangent-2-l"), new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, ctrlKey: true }));
+      expect(curve.handles![2]).toBeNull();
+      expect(curve.tangents![2]).toBeCloseTo(toneTangents({ name: "T", interp: "smooth", points: pts })[2], 6);
+    });
+
+    it("keeps its slopes and handles in step as points are added and removed", () => {
+      const base = profileOf(initialState());
+      let curve = parseToneCurve(doc({ tangents: [0.01, 0.1, 0.2, 0.15, 0.01], handles: [null, null, { r: [1, 0.2], l: [-1, -0.2] }, null, null] }))!;
+      const dispatch = vi.fn((c: { type: string; curve?: string }) => {
+        if (c.type === "set_tone_curve") curve = parseToneCurve(c.curve)!;
+      });
+      const node = () => ({ ...base, textParams: { ...base.textParams, mode: "custom", curve: toneCurveJson(curve) } });
+      const view = render(<ToneCurveBlock node={node()} dispatch={dispatch as never} />);
+      const editor = screen.getByTestId("tone-curve-editor") as unknown as SVGSVGElement;
+      editor.setPointerCapture = vi.fn();
+      // Removing the point at -2 takes its slope and handle with it.
+      fireEvent(editor, pressOn(screen.getByTestId("tone-curve-point-1"), { ctrlKey: true }));
+      expect(curve.points).toHaveLength(4);
+      expect(curve.tangents).toEqual([0.01, 0.2, 0.15, 0.01]);
+      expect(curve.handles![1]).toEqual({ r: [1, 0.2], l: [-1, -0.2] });
+      // A point added between 2 and 5 stops arrives automatic.
+      view.rerender(<ToneCurveBlock node={node()} dispatch={dispatch as never} />);
+      const a = screen.getByTestId("tone-curve-point-2");
+      const b = screen.getByTestId("tone-curve-point-3");
+      const mx = (Number(a.getAttribute("cx")) + Number(b.getAttribute("cx"))) / 2;
+      fireEvent(editor, new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, clientX: mx, clientY: 30 }));
+      fireEvent(editor, new MouseEvent("pointerup", { bubbles: true }));
+      expect(curve.points).toHaveLength(5);
+      expect(curve.tangents).toHaveLength(5);
+      expect(curve.handles).toHaveLength(5);
+      expect(curve.handles![3]).toBeNull();
+      expect(curve.handles![1]).toEqual({ r: [1, 0.2], l: [-1, -0.2] });
+    });
   });
 
   it("Reset puts the Standard curve back, the name kept", () => {

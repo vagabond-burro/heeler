@@ -5,19 +5,33 @@
 //
 // The curve runs from scene light in stops around middle gray to a
 // display value. Inside its points it is the Curves editor's curve
-// (curvesampler.ts: the monotone Hermite, or straight segments); past
-// either end the end's value holds, as the engine holds it.
+// (curvesampler.ts: the monotone Hermite, straight segments, or Curves'
+// tangent mode, its slopes and handle vectors); past either end the
+// end's value holds, as the engine holds it.
 
 import { useSyncExternalStore } from "react";
 import { toneProfileList, type ToneProfileEntry } from "./bridge";
-import { curvePath, curveValueAt } from "./curvesampler";
-import type { NodeCard } from "./state";
+import { curveEqPoints, curvePath, curveValueAt, monotoneTangents } from "./curvesampler";
+import { evalEq } from "./eqcurve";
+import type { CurveHandle, NodeCard } from "./state";
 import { PROFILE_CHOICES, type Choice } from "./ui/sourcemenusparts";
 import { vtToDisplay } from "./viewtransform";
 
 type Pt = [number, number];
 
-export type ToneCurveDoc = { name: string; interp: "smooth" | "linear"; points: Pt[] };
+export type ToneInterp = "smooth" | "linear" | "tangent";
+
+/** `tangents` and `handles` are tangent mode's, parallel to the points:
+ * each point's slope in display per stop, and its handle vectors in
+ * stops and display units (null for an automatic point), as Curves keeps
+ * them. The engine reads the same (tone_curve.rs). */
+export type ToneCurveDoc = {
+  name: string;
+  interp: ToneInterp;
+  points: Pt[];
+  tangents?: number[];
+  handles?: (CurveHandle | null)[];
+};
 
 /** Scene white, 1.0, in stops above middle gray. */
 export const WHITE_STOPS = Math.log2(1 / 0.18);
@@ -38,35 +52,89 @@ export function parseToneCurve(json: string | undefined): ToneCurveDoc | null {
     const v = JSON.parse(json);
     const raw = v?.points;
     if (!Array.isArray(raw) || raw.length < 2 || raw.length > MAX_POINTS) return null;
-    if (v?.interp !== undefined && v.interp !== "smooth" && v.interp !== "linear") return null;
+    if (v?.interp !== undefined && v.interp !== "smooth" && v.interp !== "linear" && v.interp !== "tangent") return null;
     if (v?.name !== undefined && typeof v.name !== "string") return null;
     if (!raw.every((p: unknown) => Array.isArray(p) && p.length === 2 && p.every((x) => typeof x === "number" && Number.isFinite(x)))) return null;
     const pts: Pt[] = raw.map((p: Pt) => [p[0], Math.min(1, Math.max(0, p[1]))]);
     if (pts.some(([x]) => Math.abs(x) > 24)) return null;
-    pts.sort((a, b) => a[0] - b[0]);
-    if (pts.some((p, i) => i > 0 && p[0] - pts[i - 1][0] < 1e-4)) return null;
+    const interp: ToneInterp = v.interp === "linear" || v.interp === "tangent" ? v.interp : "smooth";
+    // Tangent mode's lists, kept only when they match the points (the
+    // engine drops the same), and sorted with them.
+    const num = (x: unknown) => typeof x === "number" && Number.isFinite(x);
+    const vec = (x: unknown): x is Pt => Array.isArray(x) && x.length === 2 && x.every(num);
+    const tangents: number[] | undefined =
+      interp === "tangent" && Array.isArray(v.tangents) && v.tangents.length === pts.length && v.tangents.every(num) ? v.tangents : undefined;
+    const handles: (CurveHandle | null)[] | undefined =
+      interp === "tangent" &&
+      Array.isArray(v.handles) &&
+      v.handles.length === pts.length &&
+      v.handles.every((h: unknown) => h === null || (typeof h === "object" && (h as CurveHandle).l === undefined) || vec((h as CurveHandle).l)) &&
+      v.handles.every((h: unknown) => h === null || (typeof h === "object" && (h as CurveHandle).r === undefined) || vec((h as CurveHandle).r))
+        ? v.handles.map((h: CurveHandle | null) => (h ? { ...(h.l ? { l: h.l } : {}), ...(h.r ? { r: h.r } : {}), ...(h.broken ? { broken: true } : {}) } : null))
+        : undefined;
+    const order = pts.map((_, i) => i).sort((a, b) => pts[a][0] - pts[b][0]);
+    const sorted = order.map((i) => pts[i]);
+    if (sorted.some((p, i) => i > 0 && p[0] - sorted[i - 1][0] < 1e-4)) return null;
     return {
       name: v.name ?? "",
-      interp: v.interp === "linear" ? "linear" : "smooth",
-      points: pts,
+      interp,
+      points: sorted,
+      ...(tangents ? { tangents: order.map((i) => tangents[i]) } : {}),
+      ...(handles ? { handles: order.map((i) => handles[i]) } : {}),
     };
   } catch {
     return null;
   }
 }
 
-export const toneCurveJson = (c: ToneCurveDoc): string => JSON.stringify({ name: c.name, interp: c.interp, points: c.points });
+export const toneCurveJson = (c: ToneCurveDoc): string =>
+  JSON.stringify({
+    name: c.name,
+    interp: c.interp,
+    points: c.points,
+    ...(c.interp === "tangent" && c.tangents?.length === c.points.length ? { tangents: c.tangents } : {}),
+    ...(c.interp === "tangent" && c.handles?.length === c.points.length ? { handles: c.handles } : {}),
+  });
+
+/** The slopes tangent mode reads: the curve's own where they match its
+ * points, the monotone ones otherwise. */
+export function toneTangents(c: ToneCurveDoc): number[] {
+  return c.tangents && c.tangents.length === c.points.length ? c.tangents : monotoneTangents(c.points);
+}
+
+/** Curves' choice (curveShape), on the tone curve's axis: tangent mode
+ * with a handle on any point reads the handle vectors, otherwise the
+ * Hermite through the slopes, or the chord. The engine chooses the same. */
+function shapeOf(c: ToneCurveDoc): { at: (x: number) => number; weighted: boolean; slopes?: number[] } {
+  const tangent = c.interp === "tangent";
+  const handles = tangent && c.handles?.length === c.points.length ? c.handles : null;
+  if (handles && handles.some((h) => h && (h.l || h.r))) {
+    const eq = curveEqPoints(c.points, handles);
+    return { at: (x) => evalEq(eq, x), weighted: true };
+  }
+  const slopes = tangent ? toneTangents(c) : undefined;
+  return { at: (x) => curveValueAt(c.points, c.interp !== "linear", x, slopes), weighted: false, slopes };
+}
 
 /** The curve's display value at `stops`, held at the ends. */
 export function toneCurveAt(c: ToneCurveDoc, stops: number): number {
   const pts = c.points;
   if (stops <= pts[0][0]) return pts[0][1];
   if (stops >= pts[pts.length - 1][0]) return pts[pts.length - 1][1];
-  return Math.min(1, Math.max(0, curveValueAt(pts, c.interp === "smooth", stops)));
+  return Math.min(1, Math.max(0, shapeOf(c).at(stops)));
 }
 
 /** The outline the editor draws between the first point and the last. */
-export const toneCurvePath = (c: ToneCurveDoc): Pt[] => curvePath(c.points, c.interp === "smooth");
+export function toneCurvePath(c: ToneCurveDoc): Pt[] {
+  const shape = shapeOf(c);
+  if (!shape.weighted) return curvePath(c.points, c.interp !== "linear", shape.slopes);
+  const lo = c.points[0][0];
+  const hi = c.points[c.points.length - 1][0];
+  return Array.from({ length: 257 }, (_, i): Pt => {
+    const x = lo + ((hi - lo) * i) / 256;
+    return [x, shape.at(x)];
+  });
+}
 
 /** What the Standard mode draws at full amount, in the curve's terms:
  * the S over the display value of the scene, white held. A fresh Custom
