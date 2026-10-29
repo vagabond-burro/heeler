@@ -60,3 +60,29 @@ export function activeSmartMask(s: State) {
   // too (antsSources).
   return smartMaskInHand(s);
 }
+
+/** A count of the Smart computes that have finished, for the viewer's
+ * MASK NOT COMPUTED badge to ask its question again: a compute started
+ * from the panel (Subject, Select by text, Polish's Refine edge) changes
+ * nothing the badge's overlay watches when the recipe was written before
+ * the pixels, so the badge asked once, before the model answered, and
+ * stayed up after (2026-10-29: "I am seeing that RECOMPUTE now every
+ * time I do this", Select by text). */
+let smartComputed = 0;
+const smartComputedListeners = new Set<() => void>();
+
+export function noteSmartComputed(): void {
+  smartComputed += 1;
+  for (const fn of smartComputedListeners) fn();
+}
+
+export function useSmartComputed(): number {
+  return React.useSyncExternalStore(
+    (fn) => {
+      smartComputedListeners.add(fn);
+      return () => smartComputedListeners.delete(fn);
+    },
+    () => smartComputed,
+    () => smartComputed,
+  );
+}

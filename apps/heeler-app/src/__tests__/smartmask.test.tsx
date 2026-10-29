@@ -191,6 +191,31 @@ describe("the click overlay", () => {
     expect(vi.mocked(smartClick)).toHaveBeenCalledWith(s.activeImage, maskId, prompts, "click", "", "");
   });
 
+  it("the badge asks again when a compute started from the panel finishes", async () => {
+    // 2026-10-29, Select by text: "I am seeing that RECOMPUTE now every
+    // time I do this". The recipe is written before the model answers,
+    // so the badge asked while the pixels were still on their way, and
+    // nothing the overlay watched changed when they arrived.
+    mockCached = false;
+    let s = withSmart();
+    const maskId = s.activeLayer!.replace("_adj", "_mask");
+    s = run(s, { type: "set_text_param", id: maskId, param: "mode", value: "sky" });
+    s = run(s, { type: "set_text_param", id: maskId, param: "model", value: "sam2_1_hiera_tiny" });
+    render(
+      <>
+        <SmartModePanel state={s} dispatch={() => {}} />
+        <SmartClickOverlay state={s} dispatch={() => {}} norm={norm} />
+      </>,
+    );
+    // Asked before the pixels exist: the badge is up.
+    await screen.findByTestId("smart-uncomputed");
+    fireEvent.click(screen.getByTestId("smart-mode-sky"));
+    // The pixels land as the compute finishes; the recipe (and the
+    // model it records) is the same as before.
+    mockCached = true;
+    await waitFor(() => expect(screen.queryByTestId("smart-uncomputed")).toBeNull());
+  });
+
   it("RECOMPUTE on a Subject keeps the matte its recipe names", async () => {
     mockCached = false;
     let s = withSmart();

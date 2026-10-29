@@ -39,7 +39,7 @@ import type { Command, NodeCard, State } from "../state";
 import { activeSelectionMask, artLayers, artMaskNode, removalPending, maskViewOverriddenBy } from "../state";
 import { publishBusy } from "./statusbarparts";
 import { parseSmartPoints, smartMarkersOn, smartPromptAt, subjectAim } from "../smartpoints";
-import { SMART_ICON_BUTTON, activeSmartMask, depthEyeHint, depthEyeModifier } from "./smarttoolparts";
+import { SMART_ICON_BUTTON, activeSmartMask, depthEyeHint, depthEyeModifier, noteSmartComputed, useSmartComputed } from "./smarttoolparts";
 import { samFor, smartAsk, smartModelMissing } from "./smartnodeparts";
 
 type D = React.Dispatch<Command>;
@@ -545,6 +545,7 @@ export function SmartModePanel({
       })
       .catch((err) => reportToolError("Smart selection", err))
       .finally(() => {
+        noteSmartComputed();
         if (computeRequest.current === request) {
           publishBusy(null);
           setBusy(false);
@@ -707,6 +708,7 @@ refinement falls away, ready to run again.*/}
                 })
                 .catch((err) => reportToolError("Refine", err))
                 .finally(() => {
+                  noteSmartComputed();
                   publishBusy(null);
                   setMatting(false);
                 });
@@ -934,6 +936,9 @@ export function SmartClickOverlay({
   const mode = mask?.textParams?.mode ?? "click";
   // Subject's aim is part of its recipe (lib.rs smart_recipe_prompts).
   const aim = smartAsk(mask?.textParams);
+  const recorded = mask?.textParams?.model ?? "";
+  // Asked again when any compute finishes, wherever it started.
+  const computed = useSmartComputed();
   // The badge's question: is the raster for exactly this recipe here? A
   // graph from another machine carries clicks but no pixels, and the
   // answer must be visible, never silent.
@@ -956,7 +961,7 @@ export function SmartClickOverlay({
     return () => {
       live = false;
     };
-  }, [state.activeImage, maskId, mode, prompts, aim, busy]);
+  }, [state.activeImage, maskId, mode, prompts, aim, recorded, computed, busy]);
   if (!mask) return null;
 
   const models = status !== "loading" ? status : null;
