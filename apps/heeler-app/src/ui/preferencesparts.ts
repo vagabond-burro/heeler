@@ -345,3 +345,28 @@ export const SETTINGS = [
 export function settingDescription(id: string): string | undefined {
   return SETTINGS.find((item) => item.id === id)?.description;
 }
+
+/** What each downloadable model is for, by its id: the features that
+ * read it, so a model can be removed knowing what stops working until
+ * it is downloaded again (2026-10-29: "a section that briefly explains
+ * what each model is for ... so if a user wants to clean up models they
+ * have more information on the impacted features"). */
+export const MODEL_USES: Record<string, string> = {
+  sam2_1_hiera_tiny: "Smart selection's Click and Sky, Subject where no BiRefNet is installed, and the outline of what Select by text finds.",
+  mobile_sam: "Smart selections made before Heeler 2026.7, when they are computed again.",
+  birefnet_dynamic: "Smart selection's Subject in one click, and View depth fitted to the subject.",
+  birefnet_lite: "The earlier subject matte: Subject and View depth's subject fit where BiRefNet dynamic is not installed.",
+  lama: "Remove, and the Finish Fill layer.",
+  vitmatte: "Selection Polish, for hair, fur and fine edges.",
+  depth_anything_v2_small: "The Depth Map's default model: Fog, Depth Lighting, Depth of Field, Lens Flare's occlusion, depth masks and depth-range selections.",
+  depth_anything_3_mono_large: "The Depth Map's larger model, for photographs set to it: more relief inside a subject.",
+  moge_2_vits_normal: "Depth Lighting's Normals: Model.",
+  scunet_color_real_psnr: "Noise Reduction's Model method.",
+  florence_2_base: "Select by text, and the assistant's view of what is in the photograph and where.",
+};
+
+/** Bytes as the models table shows them: MB under a gigabyte, GB with
+ * one decimal from there. */
+export function modelBytes(bytes: number): string {
+  return bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.round(bytes / 1e6)} MB`;
+}

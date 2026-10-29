@@ -8,7 +8,7 @@ The smart selection tools, the depth tools, Noise Reduction's Model method and t
 |---|---|---|
 | Segment Anything 2.1 (Tiny) | Smart selection: Click, Subject and Sky | 156 MB |
 | Segment Anything (MobileSAM) | Smart selections made before Heeler 2026.7 | 37 MB |
-| BiRefNet dynamic | The subject one-shot matte | 972 MB |
+| BiRefNet dynamic | The subject one-shot matte, and View depth fitted to the subject | 972 MB |
 | LaMa | Remove and the Finish Fill layer | 208 MB |
 | ViTMatte | Selection Polish | 104 MB |
 | Depth Anything V2 Small | Fog, Depth Lighting, Depth of Field, depth masks and depth-range selections | 99 MB |
@@ -27,7 +27,7 @@ Florence-2 is Microsoft's, under the MIT license, packaged for ONNX by the Huggi
 
 A tool that needs a model it does not have shows a card naming the model, its size, its license and where it comes from, with a **DOWNLOAD** button. Nothing is fetched until you press it.
 
-Preferences, **Models** lists every model with its status and version. A model not yet installed has an **INSTALL** button there, which opens the same card, so you can fetch a model ahead of a shoot rather than at the moment a tool first asks. **REMOVE** frees a model's disk space; its tool asks again the next time it needs it.
+Preferences, **Models** lists every model with its status, size and version, and under the list how many are installed and the disk space they take together. A model not yet installed has an **Install** button there (an arrow into a tray), which opens the same card, so you can fetch a model ahead of a shoot rather than at the moment a tool first asks. **Remove** (the bin) frees a model's disk space; its tool asks again the next time it needs it. Below the list, **What each model is for** names the features each model serves, so before removing one you can see which features will wait for it again.
 
 Every model has two sources: where its authors published it, and a mirror of the same files on Vagabond Burro's own release page. The download tries the first and falls back to the second; the checksum is the same, so it does not matter which one answered.
 

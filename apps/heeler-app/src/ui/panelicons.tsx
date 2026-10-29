@@ -740,3 +740,28 @@ export function XformIcon({ id, size = 14 }: { id: XformIconId; size?: number })
     </svg>
   );
 }
+
+/** Install: an arrow down into a tray, for a model's download in
+ * Preferences (2026-10-29: "replace the labels for INSTALL and REMOVE
+ * with icons"). */
+export function InstallIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d="M12 3v12" />
+      <path d="M7 10l5 5 5-5" />
+      <path d="M4 17v3h16v-3" />
+    </svg>
+  );
+}
+
+/** Remove: a waste bin, for freeing a model's disk space. */
+export function RemoveIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d="M4 7h16" />
+      <path d="M9 7V4h6v3" />
+      <path d="M6 7l1 13h10l1-13" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  );
+}

@@ -1,7 +1,7 @@
 import { modLabel } from "../platform";
 import { NAVIGATOR_SIZE_RANGE, clampNavigatorSize } from "./viewaidsparts";
 import { useDialogFocus } from "./dialogfocus";
-import { EyeOffIcon, MaskEyeIcon, PinIcon } from "./panelicons";
+import { EyeOffIcon, InstallIcon, MaskEyeIcon, PinIcon, RemoveIcon } from "./panelicons";
 import { SECTIONS, hiddenSectionCount, sectionHidden } from "./simpledata";
 import React, { useEffect, useMemo, useState } from "react";
 import type { Command, State } from "../state";
@@ -64,7 +64,7 @@ import { AssistantSettings } from "./assistantprefs";
 import { MenuField } from "./menufield";
 import { ColorField } from "./colorfield";
 import { PROFILE_CHOICES, SHARPENING_CHOICES, fitOf } from "./sourcemenusparts";
-import { CATEGORIES, type Category, SETTINGS } from "./preferencesparts";
+import { CATEGORIES, MODEL_USES, type Category, SETTINGS, modelBytes } from "./preferencesparts";
 
 /** The two RAW defaults share one width, the longest choice in either. */
 const RAW_DEFAULTS_FIT = fitOf(PROFILE_CHOICES, SHARPENING_CHOICES);
@@ -607,7 +607,7 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
 
   return (
     <div>
-      <div role="table" aria-label="Downloaded models" style={{ display: "grid", gridTemplateColumns: "minmax(160px, 1fr) 150px 84px", columnGap: 10 }}>
+      <div role="table" aria-label="Downloaded models" style={{ display: "grid", gridTemplateColumns: "minmax(160px, 1fr) 150px 34px", columnGap: 10 }}>
         <div role="row" className="kicker" style={{ display: "contents", fontSize: 10 }}>
           <span role="columnheader">Model</span>
           <span role="columnheader">Status / size on disk</span>
@@ -619,7 +619,7 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
               {model.label}
             </span>
             <span role="cell" data-testid={`prefs-model-status-${model.id}`} style={{ fontSize: 11, color: "var(--text-ghost)", alignSelf: "center", padding: "4px 0", borderBottom: "1px solid var(--line-1)" }}>
-              {"pending" in model ? "\u00a0" : model.installed ? `installed \u00b7 ${Math.round(model.bytes / 1e6)} MB \u00b7 ${model.version}` : "not installed"}
+              {"pending" in model ? "\u00a0" : model.installed ? `installed \u00b7 ${modelBytes(model.bytes)} \u00b7 ${model.version}` : installing === model.id ? "installing\u2026" : "not installed"}
             </span>
             <span role="cell" style={{ alignSelf: "center", padding: "4px 0", borderBottom: "1px solid var(--line-1)" }}>
               {!("pending" in model) && !model.installed && (
@@ -628,11 +628,17 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
                   data-testid={`prefs-model-install-${model.id}`}
                   disabled={working}
                   data-active={consent === model.id || undefined}
-                  data-hint="Download this model now, before its tool asks for it; the card below names the size, license and source first"
-                  style={{ fontSize: 11, padding: "1px 8px" }}
+                  aria-label={`Install ${model.label}`}
+                  aria-busy={installing === model.id || undefined}
+                  data-hint={
+                    installing === model.id
+                      ? `Installing ${model.label}`
+                      : "Install: download this model now, before its tool asks for it; the card below names the size, license and source first"
+                  }
+                  style={{ padding: "2px 6px", display: "inline-flex", alignItems: "center" }}
                   onClick={() => setConsent((cur) => (cur === model.id ? null : model.id))}
                 >
-                  {installing === model.id ? "INSTALLING\u2026" : "INSTALL"}
+                  <InstallIcon />
                 </button>
               )}
               {model.installed && (
@@ -640,8 +646,9 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
                   className="chip"
                   data-testid={`prefs-model-remove-${model.id}`}
                   disabled={working}
-                  data-hint="Frees this model's disk space; its tool can download it again later"
-                  style={{ fontSize: 11, padding: "1px 8px" }}
+                  aria-label={`Remove ${model.label}`}
+                  data-hint={`Remove: frees this model's disk space; ${(MODEL_USES[model.id] ?? "its tools").replace(/\.$/, "")} will ask to download it again`}
+                  style={{ padding: "2px 6px", display: "inline-flex", alignItems: "center" }}
                   onClick={() => {
                     setBusy(true);
                     void smartModelRemove(model.id)
@@ -649,13 +656,24 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
                       .finally(() => setBusy(false));
                   }}
                 >
-                  REMOVE
+                  <RemoveIcon />
                 </button>
               )}
             </span>
           </div>
         ))}
       </div>
+      {models && (() => {
+        const installed = listed(models).filter((m) => m.installed);
+        const bytes = installed.reduce((sum, m) => sum + m.bytes, 0);
+        return (
+          <div data-testid="prefs-models-total" className="tnum" style={{ fontSize: 12, color: "var(--text-ghost)", marginTop: 6 }}>
+            {installed.length === 0
+              ? "No models installed"
+              : `${installed.length} of ${listed(models).length} installed \u00b7 ${modelBytes(bytes)} on disk`}
+          </div>
+        );
+      })()}
       {consent && models && (() => {
         const model = rows.find((m) => m.id === consent);
         if (!model || "pending" in model || model.installed) return null;
@@ -681,6 +699,26 @@ function ModelsControl({ state, dispatch }: { state: State; dispatch: D }) {
           />
         );
       })()}
+      {/* What each model is for, under the table, so a model can be
+          removed knowing which features wait for it again. */}
+      <div data-testid="prefs-model-uses" style={{ marginTop: 14 }}>
+        <div className="kicker" style={{ fontSize: 10, paddingBottom: 6 }}>What each model is for</div>
+        <dl style={{ display: "grid", gridTemplateColumns: "minmax(140px, 220px) 1fr", columnGap: 12, rowGap: 5, margin: 0 }}>
+          {rows
+            .filter((m) => MODEL_USES[m.id])
+            .map((m) => (
+              <React.Fragment key={m.id}>
+                <dt style={{ fontSize: 12.5, color: "var(--text-body)" }}>{m.label.replace(/ \([a-z][^)]*\)$/, "")}</dt>
+                <dd data-testid={`prefs-model-use-${m.id}`} style={{ fontSize: 12.5, color: "var(--text-ghost)", margin: 0, lineHeight: 1.45 }}>
+                  {MODEL_USES[m.id]}
+                </dd>
+              </React.Fragment>
+            ))}
+        </dl>
+        <div style={{ fontSize: 12.5, color: "var(--text-ghost)", marginTop: 6, lineHeight: 1.45 }}>
+          A removed model's features ask to download it again the next time they need it; your edits keep their settings.
+        </div>
+      </div>
       <div style={{ display: "flex", alignItems: "center", gap: 9, marginTop: 8, flexWrap: "wrap" }}>
         <button
           className="chip"
