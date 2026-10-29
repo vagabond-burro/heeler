@@ -30,6 +30,7 @@ import { vtToDisplay } from "../viewtransform";
 import { modLabel } from "../platform";
 import { InterpCycle } from "./interpglyph";
 import { CURVE_POINT_CURSOR } from "./cursors";
+import { ResetIcon } from "./panelicons";
 import { SourceMenuRow } from "./sourcemenus";
 
 type D = React.Dispatch<Command>;
@@ -161,6 +162,18 @@ export function ToneCurveBlock({ node, dispatch, width = 260 }: { node: NodeCard
           testid="tone-curve-interp"
           onChange={(m) => write({ ...curve, interp: m === "linear" ? "linear" : "smooth" })}
         />
+        {/* Back to the curve Custom starts on, the name kept (2026-10-29:
+            "Also need a reset on the curve"). One undo step. */}
+        <button
+          className="chip"
+          data-testid="tone-curve-reset"
+          aria-label="Reset the curve"
+          data-hint="Reset the curve: back to the Standard curve Custom starts on; the name is kept"
+          style={{ padding: "2px 6px", display: "inline-flex", alignItems: "center" }}
+          onClick={() => write({ ...standardSeed(), name: curve.name })}
+        >
+          <ResetIcon />
+        </button>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <input
@@ -223,10 +236,20 @@ function ToneCurveEditor({
   const plotH = H - PAD.t - PAD.b;
   const xPx = (x: number) => PAD.l + ((x - lo) / (hi - lo)) * plotW;
   const yPx = (y: number) => PAD.t + (1 - y) * plotH;
-  const at = (e: React.PointerEvent): [number, number] => {
+  /** The plot as drawn on the page: its box, and how many page pixels
+   * one of its own units takes. The panel's zoom draws it larger than
+   * its own units, and pointer positions read unscaled took a press
+   * over one point for another and dragged it to the wrong height
+   * (2026-10-29: "I clicked the dot over -4 but the dot 3 to the right
+   * snapped to the bottom"), the scaling Curves' editor already does. */
+  const drawn = () => {
     const r = svg.current!.getBoundingClientRect();
-    const x = lo + ((e.clientX - r.left - PAD.l) / plotW) * (hi - lo);
-    const y = 1 - (e.clientY - r.top - PAD.t) / plotH;
+    return { r, sx: (r.width || width) / width, sy: (r.height || H) / H };
+  };
+  const at = (e: { clientX: number; clientY: number }): [number, number] => {
+    const { r, sx, sy } = drawn();
+    const x = lo + (((e.clientX - r.left) / sx - PAD.l) / plotW) * (hi - lo);
+    const y = 1 - ((e.clientY - r.top) / sy - PAD.t) / plotH;
     return [Math.min(hi, Math.max(lo, x)), Math.min(1, Math.max(0, y))];
   };
   const moved = (i: number, [x, y]: [number, number]): ToneCurveDoc => {
@@ -255,8 +278,8 @@ function ToneCurveEditor({
    * the press is nearer it than halfway to the next one, so the gap
    * between close points still takes a new point (Curves' rule). */
   const nearest = (clientX: number, clientY: number): number | null => {
-    const r = svg.current!.getBoundingClientRect();
-    const px = (i: number) => [r.left + xPx(pts[i][0]), r.top + yPx(pts[i][1])];
+    const { r, sx, sy } = drawn();
+    const px = (i: number) => [r.left + xPx(pts[i][0]) * sx, r.top + yPx(pts[i][1]) * sy];
     let best: number | null = null;
     let bestD = GRAB_PX;
     pts.forEach((_, i) => {

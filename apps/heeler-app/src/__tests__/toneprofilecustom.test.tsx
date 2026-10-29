@@ -189,6 +189,51 @@ describe("Tone Profile: Custom", () => {
     expect(screen.getByText(/-click one to remove it/)).toBeInTheDocument();
   });
 
+  it("takes the point under the press when the panel's zoom draws the plot larger", () => {
+    // "I clicked the dot over -4 but the dot 3 to the right snapped to
+    // the bottom": positions read in the plot's own units missed under
+    // the panel's zoom.
+    let node = { ...profileOf(initialState()), textParams: { ...profileOf(initialState()).textParams, mode: "custom", curve: toneCurveJson(standardSeed()) } };
+    const writes: string[] = [];
+    const dispatch = vi.fn((c: { type: string; curve?: string }) => {
+      if (c.type === "set_tone_curve") writes.push(c.curve!);
+    });
+    render(<ToneCurveBlock node={node} dispatch={dispatch as never} width={260} />);
+    const editor = screen.getByTestId("tone-curve-editor") as unknown as SVGSVGElement;
+    editor.setPointerCapture = vi.fn();
+    // Drawn at twice its own size, 100 px in from the page's corner.
+    editor.getBoundingClientRect = () => ({ left: 100, top: 100, width: 520, height: 300, right: 620, bottom: 400, x: 100, y: 100, toJSON() {} }) as DOMRect;
+    const page = (i: number) => {
+      const c = screen.getByTestId(`tone-curve-point-${i}`);
+      return [100 + Number(c.getAttribute("cx")) * 2, 100 + Number(c.getAttribute("cy")) * 2];
+    };
+    const before = standardSeed().points;
+    const [x2, y2] = page(2);
+    fireEvent(editor, new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, clientX: x2 + 3, clientY: y2 + 3 }));
+    // Up 40 page pixels: 20 of the plot's own.
+    fireEvent(editor, new MouseEvent("pointermove", { bubbles: true, clientX: x2, clientY: y2 - 40 }));
+    const moved = parseToneCurve(writes[writes.length - 1])!.points;
+    expect(moved).toHaveLength(before.length);
+    for (let i = 0; i < before.length; i++) if (i !== 2) expect(moved[i]).toEqual(before[i]);
+    expect(moved[2][0]).toBeCloseTo(before[2][0], 1);
+    expect(moved[2][1]).toBeGreaterThan(before[2][1]);
+    fireEvent(editor, new MouseEvent("pointerup", { bubbles: true }));
+  });
+
+  it("Reset puts the Standard curve back, the name kept", () => {
+    const base = profileOf(initialState());
+    const bent = { ...standardSeed(), name: "Mine", interp: "linear" as const, points: [[-8, 0], [0, 0.9], [6, 1]] as [number, number][] };
+    const dispatch = vi.fn();
+    render(<ToneCurveBlock node={{ ...base, textParams: { ...base.textParams, mode: "custom", curve: toneCurveJson(bent) } }} dispatch={dispatch} />);
+    const reset = screen.getByTestId("tone-curve-reset");
+    expect(reset).toHaveAttribute("aria-label", "Reset the curve");
+    fireEvent.click(reset);
+    const back = parseToneCurve(dispatch.mock.calls[dispatch.mock.calls.length - 1][0].curve)!;
+    expect(back.points).toEqual(standardSeed().points);
+    expect(back.interp).toBe(standardSeed().interp);
+    expect(back.name).toBe("Mine");
+  });
+
   it("wears the app's controls: Curves' Smooth and Linear button, chips, the panel's text field", () => {
     // "Why is tone profile curve not using the same smooth/linear buttons
     // used on the curve editors? The buttons and input field does not
