@@ -5522,6 +5522,16 @@ menu"). The graph inspector's Source node draws the same rows.*/}
                     />
                   </div>
                 )}
+                {/* Lens Flare's lens, its sources and the lights or spots that
+                    flare, above the sliders: what decides whether anything
+                    flares at all sat under some twenty of them, out of
+                    sight (2026-10-29: "Just had to FIND the right
+                    control!"). */}
+                {sec.depthTools === "flare" &&
+                  (() => {
+                    const n = sec.node(state);
+                    return n ? <FlarePanel state={state} dispatch={dispatch} node={n} /> : null;
+                  })()}
                 {(() => {
                   // Letters are handed out per section, so they stay
                   // short and the same control keeps the same key.
@@ -5894,11 +5904,6 @@ the rig draws at the one thickness every overlay reads.*/}
                         raw={sec.depthTools === "depthmap"}
                       />
                     ) : null;
-                  })()}
-                {sec.depthTools === "flare" &&
-                  (() => {
-                    const n = sec.node(state);
-                    return n ? <FlarePanel state={state} dispatch={dispatch} node={n} /> : null;
                   })()}
                 {sec.depthTools === "halation" &&
                   (() => {

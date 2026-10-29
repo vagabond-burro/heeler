@@ -46,6 +46,10 @@ bright source. Nothing is painted; every element is drawn from the light's
 position and the lens's character, so moving the light moves the flare and
 the flare renders fresh at every size, in the export included.
 
+The lens preset, **Sources** and the list of what flares sit at the top of the
+section, above the dials. The list shows five lights or spots at a time and
+scrolls for the rest.
+
 - **Sources** chooses where the flare comes from. **Rig lights** flares the
   Depth Lighting lights with their flare switch on. **Bright spots** finds the
   photograph's own light sources, street lamps, headlights, a sun in frame, and

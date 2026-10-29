@@ -18,6 +18,22 @@ import { readSpots, readSpotsOff, readStreakStops, spotIsOff, toggleSpotOff, wri
 
 type D = React.Dispatch<Command>;
 
+/** A list of sources, lights or bright spots, at most five rows tall
+ * and scrolling past that, so sixteen found spots do not push the dials
+ * down the panel (2026-10-29: "only up to 5 sources visible, we don't
+ * need this list to grow and push rest of the controls down"). Every
+ * row is 16 px with 2 px between, so five rows are 88 px exactly. */
+const SOURCE_ROWS = 5;
+const SOURCE_ROW: React.CSSProperties = { display: "flex", alignItems: "center", gap: 6, fontSize: 10, height: 16, flex: "none" };
+const SOURCE_LIST: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+  maxHeight: SOURCE_ROWS * 16 + (SOURCE_ROWS - 1) * 2,
+  overflowY: "auto",
+  overscrollBehavior: "contain",
+};
+
 export function FlarePanel({ state, dispatch, node }: { state: State; dispatch: D; node: NodeCard }) {
   const keylight = toolNode(state, "keylight");
   const lights = keylight ? lightsOf(keylight) : [];
@@ -118,8 +134,9 @@ export function FlarePanel({ state, dispatch, node }: { state: State; dispatch: 
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <div data-testid="flare-lights-list" style={SOURCE_LIST}>
           {lights.map((l, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10 }}>
+            <div key={i} style={SOURCE_ROW}>
               <button
                 className="chip"
                 data-testid={`flare-light-${i}`}
@@ -137,6 +154,7 @@ export function FlarePanel({ state, dispatch, node }: { state: State; dispatch: 
               </span>
             </div>
           ))}
+          </div>
           {flaring === 0 && !brightOn && (
             <div data-testid="flare-none-flaring" style={{ fontSize: 9, color: "var(--text-faint)", lineHeight: 1.5 }}>
               No light is flaring: switch one on above.
@@ -160,10 +178,11 @@ export function FlarePanel({ state, dispatch, node }: { state: State; dispatch: 
               No bright spot found: lower Threshold or Min size.
             </div>
           ) : (
-            spots.map((sp, i) => {
+            <div data-testid="flare-spots-list" style={SOURCE_LIST}>
+            {spots.map((sp, i) => {
               const on = !spotIsOff(sp, spotsOff);
               return (
-                <div key={`${sp.x},${sp.y}`} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10 }}>
+                <div key={`${sp.x},${sp.y}`} style={SOURCE_ROW}>
                   <button
                     className="chip"
                     data-testid={`flare-spot-${i}`}
@@ -190,7 +209,8 @@ export function FlarePanel({ state, dispatch, node }: { state: State; dispatch: 
                   </span>
                 </div>
               );
-            })
+            })}
+            </div>
           )}
         </div>
       )}
