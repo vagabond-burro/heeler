@@ -13,6 +13,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { untracked } from "./untracked";
 
 const NAME_LIST = [
   "Lightroom", "Capture ?One", "Photoshop", "Affinity", "DaVinci", "Resolve-style", "\\bResolve's",
@@ -49,7 +50,7 @@ function walk(dir: string, exts: string[]): string[] {
     if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
     const full = `${dir}/${entry.name}`;
     if (entry.isDirectory()) out.push(...walk(full, exts));
-    else if (exts.some((e) => entry.name.endsWith(e))) out.push(full);
+    else if (exts.some((e) => entry.name.endsWith(e)) && !untracked(full)) out.push(full);
   }
   return out;
 }

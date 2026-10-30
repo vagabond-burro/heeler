@@ -12,6 +12,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { untracked } from "./untracked";
 
 const DASHES = /[\u2013\u2014]/g; // en-dash, em-dash
 /** A dash however a shipped string spells it: the character, a JS
@@ -84,7 +85,7 @@ function walk(dir: string, exts: string[]): string[] {
     if (entry.name === "node_modules" || entry.name === "target" || entry.name.startsWith(".")) continue;
     const full = `${dir}/${entry.name}`;
     if (entry.isDirectory()) out.push(...walk(full, exts));
-    else if (exts.some((e) => entry.name.endsWith(e))) out.push(full);
+    else if (exts.some((e) => entry.name.endsWith(e)) && !untracked(full)) out.push(full);
   }
   return out;
 }

@@ -14,6 +14,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { untracked } from "./untracked";
 
 const REPO = resolve(process.cwd(), "../..");
 
@@ -226,7 +227,7 @@ function walk(dir: string, exts: string[]): string[] {
     if (["node_modules", "target", "gen", "dist"].includes(entry.name) || entry.name.startsWith(".")) continue;
     const full = `${dir}/${entry.name}`;
     if (entry.isDirectory()) out.push(...walk(full, exts));
-    else if (exts.some((e) => entry.name.endsWith(e))) out.push(full);
+    else if (exts.some((e) => entry.name.endsWith(e)) && !untracked(full)) out.push(full);
   }
   return out;
 }
