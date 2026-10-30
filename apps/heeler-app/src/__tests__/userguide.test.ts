@@ -123,9 +123,8 @@ describe("the guide as shipped", () => {
     expect(adjust.children.map((n) => n.file)).toContain("adjustments/black-and-white.md");
   });
 
-  // The components' licenses ask that their notices travel with Heeler,
-  // and the notice says where the LibRaw source of earlier versions stays
-  // published. The About box tells people the menu path to it in prose,
+  // The components' licenses ask that their notices travel with Heeler.
+  // The About box tells people the menu path to it in prose,
   // and prose does not fail to compile.
   //
   // It has already broken once: the guide became a tree, only the tree
@@ -154,12 +153,14 @@ describe("the guide as shipped", () => {
       expect(files).toContain(OPEN_SOURCE_FILE);
     });
 
-    it("says where the LibRaw source of earlier versions stays published", () => {
-      // This version ships no LibRaw (2026-10-26); the ones before it
-      // did, under CDDL-1.0, and their source stays where they said.
+    it("lists only what this version ships", () => {
+      // This version ships no LibRaw (2026-10-26), so its notice names
+      // none (2026-10-29: "There's no reason to list it on the
+      // open-source licenses page moving forward"). The versions that did
+      // carry their own notices, which say where their source stays.
       const text = readFileSync(`${ROOT}/${OPEN_SOURCE_FILE}`, "utf8");
-      expect(text).toContain("CDDL");
-      expect(text).toContain("https://www.heeler.app/source/libraw/");
+      expect(text).not.toMatch(/libraw/i);
+      expect(text).not.toContain("CDDL");
     });
   });
 

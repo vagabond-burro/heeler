@@ -32,9 +32,12 @@ depend on finding out.
 ## The one thing that must be done before a binary ships
 
 `https://www.heeler.app/source/libraw/` must serve the archive and
-its checksum. That URL is named in
-`docs/user-guide/legal/open-source.md`, which is the notice users read, so a binary that ships before the URL is live is
-a binary whose license page points at nothing.
+its checksum. That URL is named in the open source notices of the
+versions that shipped LibRaw (2026.6 and earlier; the current notice no
+longer names LibRaw, since the current app has none of it), so it must
+keep serving for as long as anyone may have those binaries. A binary
+that ships LibRaw before the URL is live is a binary whose license page
+points at nothing.
 
 Nothing in this repository can check that for you. It is the only step
 here that is a decision rather than a command.

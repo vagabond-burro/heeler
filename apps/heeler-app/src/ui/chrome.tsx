@@ -1882,9 +1882,8 @@ export function MenuBar({ state, dispatch }: { state: State; dispatch: D }) {
               logMsg("info", `Heeler ${b} · node-based RAW developer · www.heeler.app · © 2026 Vagabond Burro LLC`);
               // Attribution has to be reachable from About, not only
               // from a page somebody would have to already know about:
-              // the notice carries every component's terms (and where
-              // the LibRaw source of earlier versions stays published),
-              // and this is the signpost to it.
+              // the notice carries every component's terms, and this is
+              // the signpost to it.
               //
               // The path here has to match where the notice actually
               // lives, and once it did not: the guide became a tree and

@@ -152,7 +152,7 @@ def main() -> None:
     print(f"  {archive}")
     print(f"  sha256 {digest}")
     print()
-    print("Publish both files at the URL named in docs/user-guide/legal/open-source.md,")
+    print("Publish both files at https://www.heeler.app/source/libraw/, the URL the notices of 2026.6 and earlier name,")
     print("and keep them there for as long as binaries built from this tree")
     print("are in anyone's hands.")
 

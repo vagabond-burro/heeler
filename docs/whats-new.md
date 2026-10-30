@@ -17,6 +17,13 @@
 - **View depth fitted to the subject.** The Depth Map section's new **Subject** chip spreads the depth view's grays over your subject's own depth, so the relief inside a face or a beak shows even when the subject is a small part of the scene. [Depth Map](user-guide/adjustments/depth-map.md).
 
 - **Your own tone curve.** The Tone Profile has a **Custom** mode: draw the curve from scene light to display in an editor that works like Curves, with Smooth, Linear and Tangent shapes and handles to steer it, or import one from a 1D .cube, a two-column text file or a DNG or camera profile, and save it as a profile that lists in the Profile menu. The curve travels in the document, so it renders the same on a computer without the profile file. [Source](user-guide/adjustments/source.md#tone-profile).
+- **A finer Subject matte.** **Subject** now answers with BiRefNet dynamic, which reads fur and fine edges better than the model before it, with soft edges in one shot. It is an optional 972 MB download, asked for the first time you use Subject. Selections made in earlier versions keep the matte they had. [Masks and selections](user-guide/finish/masks-selections.md#the-subject-matte).
+- **A rotation ring on the crop.** With the crop tool up, drag along the dashed ring around the crop, or anywhere outside it, and the picture turns as the pointer goes round, against a level grid. Double-click the ring to level it again. [Geometry](user-guide/adjustments/geometry.md#rotation-ring).
+- **Straightening keeps a clean crop.** With **Stay inside picture** on, as it is by default, straightening shrinks the crop so no empty corner shows, and coming back to level gives the whole frame again. **Crop to picture** sets the largest crop that is all picture in one click. [Geometry](user-guide/adjustments/geometry.md#crop-to-picture).
+- **Film crop ratios.** The crop bar's ratio menu has the cinema's widths in their own group, named by their decimals: 1.85, 2.00, 2.35, 2.39, 2.40, 2.50 and 2.76, and a ratio of your own can be typed with decimals. [Geometry](user-guide/adjustments/geometry.md#crop-ratios).
+- **Panoramas line up at their edges.** Each frame's lens distortion is undone from its lens profile before the frames are matched, so wide frames line up across the whole overlap rather than only its middle. The Pano panel says which profile was found, and **Lens correction** turns it off. [Panoramas](user-guide/composites.md#lens-correction).
+- **Seams that go round what moved.** Where frames overlap, the seam now runs where they agree, through sky, grass or anything that stayed still, and around anything that moved between the shots. Someone walking through the overlap, or a car driving across it, appears once and whole, not cut in half, doubled or left as a faint copy. [Panoramas](user-guide/composites.md#seams).
+- **Panoramas open cropped.** A new panorama opens with Crop & Rotate set to the largest rectangle it fills, an ordinary crop you can widen again. **Auto-crop** in the Pano panel turns it off and on without stitching again. [Panoramas](user-guide/composites.md#auto-crop).
 
 ### Changed
 
@@ -29,6 +36,11 @@
 - **Highlights: Rebuild and the Demosaic menu are gone.** A photograph edited with Rebuild now develops with Clip, and one edited with the Fast or Fine demosaic develops with Heeler's demosaic. [Source](user-guide/adjustments/source.md#raw-controls).
 - **A camera newer than Heeler says so.** A RAW file from a camera Heeler does not know yet shows its thumbnail and says "this camera is not supported yet", instead of developing with guessed color. An update that adds the camera develops it. [Library](user-guide/library.md#raw-files-heeler-cannot-develop-yet).
 - **A few rare older formats no longer develop.** The Nikon D1X's compressed NEF, the YI action cameras' first DNGs, the FinePix F700's RAF, the GX680 digital back's RAF, the DSC-F828's SRF, the Kodak DC50's KDC, the Minolta RD175's MDC and some action cameras' .RAW files show their thumbnails but do not open for editing. Converting them to DNG with a converter that reads them works in the meantime. [Library](user-guide/library.md#raw-files-heeler-cannot-develop-yet).
+
+### Fixed
+
+- **Match exposure in the Pano panel works.** Switching **Match exposure** off in the Pano panel wrote the panorama's recipe back unchanged, so the switch stayed on however often it was clicked. It now takes effect, as do the new **Lens correction** and **Auto-crop** switches. [Panoramas](user-guide/composites.md#panoramas).
+- **A drag off the canvas leaves the panels alone.** A straighten line, a crop edge or a brush stroke carried off the canvas could move a slider it crossed in the panel, so a straighten drag could set the Color section's Temp. Sliders, the Harmony wheel and the compare split now follow only a drag that began on them. [Image viewport](user-guide/image-viewport.md).
 
 ## 2026.6
 

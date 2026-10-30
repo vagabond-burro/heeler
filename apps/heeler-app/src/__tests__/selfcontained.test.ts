@@ -169,7 +169,6 @@ const RUNTIME: { file: string; text: string; why: string }[] = [
   {"file": "apps/heeler-app/src/bridge.ts", "text": "    \"The real guide ships with the installed app and renders here from its `docs\/user-guide` folder.\",", "why": "preview message identifies the rendered guide folder"},
   {"file": "scripts/check_user_guide_links.py", "text": "GUIDE = ROOT / 'docs\/user-guide'", "why": "reads or verifies the shipped guide"},
   {"file": "scripts/check_user_guide_links.py", "text": "    for page in [*pages, ROOT / 'docs\/whats-new.md']:", "why": "reads, links or verifies the shipped release notes"},
-  {"file": "scripts/libraw_source.py", "text": "    print(\"Publish both files at the URL named in docs\/user-guide/legal/open-source.md,\")", "why": "prints the source publication destination required by the guide"},
   {"file": "scripts/linux-setup.sh", "text": "    no Linux equivalent wired up. See docs\/user-guide/legal/open-source.md.", "why": "prints the bundled license information location"},
   {"file": "scripts/release.py", "text": "    \"([how to use them](https://www.heeler.app/docs\/ask-an-ai/))\"", "why": "publishes a guide help link"},
   {"file": "scripts/latest_json.py", "text": "GUIDE_SITE = \"https://www.heeler.app/docs\/\"", "why": "publishes guide links in the update notes"},
