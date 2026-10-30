@@ -534,7 +534,7 @@ export function ShapeWarpOverlay({
         })}
       </svg>
       {selected && ui.mode === "position" && (
-        <RadialOverlay key={`${state.activeImage}|${state.warpTarget ?? ""}|${selected.id}`} node={standIn(selected, space, frameAspect)} dispatch={gizmoDispatch(dispatch, selected, space, frameAspect)} view={view} lineColor={state.lineColor} previewUrl={previewUrl} lineWidth={lw} dashed={!selected.enabled} />
+        <RadialOverlay key={`${state.activeImage}|${state.warpTarget ?? ""}|${selected.id}`} node={standIn(selected, space, frameAspect)} dispatch={gizmoDispatch(dispatch, selected, space, frameAspect)} view={view} lineColor={lineSetting(state)} previewUrl={previewUrl} lineWidth={lw} dashed={!selected.enabled} />
       )}
     </div>
   );

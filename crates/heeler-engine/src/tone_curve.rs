@@ -489,17 +489,20 @@ mod tests {
         // All-automatic handles read as the slopes, as in Curves.
         let auto = tangent(Some(vec![0.1, 0.0, 0.1]), Some(vec![None, None, None]));
         assert!((auto.eval(0.3) - flat.eval(0.3)).abs() < 1e-6);
-        // Sorted together: the flat slope stays with middle gray.
+        // Sorted together: each slope and handle stays with its point.
+        // The lists are lopsided, so one left in place reads differently.
+        let far = ToneHandle { l: Some([-0.5, -0.1]), r: None };
         let shuffled = ToneCurve {
             name: "t".into(),
             interp: "tangent".into(),
             points: vec![[4.0, 0.9], [0.0, 0.5], [-4.0, 0.1]],
-            tangents: Some(vec![0.1, 0.0, 0.1]),
-            handles: None,
+            tangents: Some(vec![0.3, 0.0, 0.1]),
+            handles: Some(vec![Some(far), None, None]),
         }
         .checked()
         .unwrap();
-        assert_eq!(shuffled.tangents.as_deref(), Some(&[0.1, 0.0, 0.1][..]));
+        assert_eq!(shuffled.tangents.as_deref(), Some(&[0.1, 0.0, 0.3][..]));
+        assert_eq!(shuffled.handles, Some(vec![None, None, Some(far)]));
         // Wrong lengths and non-numbers are dropped.
         assert_eq!(tangent(Some(vec![0.0]), None).tangents, None);
         assert_eq!(tangent(Some(vec![0.0, f32::NAN, 0.0]), None).tangents, None);

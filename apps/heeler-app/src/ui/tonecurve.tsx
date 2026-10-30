@@ -297,7 +297,11 @@ function ToneCurveEditor({
     // under the pointer.
     const left = i > 0 ? pts[i - 1][0] + MIN_GAP : lo;
     const right = i < pts.length - 1 ? pts[i + 1][0] - MIN_GAP : hi;
-    const next = pts.map((p, k): [number, number] => (k === i ? [round4(Math.min(right, Math.max(left, x))), round4(y)] : p));
+    // Neighbors closer than two gaps (a curve saved before the gap grew,
+    // or imported) leave no room: the point keeps its stop and moves up
+    // and down only, rather than snapping onto or past a neighbor.
+    const nx = left <= right ? Math.min(right, Math.max(left, x)) : pts[i][0];
+    const next = pts.map((p, k): [number, number] => (k === i ? [round4(nx), round4(y)] : p));
     return { ...curve, points: next };
   };
 

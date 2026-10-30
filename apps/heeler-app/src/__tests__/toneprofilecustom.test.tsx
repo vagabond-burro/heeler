@@ -190,6 +190,32 @@ describe("Tone Profile: Custom", () => {
     expect(screen.getByText(/-click one to remove it/)).toBeInTheDocument();
   });
 
+  it("a point between neighbors closer than two gaps keeps its stop when dragged", () => {
+    // A curve saved before the gap grew to a quarter stop: dragged, the
+    // middle point snapped onto or past its neighbor and the order changed
+    // under the hand.
+    const seed = standardSeed();
+    const close = { ...seed, points: [seed.points[0], [-0.1, 0.4], [0, 0.45], [0.1, 0.5], seed.points[seed.points.length - 1]] as [number, number][] };
+    let node = { ...profileOf(initialState()), textParams: { ...profileOf(initialState()).textParams, mode: "custom", curve: toneCurveJson(close) } };
+    const writes: string[] = [];
+    const dispatch = vi.fn((c: { type: string; curve?: string }) => {
+      if (c.type === "set_tone_curve") {
+        writes.push(c.curve!);
+        node = { ...node, textParams: { ...node.textParams, curve: c.curve! } };
+      }
+    });
+    render(<ToneCurveBlock node={node} dispatch={dispatch as never} />);
+    const editor = screen.getByTestId("tone-curve-editor") as unknown as SVGSVGElement;
+    editor.setPointerCapture = vi.fn();
+    const mid = screen.getByTestId("tone-curve-point-2");
+    fireEvent(editor, pressOn(mid, {}));
+    fireEvent(editor, new MouseEvent("pointermove", { bubbles: true, clientX: Number(mid.getAttribute("cx")) - 30, clientY: Number(mid.getAttribute("cy")) - 10 }));
+    fireEvent(editor, new MouseEvent("pointerup", { bubbles: true }));
+    const points = parseToneCurve(writes[writes.length - 1])!.points;
+    expect(points[2][0]).toBeCloseTo(0, 6);
+    expect(points[1][0] < points[2][0] && points[2][0] < points[3][0]).toBe(true);
+  });
+
   it("takes the point under the press when the panel's zoom draws the plot larger", () => {
     // "I clicked the dot over -4 but the dot 3 to the right snapped to
     // the bottom": positions read in the plot's own units missed under

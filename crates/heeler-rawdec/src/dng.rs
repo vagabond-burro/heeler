@@ -372,7 +372,9 @@ impl Dng {
             Some(&[r, c]) if r > 0 && c > 0 => (r as usize, c as usize),
             _ => (1, 1),
         };
-        let black = reals(&t, raw, 50714).unwrap_or_else(|| vec![0.0]);
+        // A BlackLevel of no values is none at all: black_at falls back to
+        // the first.
+        let black = reals(&t, raw, 50714).filter(|b| !b.is_empty()).unwrap_or_else(|| vec![0.0]);
         let three = |tag1: u16, tag2: u16, tag3: u16| [profile(tag1), profile(tag2), profile(tag3)];
         let crop = match (reals(&t, raw, 50719).as_deref(), reals(&t, raw, 50720).as_deref()) {
             (Some(&[x, y]), Some(&[w, h])) => Some([x, y, w, h]),

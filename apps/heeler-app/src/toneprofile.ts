@@ -54,13 +54,16 @@ export function parseToneCurve(json: string | undefined): ToneCurveDoc | null {
     if (!Array.isArray(raw) || raw.length < 2 || raw.length > MAX_POINTS) return null;
     if (v?.interp !== undefined && v.interp !== "smooth" && v.interp !== "linear" && v.interp !== "tangent") return null;
     if (v?.name !== undefined && typeof v.name !== "string") return null;
-    if (!raw.every((p: unknown) => Array.isArray(p) && p.length === 2 && p.every((x) => typeof x === "number" && Number.isFinite(x)))) return null;
+    // A number the engine can hold: it reads the curve as 32-bit floats,
+    // where anything past their range is infinite and refused.
+    const f32 = (x: unknown) => typeof x === "number" && Number.isFinite(x) && Math.abs(x) <= 3.4028234663852886e38;
+    if (!raw.every((p: unknown) => Array.isArray(p) && p.length === 2 && p.every(f32))) return null;
     const pts: Pt[] = raw.map((p: Pt) => [p[0], Math.min(1, Math.max(0, p[1]))]);
     if (pts.some(([x]) => Math.abs(x) > 24)) return null;
     const interp: ToneInterp = v.interp === "linear" || v.interp === "tangent" ? v.interp : "smooth";
     // Tangent mode's lists, kept only when they match the points (the
     // engine drops the same), and sorted with them.
-    const num = (x: unknown) => typeof x === "number" && Number.isFinite(x);
+    const num = f32;
     const vec = (x: unknown): x is Pt => Array.isArray(x) && x.length === 2 && x.every(num);
     const tangents: number[] | undefined =
       interp === "tangent" && Array.isArray(v.tangents) && v.tangents.length === pts.length && v.tangents.every(num) ? v.tangents : undefined;

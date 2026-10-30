@@ -83,6 +83,25 @@ describe("Lens Flare's Bright spots", () => {
     expect((undone.nodes.find((n) => n.id === "flare")!.params.bright as number) ?? 0).toBe(0);
   });
 
+  it("an answer dropped by a gesture is asked for again when the gesture ends", async () => {
+    // A slider pressed and let go without moving, while the find was still
+    // rendering: the answer is dropped, the recipe is the same, and it
+    // must still be asked again rather than taken as answered.
+    let release!: (spots: FlareSpot[]) => void;
+    vi.mocked(flareSpots).mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    const got: Command[] = [];
+    const on = run(noRig(), { type: "set_param", id: "flare", param: "bright", value: 1 });
+    const view = render(<FlareSpotsRunner state={on} dispatch={(c) => got.push(c)} />);
+    await waitFor(() => expect(vi.mocked(flareSpots)).toHaveBeenCalledTimes(1));
+    const held = run(on, { type: "begin_gesture", key: "slider" });
+    view.rerender(<FlareSpotsRunner state={held} dispatch={(c) => got.push(c)} />);
+    await act(async () => release(HEADLIGHTS));
+    expect(got.filter((c) => c.type === "flare_spots_found")).toHaveLength(0);
+    view.rerender(<FlareSpotsRunner state={run(held, { type: "end_gesture" })} dispatch={(c) => got.push(c)} />);
+    await waitFor(() => expect(vi.mocked(flareSpots)).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(got.filter((c) => c.type === "flare_spots_found")).toHaveLength(1));
+  });
+
   it("a source switched off stays off when Threshold moves it", async () => {
     render(<Harness start={run(noRig(), { type: "set_param", id: "flare", param: "bright", value: 1 })} />);
     await waitFor(() => expect(screen.getByTestId("flare-spot-1")).toBeTruthy());

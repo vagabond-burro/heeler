@@ -196,6 +196,9 @@ export function NormalsRunner({ state, dispatch }: { state: State; dispatch: D }
   const [needModel, setNeedModel] = useState(false);
   const [models, setModels] = useState<SmartModels | null>(null);
   const [downloading, setDownloading] = useState(false);
+  // A model installed anywhere (Preferences as well as this runner's own
+  // card) is the answer this runner waits for, as the depth runners'.
+  useEffect(() => onModelsChanged(() => setNeedModel(false)), []);
   useEffect(() => {
     if (!needModel) return;
     let live = true;
@@ -219,8 +222,11 @@ export function NormalsRunner({ state, dispatch }: { state: State; dispatch: D }
     setBusy(true);
     publishBusy("NORMALS · reading the surfaces");
     void surfaceNormals(state)
-      .then(() => {
+      .then((answer) => {
         done.current[mark] = true;
+        // Only a raster the model just made needs the frame drawn again:
+        // a cached one is already what the render plants.
+        if (answer.work !== "model") return;
         ownPoke.current = { base, nonce: state.previewNonce };
         dispatch({ type: "poke_render" });
       })

@@ -118,7 +118,10 @@ impl Fuji {
             _ => return Err(Error::Unsupported("a Fujifilm raw type not read here")),
         };
         let (b, fh, fw, block, n, lines) = (h[4] as u32, u16be(5), u16be(9), u16be(11), h[13] as usize, u16be(14));
-        if b != bits || fh != height || fw != width || block == 0 || block % 6 != 0 || n == 0 || n * block < width || lines * 6 != height || !(12..=16).contains(&b) {
+        // A block under 18 wide leaves its color lines 8 samples or fewer,
+        // and the lines' pairs never reach their odd samples, so the
+        // decode would never end: no camera writes one so narrow.
+        if b != bits || fh != height || fw != width || block < 18 || block % 6 != 0 || n == 0 || n * block < width || lines * 6 != height || !(12..=16).contains(&b) {
             return Err(Error::Corrupt("a Fujifilm compression header"));
         }
         let pattern = match (xtrans, pattern) {
@@ -582,4 +585,30 @@ pub fn decode(bytes: &[u8], f: &Fuji, rows: usize, stop: Option<&AtomicBool>, pu
     }
     frame.par_chunks(f.width).enumerate().for_each(|(y, row)| put(y, row));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Fuji;
+
+    /// A compression header that says it all fits but has blocks only 6
+    /// wide: the decode of such a block never ends, so it is refused.
+    #[test]
+    fn a_block_too_narrow_to_decode_is_refused() {
+        let header = |block: u16| {
+            let mut h = vec![0u8; 64];
+            h[..4].copy_from_slice(&[b'I', b'S', 1, 0]);
+            h[4] = 14;
+            h[5..7].copy_from_slice(&6u16.to_be_bytes());
+            h[9..11].copy_from_slice(&36u16.to_be_bytes());
+            h[11..13].copy_from_slice(&block.to_be_bytes());
+            h[13] = (36 / block as usize).max(1) as u8;
+            h[14..16].copy_from_slice(&1u16.to_be_bytes());
+            h
+        };
+        for block in [6u16, 12] {
+            let bytes = header(block);
+            assert!(Fuji::read(&bytes, 0, bytes.len(), 36, 6, 14, None).is_err(), "a block of {block}");
+        }
+    }
 }

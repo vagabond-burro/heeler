@@ -21,6 +21,7 @@ import {
   loupeSliceRect,
   loupeSpan,
   loupeWheel,
+  loupeWheelStep,
   navigatorBox,
   overflowsStage,
   panToCenter,
@@ -738,3 +739,29 @@ function mountViewer(s: State) {
   fireEvent.load(img);
   return dispatch;
 }
+
+describe("the Loupe's size on a slow wheel", () => {
+  it("adds up steps too small to move a whole pixel, and starts again from a changed preference", () => {
+    // A trackpad's small deltas: each step alone rounds back to 90.
+    const prefs = { loupeMagnification: 3, loupeRadius: 90 };
+    const small = { kind: "radius" as const, factor: Math.exp(2 * 0.0015) };
+    expect(Math.round(90 * small.factor)).toBe(90);
+    let at = null as ReturnType<typeof loupeWheelStep>["at"] | null;
+    const writes: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      const step = loupeWheelStep(at, { ...prefs, loupeRadius: writes.length ? writes[writes.length - 1] : 90 }, small);
+      at = step.at;
+      if (step.write && "loupeRadius" in step.write) writes.push(step.write.loupeRadius);
+    }
+    expect(writes.length).toBeGreaterThan(0);
+    expect(writes[writes.length - 1]).toBe(Math.round(90 * Math.exp(20 * 2 * 0.0015)));
+    // Set to 200 in Preferences: the wheel goes on from there.
+    const next = loupeWheelStep(at, { ...prefs, loupeRadius: 200 }, { kind: "radius", factor: 1.1 });
+    expect(next.write).toEqual({ loupeRadius: 220 });
+    // Held past the top, it writes nothing more and turns back at once.
+    let top = loupeWheelStep(null, { ...prefs, loupeRadius: 300 }, { kind: "radius", factor: 2 });
+    expect(top.write).toBeNull();
+    top = loupeWheelStep(top.at, { ...prefs, loupeRadius: 300 }, { kind: "radius", factor: 0.9 });
+    expect(top.write).toEqual({ loupeRadius: 270 });
+  });
+});

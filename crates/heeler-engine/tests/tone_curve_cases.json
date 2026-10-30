@@ -2,6 +2,7 @@
   "about": "Custom tone curves checked once for both sides: the engine's ToneCurve::from_json (tone_curve.rs) and the panel's parseToneCurve (toneprofile.ts) must take the same curves and refuse the same ones. A taken curve comes back with its points sorted and its display values held to 0 to 1; points is null where both must refuse it.",
   "cases": [
     {"name": "taken as given", "json": "{\"name\":\"a\",\"interp\":\"smooth\",\"points\":[[-8,0],[0,0.4],[3,1]]}", "interp": "smooth", "points": [[-8, 0], [0, 0.4], [3, 1]]},
+    {"name": "a display value past 32-bit range", "json": "{\"points\":[[0,0],[1,1e39]]}", "points": null},
     {"name": "linear", "json": "{\"interp\":\"linear\",\"points\":[[0,0],[1,1]]}", "interp": "linear", "points": [[0, 0], [1, 1]]},
     {"name": "no interp is smooth", "json": "{\"points\":[[0,0],[1,1]]}", "interp": "smooth", "points": [[0, 0], [1, 1]]},
     {"name": "sorted and held", "json": "{\"points\":[[2,1.5],[-2,-0.1]]}", "interp": "smooth", "points": [[-2, 0], [2, 1]]},

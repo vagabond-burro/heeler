@@ -1613,10 +1613,6 @@ fn develop_is_the_picture(img: &ImageBuf, bytes: &[u8]) -> bool {
     bake::baked_exposure(bytes).is_some() || develop_looks_sane(img)
 }
 
-/// The answer when a develop was turned away as noise and nothing after
-/// it could read the file either: that, rather than the last reader's
-/// complaint (the image crate's TIFF reader on a linear DNG, which says
-/// nothing about why the develop was not used).
 /// The error for a RAW file the develop does not open, said as that: the
 /// camera's embedded JPEG is no stand-in for its develop. None for a
 /// failure that is not about the file (a cancel), which keeps the
@@ -1627,9 +1623,11 @@ fn declined_raw(e: &heeler_raw::RawError) -> Option<IoError> {
         // No container the develop knows: the readers after it, and the
         // file's own preview, answer as they always have.
         heeler_raw::RawError::Unsupported(why) if why == "not a TIFF" || why == "not a DNG" => None,
-        // A format the develop reads, from a camera newer than its table of
-        // color calibrations: about the camera, not the format.
-        heeler_raw::RawError::Unsupported(why) if why == "a camera without calibrations" => Some(IoError::Unsupported("this camera is not supported yet (Heeler has no color calibration for it), so its RAW files cannot be developed".into())),
+        // A format the develop reads, from a camera newer than its tables:
+        // about the camera, not the format. Most formats look up the
+        // camera's frame geometry before its color calibration, so a new
+        // camera is turned away for the first as often as the second.
+        heeler_raw::RawError::Unsupported(why) if why == "a camera without calibrations" || why == "a camera and frame size without geometry" => Some(IoError::Unsupported("this camera is not supported yet (Heeler does not know it yet), so its RAW files cannot be developed".into())),
         heeler_raw::RawError::Unsupported(why) => Some(IoError::Unsupported(format!("this RAW file's format is not supported yet ({why}), so it cannot be developed"))),
         heeler_raw::RawError::Damaged(why) => Some(IoError::Unsupported(format!("this RAW file is damaged ({why}), so it cannot be developed"))),
         _ => None,
@@ -1674,6 +1672,10 @@ fn thumbnail_only(full: (u32, u32), thumb: &ImageBuf, orientation: u16) -> IoErr
     ))
 }
 
+/// The answer when a develop was turned away as noise and nothing after
+/// it could read the file either: that, rather than the last reader's
+/// complaint (the image crate's TIFF reader on a linear DNG, which says
+/// nothing about why the develop was not used).
 fn rejected_develop(size: (usize, usize)) -> IoError {
     IoError::Unsupported(format!(
         "the RAW develop ({} x {}) read as noise rather than a photograph, and the file has no other picture this build can read",
@@ -2757,8 +2759,13 @@ mod tests {
     #[test]
     #[cfg(feature = "raw")]
     fn a_camera_without_calibrations_is_said_to_be_the_camera() {
-        let why = declined_raw(&heeler_raw::RawError::Unsupported("a camera without calibrations".into())).unwrap().to_string();
-        assert!(why.contains("this camera is not supported yet") && why.contains("cannot be developed"), "{why}");
+        // Either table the camera is missing from: most formats find the
+        // frame's geometry first, so a new camera's CR3, RAF, NEF, ORF or
+        // RW2 is turned away there.
+        for missing in ["a camera without calibrations", "a camera and frame size without geometry"] {
+            let why = declined_raw(&heeler_raw::RawError::Unsupported(missing.into())).unwrap().to_string();
+            assert!(why.contains("this camera is not supported yet") && why.contains("cannot be developed"), "{missing}: {why}");
+        }
     }
 
     #[test]

@@ -461,12 +461,12 @@ fn measure_chart(args: &[String]) {
     // luminance is the light every patch received from the rest of the
     // scene. Scored both ways; the same offset for every source.
     let flare_free = std::env::var_os("COLORCHECK_FLARE").is_some();
-    let grey: Vec<usize> = (0..refs.len()).filter(|&i| { let l = lab(refs[i]); (l[1] * l[1] + l[2] * l[2]).sqrt() < 2.0 }).collect();
+    let gray: Vec<usize> = (0..refs.len()).filter(|&i| { let l = lab(refs[i]); (l[1] * l[1] + l[2] * l[2]).sqrt() < 2.0 }).collect();
     let mut flare = [0.0; 3];
     for ch in 0..3 {
-        let n = grey.len() as f64;
-        let (sx, sy) = grey.iter().fold((0.0, 0.0), |(a, b), &i| (a + refs[i][1], b + cam[i][ch]));
-        let (sxx, sxy) = grey.iter().fold((0.0, 0.0), |(a, b), &i| (a + refs[i][1] * refs[i][1], b + refs[i][1] * cam[i][ch]));
+        let n = gray.len() as f64;
+        let (sx, sy) = gray.iter().fold((0.0, 0.0), |(a, b), &i| (a + refs[i][1], b + cam[i][ch]));
+        let (sxx, sxy) = gray.iter().fold((0.0, 0.0), |(a, b), &i| (a + refs[i][1] * refs[i][1], b + refs[i][1] * cam[i][ch]));
         let slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
         flare[ch] = (sy - slope * sx) / n;
     }

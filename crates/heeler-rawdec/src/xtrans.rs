@@ -177,6 +177,20 @@ impl Steps {
     }
 }
 
+/// Whether `p` is a pattern the demosaic can fill: every site has each
+/// color it lacks somewhere in its 5 by 5, which is where red and blue
+/// are taken from. Eight reds, twenty greens and eight blues do not make
+/// sure of it (eight reds in a row and a column leave sites with none
+/// near), and a site with none would divide by a weight of nothing.
+pub fn pattern_reads(p: &[[u8; 6]; 6]) -> bool {
+    let color = |r: isize, c: isize| p[r.rem_euclid(6) as usize][c.rem_euclid(6) as usize];
+    (0..6isize).all(|r| {
+        (0..6isize).all(|c| {
+            (0..3u8).all(|k| k == color(r, c) || (-2isize..=2).any(|y| (-2isize..=2).any(|x| (y, x) != (0, 0) && color(r + y, c + x) == k)))
+        })
+    })
+}
+
 struct Buffers {
     green: Vec<[u16; ND]>,
     rgb: Vec<[[u16; 3]; ND]>,
@@ -321,5 +335,35 @@ fn tile(m: &Mosaic, lab: &Lab, s: &Steps, b: &mut Buffers, y0: usize, y1: usize,
             }
             put(ty + i, tx + j, sum.map(|v| ((v + weight / 2) / weight) as u16));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pattern_reads;
+
+    #[test]
+    fn a_pattern_with_a_site_far_from_a_color_is_not_read() {
+        // Fujifilm's own arrangement: every site has red, green and blue
+        // in its 5 by 5.
+        let (r, g, b) = (0u8, 1u8, 2u8);
+        let fuji = [[g, g, r, g, g, b], [g, g, b, g, g, r], [b, r, g, r, b, g], [g, g, b, g, g, r], [g, g, r, g, g, b], [r, b, g, b, r, g]];
+        assert!(pattern_reads(&fuji));
+        // The same counts, eight reds in the top row and the left column:
+        // the sites in the middle have no red within two of them, and the
+        // demosaic would divide by a weight of nothing.
+        let mut odd = [[g; 6]; 6];
+        for k in 0..6 {
+            odd[0][k] = r;
+        }
+        for row in odd.iter_mut().skip(1).take(2) {
+            row[0] = r;
+        }
+        for (y, x) in [(2, 2), (2, 4), (3, 3), (4, 2), (4, 4), (5, 3), (3, 5), (5, 5)] {
+            odd[y][x] = b;
+        }
+        let count = |c: u8| odd.iter().flatten().filter(|&&v| v == c).count();
+        assert_eq!((count(r), count(g), count(b)), (8, 20, 8));
+        assert!(!pattern_reads(&odd));
     }
 }

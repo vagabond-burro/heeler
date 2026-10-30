@@ -461,12 +461,15 @@ pub(crate) fn seam_ownership(warps: &[Warped], width: usize, height: usize, stop
                 // at all. A side that cuts a hard tie the free cut did not
                 // is no choice; with neither, the free cut stands. (A thin
                 // overlap can hold cells tied hard both ways, which every
-                // cut pays for alike.)
-                let mut best = free.saturating_add(TIE as i64);
+                // cut pays for alike.) The ties a cut pays are its cost's
+                // whole TIEs: every other link of an overlap together costs
+                // far less than one.
+                let ties = free / TIE as i64;
+                let mut best = i64::MAX;
                 for side in [true, false] {
                     let mut g = build(Some(side));
                     let flow = g.max_flow(stop)?;
-                    if flow < best {
+                    if flow / TIE as i64 == ties && flow < best {
                         best = flow;
                         keep = g.source_side();
                     }

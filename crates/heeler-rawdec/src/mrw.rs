@@ -73,6 +73,12 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
     let ascii = |tag| ifd0.get(tag).and_then(|e| t.ascii(&e)).unwrap_or_default();
     let (make, model) = (ascii(271), ascii(272));
     let model_a200 = model == "DiMAGE A200";
+    // Red, green, the other green, blue; the DiMAGE A200's green, blue,
+    // red, the other green (found against LibRaw's multipliers for it,
+    // which its words give in that order exactly). The as-shot neutral is
+    // read from the same order, or the develop's color would take its
+    // calibration and its balance from two different whites.
+    let (r, g, g2, bl) = if model_a200 { (wb[2], wb[0], wb[3], wb[1]) } else { (wb[0], wb[1], wb[2], wb[3]) };
     let geometry = crate::geometry::find(&make, &model, (width as u32, height as u32)).ok_or(Error::Unsupported("a camera and frame size without geometry"))?;
     let white = match geometry.white {
         0 => 4095,
@@ -113,7 +119,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         active: (top, left, top + geometry.height as usize, left + geometry.width as usize),
         default_crop: None,
         default_scale: (1.0, 1.0),
-        as_shot_neutral: Some(vec![wb[1] / wb[0], 1.0, wb[1] / wb[3]]),
+        as_shot_neutral: Some(vec![g / r, 1.0, g / bl]),
         as_shot_white_xy: None,
         color_matrix: [m(&calibration.color_matrix[0]), m(&calibration.color_matrix[1]), None],
         camera_calibration: [None, None, None],
@@ -124,10 +130,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         profile_tables: calibration.tables,
         baseline_exposure: 0.0,
         coding: Coding::Tiff,
-        // Red, green, the other green, blue; the DiMAGE A200's green, blue,
-        // red, the other green (found against LibRaw's multipliers for it,
-        // which its words give in that order exactly).
-        cam_mul: Some(if model_a200 { [wb[2] as f32, wb[0] as f32, wb[1] as f32, wb[3] as f32] } else { [wb[0] as f32, wb[1] as f32, wb[3] as f32, wb[2] as f32] }),
+        cam_mul: Some([r as f32, g as f32, bl as f32, g2 as f32]),
         border_black: false,
     })
 }

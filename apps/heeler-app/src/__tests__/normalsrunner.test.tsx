@@ -57,3 +57,17 @@ it("asks for consent when the model is not installed", async () => {
   await waitFor(() => expect(screen.getByTestId("normals-consent")).toBeInTheDocument());
   expect(screen.getByTestId("normals-consent").textContent).toContain("MoGe-2");
 });
+
+it("a cached answer pokes no render: the raster is already what the render plants", async () => {
+  // A preview refresh from elsewhere asks again (the nonce is in the
+  // mark); its cached answer must not draw the frame a second time.
+  vi.mocked(bridge.surfaceNormals).mockResolvedValue({ version: "v", work: "cached" });
+  const got: Command[] = [];
+  const s = withModel("model");
+  const view = render(<NormalsRunner state={s} dispatch={(c) => got.push(c)} />);
+  await waitFor(() => expect(bridge.surfaceNormals).toHaveBeenCalledTimes(1));
+  const refreshed = reduce(s, { type: "poke_render" });
+  view.rerender(<NormalsRunner state={refreshed} dispatch={(c) => got.push(c)} />);
+  await waitFor(() => expect(bridge.surfaceNormals).toHaveBeenCalledTimes(2));
+  expect(got.filter((c) => c.type === "poke_render")).toHaveLength(0);
+});

@@ -322,6 +322,16 @@ fn with_the_feature_heeler_raw_develops_verified_files_in_rust() {
     heeler_raw::rust_path::set_libraw_color(true);
     assert!(!heeler_raw::rust_path::takes(&bytes, DevelopOpts::default()), "an unverified camera stays on LibRaw");
     heeler_rawdec::set_verified_only(false);
+    // The routing is process-wide: put back even when an assertion below
+    // fails, or the next test in this binary runs routed this way.
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            heeler_raw::rust_path::set_libraw_color(false);
+            heeler_rawdec::set_verified_only(true);
+        }
+    }
+    let _restore = Restore;
     assert!(heeler_raw::rust_path::takes(&bytes, DevelopOpts::default()));
     for (o, lib) in &theirs {
         let rust = heeler_raw::decode_sensor_with(&bytes, *o).unwrap();
@@ -335,10 +345,11 @@ fn with_the_feature_heeler_raw_develops_verified_files_in_rust() {
     assert_eq!(heeler_raw::demosaic_extra_bytes(&bytes), plan.demosaic_extra());
     let stop = AtomicBool::new(true);
     assert!(matches!(heeler_raw::decode_sensor_until(&bytes, DevelopOpts::default(), &stop), Err(heeler_raw::RawError::Cancelled)));
+    // heeler-raw answers a set flag before it routes anywhere, so the
+    // Rust develop's own stop is asked of it directly.
+    assert!(matches!(heeler_rawdec::develop::develop(&bytes, &opts(DevelopOpts::default()), Some(&stop)), Err(heeler_rawdec::Error::Canceled)));
     // A develop the Rust path does not do goes to LibRaw.
     assert!(!heeler_raw::rust_path::takes(&bytes, DevelopOpts { demosaic: 11, ..DevelopOpts::default() }));
-    heeler_raw::rust_path::set_libraw_color(false);
-    heeler_rawdec::set_verified_only(true);
 }
 
 /// The DNG color model, for a shot whose white is the daylight

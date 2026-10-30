@@ -20,7 +20,7 @@ A RAW file Heeler does not read yet still shows in the Library, with the camera'
 - **For High Efficiency NEFs you already have**, convert them to DNG with a converter that reads them, keeping the raw data (not a linear DNG), and open the DNG. Heeler develops the converted file as it develops any camera's DNG. Keep the original NEF.
 - **Or develop them in software that reads them** and export a 16-bit TIFF. Heeler opens it as a finished picture, so the Source section's RAW controls (white balance as shot, highlights) do not apply to it.
 
-**A camera newer than your version of Heeler** may write a format Heeler reads but have no color calibration in it yet. Its files show their thumbnails and say "this camera is not supported yet" on the status line; an update that adds the camera develops them. Converting them to DNG, as above, works in the meantime.
+**A camera newer than your version of Heeler** may write a format Heeler reads but not be known to it yet: its frame size or its color calibration is missing. Its files show their thumbnails and say "this camera is not supported yet" on the status line; an update that adds the camera develops them. Converting them to DNG, as above, works in the meantime.
 
 A few rare older formats do not develop yet either: the Nikon D1X's compressed NEF, the YI action cameras' first DNGs, the FinePix F700's RAF, the GX680 digital back's RAF, the DSC-F828's SRF, the Kodak DC50's KDC, the Minolta RD175's MDC and some action cameras' .RAW files. A damaged file says that it is damaged instead.
 

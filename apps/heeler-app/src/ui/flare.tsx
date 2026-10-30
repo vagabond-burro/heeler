@@ -265,19 +265,28 @@ export function FlareSpotsRunner({ state, dispatch }: { state: State; dispatch: 
     if (!mark || state.gesture !== null || asked.current === mark) return;
     const image = state.activeImage;
     let live = true;
+    let waiting = 0;
     const t = setTimeout(() => {
       asked.current = mark;
       for (const id of ids.split(",")) {
+        waiting += 1;
         void flareSpots(latest.current, id)
           .then((found) => {
             if (live) dispatch({ type: "flare_spots_found", id, image, spots: writeSpots(found) });
           })
-          .catch((err) => reportToolError("Lens Flare", err));
+          .catch((err) => reportToolError("Lens Flare", err))
+          .finally(() => {
+            waiting -= 1;
+          });
       }
     }, 120);
     return () => {
       live = false;
       clearTimeout(t);
+      // An answer still on its way is dropped (a gesture began, or the
+      // recipe moved on); for the same recipe the next run asks again
+      // rather than taking the question as answered.
+      if (waiting > 0 && asked.current === mark) asked.current = "";
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mark, state.gesture]);

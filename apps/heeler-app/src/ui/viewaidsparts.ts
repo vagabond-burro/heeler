@@ -33,6 +33,38 @@ export const clampNavigatorSize = (v: unknown) => Math.round(clampTo(v, NAVIGATO
 export const clampLoupeMag = (v: unknown) => clampTo(v, LOUPE_MAG_RANGE, 3);
 export const clampLoupeRadius = (v: unknown) => Math.round(clampTo(v, LOUPE_RADIUS_RANGE, 90));
 
+/** Where the wheel left the Loupe, unrounded, and the preferences it
+ * last wrote (`magSeen`, `radiusSeen`). */
+export type LoupeWheelAt = { mag: number; radius: number; magSeen: number; radiusSeen: number };
+
+/** One wheel step on the Loupe: its new place, and the preference to
+ * write, or none when the rounded value has not moved. The size is kept
+ * to whole pixels, so it is carried unrounded between steps: each small
+ * trackpad step rounded back to where it began, and a slow scroll never
+ * resized the Loupe. A preference changed some other way since the wheel
+ * last wrote it is where the wheel starts from. */
+export function loupeWheelStep(
+  was: LoupeWheelAt | null,
+  prefs: { loupeMagnification: number; loupeRadius: number },
+  op: { kind: "mag" | "radius"; factor: number },
+): { at: LoupeWheelAt; write: { loupeMagnification: number } | { loupeRadius: number } | null } {
+  const { loupeMagnification: magPref, loupeRadius: radiusPref } = prefs;
+  let at = was ?? { mag: magPref, radius: radiusPref, magSeen: magPref, radiusSeen: radiusPref };
+  if (magPref !== at.magSeen) at = { ...at, mag: magPref, magSeen: magPref };
+  if (radiusPref !== at.radiusSeen) at = { ...at, radius: radiusPref, radiusSeen: radiusPref };
+  if (op.kind === "mag") {
+    const mag = clampLoupeMag(at.mag * op.factor);
+    const moved = mag !== at.magSeen;
+    return { at: { ...at, mag, magSeen: mag }, write: moved ? { loupeMagnification: mag } : null };
+  }
+  // Unrounded, but inside the range, so a wheel held past an end turns
+  // back at once.
+  const radius = Math.min(Math.max(at.radius * op.factor, LOUPE_RADIUS_RANGE[0]), LOUPE_RADIUS_RANGE[1]);
+  const shown = clampLoupeRadius(radius);
+  const moved = shown !== at.radiusSeen;
+  return { at: { ...at, radius, radiusSeen: shown }, write: moved ? { loupeRadius: shown } : null };
+}
+
 /** The view as the stage lays it out: the frame's box before the
  * transform's scale (`base`), the scale, the pan from the stage's
  * center and the view rotation, the same terms the stage's transform

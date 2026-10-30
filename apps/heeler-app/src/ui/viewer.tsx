@@ -72,7 +72,7 @@ import { maskOfLayer } from "../layerids";
 import { HoverSampler } from "../hoversampler";
 import { CURVE_PICK_REACH, layoutSplit, oneToOneBox, snapToDevice, visibleRoi, zoomSegActive } from "./viewerparts";
 import { Loupe, Navigator, ViewAidButtons } from "./viewaids";
-import { clampLoupeMag, clampLoupeRadius, loupeWheel, type StageView } from "./viewaidsparts";
+import { loupeWheel, loupeWheelStep, type LoupeWheelAt, type StageView } from "./viewaidsparts";
 
 /** sRGB encode, matching the engine's to_display: the curve editor's
  * axis is display space, samples arrive scene-linear. */
@@ -1174,6 +1174,9 @@ export function Viewer({
   // Space-drag pans, same as Canvas: the pan a touchpad can reach.
   // Capture-phase on the stage, so a held space preempts the tools.
   const spacePan = useSpacePan((dx, dy) => dispatch({ type: "pan_viewer", dx, dy }));
+  // The Loupe as the wheel last left it, unrounded (loupeWheelStep);
+  // several events between renders would otherwise read one stale size.
+  const loupeWheelAt = useRef<LoupeWheelAt | null>(null);
   const navRef = useViewportNav<HTMLDivElement>({
     onZoom: (factor, cx, cy) => dispatch({ type: "zoom_viewer", factor, cx, cy, unit: oneToOneScale ?? undefined }),
     onPan: (dx, dy) => dispatch({ type: "pan_viewer", dx, dy }),
@@ -1189,11 +1192,11 @@ export function Viewer({
       ? (e) => {
           const op = loupeWheel(e, isMac(), state.prefs.viewerZoomRate, state.prefs.wheelZoomInverted);
           if (!op) return false;
-          const key = op.kind === "mag" ? "loupeMagnification" : "loupeRadius";
-          const next = op.kind === "mag" ? clampLoupeMag(state.prefs.loupeMagnification * op.factor) : clampLoupeRadius(state.prefs.loupeRadius * op.factor);
+          const step = loupeWheelStep(loupeWheelAt.current, state.prefs, op);
+          loupeWheelAt.current = step.at;
           // A wheel held at either end still claims the gesture, but an
           // unchanged preference must not rerender and schedule a save.
-          if (next !== state.prefs[key]) dispatch({ type: "set_prefs", prefs: { [key]: next } });
+          if (step.write) dispatch({ type: "set_prefs", prefs: step.write });
           return true;
         }
       : undefined,
@@ -4241,7 +4244,7 @@ softness it was pretending not to be related to.*/}
                 truePct={truePct}
                 frameWidth={knownFrame ? knownFrame[0] : null}
                 filter={filter}
-                requestSlice={(rect, token) => renderRoi(state, rect, token).then((p) => (p ? { url: p.url, rect: p.rect } : null))}
+                requestSlice={(rect, token) => renderRoi(state, rect, token, "loupe").then((p) => (p ? { url: p.url, rect: p.rect } : null))}
                 cancelSlice={(token) => void cancelRender(token)}
                 sliceOn={isTauri() && !state.gesture && !state.compare && state.lookPreview === null}
                 sliceKey={`${state.activeImage}|${state.renderVersion}|${state.previewNonce}|${currentMask ?? ""}|${currentLook}`}

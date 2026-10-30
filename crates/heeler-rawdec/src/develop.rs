@@ -135,7 +135,7 @@ impl Plan {
             // Eight reds, twenty greens and eight blues.
             let mut n = [0; 3];
             x.iter().flatten().for_each(|&c| n[c.min(2) as usize] += 1);
-            if x.iter().flatten().any(|&c| c > 2) || n != [8, 20, 8] {
+            if x.iter().flatten().any(|&c| c > 2) || n != [8, 20, 8] || !crate::xtrans::pattern_reads(x) {
                 return Err(Error::Unsupported("not an X-Trans arrangement"));
             }
         } else if count != [1, 2, 1] || pattern[0][0] == pattern[0][1] || pattern[0][0] == pattern[1][0] {
@@ -374,7 +374,7 @@ impl Plan {
             if self.flip & 4 != 0 { (w * 2, h) } else { (w, h * 2) }
         } else if self.dng.default_scale == crate::kodak::DC120_SCALE {
             let (num, den) = crate::kodak::DC120_WIDEN;
-            ((w * num + den / 2) / den, h)
+            if self.flip & 4 != 0 { (w, (h * num + den / 2) / den) } else { ((w * num + den / 2) / den, h) }
         } else {
             (w, h)
         }
@@ -1558,19 +1558,31 @@ fn twice(img: Image, turned: bool) -> Result<Image, Error> {
 /// column, no blending: den over num (in double precision) summed once a
 /// column from 0, the sum's whole part (the running sum's rounding, not
 /// the product's, decides the columns where the ratio lands on a whole
-/// number).
-fn widen(img: Image, (num, den): (usize, usize)) -> Result<Image, Error> {
-    let width = (img.width * num + den / 2) / den;
+/// number). Where the develop turned the image a quarter, the pixels'
+/// narrow side runs down it, and the rows are widened that way instead.
+fn widen(img: Image, (num, den): (usize, usize), turned: bool) -> Result<Image, Error> {
+    let along = |n: usize| -> Vec<usize> {
+        let out = (n * num + den / 2) / den;
+        let step = den as f64 / num as f64;
+        let mut sum = 0.0f64;
+        (0..out)
+            .map(|_| {
+                let s = (sum as usize).min(n - 1);
+                sum += step;
+                s
+            })
+            .collect()
+    };
+    if turned {
+        let rows = along(img.height);
+        let row = img.width * 3;
+        let mut rgb = memory::vector(row * rows.len(), 0u16, "RAW stretched image")?;
+        rgb.par_chunks_mut(row).zip(rows.par_iter()).for_each(|(out, &s)| out.copy_from_slice(&img.rgb[s * row..s * row + row]));
+        return Ok(Image { height: rows.len(), rgb, ..img });
+    }
+    let columns = along(img.width);
+    let width = columns.len();
     let mut rgb = memory::vector(width * img.height * 3, 0u16, "RAW stretched image")?;
-    let step = den as f64 / num as f64;
-    let mut sum = 0.0f64;
-    let columns: Vec<usize> = (0..width)
-        .map(|_| {
-            let s = (sum as usize).min(img.width - 1);
-            sum += step;
-            s
-        })
-        .collect();
     rgb.par_chunks_mut(width * 3).zip(img.rgb.par_chunks(img.width * 3)).for_each(|(out, row)| {
         for (px, &s) in out.chunks_exact_mut(3).zip(&columns) {
             px.copy_from_slice(&row[s * 3..s * 3 + 3]);
@@ -1621,7 +1633,7 @@ fn develop_plan(bytes: &[u8], p: &Plan, opts: &Opts, stop: Option<&AtomicBool>, 
     let img = if p.dng.default_scale == (1.0, 2.0) {
         twice(img, p.flip & 4 != 0)?
     } else if p.dng.default_scale == crate::kodak::DC120_SCALE {
-        widen(img, crate::kodak::DC120_WIDEN)?
+        widen(img, crate::kodak::DC120_WIDEN, p.flip & 4 != 0)?
     } else {
         img
     };
@@ -2032,4 +2044,26 @@ fn full(cfa: &[u16], p: &Plan, n: &Numbers, stop: Option<&AtomicBool>) -> Result
         ahd::demosaic(&Mosaic { data: cfa, width: w, height: h, pattern: p.pattern }, &lab, stop, &put)?;
     }
     Ok(Image { width: ow, height: oh, rgb, headroom: 1.0 })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{widen, Image};
+
+    /// The DC120's narrow pixels are widened across the picture as it
+    /// stands; turned a quarter, their narrow side runs down it, and the
+    /// rows are what grow.
+    #[test]
+    fn a_turned_dc120_frame_is_widened_down_its_rows() {
+        let img = |w: usize, h: usize| Image { width: w, height: h, rgb: (0..w * h * 3).map(|v| v as u16).collect(), headroom: 1.0 };
+        let flat = widen(img(159, 4), crate::kodak::DC120_WIDEN, false).unwrap();
+        assert_eq!((flat.width, flat.height), (244, 4));
+        let turned = widen(img(4, 159), crate::kodak::DC120_WIDEN, true).unwrap();
+        assert_eq!((turned.width, turned.height), (4, 244));
+        // Each row of the turned image is a whole source row.
+        let row = 4 * 3;
+        for out in turned.rgb.chunks(row) {
+            assert_eq!(out[0] as usize % row, 0);
+        }
+    }
 }

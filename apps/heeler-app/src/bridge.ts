@@ -4602,6 +4602,9 @@ export async function renderRoi(
   state: State,
   rect: [number, number, number, number],
   cancelToken?: string,
+  /** The frame slot its URL is kept in: the Loupe's slices keep their
+   * own, or two of them would revoke the 1:1 patch's URL under it. */
+  slot = "roi",
 ): Promise<ViewState["roiPatch"] | null> {
   if (!isTauri()) return null;
   // The same view selector renderPreview uses: at 1:1 the sharp patch
@@ -4628,7 +4631,7 @@ export async function renderRoi(
     logDebug(() => `envelope: ${meta.image_id} ${meta.mime} ${bytes.length}b ${meta.ms}ms ${meta.backend}${meta.roi ? ` roi=[${meta.roi.join(",")}]` : ""}`);
     if (!meta.roi || !meta.frame) return null;
     return {
-      url: frameUrl("roi", meta, bytes),
+      url: frameUrl(slot, meta, bytes),
       rect: meta.roi,
       frame: meta.frame,
       imageId: meta.image_id,
