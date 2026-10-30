@@ -99,7 +99,10 @@ describe("an export under the progress dialog", () => {
     const done = watchExport("Exporting DSC00114", () => new Promise<string>((r) => (land = r)));
     await report(7999, 8000, "Rendering and writing the file");
     await wait(BAKE_DIALOG_DELAY_MS + 50);
-    fireEvent.click(screen.getByTestId("bake-dialog-cancel"));
+    // No report follows the wait, so the dialog comes up on its own timer,
+    // which a busy machine runs late (a Linux run): wait for it rather
+    // than expect it on the dot.
+    fireEvent.click(await screen.findByTestId("bake-dialog-cancel", undefined, { timeout: 5000 }));
     await act(async () => land("/out/DSC00114.jpg"));
     expect(await done).toBe("/out/DSC00114.jpg");
     expect(screen.queryByTestId("bake-dialog")).toBeNull();
