@@ -15,20 +15,13 @@ import { isPrimaryPress } from "./pointerguard";
 import { TrackSlider } from "./track";
 import { TrashIcon } from "./takeicons";
 import { usePickSessions } from "../picksession";
-import { MAX_PAIRS, PAIR_PICK_NOISE, type RecolorPair, arc, pairAfter, pairPickFloor, parsePairs, wrap } from "./recolorpairsparts";
+import { MAX_PAIRS, PAIR_PICK_NOISE, type PairReach, type PairView, type RecolorPair, arc, hueCss, pairAfter, pairPickFloor, pairReach, pairView, parsePairs, wrap } from "./recolorpairsparts";
 import { flashStatus } from "./hints";
 
 type D = (c: Command) => void;
-/** The scope's outer ring, in OkLab chroma, a pair's own: the more
- * colorful of its two picks sits this share of the way out, so the colors
- * fill the wheel instead of huddling at the middle (2026-10-19: "The
- * circles don't move far off of origin"), with room left for Balance to
- * carry one out by its whole half again. Set by the picks, not by where the
- * dials move them, so the wheel holds still under a drag. */
-const SCOPE_FILL = 0.6;
-/** The least outer ring, so two nearly gray picks still read apart. */
-const SCOPE_C_MIN = 0.04;
-const scopeChroma = (pair: RecolorPair) => Math.max(SCOPE_C_MIN, Math.max(pair.a.c, pair.b.c) / SCOPE_FILL);
+/** Below this linear luminance a pick's ring is drawn in its hue, not its
+ * own color, which would vanish against the panel. */
+const RING_DARK = 0.02;
 /** How far from a ring's center a press still picks it up, in pixels. */
 const HANDLE_REACH = 11;
 /** How far a pick reads around the click, a share of the short side. */
@@ -111,10 +104,30 @@ export function RecolorPairLayer({ state, dispatch, view }: { state: State; disp
 
 const css = (rgb: [number, number, number]) => `rgb(${linearToSrgb255(rgb[0], rgb[1], rgb[2]).join(",")})`;
 
-/** The vectorscope of one pair: the hue circle with each color where it
- * was picked (filled) and where the pair moves it (ringed). Drag a ring
- * around the circle to set the separation, in or out to set the
- * balance. */
+/** An arc of the scope at chroma `c`, from hue `h0` to `h1`, as path
+ * points (the first a move). */
+function arcPath(view: PairView, h0: number, h1: number, c: number, first = "M"): string {
+  const n = Math.max(2, Math.ceil(Math.abs(h1 - h0) / 4));
+  let d = "";
+  for (let i = 0; i <= n; i++) {
+    const [x, y] = view.toXY(h0 + ((h1 - h0) * i) / n, c);
+    d += `${i ? "L" : first}${x.toFixed(1)},${y.toFixed(1)}`;
+  }
+  return d;
+}
+
+/** One color's reach on the scope: the band it can be moved within. */
+function bandPath(view: PairView, r: PairReach): string {
+  const outer = arcPath(view, r.h0, r.h1, r.c1);
+  const [x, y] = view.toXY(r.h1, r.c0);
+  return `${outer}L${x.toFixed(1)},${y.toFixed(1)}${arcPath(view, r.h1, r.h0, r.c0, "L")}Z`;
+}
+
+/** The vectorscope of one pair: the slice of the hue circle the pair can
+ * reach, turned so its middle hue points up (see pairView), with each
+ * color where it was picked (filled), where the pair moves it (ringed)
+ * and the band it can be moved within (shaded). Drag a ring around the
+ * fan to set the separation, in or out to set the balance. */
 function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
   pair: RecolorPair;
   size: number;
@@ -123,13 +136,9 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
   onEnd: () => void;
   index: number;
 }) {
-  const r = size / 2 - 5;
-  const scopeC = scopeChroma(pair);
-  const at = (h: number, c: number) => {
-    const rad = (h * Math.PI) / 180;
-    const k = Math.min(1, c / scopeC) * r;
-    return [size / 2 + k * Math.cos(rad), size / 2 - k * Math.sin(rad)];
-  };
+  const view = pairView(pair, size);
+  const reach = pairReach(pair);
+  const at = (h: number, c: number) => view.toXY(h, Math.min(c, view.cmax));
   const after = pairAfter(pair);
   const drag = useRef<"a" | "b" | null>(null);
   const [a2x, a2y] = at(after.a.h, after.a.c);
@@ -155,10 +164,7 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
     const which = drag.current;
     if (!which) return;
     const [x, y] = local(e);
-    const dx = x - size / 2;
-    const dy = size / 2 - y;
-    const h = wrap((Math.atan2(dy, dx) * 180) / Math.PI);
-    const c = (Math.hypot(dx, dy) / r) * scopeC;
+    const { h, c } = view.fromXY(x, y);
     // Invert the same windowed arithmetic the rings draw. Overlapping
     // windows and the meeting limit make the old independent turns and
     // chroma ratios ambiguous; keep the closest current dial on a tie.
@@ -203,14 +209,49 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
       onLostPointerCapture={finish}
       onPointerLeave={finish}
     >
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line-4)" />
-      <circle cx={size / 2} cy={size / 2} r={r / 2} fill="none" stroke="var(--line-2)" strokeDasharray="2 3" />
+      {(() => {
+        // The fan's outline, its half-chroma guide, and a rim in the hues
+        // it spans, so which way round is which color reads at a glance.
+        const lo = view.mid - view.half, hi = view.mid + view.half;
+        const whole = view.half >= 180;
+        const [ox, oy] = view.origin;
+        const rim = [];
+        for (let h = lo; h < hi - 1e-6; h += 6) {
+          rim.push(<path key={h} d={arcPath(view, h, Math.min(hi, h + 6), view.cmax)} stroke={hueCss(h)} strokeWidth={2.5} strokeOpacity={0.7} fill="none" />);
+        }
+        return (
+          <g data-testid={`recolor-pair-fan-${index}`} data-half={view.half.toFixed(1)} style={{ pointerEvents: "none" }}>
+            <path d={`${arcPath(view, lo, hi, view.cmax)}${whole ? "Z" : `L${ox.toFixed(1)},${oy.toFixed(1)}Z`}`} fill="none" stroke="var(--line-4)" />
+            <path d={arcPath(view, lo, hi, view.cmax / 2)} fill="none" stroke="var(--line-2)" strokeDasharray="2 3" />
+            {rim}
+            <circle cx={ox} cy={oy} r={1.5} fill="var(--text-ghost)" />
+            {(["a", "b"] as const).map((which) => (
+              <path
+                key={which}
+                data-testid={`recolor-pair-reach-${index}-${which}`}
+                d={bandPath(view, reach[which])}
+                fill={hueCss(pair[which].h)}
+                fillOpacity={0.22}
+                stroke={hueCss(pair[which].h)}
+                strokeOpacity={0.55}
+                strokeWidth={0.8}
+              />
+            ))}
+          </g>
+        );
+      })()}
       {(() => {
         const [ax, ay] = at(pair.a.h, pair.a.c);
         const [bx, by] = at(pair.b.h, pair.b.c);
         // The ring as drawn, and under it a wider clear circle that takes
         // the press; the scope's own handler picks the nearer ring.
-        const ring = (which: "a" | "b", x: number, y: number, rgb: [number, number, number]) => (
+        // A pick too dark to see against the panel rings in its hue,
+        // lifted to a readable lightness, as its band is drawn.
+        const ringColor = (which: "a" | "b") => {
+          const [r, g, b] = pair[which].rgb;
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b < RING_DARK ? hueCss(pair[which].h) : css(pair[which].rgb);
+        };
+        const ring = (which: "a" | "b", x: number, y: number) => (
           <g key={which}>
             <circle
               cx={x}
@@ -225,7 +266,7 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
               cy={y}
               r={4.5}
               fill="none"
-              stroke={css(rgb)}
+              stroke={ringColor(which)}
               strokeWidth={1.6}
               style={{ cursor: "grab", pointerEvents: "none" }}
               data-testid={`recolor-pair-handle-${index}-${which}`}
@@ -238,8 +279,8 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
             <line x1={a2x} y1={a2y} x2={b2x} y2={b2y} stroke="var(--accent)" />
             <circle cx={ax} cy={ay} r={2.5} fill={css(pair.a.rgb)} />
             <circle cx={bx} cy={by} r={2.5} fill={css(pair.b.rgb)} />
-            {ring("a", a2x, a2y, pair.a.rgb)}
-            {ring("b", b2x, b2y, pair.b.rgb)}
+            {ring("a", a2x, a2y)}
+            {ring("b", b2x, b2y)}
           </>
         );
       })()}
@@ -248,8 +289,11 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
 }
 
 /** One dial of a pair, -100 to 100 (or Width's 5 to 90). */
-function PairDial({ label, value, min, max, hint, testid, onChange, onBegin, onEnd }: {
+function PairDial({ label, value, min, max, hint, testid, onChange, onBegin, onEnd, ends }: {
   label: string;
+  /** Swatches at the slider's two ends, low then high, for a dial that
+   * moves toward one color or the other. */
+  ends?: [string, string];
   value: number;
   min: number;
   max: number;
@@ -262,6 +306,7 @@ function PairDial({ label, value, min, max, hint, testid, onChange, onBegin, onE
   return (
     <div className="srow" style={{ display: "flex", alignItems: "center", gap: 6 }} data-hint={hint}>
       <span className="lbl" style={{ width: 66, flexShrink: 0 }}>{label}</span>
+      {ends && <span data-testid={`${testid}-low`} style={{ width: 7, height: 7, flexShrink: 0, background: ends[0], border: "1px solid var(--line-4)" }} />}
       <div style={{ flex: 1, minWidth: 0 }}>
         <TrackSlider
           label={label}
@@ -276,6 +321,7 @@ function PairDial({ label, value, min, max, hint, testid, onChange, onBegin, onE
           onEnd={onEnd}
         />
       </div>
+      {ends && <span data-testid={`${testid}-high`} style={{ width: 7, height: 7, flexShrink: 0, background: ends[1], border: "1px solid var(--line-4)" }} />}
       <span className="val" style={{ width: 30 }}>{value}</span>
     </div>
   );
@@ -375,7 +421,7 @@ export function RecolorPairs({ state, node, dispatch, width }: { state: State; n
                 <PairScope pair={p} size={Math.min(96, Math.max(72, width / 3.4))} index={i} onChange={(patch) => set(i, patch)} onBegin={() => begin(i)} onEnd={end} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <PairDial label="Separation" value={p.sep} min={-100} max={100} testid={`recolor-pair-sep-${i}`} hint="Turn the two hues apart, or toward each other" onChange={(v) => set(i, { sep: v })} onBegin={() => begin(i)} onEnd={end} />
-                  <PairDial label="Balance" value={p.sat} min={-100} max={100} testid={`recolor-pair-sat-${i}`} hint="Move saturation toward the first color, or the second" onChange={(v) => set(i, { sat: v })} onBegin={() => begin(i)} onEnd={end} />
+                  <PairDial label="Balance" value={p.sat} min={-100} max={100} testid={`recolor-pair-sat-${i}`} hint="Move saturation toward the first color (right), or the second (left)" ends={[css(p.b.rgb), css(p.a.rgb)]} onChange={(v) => set(i, { sat: v })} onBegin={() => begin(i)} onEnd={end} />
                   <PairDial label="Contrast" value={p.lum} min={-100} max={100} testid={`recolor-pair-lum-${i}`} hint="Widen the brightness gap between them, or narrow it" onChange={(v) => set(i, { lum: v })} onBegin={() => begin(i)} onEnd={end} />
                   <PairDial label="Width" value={p.width} min={5} max={90} testid={`recolor-pair-width-${i}`} hint="How far around each picked hue counts as that color, in degrees" onChange={(v) => set(i, { width: v })} onBegin={() => begin(i)} onEnd={end} />
                 </div>

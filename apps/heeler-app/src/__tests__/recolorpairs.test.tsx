@@ -13,7 +13,7 @@ import { initialState } from "../data";
 import { anyPickerArmed, reduce, toolNode, type Command, type State } from "../state";
 import { IDENTITY_VIEW } from "../ui/overlaysparts";
 import { RecolorPairLayer, RecolorPairs } from "../ui/recolorpairs";
-import { PAIR_PICK_NOISE, pairAfter, pairPickFloor, pairTurn, parsePairs, type RecolorPair } from "../ui/recolorpairsparts";
+import { PAIR_PICK_NOISE, hueCss, pairAfter, pairPickFloor, pairReach, pairTurn, pairView, parsePairs, type RecolorPair } from "../ui/recolorpairsparts";
 import { _clearFlashForTests, currentFlash } from "../ui/hints";
 import { guardGate } from "../eqcurve";
 
@@ -88,10 +88,8 @@ describe("Recolor pairs", () => {
     const stayed = parsePairs(s.nodes.find((n) => n.id === id)!.textParams?.pairs)[0];
     expect(stayed.sep).toBe(-100);
     expect(stayed.sat).toBe(0);
-    // The wheel is the pair's own: its more colorful pick (0.12) sits 0.6
-    // of the way out, so 0.12 is at 0.6 of the radius.
-    const size = 320 / 3.4, r = size / 2 - 5, rad = 95 * Math.PI / 180;
-    fireEvent(svg, new MouseEvent("pointermove", { bubbles: true, clientX: size / 2 + r * 0.6 * Math.cos(rad), clientY: size / 2 - r * 0.6 * Math.sin(rad) }));
+    const [tx, ty] = pairView(pair(100, 80, { sep: -100 }), 320 / 3.4).toXY(95, 0.12);
+    fireEvent(svg, new MouseEvent("pointermove", { bubbles: true, clientX: tx, clientY: ty }));
     const moved = pairAfter(parsePairs(s.nodes.find((n) => n.id === id)!.textParams?.pairs)[0]);
     expect(Math.abs(moved.a.h - 95)).toBeLessThan(0.1);
     expect(moved.a.c).toBeCloseTo(0.12, 5);
@@ -222,13 +220,15 @@ describe("Recolor pairs", () => {
     s = run(s, { type: "set_text_param", id, param: "pairs", value: JSON.stringify([quiet]) });
     render(<RecolorPairs state={s} node={s.nodes.find((n) => n.id === id)!} dispatch={() => {}} width={320} />);
     fireEvent.click(screen.getByTestId("recolor-pairs-toggle"));
-    const size = 320 / 3.4, r = size / 2 - 5;
+    const view = pairView(quiet, 320 / 3.4);
     const out = (which: "a" | "b") => {
       const h = screen.getByTestId(`recolor-pair-handle-0-${which}`);
-      return Math.hypot(Number(h.getAttribute("cx")) - size / 2, Number(h.getAttribute("cy")) - size / 2) / r;
+      return Math.hypot(Number(h.getAttribute("cx")) - view.origin[0], Number(h.getAttribute("cy")) - view.origin[1]) / view.scale;
     };
-    expect(out("a")).toBeCloseTo(0.6, 2);
-    expect(out("b")).toBeCloseTo(0.4, 2);
+    // The rim is the pair's own: Balance's whole reach, and a little room.
+    expect(out("a")).toBeCloseTo(0.06 / view.cmax, 2);
+    expect(out("a")).toBeGreaterThan(0.6);
+    expect(out("b")).toBeCloseTo(0.04 / view.cmax, 2);
     // The rings are the slimmer size.
     expect(screen.getByTestId("recolor-pair-handle-0-a").getAttribute("r")).toBe("4.5");
     // The dials' names and numbers wear the slider rows' classes.
@@ -356,9 +356,8 @@ describe("the pair scope's handles", () => {
     const { svg, at, cmds } = scope(pair(100, 110, { width: 5 }));
     const [ax, ay] = at("a");
     const [bx, by] = at("b");
-    const size = 320 / 3.4, r = size / 2 - 5;
-    // Drag to hue 70 at the picks' chroma (0.6 of the radius).
-    const to = (h: number) => [size / 2 + r * 0.6 * Math.cos((h * Math.PI) / 180), size / 2 - r * 0.6 * Math.sin((h * Math.PI) / 180)];
+    // Drag to hue 70 at the picks' chroma.
+    const to = (h: number) => pairView(pair(100, 110, { width: 5 }), 320 / 3.4).toXY(h, 0.12);
     const drag = (fromX: number, fromY: number) => {
       fireEvent(svg, new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: fromX, clientY: fromY }));
       const [tx, ty] = to(70);
@@ -399,12 +398,11 @@ describe("the pair scope's handles", () => {
 
   it("uses SVG coordinates when the scope is scaled", () => {
     const { svg, at, cmds } = scope(pair(100, 20));
-    const size = 320 / 3.4, r = size / 2 - 5;
+    const size = 320 / 3.4;
     svg.getBoundingClientRect = () => ({ left: 20, top: 10, width: size * 2, height: size * 2 } as DOMRect);
     const [ax, ay] = at("a");
     fireEvent(svg, new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 20 + ax * 2, clientY: 10 + ay * 2 }));
-    const tx = size / 2 + r * 0.6 * Math.cos(70 * Math.PI / 180);
-    const ty = size / 2 - r * 0.6 * Math.sin(70 * Math.PI / 180);
+    const [tx, ty] = pairView(pair(100, 20), size).toXY(70, 0.12);
     fireEvent(svg, new MouseEvent("pointermove", { bubbles: true, clientX: 20 + tx * 2, clientY: 10 + ty * 2 }));
     fireEvent(svg, new MouseEvent("pointerup", { bubbles: true }));
     const set = cmds.filter((c) => c.type === "set_text_param").pop() as Extract<Command, { type: "set_text_param" }>;
@@ -419,5 +417,112 @@ describe("the pair scope's handles", () => {
     const [x, y] = at("a");
     expect(svg.style.overflow).toBe("visible");
     expect(press(x + 10, y), "the reach outside the SVG's bounds").toBe(true);
+  });
+});
+
+// 2026-11: "It's not clear the allowed range you can adjust in until
+// you've dragged the second point around", and "approximately 75% is not
+// usable space".
+describe("the pair scope's fan", () => {
+  const SIZE = 320 / 3.4;
+
+  it("knows how far each color can go, from the dials' ends", () => {
+    const p = pair(200, 100);
+    const reach = pairReach(p);
+    // Far apart: each turns its whole 30 degrees either way, and Balance
+    // takes its chroma from half to one and a half.
+    expect(reach.a.h0).toBeCloseTo(170, 5);
+    expect(reach.a.h1).toBeCloseTo(230, 5);
+    expect(reach.b.h0).toBeCloseTo(70, 5);
+    expect(reach.b.h1).toBeCloseTo(130, 5);
+    expect(reach.a.c0).toBeCloseTo(0.06, 5);
+    expect(reach.a.c1).toBeCloseTo(0.18, 5);
+    // Close together: pulled in, they stop where they meet.
+    const near = pairReach(pair(100, 110, { width: 5 }));
+    expect(near.a.h1).toBeCloseTo(105, 5);
+    expect(near.b.h0).toBeCloseTo(105, 5);
+    // A band across 0 degrees stays whole.
+    const wrapped = pairReach(pair(10, 250));
+    expect(wrapped.a.h1 - wrapped.a.h0).toBeCloseTo(60, 5);
+    // Every point the dials can reach lies in the band.
+    for (const sep of [-100, -40, 0, 60, 100]) {
+      for (const sat of [-100, 0, 100]) {
+        const after = pairAfter({ ...p, sep, sat });
+        expect(after.a.h).toBeGreaterThanOrEqual(reach.a.h0 - 1e-9);
+        expect(after.a.h).toBeLessThanOrEqual(reach.a.h1 + 1e-9);
+        expect(after.a.c).toBeGreaterThanOrEqual(reach.a.c0 - 1e-9);
+        expect(after.a.c).toBeLessThanOrEqual(reach.a.c1 + 1e-9);
+      }
+    }
+  });
+
+  it("turns the pair's middle hue up and fits the slice the pair can reach", () => {
+    const view = pairView(pair(100, 110, { width: 5 }), SIZE);
+    expect(view.mid).toBeCloseTo(105, 5);
+    // Both bands and a margin: far less than the whole circle.
+    expect(view.half).toBeLessThan(60);
+    const [mx, my] = view.toXY(view.mid, view.cmax);
+    expect(mx).toBeCloseTo(view.origin[0], 5);
+    expect(my).toBeLessThan(view.origin[1]);
+    // The gray center sits at the foot, and the fan is drawn larger than
+    // the old whole wheel's radius.
+    expect(view.origin[1]).toBeGreaterThan(SIZE * 0.75);
+    expect(view.scale).toBeGreaterThan(SIZE / 2 - 5);
+    // Everything in the fan is inside the box.
+    for (const h of [view.mid - view.half, view.mid, view.mid + view.half]) {
+      const [x, y] = view.toXY(h, view.cmax);
+      expect(x).toBeGreaterThanOrEqual(-1e-6);
+      expect(x).toBeLessThanOrEqual(SIZE + 1e-6);
+      expect(y).toBeGreaterThanOrEqual(-1e-6);
+      expect(y).toBeLessThanOrEqual(SIZE + 1e-6);
+    }
+  });
+
+  it("never opens past a little over half the circle, and reads back what it draws", () => {
+    // Pushed apart, the colors stop at opposite sides: no band reaches
+    // past a quarter turn from the middle hue, whatever the picks.
+    for (const b of [180, 150, 120, 90, 30]) {
+      expect(pairView(pair(0, b), SIZE).half, `picks ${b} degrees apart`).toBeLessThanOrEqual(98 + 1e-9);
+    }
+    const far = pairView(pair(0, 180), SIZE);
+    expect(far.half).toBeCloseTo(98, 5);
+    for (const view of [far, pairView(pair(100, 110), SIZE), pairView(pair(350, 20), SIZE)]) {
+      for (const [h, c] of [[view.mid, 0.05], [view.mid + 20, 0.1], [view.mid - 15, 0.02]]) {
+        const [x, y] = view.toXY(h, c);
+        const back = view.fromXY(x, y);
+        expect(Math.abs(((back.h - h + 540) % 360) - 180)).toBeLessThan(1e-6);
+        expect(back.c).toBeCloseTo(c, 9);
+      }
+    }
+  });
+
+  it("holds still under a drag: the dials do not move it", () => {
+    const a = pairView(pair(200, 100), SIZE), b = pairView(pair(200, 100, { sep: 80, sat: -60, lum: 40 }), SIZE);
+    expect(b.mid).toBe(a.mid);
+    expect(b.half).toBe(a.half);
+    expect(b.cmax).toBe(a.cmax);
+    expect(b.origin).toEqual(a.origin);
+  });
+
+  it("shades each color's band, and puts the colors on Balance's ends", () => {
+    let s = run(initialState(), { type: "set_category", title: "Recolor", on: true });
+    const id = toolNode(s, "recolor")!.id;
+    const p = { ...pair(200, 100), a: { ...end(200), rgb: [0.008, 0.01, 0.012] as [number, number, number] }, b: { ...end(100), rgb: [0.05, 0.3, 0.1] as [number, number, number] } };
+    s = run(s, { type: "set_text_param", id, param: "pairs", value: JSON.stringify([p]) });
+    render(<RecolorPairs state={s} node={s.nodes.find((n) => n.id === id)!} dispatch={() => {}} width={320} />);
+    fireEvent.click(screen.getByTestId("recolor-pairs-toggle"));
+    expect(screen.getByTestId("recolor-pair-reach-0-a").getAttribute("d")).toMatch(/^M.*Z$/);
+    expect(screen.getByTestId("recolor-pair-reach-0-b").getAttribute("d")).toMatch(/^M.*Z$/);
+    expect(screen.getByTestId("recolor-pair-scope-0").innerHTML).not.toContain("NaN");
+    // A pick as dark as the panel rings in its hue, a visible one in its own color.
+    expect(screen.getByTestId("recolor-pair-handle-0-a").getAttribute("stroke")).toBe(hueCss(200));
+    expect(screen.getByTestId("recolor-pair-handle-0-b").getAttribute("stroke")).not.toBe(hueCss(100));
+    // Positive Balance moves saturation toward the first color: it sits
+    // at the high end, the second at the low end.
+    const low = screen.getByTestId("recolor-pair-sat-0-low").style.background;
+    const high = screen.getByTestId("recolor-pair-sat-0-high").style.background;
+    const swatches = within(screen.getByTestId("recolor-pair-0")).getAllByText("and")[0].parentElement!.querySelectorAll("span");
+    expect(high).toBe((swatches[0] as HTMLElement).style.background);
+    expect(low).toBe((swatches[2] as HTMLElement).style.background);
   });
 });
