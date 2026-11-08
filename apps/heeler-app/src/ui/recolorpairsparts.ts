@@ -2,6 +2,7 @@
 // recolorpairs.tsx exports components alone and Vite can refresh it in place as
 // it is edited instead of reloading the window.
 import type { RecolorPairEnd } from "../state";
+import { guardGate } from "../eqcurve";
 
 /** One pair as the node stores it. */
 export interface RecolorPair {
@@ -19,6 +20,28 @@ export interface RecolorPair {
 export const MAX_PAIRS = 3;
 
 export const PAIR_TURN = 30;
+
+/** Below this OkLab chroma a pick's hue is noise, whatever the guard. */
+export const PAIR_PICK_NOISE = 0.003;
+/** The share of a pair's effect the engine must give a pick's own color
+ * for the pick to count as a color. */
+const PAIR_PICK_GATE = 0.1;
+
+/** The least chroma a pick needs to pair at Neutral guard `guard`: where
+ * the engine's gate (guard_gate in ops_recolor.rs, which gates pairs as it
+ * does every hue row) gives a tenth of the effect, never under the noise
+ * floor. It follows the guard, so lowering the guard for a muted scene
+ * also lets that scene's colors pair (2026-11: a fixed 0.02 refused,
+ * at guard 0, a dark green the engine would have moved in full). */
+export function pairPickFloor(guard: number): number {
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (guardGate(mid, guard) < PAIR_PICK_GATE) lo = mid;
+    else hi = mid;
+  }
+  return Math.max(PAIR_PICK_NOISE, hi);
+}
 
 export const wrap = (h: number) => ((h % 360) + 360) % 360;
 

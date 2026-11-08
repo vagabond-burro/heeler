@@ -13,7 +13,9 @@ import { initialState } from "../data";
 import { anyPickerArmed, reduce, toolNode, type Command, type State } from "../state";
 import { IDENTITY_VIEW } from "../ui/overlaysparts";
 import { RecolorPairLayer, RecolorPairs } from "../ui/recolorpairs";
-import { pairAfter, pairTurn, parsePairs, type RecolorPair } from "../ui/recolorpairsparts";
+import { PAIR_PICK_NOISE, pairAfter, pairPickFloor, pairTurn, parsePairs, type RecolorPair } from "../ui/recolorpairsparts";
+import { _clearFlashForTests, currentFlash } from "../ui/hints";
+import { guardGate } from "../eqcurve";
 
 const run = (s: State, ...cmds: Command[]) => cmds.reduce(reduce, s);
 const sampleMock = sampleImage as unknown as ReturnType<typeof vi.fn>;
@@ -81,7 +83,7 @@ describe("Recolor pairs", () => {
     svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 320 / 3.4, height: 320 / 3.4 } as DOMRect);
     const handle = screen.getByTestId("recolor-pair-handle-0-a");
     const x = Number(handle.getAttribute("cx")), y = Number(handle.getAttribute("cy"));
-    fireEvent(handle, new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    fireEvent(handle, new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: x, clientY: y }));
     fireEvent(svg, new MouseEvent("pointermove", { bubbles: true, clientX: x, clientY: y }));
     const stayed = parsePairs(s.nodes.find((n) => n.id === id)!.textParams?.pairs)[0];
     expect(stayed.sep).toBe(-100);
@@ -233,5 +235,115 @@ describe("Recolor pairs", () => {
     const row = screen.getByTestId("recolor-pair-sep-0").closest(".srow")!;
     expect(row.querySelector(".lbl")?.textContent).toBe("Separation");
     expect(row.querySelector(".val")).not.toBeNull();
+  });
+});
+
+// 2026-11: with the Neutral guard at 0, a dark green the engine
+// would have moved in full was silently refused by a fixed 0.02 floor.
+describe("the pair picker's floor", () => {
+  it("follows the Neutral guard, with a floor for hue noise", () => {
+    for (const g of [2, 5, 10, 20, 50]) {
+      expect(guardGate(pairPickFloor(g), g), `guard ${g}`).toBeCloseTo(0.1, 3);
+    }
+    expect(pairPickFloor(0)).toBe(PAIR_PICK_NOISE);
+    expect(pairPickFloor(10), "no stricter than the old fixed floor at the default guard").toBeLessThan(0.02);
+    expect(pairPickFloor(5)).toBeLessThan(pairPickFloor(10));
+  });
+
+  async function pickAt(guard: number, rgb: [number, number, number]) {
+    _clearFlashForTests();
+    let s = run(initialState(), { type: "set_category", title: "Recolor", on: true });
+    const id = toolNode(s, "recolor")!.id;
+    s = run(s, { type: "set_param", id, param: "neutral_guard", value: guard }, { type: "toggle_recolor_pair_pick", id });
+    let current = s;
+    const dispatch = (c: Command) => {
+      current = reduce(current, c);
+      view.rerender(<RecolorPairLayer state={current} dispatch={dispatch} view={IDENTITY_VIEW} />);
+    };
+    const view = render(<RecolorPairLayer state={current} dispatch={dispatch} view={IDENTITY_VIEW} />);
+    sampleMock.mockResolvedValueOnce({ luma: 0, hue: 0, sat: 0, r: rgb[0], g: rgb[1], b: rgb[2] });
+    fireEvent.mouseDown(screen.getByTestId("recolor-pair-overlay"), { button: 0, clientX: 0, clientY: 0 });
+    await waitFor(() => expect(sampleMock).toHaveBeenCalled());
+    await act(async () => {});
+    view.unmount();
+    return current;
+  }
+  // The issue's dark green, sRGB (20,22,20): OkLab chroma 0.005.
+  const lin = (v: number) => ((v / 255 + 0.055) / 1.055) ** 2.4;
+  const DARK_GREEN: [number, number, number] = [lin(20), lin(22), lin(20)];
+
+  it("takes a dark green at guard 0", async () => {
+    const s = await pickAt(0, DARK_GREEN);
+    expect(s.recolorPairPick?.first).not.toBeNull();
+    expect(currentFlash()).toBeNull();
+  });
+
+  it("says why at the click when a pick is too gray, and stays armed", async () => {
+    let s = await pickAt(10, DARK_GREEN);
+    expect(s.recolorPairPick).not.toBeNull();
+    expect(s.recolorPairPick?.first).toBeNull();
+    expect(currentFlash()).toMatch(/Too gray to pair at Neutral guard 10: lower the guard/);
+    s = await pickAt(0, [0.2, 0.2, 0.2]);
+    expect(s.recolorPairPick?.first).toBeNull();
+    expect(currentFlash()).toBe("Too gray to pair: no hue here");
+  });
+});
+
+// 2026-11: only the 1.6 px painted ring took a press.
+describe("the pair scope's handles", () => {
+  function scope(p: RecolorPair) {
+    let s = run(initialState(), { type: "set_category", title: "Recolor", on: true });
+    const id = toolNode(s, "recolor")!.id;
+    s = run(s, { type: "set_text_param", id, param: "pairs", value: JSON.stringify([p]) });
+    const cmds: Command[] = [];
+    render(<RecolorPairs state={s} node={s.nodes.find((n) => n.id === id)!} dispatch={(c) => cmds.push(c)} width={320} />);
+    fireEvent.click(screen.getByTestId("recolor-pairs-toggle"));
+    const svg = screen.getByTestId("recolor-pair-scope-0");
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 320 / 3.4, height: 320 / 3.4 } as DOMRect);
+    const at = (which: "a" | "b") => {
+      const h = screen.getByTestId(`recolor-pair-handle-0-${which}`);
+      return [Number(h.getAttribute("cx")), Number(h.getAttribute("cy"))];
+    };
+    const press = (x: number, y: number) => {
+      fireEvent(svg, new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: x, clientY: y }));
+      const began = cmds.some((c) => c.type === "begin_gesture");
+      fireEvent(svg, new MouseEvent("pointerup", { bubbles: true }));
+      cmds.length = 0;
+      return began;
+    };
+    return { svg, at, press, cmds };
+  }
+
+  it("grabs at the ring's center and a margin around it, not far off", () => {
+    const { at, press } = scope(pair(200, 20));
+    const [x, y] = at("a");
+    expect(press(x, y), "the center").toBe(true);
+    expect(press(x + 9, y), "a few pixels outside the ring").toBe(true);
+    expect(press(x + 20, y + 20), "well away").toBe(false);
+    // The visible ring is drawn as before, and a wider clear circle sits under it.
+    expect(screen.getByTestId("recolor-pair-handle-0-a").getAttribute("r")).toBe("4.5");
+    expect(Number(screen.getByTestId("recolor-pair-hit-0-a").getAttribute("r"))).toBeGreaterThanOrEqual(10);
+  });
+
+  it("gives a press between two close rings to the nearer", () => {
+    const { svg, at, cmds } = scope(pair(100, 110, { width: 5 }));
+    const [ax, ay] = at("a");
+    const [bx, by] = at("b");
+    const size = 320 / 3.4, r = size / 2 - 5;
+    // Drag to hue 70 at the picks' chroma (0.6 of the radius).
+    const to = (h: number) => [size / 2 + r * 0.6 * Math.cos((h * Math.PI) / 180), size / 2 - r * 0.6 * Math.sin((h * Math.PI) / 180)];
+    const drag = (fromX: number, fromY: number) => {
+      fireEvent(svg, new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: fromX, clientY: fromY }));
+      const [tx, ty] = to(70);
+      fireEvent(svg, new MouseEvent("pointermove", { bubbles: true, clientX: tx, clientY: ty }));
+      fireEvent(svg, new MouseEvent("pointerup", { bubbles: true }));
+      const set = cmds.filter((c) => c.type === "set_text_param").pop() as Extract<Command, { type: "set_text_param" }>;
+      cmds.length = 0;
+      return pairAfter(parsePairs(set.value)[0]);
+    };
+    // A third of the way from A to B takes A: A turns out to 70. Two
+    // thirds takes B, which can only come toward A: they meet at 105.
+    expect(drag(ax + (bx - ax) / 3, ay + (by - ay) / 3).a.h).toBeCloseTo(70, 0);
+    expect(drag(ax + (bx - ax) * 2 / 3, ay + (by - ay) * 2 / 3).b.h).toBeCloseTo(105, 0);
   });
 });

@@ -15,12 +15,10 @@ import { isPrimaryPress } from "./pointerguard";
 import { TrackSlider } from "./track";
 import { TrashIcon } from "./takeicons";
 import { usePickSessions } from "../picksession";
-import { MAX_PAIRS, type RecolorPair, arc, pairAfter, parsePairs, wrap } from "./recolorpairsparts";
+import { MAX_PAIRS, PAIR_PICK_NOISE, type RecolorPair, arc, pairAfter, pairPickFloor, parsePairs, wrap } from "./recolorpairsparts";
+import { flashStatus } from "./hints";
 
 type D = (c: Command) => void;
-/** The chroma a pick must have to be a color at all: a gray has no hue
- * to pair. */
-const MIN_CHROMA = 0.02;
 /** The scope's outer ring, in OkLab chroma, a pair's own: the more
  * colorful of its two picks sits this share of the way out, so the colors
  * fill the wheel instead of huddling at the middle (2026-10-19: "The
@@ -31,6 +29,8 @@ const SCOPE_FILL = 0.6;
 /** The least outer ring, so two nearly gray picks still read apart. */
 const SCOPE_C_MIN = 0.04;
 const scopeChroma = (pair: RecolorPair) => Math.max(SCOPE_C_MIN, Math.max(pair.a.c, pair.b.c) / SCOPE_FILL);
+/** How far from a ring's center a press still picks it up, in pixels. */
+const HANDLE_REACH = 11;
 /** How far a pick reads around the click, a share of the short side. */
 const PAIR_PICK_REACH = 0.01;
 
@@ -78,7 +78,21 @@ export function RecolorPairLayer({ state, dispatch, view }: { state: State; disp
           const now = session.state();
           // A picker put away or moved to another node meanwhile: the
           // answer belongs to nobody.
-          if (!end || now.recolorPairPick?.id !== arm.id || end.c < MIN_CHROMA) return;
+          if (now.recolorPairPick?.id !== arm.id) return;
+          if (!end) {
+            flashStatus("No color could be read there");
+            return;
+          }
+          // A gray has no hue to pair: say so at the click, and stay armed.
+          const guard = now.nodes.find((n) => n.id === arm.id)?.params.neutral_guard ?? 10;
+          if (end.c < pairPickFloor(guard)) {
+            flashStatus(
+              pairPickFloor(guard) > PAIR_PICK_NOISE
+                ? `Too gray to pair at Neutral guard ${guard}: lower the guard to pair muted colors`
+                : "Too gray to pair: no hue here",
+            );
+            return;
+          }
           if (!now.recolorPairPick.first) {
             session.dispatch({ type: "recolor_pair_first", end });
             return;
@@ -117,6 +131,20 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
   };
   const after = pairAfter(pair);
   const drag = useRef<"a" | "b" | null>(null);
+  const [a2x, a2y] = at(after.a.h, after.a.c);
+  const [b2x, b2y] = at(after.b.h, after.b.c);
+  /** The ring nearer a press, if it is within reach: two rings close
+   * together go to the nearer, and a press anywhere near one takes it
+   * (2026-11: only the thin painted ring could be grabbed). */
+  const nearest = (e: React.PointerEvent<SVGElement>): "a" | "b" | null => {
+    const svg = e.currentTarget instanceof SVGSVGElement ? e.currentTarget : e.currentTarget.ownerSVGElement;
+    if (!svg) return null;
+    const box = svg.getBoundingClientRect();
+    const x = e.clientX - box.left, y = e.clientY - box.top;
+    const da = Math.hypot(x - a2x, y - a2y), db = Math.hypot(x - b2x, y - b2y);
+    const which = da <= db ? "a" : "b";
+    return Math.min(da, db) <= HANDLE_REACH ? which : null;
+  };
   const move = (e: React.PointerEvent<SVGSVGElement>) => {
     const which = drag.current;
     if (!which) return;
@@ -149,6 +177,15 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
       height={size}
       data-testid={`recolor-pair-scope-${index}`}
       style={{ display: "block", touchAction: "none" }}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        const which = nearest(e);
+        if (!which) return;
+        e.preventDefault();
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+        drag.current = which;
+        onBegin();
+      }}
       onPointerMove={move}
       onPointerUp={() => {
         if (drag.current) onEnd();
@@ -164,24 +201,29 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
       {(() => {
         const [ax, ay] = at(pair.a.h, pair.a.c);
         const [bx, by] = at(pair.b.h, pair.b.c);
-        const [a2x, a2y] = at(after.a.h, after.a.c);
-        const [b2x, b2y] = at(after.b.h, after.b.c);
+        // The ring as drawn, and under it a wider clear circle that takes
+        // the press; the scope's own handler picks the nearer ring.
         const ring = (which: "a" | "b", x: number, y: number, rgb: [number, number, number]) => (
-          <circle
-            cx={x}
-            cy={y}
-            r={4.5}
-            fill="none"
-            stroke={css(rgb)}
-            strokeWidth={1.6}
-            style={{ cursor: "grab" }}
-            data-testid={`recolor-pair-handle-${index}-${which}`}
-            onPointerDown={(e) => {
-              e.currentTarget.ownerSVGElement?.setPointerCapture?.(e.pointerId);
-              drag.current = which;
-              onBegin();
-            }}
-          />
+          <g key={which}>
+            <circle
+              cx={x}
+              cy={y}
+              r={HANDLE_REACH}
+              fill="transparent"
+              style={{ cursor: "grab", pointerEvents: "all" }}
+              data-testid={`recolor-pair-hit-${index}-${which}`}
+            />
+            <circle
+              cx={x}
+              cy={y}
+              r={4.5}
+              fill="none"
+              stroke={css(rgb)}
+              strokeWidth={1.6}
+              style={{ cursor: "grab", pointerEvents: "none" }}
+              data-testid={`recolor-pair-handle-${index}-${which}`}
+            />
+          </g>
         );
         return (
           <>
