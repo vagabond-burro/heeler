@@ -133,14 +133,19 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
   const drag = useRef<"a" | "b" | null>(null);
   const [a2x, a2y] = at(after.a.h, after.a.c);
   const [b2x, b2y] = at(after.b.h, after.b.c);
+  /** A press in the SVG's own coordinates, including under CSS scaling. */
+  const local = (e: React.PointerEvent<SVGSVGElement>): [number, number] => {
+    const box = e.currentTarget.getBoundingClientRect();
+    return [
+      (e.clientX - box.left) * (box.width ? size / box.width : 1),
+      (e.clientY - box.top) * (box.height ? size / box.height : 1),
+    ];
+  };
   /** The ring nearer a press, if it is within reach: two rings close
    * together go to the nearer, and a press anywhere near one takes it
    * (2026-11: only the thin painted ring could be grabbed). */
-  const nearest = (e: React.PointerEvent<SVGElement>): "a" | "b" | null => {
-    const svg = e.currentTarget instanceof SVGSVGElement ? e.currentTarget : e.currentTarget.ownerSVGElement;
-    if (!svg) return null;
-    const box = svg.getBoundingClientRect();
-    const x = e.clientX - box.left, y = e.clientY - box.top;
+  const nearest = (e: React.PointerEvent<SVGSVGElement>): "a" | "b" | null => {
+    const [x, y] = local(e);
     const da = Math.hypot(x - a2x, y - a2y), db = Math.hypot(x - b2x, y - b2y);
     const which = da <= db ? "a" : "b";
     return Math.min(da, db) <= HANDLE_REACH ? which : null;
@@ -148,9 +153,9 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
   const move = (e: React.PointerEvent<SVGSVGElement>) => {
     const which = drag.current;
     if (!which) return;
-    const box = e.currentTarget.getBoundingClientRect();
-    const dx = e.clientX - box.left - size / 2;
-    const dy = size / 2 - (e.clientY - box.top);
+    const [x, y] = local(e);
+    const dx = x - size / 2;
+    const dy = size / 2 - y;
     const h = wrap((Math.atan2(dy, dx) * 180) / Math.PI);
     const c = (Math.hypot(dx, dy) / r) * scopeC;
     // Invert the same windowed arithmetic the rings draw. Overlapping
@@ -171,14 +176,19 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
     const sat = closest("sat", (p) => Math.abs(pairAfter(p)[which].c - c));
     onChange({ sep, sat });
   };
+  const finish = () => {
+    if (drag.current) onEnd();
+    drag.current = null;
+  };
   return (
     <svg
       width={size}
       height={size}
+      viewBox={`0 0 ${size} ${size}`}
       data-testid={`recolor-pair-scope-${index}`}
-      style={{ display: "block", touchAction: "none" }}
+      style={{ display: "block", overflow: "visible", touchAction: "none" }}
       onPointerDown={(e) => {
-        if (e.button !== 0) return;
+        if (!isPrimaryPress(e)) return;
         const which = nearest(e);
         if (!which) return;
         e.preventDefault();
@@ -187,14 +197,10 @@ function PairScope({ pair, size, onChange, onBegin, onEnd, index }: {
         onBegin();
       }}
       onPointerMove={move}
-      onPointerUp={() => {
-        if (drag.current) onEnd();
-        drag.current = null;
-      }}
-      onPointerLeave={() => {
-        if (drag.current) onEnd();
-        drag.current = null;
-      }}
+      onPointerUp={finish}
+      onPointerCancel={finish}
+      onLostPointerCapture={finish}
+      onPointerLeave={finish}
     >
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line-4)" />
       <circle cx={size / 2} cy={size / 2} r={r / 2} fill="none" stroke="var(--line-2)" strokeDasharray="2 3" />

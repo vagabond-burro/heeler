@@ -346,4 +346,51 @@ describe("the pair scope's handles", () => {
     expect(drag(ax + (bx - ax) / 3, ay + (by - ay) / 3).a.h).toBeCloseTo(70, 0);
     expect(drag(ax + (bx - ax) * 2 / 3, ay + (by - ay) * 2 / 3).b.h).toBeCloseTo(105, 0);
   });
+
+  it("takes a press on the transparent hit circle as one gesture", () => {
+    const { svg, at, cmds } = scope(pair(200, 20));
+    const [x, y] = at("a");
+    fireEvent(screen.getByTestId("recolor-pair-hit-0-a"), new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: x, clientY: y }));
+    fireEvent(svg, new MouseEvent("pointerup", { bubbles: true }));
+    expect(cmds.map((c) => c.type)).toEqual(["begin_gesture", "end_gesture"]);
+  });
+
+  it("ignores a primary press chorded with another button", () => {
+    const { svg, at, cmds } = scope(pair(200, 20));
+    const [x, y] = at("a");
+    fireEvent(svg, new MouseEvent("pointerdown", { bubbles: true, button: 0, buttons: 5, clientX: x, clientY: y }));
+    expect(cmds).toEqual([]);
+  });
+
+  it("ends its gesture when the pointer is canceled", () => {
+    const { svg, at, cmds } = scope(pair(200, 20));
+    const [x, y] = at("a");
+    fireEvent(svg, new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: x, clientY: y }));
+    fireEvent(svg, new MouseEvent("pointercancel", { bubbles: true }));
+    expect(cmds.map((c) => c.type)).toEqual(["begin_gesture", "end_gesture"]);
+  });
+
+  it("uses SVG coordinates when the scope is scaled", () => {
+    const { svg, at, cmds } = scope(pair(100, 20));
+    const size = 320 / 3.4, r = size / 2 - 5;
+    svg.getBoundingClientRect = () => ({ left: 20, top: 10, width: size * 2, height: size * 2 } as DOMRect);
+    const [ax, ay] = at("a");
+    fireEvent(svg, new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 20 + ax * 2, clientY: 10 + ay * 2 }));
+    const tx = size / 2 + r * 0.6 * Math.cos(70 * Math.PI / 180);
+    const ty = size / 2 - r * 0.6 * Math.sin(70 * Math.PI / 180);
+    fireEvent(svg, new MouseEvent("pointermove", { bubbles: true, clientX: 20 + tx * 2, clientY: 10 + ty * 2 }));
+    fireEvent(svg, new MouseEvent("pointerup", { bubbles: true }));
+    const set = cmds.filter((c) => c.type === "set_text_param").pop() as Extract<Command, { type: "set_text_param" }>;
+    expect(set).toBeDefined();
+    const moved = pairAfter(parsePairs(set.value)[0]);
+    expect(moved.a.h).toBeCloseTo(70, 0);
+    expect(moved.a.c).toBeCloseTo(0.12, 5);
+  });
+
+  it("keeps the whole hit circle available at the scope's edge", () => {
+    const { svg, at, press } = scope(pair(0, 180, { sat: 100 }));
+    const [x, y] = at("a");
+    expect(svg.style.overflow).toBe("visible");
+    expect(press(x + 10, y), "the reach outside the SVG's bounds").toBe(true);
+  });
 });
