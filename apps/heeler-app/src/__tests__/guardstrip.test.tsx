@@ -194,6 +194,53 @@ describe("the guard strip", () => {
     expect(currentFlash(), "the nudge only waited; it does not flash again").toBeNull();
   });
 
+  it("flashes again when a nudge returns after an empty answer", async () => {
+    histMock.mockResolvedValueOnce(DUSK);
+    const state = recolorState(DOWN);
+    const node = state.nodes.find((n) => n.id === "recolor")!;
+    const view = render(<GuardStrip state={state} node={node} cell="hue_lum" dispatch={() => {}} />);
+    await act(async () => { vi.advanceTimersByTime(450); });
+    expect(currentFlash()).toMatch(/mostly muted/);
+    _clearFlashForTests();
+
+    const changed = reduce(state, { type: "set_param", id: "exposure", param: "exposure", value: 0.5 });
+    histMock.mockResolvedValueOnce(null);
+    view.rerender(<GuardStrip state={changed} node={node} cell="hue_lum" dispatch={() => {}} />);
+    await act(async () => { vi.advanceTimersByTime(450); });
+    expect(screen.queryByTestId("guard-strip")).toBeNull();
+
+    const restored = reduce(changed, { type: "set_param", id: "exposure", param: "exposure", value: 0.8 });
+    histMock.mockResolvedValueOnce(DUSK);
+    view.rerender(<GuardStrip state={restored} node={node} cell="hue_lum" dispatch={() => {}} />);
+    await act(async () => { vi.advanceTimersByTime(450); });
+    expect(screen.getByTestId("guard-nudge")).toBeInTheDocument();
+    expect(currentFlash()).toMatch(/mostly muted/);
+  });
+
+  it("flashes again when the curve resets and restarts during an update", async () => {
+    histMock.mockResolvedValueOnce(DUSK);
+    const state = recolorState(DOWN);
+    const node = state.nodes.find((n) => n.id === "recolor")!;
+    const view = render(<GuardStrip state={state} node={node} cell="hue_lum" dispatch={() => {}} />);
+    await act(async () => { vi.advanceTimersByTime(450); });
+    expect(currentFlash()).toMatch(/mostly muted/);
+    _clearFlashForTests();
+
+    const changed = reduce(state, { type: "set_param", id: "exposure", param: "exposure", value: 0.5 });
+    let resolve!: (hist: number[]) => void;
+    histMock.mockReturnValueOnce(new Promise<number[]>((r) => { resolve = r; }));
+    view.rerender(<GuardStrip state={changed} node={node} cell="hue_lum" dispatch={() => {}} />);
+    await act(async () => { vi.advanceTimersByTime(450); });
+    expect(screen.getByTestId("guard-strip").getAttribute("data-stale")).toBe("true");
+
+    const reset = reduce(changed, { type: "set_text_param", id: "recolor", param: "curves", value: "" });
+    view.rerender(<GuardStrip state={reset} node={reset.nodes.find((n) => n.id === "recolor")!} cell="hue_lum" dispatch={() => {}} />);
+    view.rerender(<GuardStrip state={changed} node={node} cell="hue_lum" dispatch={() => {}} />);
+    await act(async () => { resolve(DUSK); });
+    expect(screen.getByTestId("guard-nudge")).toBeInTheDocument();
+    expect(currentFlash()).toMatch(/mostly muted/);
+  });
+
   it("sets its line at the size of the slider labels", async () => {
     await show(recolorState(null), DUSK);
     expect(screen.getByTestId("guard-reach").style.fontSize).toBe("11px");

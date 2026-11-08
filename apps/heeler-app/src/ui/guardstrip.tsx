@@ -118,13 +118,19 @@ export function GuardStrip({
       ? `This photo is mostly muted: the Neutral guard keeps ${100 - pct}% of it out of the Hue rows, so this curve barely shows. Lowering the guard to ${better} lets it land.`
       : "This photo has almost no color for the Hue rows to read. The Lum row, or Tone Equalizer, works by brightness instead.";
   const wasNudging = useRef(false);
+  const noHistogram = !answer;
   useEffect(() => {
-    // While stale the nudge is only waiting, not gone: no second flash
+    // A reset, a non-hue cell, or an empty answer really ends the nudge,
+    // even while stale. Otherwise it is only waiting: no second flash
     // when the new histogram brings it back.
+    if (noHistogram || !moved) {
+      wasNudging.current = false;
+      return;
+    }
     if (stale) return;
     if (nudge && !wasNudging.current) flashStatus(story, 8000);
     wasNudging.current = nudge;
-  }, [nudge, story, stale]);
+  }, [moved, nudge, noHistogram, story, stale]);
   // The engine has no histogram for this picture.
   if (!answer) return null;
 
