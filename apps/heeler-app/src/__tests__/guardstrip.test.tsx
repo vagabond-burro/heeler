@@ -149,9 +149,54 @@ describe("the guard strip", () => {
     expect(screen.queryByTestId("guard-nudge-apply")).toBeNull();
   });
 
-  it("draws nothing until the engine answers, and nothing in the browser build", async () => {
+  it("holds its place, updating, until the engine answers, and draws nothing when it has no histogram", async () => {
+    histMock.mockReturnValue(new Promise(() => {}));
+    const state = recolorState(DOWN);
+    render(<GuardStrip state={state} node={state.nodes.find((n) => n.id === "recolor")!} cell="hue_lum" dispatch={() => {}} />);
+    // Before any answer: the strip, its fade and its row are there.
+    expect(screen.getByTestId("guard-strip").getAttribute("data-stale")).toBe("true");
+    expect(screen.getAllByTestId("guard-bar")).toHaveLength(50);
+    expect(screen.getByTestId("guard-ramp")).toBeInTheDocument();
+    expect(screen.getByTestId("guard-reach")).toHaveTextContent("Updating");
+    expect(screen.queryByTestId("guard-nudge"), "no nudge from no histogram").toBeNull();
+    cleanup();
     await show(recolorState(DOWN), null);
     expect(screen.queryByTestId("guard-strip")).toBeNull();
+  });
+
+  // 2026-11: a slider moved in another section emptied the strip on
+  // every move, and the panel under it bounced.
+  it("keeps the strip, dimmed and updating, while the picture feeding it changes", async () => {
+    histMock.mockResolvedValue(DUSK);
+    const state = recolorState(DOWN);
+    const node = state.nodes.find((n) => n.id === "recolor")!;
+    const view = render(<GuardStrip state={state} node={node} cell="hue_lum" dispatch={() => {}} />);
+    await act(async () => { vi.advanceTimersByTime(450); });
+    expect(currentFlash()).toMatch(/mostly muted/);
+    _clearFlashForTests();
+    const fresh = screen.getAllByTestId("guard-bar").map((b) => b.getAttribute("height"));
+    let moving: State = { ...state, gesture: "exposure.exposure" };
+    for (const v of [0.2, 0.4, 0.6]) {
+      moving = reduce(moving, { type: "set_param", id: "exposure", param: "exposure", value: v });
+      view.rerender(<GuardStrip state={moving} node={node} cell="hue_lum" dispatch={() => {}} />);
+      await act(async () => { vi.advanceTimersByTime(100); });
+      const strip = screen.getByTestId("guard-strip");
+      expect(strip.getAttribute("data-stale")).toBe("true");
+      expect(screen.getAllByTestId("guard-bar").map((b) => b.getAttribute("height")), "the last bars stand in").toEqual(fresh);
+      expect(screen.getByTestId("guard-bars").style.opacity).toBe("0.4");
+      expect(screen.getByTestId("guard-ramp")).toBeInTheDocument();
+      expect(screen.getByTestId("guard-reach")).toHaveTextContent("Updating");
+    }
+    view.rerender(<GuardStrip state={{ ...moving, gesture: null }} node={node} cell="hue_lum" dispatch={() => {}} />);
+    await act(async () => { vi.advanceTimersByTime(450); });
+    expect(screen.getByTestId("guard-strip").getAttribute("data-stale")).toBe("false");
+    expect(screen.getByTestId("guard-nudge")).toBeInTheDocument();
+    expect(currentFlash(), "the nudge only waited; it does not flash again").toBeNull();
+  });
+
+  it("sets its line at the size of the slider labels", async () => {
+    await show(recolorState(null), DUSK);
+    expect(screen.getByTestId("guard-reach").style.fontSize).toBe("11px");
   });
 
   it("refreshes after an upstream curve changes", async () => {
@@ -163,7 +208,7 @@ describe("the guard strip", () => {
     expect(histMock).toHaveBeenCalledTimes(1);
     const changed = reduce(state, { type: "set_curve", id: "curves", channel: "rgb", curve: [[0, 0], [0.5, 0.25], [1, 1]] });
     view.rerender(<GuardStrip state={changed} node={node} cell="hue_lum" dispatch={() => {}} />);
-    expect(screen.queryByTestId("guard-strip")).toBeNull();
+    expect(screen.getByTestId("guard-strip").getAttribute("data-stale")).toBe("true");
     await act(async () => { vi.advanceTimersByTime(450); });
     expect(histMock).toHaveBeenCalledTimes(2);
   });
@@ -175,7 +220,7 @@ describe("the guard strip", () => {
     await act(async () => { vi.advanceTimersByTime(450); });
     const changed = reduce(state, { type: "set_param", id: "recolor", param: "smoothing", value: 0 });
     view.rerender(<GuardStrip state={changed} node={changed.nodes.find((n) => n.id === "recolor")!} cell="hue_lum" dispatch={() => {}} />);
-    expect(screen.queryByTestId("guard-strip")).toBeNull();
+    expect(screen.getByTestId("guard-strip").getAttribute("data-stale")).toBe("true");
     await act(async () => { vi.advanceTimersByTime(450); });
     expect(histMock).toHaveBeenCalledTimes(2);
   });
@@ -203,7 +248,9 @@ describe("the guard strip", () => {
     const moved = reduce(state, { type: "set_param", id: "exposure", param: "exposure", value: 1 });
     view.rerender(<GuardStrip state={moved} node={node} cell="hue_lum" dispatch={() => {}} />);
     await act(async () => { resolve(DUSK); });
-    expect(screen.queryByTestId("guard-strip")).toBeNull();
+    expect(screen.getByTestId("guard-strip").getAttribute("data-stale"), "the old picture's answer is no answer").toBe("true");
+    expect(screen.getByTestId("guard-reach")).toHaveTextContent("Updating");
+    expect(screen.queryByTestId("guard-nudge")).toBeNull();
   });
 
   it("sits under the Neutral guard on the node's Graph inspector too", async () => {

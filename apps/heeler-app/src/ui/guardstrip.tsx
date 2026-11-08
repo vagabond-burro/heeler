@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { chromaHistogram, serializeGraph } from "../bridge";
 import { flashStatus } from "./hints";
 import {
+  GUARD_HIST_BINS,
   GUARD_HIST_MAX,
   GUARD_NUDGE_REACH,
   RECOLOR_CELLS,
@@ -45,11 +46,16 @@ function upstreamKey(state: State, node: string): string {
 }
 
 /** The engine's histogram for this node, fetched a moment after the
- * picture feeding it stops changing; null until it lands. The browser
- * build reads the photograph instead. */
-function useChromaHistogram(state: State, node: string): number[] | null {
+ * picture feeding it stops changing. While a new one is on its way the
+ * last one stands in, marked stale, so the strip keeps its place under a
+ * drag in another section (2026-11: the strip vanished on every move and
+ * the panel bounced); before the first lands there is none, stale. Null
+ * only when the engine answered that it has none for this picture. The
+ * browser build reads the photograph instead. */
+function useChromaHistogram(state: State, node: string): { hist: number[] | null; stale: boolean } | null {
   const key = useMemo(() => upstreamKey(state, node), [state.activeImage, state.nodes, state.wires, node]);
-  const [answer, setAnswer] = useState<{ key: string; hist: number[] } | null>(null);
+  const [answer, setAnswer] = useState<{ key: string; hist: number[] | null } | null>(null);
+  const [last, setLast] = useState<number[] | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
   useEffect(() => {
@@ -58,7 +64,10 @@ function useChromaHistogram(state: State, node: string): number[] | null {
     let live = true;
     const timer = setTimeout(() => {
       void chromaHistogram(stateRef.current, node).then((hist) => {
-        if (live && hist && hist.length) setAnswer({ key, hist });
+        if (!live) return;
+        const got = hist && hist.length ? hist : null;
+        setAnswer({ key, hist: got });
+        if (got) setLast(got);
       });
     }, 400);
     return () => {
@@ -66,8 +75,10 @@ function useChromaHistogram(state: State, node: string): number[] | null {
       clearTimeout(timer);
     };
   }, [key, node, state.gesture]);
-  // A histogram of another picture is no answer for this one.
-  return answer && answer.key === key ? answer.hist : null;
+  // A histogram of another picture is no answer for this one: it is
+  // shown only as a stand-in, stale, until this picture's lands.
+  if (answer && answer.key === key) return answer.hist ? { hist: answer.hist, stale: false } : null;
+  return { hist: last, stale: true };
 }
 
 export function GuardStrip({
@@ -81,40 +92,51 @@ export function GuardStrip({
   cell: RecolorCellId;
   dispatch: (cmd: Command) => void;
 }) {
-  const hist = useChromaHistogram(state, node.id);
+  const answer = useChromaHistogram(state, node.id);
+  const hist = answer?.hist ?? null;
+  // A stale stand-in draws, but says nothing about this picture.
+  const stale = !answer || answer.stale;
+  const fresh = stale ? null : hist;
   const guard = node.params.neutral_guard ?? 10;
-  const reach = hist ? guardReach(hist, guard) : 1;
+  const reach = fresh ? guardReach(fresh, guard) : 1;
   const pct = Math.round(reach * 100);
   const spec = RECOLOR_CELLS.find((c) => c.id === cell);
   const moved = spec?.input === "hue" && hueRowMoved(parseRecolorCurves(node.textParams?.curves)[cell], spec.output);
-  const nudge = !!hist && moved && reach < GUARD_NUDGE_REACH;
-  const better = nudge && hist ? suggestedGuard(hist, guard) : null;
+  const nudge = !!fresh && moved && reach < GUARD_NUDGE_REACH;
+  const better = nudge && fresh ? suggestedGuard(fresh, guard) : null;
   // The whole story goes to the status line, where it has room: the row
   // under the guard stays one short line, so dragging a point never
   // wraps it and moves the controls (2026-10-08: "the notification
   // (accented text) wraps around and causes the UI controls to jump
   // around. Maybe display that alert in the status line"). Hovering the
   // row shows it again; it flashes once as the nudge first applies.
-  const story = !nudge
+  const story = stale
+    ? "The strip is updating to the picture as it now stands."
+    : !nudge
     ? `The Hue rows reach ${pct}% of this photo; the Neutral guard keeps the rest, its grays and near-grays, out of them.`
     : better !== null
       ? `This photo is mostly muted: the Neutral guard keeps ${100 - pct}% of it out of the Hue rows, so this curve barely shows. Lowering the guard to ${better} lets it land.`
       : "This photo has almost no color for the Hue rows to read. The Lum row, or Tone Equalizer, works by brightness instead.";
   const wasNudging = useRef(false);
   useEffect(() => {
+    // While stale the nudge is only waiting, not gone: no second flash
+    // when the new histogram brings it back.
+    if (stale) return;
     if (nudge && !wasNudging.current) flashStatus(story, 8000);
     wasNudging.current = nudge;
-  }, [nudge, story]);
-  if (!hist) return null;
+  }, [nudge, story, stale]);
+  // The engine has no histogram for this picture.
+  if (!answer) return null;
 
   const bars = Array.from({ length: BARS }, (_, b) => {
-    const per = hist.length * STRIP_MAX / GUARD_HIST_MAX / BARS;
+    const per = (hist?.length ?? GUARD_HIST_BINS) * STRIP_MAX / GUARD_HIST_MAX / BARS;
     let share = 0;
     let reached = 0;
-    const end = b === BARS - 1 ? hist.length : Math.floor((b + 1) * per);
+    const len = hist?.length ?? GUARD_HIST_BINS;
+    const end = b === BARS - 1 ? len : Math.floor((b + 1) * per);
     for (let i = Math.floor(b * per); i < end; i++) {
-      share += hist[i] ?? 0;
-      reached += (hist[i] ?? 0) * guardGate((i + 0.5) / hist.length * GUARD_HIST_MAX, guard);
+      share += hist?.[i] ?? 0;
+      reached += (hist?.[i] ?? 0) * guardGate((i + 0.5) / len * GUARD_HIST_MAX, guard);
     }
     return { share, gate: share ? reached / share : guardGate(((b + 0.5) / BARS) * STRIP_MAX, guard) };
   });
@@ -126,14 +148,15 @@ export function GuardStrip({
   }).join(" ");
 
   return (
-    <div data-testid="guard-strip" style={{ margin: "2px 0 6px" }}>
+    <div data-testid="guard-strip" data-stale={stale ? "true" : "false"} style={{ margin: "2px 0 6px" }}>
       <svg
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
         style={{ width: "100%", height: H, display: "block" }}
         role="img"
-        aria-label={`How colorful this photo is: the Hue rows reach ${pct}% of it`}
+        aria-label={stale ? "How colorful this photo is: updating" : `How colorful this photo is: the Hue rows reach ${pct}% of it`}
       >
+        <g data-testid="guard-bars" style={{ opacity: stale ? 0.4 : 1, transition: "opacity 120ms" }}>
         {bars.map((b, i) => {
           const h = Math.max(1, (b.share / peak) * (H - 4));
           return (
@@ -149,6 +172,7 @@ export function GuardStrip({
             />
           );
         })}
+        </g>
         <path d={ramp} data-testid="guard-ramp" style={{ fill: "none", stroke: "var(--accent)", strokeWidth: 1.2 }} vectorEffect="non-scaling-stroke" />
       </svg>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-ghost)" }}>
@@ -163,12 +187,12 @@ export function GuardStrip({
         data-hint={story}
         style={{
           display: "flex", alignItems: "center", gap: 8, height: 22, marginTop: 2,
-          fontSize: 12, whiteSpace: "nowrap", overflow: "hidden",
+          fontSize: 11, whiteSpace: "nowrap", overflow: "hidden",
           color: nudge ? "var(--accent)" : "var(--text-dim)",
         }}
       >
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
-          {nudge ? (better !== null ? `Holds back ${100 - pct}%` : "Almost no color here") : `Reaches ${pct}%`}
+          {stale ? "Updating" : nudge ? (better !== null ? `Holds back ${100 - pct}%` : "Almost no color here") : `Reaches ${pct}%`}
         </span>
         {better !== null && (
           <button
