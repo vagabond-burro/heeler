@@ -6,7 +6,7 @@
 // between them, the chroma balance and the lightness contrast.
 import { useRef, useState } from "react";
 import type { Command, NodeCard, RecolorPairEnd, State } from "../state";
-import { sampleImage } from "../bridge";
+import { isTauri, sampleImage } from "../bridge";
 import { oklabHueChroma } from "../colorsets";
 import { linearToSrgb255 } from "../consolebands";
 import { PICK_CURSOR } from "./cursors";
@@ -80,7 +80,8 @@ export function RecolorPairLayer({ state, dispatch, view }: { state: State; disp
           // answer belongs to nobody.
           if (now.recolorPairPick?.id !== arm.id) return;
           if (!end) {
-            flashStatus("No color could be read there");
+            // The browser build has no engine to read the picture with.
+            flashStatus(isTauri() ? "No color could be read there" : "Picking a pair's colors needs the desktop app");
             return;
           }
           // A gray has no hue to pair: say so at the click, and stay armed.

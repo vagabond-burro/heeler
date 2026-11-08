@@ -250,6 +250,24 @@ describe("the pair picker's floor", () => {
     expect(pairPickFloor(5)).toBeLessThan(pairPickFloor(10));
   });
 
+  it("holds at fractional guards and the slider's top, and never falls as the guard rises", () => {
+    // The slider runs 0 to 100 and is not limited to whole numbers.
+    for (const g of [0.1, 0.5, 0.9, 1, 1.1, 2.5, 99.5, 100]) {
+      const floor = pairPickFloor(g);
+      expect(floor, `guard ${g}`).toBeGreaterThanOrEqual(PAIR_PICK_NOISE);
+      if (floor > PAIR_PICK_NOISE) expect(guardGate(floor, g), `guard ${g}`).toBeCloseTo(0.1, 3);
+      else expect(guardGate(PAIR_PICK_NOISE, g), `guard ${g}: the noise floor already gets a tenth`).toBeGreaterThanOrEqual(0.1);
+    }
+    // At the top a vivid color still pairs: sRGB red is about 0.26.
+    expect(pairPickFloor(100)).toBeLessThan(0.26);
+    let prev = 0;
+    for (let g = 0; g <= 100; g += 0.25) {
+      const floor = pairPickFloor(g);
+      expect(floor, `guard ${g}`).toBeGreaterThanOrEqual(prev);
+      prev = floor;
+    }
+  });
+
   async function pickAt(guard: number, rgb: [number, number, number]) {
     _clearFlashForTests();
     let s = run(initialState(), { type: "set_category", title: "Recolor", on: true });
@@ -276,6 +294,15 @@ describe("the pair picker's floor", () => {
     const s = await pickAt(0, DARK_GREEN);
     expect(s.recolorPairPick?.first).not.toBeNull();
     expect(currentFlash()).toBeNull();
+  });
+
+  it("says in the browser build that picking needs the desktop app", async () => {
+    _clearFlashForTests();
+    const s = run(initialState(), { type: "toggle_recolor_pair_pick", id: "recolor" });
+    render(<RecolorPairLayer state={s} dispatch={() => {}} view={IDENTITY_VIEW} />);
+    sampleMock.mockResolvedValueOnce(null);
+    fireEvent.mouseDown(screen.getByTestId("recolor-pair-overlay"), { button: 0, clientX: 0, clientY: 0 });
+    await waitFor(() => expect(currentFlash()).toBe("Picking a pair's colors needs the desktop app"));
   });
 
   it("says why at the click when a pick is too gray, and stays armed", async () => {
