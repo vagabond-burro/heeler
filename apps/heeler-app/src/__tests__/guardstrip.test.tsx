@@ -284,6 +284,32 @@ describe("the guard strip", () => {
     expect(histMock).toHaveBeenCalledTimes(1);
   });
 
+  it("asks the engine nothing when a drag ends on the picture it already has", async () => {
+    histMock.mockResolvedValue(DUSK);
+    const state = recolorState(DOWN);
+    const node = state.nodes.find((n) => n.id === "recolor")!;
+    const view = render(<GuardStrip state={state} node={node} cell="hue_lum" dispatch={() => {}} />);
+    await act(async () => { vi.advanceTimersByTime(450); });
+    expect(histMock).toHaveBeenCalledTimes(1);
+    // A drag in this node (outside the picture feeding it) begins and ends.
+    view.rerender(<GuardStrip state={{ ...state, gesture: "recolor.neutral_guard" }} node={node} cell="hue_lum" dispatch={() => {}} />);
+    view.rerender(<GuardStrip state={{ ...state, gesture: null }} node={node} cell="hue_lum" dispatch={() => {}} />);
+    await act(async () => { vi.advanceTimersByTime(450); });
+    expect(histMock).toHaveBeenCalledTimes(1);
+    // An upstream drag that comes back to where it began asks nothing either.
+    const moved = reduce(state, { type: "set_param", id: "exposure", param: "exposure", value: 1 });
+    view.rerender(<GuardStrip state={{ ...moved, gesture: "exposure.exposure" }} node={node} cell="hue_lum" dispatch={() => {}} />);
+    view.rerender(<GuardStrip state={{ ...state, gesture: "exposure.exposure" }} node={node} cell="hue_lum" dispatch={() => {}} />);
+    view.rerender(<GuardStrip state={{ ...state, gesture: null }} node={node} cell="hue_lum" dispatch={() => {}} />);
+    await act(async () => { vi.advanceTimersByTime(450); });
+    expect(histMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("guard-strip").getAttribute("data-stale")).toBe("false");
+    // One that changes the picture does.
+    view.rerender(<GuardStrip state={moved} node={node} cell="hue_lum" dispatch={() => {}} />);
+    await act(async () => { vi.advanceTimersByTime(450); });
+    expect(histMock).toHaveBeenCalledTimes(2);
+  });
+
   it("drops an answer for a picture that has since changed", async () => {
     histMock.mockReturnValue(new Promise(() => {}));
     const state = recolorState(DOWN);

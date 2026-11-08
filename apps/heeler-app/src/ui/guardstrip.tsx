@@ -58,9 +58,15 @@ function useChromaHistogram(state: State, node: string): { hist: number[] | null
   const [last, setLast] = useState<number[] | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
+  // The picture the standing histogram is for: a drag that ends where it
+  // began, or one that moved nothing upstream, asks the engine nothing.
+  // An answer of none is asked again, as the engine may have failed.
+  const answered = useRef<string | null>(null);
+  answered.current = answer?.hist ? answer.key : null;
   useEffect(() => {
     // A pause with the slider still held is part of the drag.
     if (state.gesture !== null) return;
+    if (answered.current === key) return;
     let live = true;
     const timer = setTimeout(() => {
       void chromaHistogram(stateRef.current, node).then((hist) => {
