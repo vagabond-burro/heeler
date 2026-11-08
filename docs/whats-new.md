@@ -1,5 +1,17 @@
 # What's new
 
+## 2026.7.1
+
+### New
+
+- **The pair wheel shows where each color can go.** A pair's wheel now shows only the part of the color circle the pair can reach, turned so the two colors sit at the top and sized to fill the space, with the edge drawn in the hues it spans. A shaded band around each color shows how far Separation and Balance can take it before you drag anything, and the two colors sit at the ends of the Balance slider. A color too dark to see on the wheel is ringed in its hue. [Recolor](user-guide/adjustments/recolor.md#color-pairs).
+
+### Fixes
+
+- **The Neutral guard's strip stays put.** Dragging a slider in another section emptied the strip under Recolor's Neutral guard on every move, and the panel below it jumped up and down. The strip now keeps its place, dims its bars and reads **Updating** until the picture settles. Its line is set at the size of the other slider labels. [Recolor](user-guide/adjustments/recolor.md#controls).
+- **Dark colors pair.** In a dusk or shadowed scene, clicks on a clearly colored but dark area did nothing when adding a pair, with no word why. How gray is too gray now follows the Neutral guard, so lowering the guard lets those colors pair, and a click that is refused says so in the status line. [Recolor](user-guide/adjustments/recolor.md#color-pairs).
+- **A pair's rings are easy to grab.** Only the thin outline of a ring on a pair's wheel took a press. A press anywhere on or near a ring now grabs it, and between two rings the nearer one wins. [Recolor](user-guide/adjustments/recolor.md#color-pairs).
+
 ## 2026.7
 
 ### New
