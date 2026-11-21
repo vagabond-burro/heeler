@@ -1549,6 +1549,16 @@ impl Catalog {
         }
     }
 
+    /// Ids of every image the catalog marks edited. The edits themselves
+    /// live in the app data's graph files, not here, so a catalog moved to
+    /// another computer brings these marks without the edits behind them;
+    /// importing graph files asks this which ones belong to the catalog.
+    pub fn edited_ids(&self) -> Result<Vec<String>, CatalogError> {
+        let mut stmt = self.conn.prepare("SELECT id FROM images WHERE edited = 1 ORDER BY id")?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     /// Paths of every folder containing at least one edited image, for
     /// the library's per-folder edited badges.
     pub fn edited_folder_paths(&self) -> Result<Vec<String>, CatalogError> {

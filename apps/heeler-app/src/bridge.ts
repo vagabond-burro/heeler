@@ -4076,6 +4076,17 @@ export async function loadGraph(imageId: string): Promise<SavedGraph | null> {
   return result.status === "ready" ? result.graph : null;
 }
 
+/** What importing a moved catalog's edits did (graphstore::Imported). */
+export type ImportedEdits = { imported: string[]; kept: string[]; unreadable: string[]; still_missing: string[]; source: string };
+
+/** Asks for the folder holding this catalog's edits on another computer
+ * (its app data, its graphs folder or a recovery bundle) and copies in
+ * those of the edited photographs that have none here, overwriting
+ * nothing (#99). Null when the picker is canceled, or in the browser. */
+export async function importMissingEdits(): Promise<ImportedEdits | null> {
+  return isTauri() ? call<ImportedEdits | null>("import_missing_edits") : null;
+}
+
 export async function loadLastGoodGraph(imageId: string): Promise<SavedGraph> {
   return parseSavedGraph(await call<string>("load_last_good_graph", { imageId }));
 }

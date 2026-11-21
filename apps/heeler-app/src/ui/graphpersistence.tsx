@@ -3,7 +3,7 @@ import type { State, Command } from "../state";
 import { clampAutosaveDelay, needsMergedDefaults, needsProfileDefaults, needsRenderedBypass } from "../state";
 import { armAutosave, flushAutosave, autosaves, saveBeforeClose } from "../autosave";
 import { nextSaveRevision } from "../saverevision";
-import { clearThumbnail, isTauri, lensProfileFor, loadGraphResult, loadLastGoodGraph, loadThumbnail, saveGraph, renderThumbnail, type GraphLoadResult } from "../bridge";
+import { clearThumbnail, importMissingEdits, isTauri, lensProfileFor, loadGraphResult, loadLastGoodGraph, loadThumbnail, saveGraph, renderThumbnail, type GraphLoadResult, type ImportedEdits } from "../bridge";
 import { queueQuadMembers } from "../quadedit";
 import { linkedWith } from "../links";
 import { writeGraphKeepingTakes } from "../copyedits";
@@ -13,6 +13,23 @@ import { logDebug, logMsg } from "../log";
 
 /** A save can finish while Reset or a newer edit replaces its graph.
  * Its late thumbnail must not cover the photograph that replaced it. */
+/** A photograph the catalog marks edited whose saved edits are not in this
+ * computer's app data: a catalog carried here from another computer
+ * brings its edited marks and thumbnails but not the graphs (#99).
+ * `edit` is the graph on screen when that was found, so a close can tell
+ * whether anything was changed since. */
+type MissingEdits = { status: "missing"; image: string; path: string; edit: string };
+
+/** The line under the missing-edits notice after an import. */
+export function importedLine(r: ImportedEdits, name: (id: string) => string): string {
+  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
+  const parts = [`${n(r.imported.length, "photograph's edits", "photographs' edits")} copied in from ${r.source}.`];
+  if (r.kept.length) parts.push(`${n(r.kept.length, "photograph already has", "photographs already have")} edits on this computer and kept them.`);
+  if (r.unreadable.length) parts.push(`${n(r.unreadable.length, "file there is", "files there are")} damaged and was left out: ${r.unreadable.map(name).join(", ")}.`);
+  if (r.still_missing.length) parts.push(`${n(r.still_missing.length, "edited photograph still has", "edited photographs still have")} no edits here.`);
+  return parts.join(" ");
+}
+
 function graphIsCurrent(state: State, id: string, graph: Pick<State, "nodes" | "wires">): boolean {
   if (state.resetPending.includes(id)) return false;
   const live = id === state.activeImage ? state : state.graphs[id];
@@ -29,16 +46,43 @@ export function GraphPersistence({ state, dispatch }: { state: State; dispatch: 
   /** The read the load effect last started, image and attempt, so the
    * hold clearing after it does not start the same read again. */
   const lastRead = useRef<string | null>(null);
-  const [recovery, setRecovery] = useState<(Extract<GraphLoadResult, { status: "blocked" }> & { image: string }) | null>(null);
+  const [recovery, setRecovery] = useState<(Extract<GraphLoadResult, { status: "blocked" }> & { image: string }) | MissingEdits | null>(null);
+  /** Photographs whose missing edits the user chose to start over from:
+   * read as never edited from then on, this session. */
+  const startedOver = useRef(new Set<string>());
+  const [importNote, setImportNote] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const findEdits = async () => {
+    if (importing) return;
+    setImporting(true);
+    try {
+      const report = await importMissingEdits();
+      if (!report) return;
+      setImportNote(importedLine(report, (id) => stateRef.current.images.find((i) => i.id === id)?.name ?? id));
+      logMsg(report.imported.length ? "info" : "warn", `Import edits: ${importedLine(report, (id) => id)}`);
+      setLoadAttempt((n) => n + 1);
+    } catch (error) {
+      setImportNote(String(error));
+    } finally {
+      setImporting(false);
+    }
+  };
+  const startOver = () => {
+    if (recovery?.status !== "missing") return;
+    startedOver.current.add(recovery.image);
+    setLoadAttempt((n) => n + 1);
+  };
   const recoveryRef = useRef(recovery);
   recoveryRef.current = recovery;
   useEffect(() => autosaves.subscribe(() => setSaveErrors(autosaves.errors())), []);
+  // An import's report belongs to the photograph it was made from.
+  useEffect(() => setImportNote(null), [state.activeImage]);
   const retrySave = async () => {
     try { await flushAutosave(); setSaveErrors([]); }
     catch (error) { setSaveErrors([String(error)]); }
   };
   const resolveGraph = async (useLastGood: boolean) => {
-    if (!recovery) return;
+    if (recovery?.status !== "blocked") return;
     const image = recovery.image;
     const s = stateRef.current;
     if (s.activeImage !== image) return;
@@ -136,6 +180,19 @@ export function GraphPersistence({ state, dispatch }: { state: State; dispatch: 
       // the member save effect ever arms. Its real stash is newer than
       // this disk read; take history still comes from the saved file.
       const linked = stateRef.current.linkDirty.includes(image) ? stateRef.current.graphs[image] : undefined;
+      // The catalog says this photograph was edited, but there is no
+      // graph file for it at all (not even a reset marker, which carries
+      // a revision): its edits are on another computer. Read as unedited
+      // it got a default graph saved over the gap and its thumbnail, the
+      // one sign of the edit left, rendered again from that default
+      // (#99). It is held like a damaged file instead: shown from the
+      // template, nothing saved or rendered, until the edits are found
+      // or the user starts over.
+      if (result.status === "absent" && !result.revision && entry?.edited && !(linked && !linked.preRead) && !startedOver.current.has(image)) {
+        logMsg("warn", `${name || image}: the catalog marks it edited, but its edits are not in this computer's app data.`);
+        setRecovery({ status: "missing", image, path: name || image, edit: editAtRead });
+        return;
+      }
       if (linked && !linked.preRead) {
         g = { ...g, nodes: linked.nodes, wires: linked.wires, backdrops: linked.backdrops, linkOverrides: linked.overrides ?? [] };
         dispatch({ type: "mark_edited", id: image });
@@ -344,11 +401,19 @@ export function GraphPersistence({ state, dispatch }: { state: State; dispatch: 
               logMsg("warn", `Linked edits for ${names.join(", ")} were still waiting for those photographs' saved edits to load, and were not applied.`);
             }
           }
-          if (recoveryRef.current) throw new Error(`${recoveryRef.current.path}: resolve the saved edits before closing.`);
+          // Missing edits hold nothing unsaved until something is changed
+          // on screen: the saved edits are elsewhere, untouched.
+          const missing = recoveryRef.current?.status === "missing" ? recoveryRef.current : null;
+          if (missing) {
+            const s = stateRef.current;
+            if (s.activeImage === missing.image && JSON.stringify([s.nodes, s.wires, s.backdrops, s.takes[missing.image]]) !== missing.edit) {
+              throw new Error(`${missing.path}: its edits are not on this computer, and the changes made since are not saved. Choose Start over to keep them, or Find edits… to bring the old ones in.`);
+            }
+          } else if (recoveryRef.current) throw new Error(`${recoveryRef.current.path}: resolve the saved edits before closing.`);
           // No photograph open (an empty collection or folder) is nothing
           // being read: the load effect leaves graphReady null for it.
           const open = stateRef.current.activeImage;
-          if (open && graphReady.current !== open) throw new Error("Saved edits are still being read. Try closing again when reading finishes.");
+          if (open && graphReady.current !== open && missing?.image !== open) throw new Error("Saved edits are still being read. Try closing again when reading finishes.");
         },
         () => win.destroy(),
         error => setSaveErrors([error]),
@@ -420,7 +485,36 @@ export function GraphPersistence({ state, dispatch }: { state: State; dispatch: 
           Retry save
         </button>
       </div>}
-      {recovery && recovery.image === state.activeImage && <div role="alert" className="save-recovery" data-testid="save-recovery-notice">
+      {recovery?.status === "missing" && recovery.image === state.activeImage && <div role="alert" className="save-recovery" data-testid="missing-edits-notice">
+        <strong>This photograph's edits are not on this computer: {state.images.find(i => i.id === recovery.image)?.name ?? recovery.image}</strong>
+        <p>The catalog marks it edited, and its thumbnail shows the edit, but the edits themselves are kept in Heeler's app data folder, not in the catalog, and that folder here has none for it. A catalog moved from another computer brings its thumbnails without its edits. It is shown unedited, and nothing is saved for it, until you choose.</p>
+        {importNote && <p data-testid="missing-edits-import">{importNote}</p>}
+        <button
+          className="chip"
+          data-testid="missing-edits-find"
+          disabled={importing}
+          data-hint="Choose the other computer's Heeler app data folder, its graphs folder or a recovery bundle; the edits of this catalog's edited photographs that have none here are copied in, and nothing here is overwritten"
+          onClick={() => void findEdits()}
+        >
+          Find edits…
+        </button>
+        <button
+          className="chip"
+          data-hint="Read this photograph's edits again, after copying the graphs folder in yourself"
+          onClick={() => setLoadAttempt(n => n + 1)}
+        >
+          Try reading again
+        </button>
+        <button
+          className="chip"
+          data-testid="missing-edits-start-over"
+          data-hint="Edit this photograph from the start. Its new edits are saved and its thumbnail is drawn again, so bring the old edits in first if you still want them"
+          onClick={startOver}
+        >
+          Start over
+        </button>
+      </div>}
+      {recovery?.status === "blocked" && recovery.image === state.activeImage && <div role="alert" className="save-recovery" data-testid="save-recovery-notice">
         <strong>Saved edits need attention: {state.images.find(i => i.id === recovery.image)?.name ?? recovery.image}</strong>
         <p>{recovery.path}: {recovery.error} Automatic saving is paused for this photograph.</p>
         <p>{recovery.broken ? `The original bytes are also preserved at ${recovery.broken}.` : "The saved file stays protected. Restore access to it, then try reading again."}</p>

@@ -18311,6 +18311,34 @@ async fn load_last_good_graph(app: tauri::AppHandle, image_id: String) -> Result
         .map_err(|e| e.to_string())?
 }
 
+/// Brings a moved catalog's edits across (#99). The catalog holds the
+/// edited marks and thumbnails, the app data's `graphs` folder the edits,
+/// so a catalog carried to another computer arrives without them. This
+/// asks for the folder that has them (the other computer's app data, its
+/// `graphs` folder, or a recovery bundle) and copies in the edits of this
+/// catalog's edited photographs that have none here, overwriting nothing.
+/// None when the picker was canceled.
+#[tauri::command]
+async fn import_missing_edits(app: tauri::AppHandle) -> Result<Option<graphstore::Imported>, String> {
+    let issued = catalog_generation(&app)?;
+    tauri::async_runtime::spawn_blocking(move || -> Result<Option<graphstore::Imported>, String> {
+        use tauri_plugin_dialog::DialogExt;
+        let Some(picked) = app
+            .dialog()
+            .file()
+            .set_title("Choose the folder that holds the edits: the other computer's Heeler app data, its graphs folder, or a recovery bundle")
+            .blocking_pick_folder()
+        else {
+            return Ok(None);
+        };
+        let from = picked.into_path().map_err(|e| e.to_string())?;
+        let ids = with_catalog_at(&app, issued, |c| c.edited_ids().map_err(|e| e.to_string()))?;
+        graphstore::import_missing(&graphs_dir(&app)?, &from, &ids).map(Some)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 async fn set_image_rating(app: tauri::AppHandle, image_id: String, stars: u8) -> Result<(), String> {
     // A write, so the guard matters most here: a switch while the tap
@@ -23571,6 +23599,7 @@ pub fn run() {
             save_ui_graph,
             load_ui_graph,
             load_last_good_graph,
+            import_missing_edits,
             list_folders,
             last_session_folder,
             edited_folders,
@@ -24176,6 +24205,7 @@ mod tests {
             "chart_defs",
             "load_ui_graph",
             "load_last_good_graph",
+            "import_missing_edits",
             "reset_image_edits",
             "set_image_keywords",
             "serve_start",

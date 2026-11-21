@@ -1,13 +1,19 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
-import { initialState } from "../data";
+import { initialState as sampleState } from "../data";
 import { reduce, type State, type Command } from "../state";
 import { GraphPersistence } from "../ui/graphpersistence";
 import { autosaves, flushAutosave } from "../autosave";
 const native = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn(), good: vi.fn(), close: undefined as undefined | ((event: { preventDefault(): void }) => Promise<void>), destroy: vi.fn() }));
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ onCloseRequested: async (f: typeof native.close) => { native.close = f; return () => {}; }, destroy: native.destroy }) }));
-vi.mock("../bridge", async original => ({ ...await original<Record<string, unknown>>(), isTauri: () => true, loadGraphResult: native.load, saveGraph: native.save, loadLastGoodGraph: native.good, renderThumbnail: vi.fn().mockResolvedValue(null) }));
+const imported = vi.hoisted(() => ({ run: vi.fn() }));
+vi.mock("../bridge", async original => ({ ...await original<Record<string, unknown>>(), isTauri: () => true, loadGraphResult: native.load, saveGraph: native.save, loadLastGoodGraph: native.good, renderThumbnail: vi.fn().mockResolvedValue(null), importMissingEdits: imported.run }));
+// The sample library marks some photographs edited, the open one among
+// them. These tests answer "no saved file" for a photograph that starts
+// fresh, and an edited mark with no file is #99's missing edits, so the
+// marks start cleared; the tests for #99 set the mark themselves.
+const initialState = (): State => { const s = sampleState(); return { ...s, images: s.images.map((i) => ({ ...i, edited: false })) }; };
 let commands: Command[] = [];
 let send: (c: Command) => void;
 let current: () => State;
@@ -530,4 +536,67 @@ it("closes with no photograph open: an empty collection has nothing being read",
   const event = { preventDefault: vi.fn() }; await act(async () => native.close!(event));
   expect(screen.queryByText(/Saved edits are still being read/)).not.toBeInTheDocument();
   expect(native.destroy).toHaveBeenCalledTimes(1); view.unmount();
+});
+
+/// #99: a catalog carried to another computer brings its edited marks
+/// and thumbnails but not the graph files. A photograph marked edited
+/// with no graph at all says so, saves no default over the gap and draws
+/// no thumbnail from it, until its edits are found or it starts over.
+describe("a photograph whose edits are on another computer", () => {
+  const editedPhoto = () => {
+    const s = initialState();
+    return { ...s, images: s.images.map((i) => i.id === s.activeImage ? { ...i, edited: true } : i) };
+  };
+  it("says so and saves nothing, even after an edit", async () => {
+    const { renderThumbnail } = await import("../bridge");
+    vi.mocked(renderThumbnail).mockClear();
+    const view = render(<Harness start={editedPhoto()} />); await settle();
+    expect(screen.getByTestId("missing-edits-notice")).toHaveTextContent(/not on this computer/);
+    await act(async () => send({ type: "set_param", id: "exposure", param: "exposure", value: 1.25 }));
+    await act(async () => { await flushAutosave(); });
+    expect(native.save).not.toHaveBeenCalled();
+    expect(renderThumbnail).not.toHaveBeenCalled();
+    view.unmount();
+  });
+  it("is not raised by a reset marker, or for a photograph never edited", async () => {
+    native.load.mockResolvedValue({ status: "absent", revision: 4 });
+    const a = render(<Harness start={editedPhoto()} />); await settle();
+    expect(screen.queryByTestId("missing-edits-notice")).toBeNull(); a.unmount();
+    native.load.mockResolvedValue({ status: "absent" });
+    const b = render(<Harness start={initialState()} />); await settle();
+    expect(screen.queryByTestId("missing-edits-notice")).toBeNull(); b.unmount();
+  });
+  it("Find edits reads the photograph again and loads what was brought in", async () => {
+    const s = editedPhoto();
+    const view = render(<Harness start={s} />); await settle();
+    const edit = { nodes: s.nodes.map(n => n.id === "exposure" ? { ...n, params: { ...n.params, exposure: 2 } } : n), wires: s.wires };
+    imported.run.mockResolvedValue({ imported: [s.activeImage], kept: [], unreadable: [], still_missing: [], source: "/old/graphs" });
+    native.load.mockResolvedValue({ status: "ready", graph: edit });
+    await act(async () => fireEvent.click(screen.getByTestId("missing-edits-find")));
+    await settle();
+    expect(screen.queryByTestId("missing-edits-notice")).toBeNull();
+    expect(commands.some(c => c.type === "replace_graph")).toBe(true);
+    view.unmount();
+  });
+  it("Start over edits it as new, saving from then on", async () => {
+    const view = render(<Harness start={editedPhoto()} />); await settle();
+    await act(async () => fireEvent.click(screen.getByTestId("missing-edits-start-over")));
+    await settle();
+    expect(screen.queryByTestId("missing-edits-notice")).toBeNull();
+    await act(async () => send({ type: "set_param", id: "exposure", param: "exposure", value: 1.25 }));
+    await act(async () => { await flushAutosave(); });
+    expect(native.save).toHaveBeenCalled();
+    view.unmount();
+  });
+  it("closes when nothing was changed, and refuses with a reason when something was", async () => {
+    const view = render(<Harness start={editedPhoto()} />); await settle();
+    await act(async () => { await native.close!({ preventDefault() {} }); });
+    expect(native.destroy).toHaveBeenCalled();
+    native.destroy.mockClear();
+    await act(async () => send({ type: "set_param", id: "exposure", param: "exposure", value: 1.25 }));
+    await act(async () => { await native.close!({ preventDefault() {} }); });
+    expect(native.destroy).not.toHaveBeenCalled();
+    expect(screen.getByTestId("save-recovery-errors")).toHaveTextContent(/Start over/);
+    view.unmount();
+  });
 });

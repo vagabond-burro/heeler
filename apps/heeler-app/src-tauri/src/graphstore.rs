@@ -263,6 +263,81 @@ pub fn reset(dir: &Path, id: &str, rev: u64) -> Result<Option<String>, String> {
     Ok(archived)
 }
 
+/// What importing saved edits from another folder did, per photograph id.
+#[derive(Serialize, Debug, Default, PartialEq)]
+pub struct Imported {
+    /// Edits copied in: these photographs had none on this computer.
+    pub imported: Vec<String>,
+    /// Edits found there that were left out because this computer already
+    /// has a graph for the photograph. Nothing is ever overwritten.
+    pub kept: Vec<String>,
+    /// Graph files there that are damaged and were not copied.
+    pub unreadable: Vec<String>,
+    /// The edited photographs still without edits here afterwards.
+    pub still_missing: Vec<String>,
+    /// The folder the graphs were read from.
+    pub source: String,
+}
+
+/// The folder holding graph files under `from`: a `graphs` folder inside
+/// it (another computer's app data, or a recovery bundle), else `from`.
+fn graphs_under(from: &Path) -> PathBuf {
+    let inner = from.join("graphs");
+    if inner.is_dir() { inner } else { from.to_path_buf() }
+}
+
+/// Copies the saved edits of the photographs `ids` from another folder into
+/// `dir`, for a catalog brought from another computer without its graphs
+/// (#99). Only a photograph with no graph here takes one: an existing file,
+/// even a reset marker, is never replaced, and a damaged one there is never
+/// copied. Each copy is written atomically under the save gate, so a save
+/// in flight cannot interleave with it, and its revision raises the gate.
+pub fn import_missing(dir: &Path, from: &Path, ids: &[String]) -> Result<Imported, String> {
+    let source = graphs_under(from);
+    if !source.is_dir() {
+        return Err(format!("{}: not a folder", from.display()));
+    }
+    if std::fs::canonicalize(&source).ok() == std::fs::canonicalize(dir).ok() && dir.exists() {
+        return Err(format!("{}: this is the folder Heeler keeps its edits in already. Choose the other computer's app data folder, its graphs folder or a recovery bundle.", source.display()));
+    }
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let mut revisions = gate().lock().map_err(|e| e.to_string())?;
+    let mut out = Imported { source: source.display().to_string(), ..Default::default() };
+    for id in ids {
+        if crate::sanitize_id(id).is_empty() {
+            continue;
+        }
+        let here = path(dir, id);
+        let there = path(&source, id);
+        let Ok(data) = std::fs::read_to_string(&there) else {
+            if !here.exists() { out.still_missing.push(id.clone()); }
+            continue;
+        };
+        if here.exists() || !broken_files(&here).is_empty() {
+            out.kept.push(id.clone());
+            continue;
+        }
+        if !valid(&data) {
+            out.unreadable.push(id.clone());
+            out.still_missing.push(id.clone());
+            continue;
+        }
+        let reset = serde_json::from_str::<serde_json::Value>(&data)
+            .ok()
+            .is_some_and(|v| v.get("heelerReset").and_then(|v| v.as_bool()) == Some(true));
+        if reset {
+            // The other computer reset this photograph: no edits to bring.
+            out.still_missing.push(id.clone());
+            continue;
+        }
+        write_json(&here, &data).map_err(|e| format!("{}: {e}", here.display()))?;
+        let latest = revisions.entry(here).or_default();
+        *latest = (*latest).max(revision(&data));
+        out.imported.push(id.clone());
+    }
+    Ok(out)
+}
+
 pub fn last_good(dir: &Path, id: &str) -> Result<String, String> {
     named(id)?;
     let p = good(&path(dir, id));
@@ -277,6 +352,45 @@ pub fn last_good(dir: &Path, id: &str) -> Result<String, String> {
 mod tests {
     use super::*;
     const A: &str = r#"{"nodes":[],"wires":[],"activeVersion":"take_1"}"#;
+    fn ids(v: &[&str]) -> Vec<String> { v.iter().map(|s| s.to_string()).collect() }
+    #[test]
+    fn import_brings_missing_edits_and_never_overwrites() {
+        let here = tempfile::tempdir().unwrap();
+        let there = tempfile::tempdir().unwrap();
+        // Another computer's app data: its edits sit in graphs/.
+        let g = there.path().join("graphs");
+        std::fs::create_dir_all(&g).unwrap();
+        let edit = r#"{"nodes":[{"id":"bw","type":"bw","params":{}}],"wires":[],"revision":7}"#;
+        std::fs::write(g.join("a.json"), edit).unwrap();
+        std::fs::write(g.join("b.json"), edit).unwrap();
+        std::fs::write(g.join("c.json"), "not a graph").unwrap();
+        std::fs::write(g.join("r.json"), r#"{"nodes":[],"wires":[],"heelerReset":true,"revision":2}"#).unwrap();
+        std::fs::write(g.join("other.json"), edit).unwrap();
+        // b already has a graph here, which stays.
+        save(here.path(), "b", A, 1, false).unwrap();
+        let out = import_missing(here.path(), there.path(), &ids(&["a", "b", "c", "r", "gone"])).unwrap();
+        assert_eq!(out.imported, ids(&["a"]));
+        assert_eq!(out.kept, ids(&["b"]));
+        assert_eq!(out.unreadable, ids(&["c"]));
+        assert_eq!(out.still_missing, ids(&["c", "r", "gone"]));
+        assert!(matches!(load(here.path(), "a").unwrap(), GraphLoad::Ready { ref data } if data.contains("\"bw\"")));
+        assert!(matches!(load(here.path(), "b").unwrap(), GraphLoad::Ready { ref data } if !data.contains("\"bw\"")));
+        assert!(!here.path().join("other.json").exists(), "only the catalog's edited photographs are copied");
+        assert!(!here.path().join("c.json").exists() && !here.path().join("r.json").exists());
+        // The copy's revision raises the gate: an older save is refused.
+        assert!(save(here.path(), "a", A, 3, false).is_err());
+        // A second import changes nothing.
+        let again = import_missing(here.path(), there.path(), &ids(&["a"])).unwrap();
+        assert_eq!((again.imported.len(), again.kept), (0, ids(&["a"])));
+    }
+    #[test]
+    fn import_reads_a_graphs_folder_itself_and_refuses_its_own() {
+        let here = tempfile::tempdir().unwrap();
+        let there = tempfile::tempdir().unwrap();
+        std::fs::write(there.path().join("a.json"), A).unwrap();
+        assert_eq!(import_missing(here.path(), there.path(), &ids(&["a"])).unwrap().imported, ids(&["a"]));
+        assert!(import_missing(here.path(), here.path(), &ids(&["a"])).is_err());
+    }
     #[test]
     fn the_empty_id_reads_and_writes_nothing() {
         let d = tempfile::tempdir().unwrap();
