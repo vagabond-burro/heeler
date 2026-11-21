@@ -119,14 +119,20 @@ export function BakeProgressDialog({ merge = null }: { merge?: StackMerge | null
   const rows = useSyncExternalStore(subscribe, snapshot).filter((p) => MODAL_OPS.has(p.op));
   const p = rows[rows.length - 1];
   const since = p ? firstHeard.get(p.op) ?? started.get(p.op) : undefined;
-  const [, wake] = useState(0);
+  const [woken, wake] = useState(0);
   const wait = since === undefined ? 0 : since + BAKE_DIALOG_DELAY_MS - Date.now();
   const waiting = wait > 0;
+  // Armed again on every wake that finds the delay not yet over. A timer
+  // is due by the event loop's clock, which on a busy machine runs behind
+  // Date.now(), so it can fire a little before the delay has passed by
+  // the wall clock. Armed only when `waiting` changed, that early wake
+  // left the dialog hidden until the next progress report, and forever
+  // when none came (a Linux run under load).
   useEffect(() => {
     if (!waiting || since === undefined) return;
-    const t = window.setTimeout(() => wake((n) => n + 1), Math.max(0, since + BAKE_DIALOG_DELAY_MS - Date.now()));
+    const t = window.setTimeout(() => wake((n) => n + 1), Math.max(1, since + BAKE_DIALOG_DELAY_MS - Date.now()));
     return () => window.clearTimeout(t);
-  }, [waiting, since]);
+  }, [waiting, since, woken]);
   const merging = !!p && !!merge;
   const visible = merging || (!!p && since !== undefined && !waiting);
   const focus = useDialogFocus(visible);

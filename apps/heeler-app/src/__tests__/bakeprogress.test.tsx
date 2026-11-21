@@ -278,7 +278,9 @@ it("the bake dialog owns keyboard focus, traps Tab and cancels on Escape", async
   const done = watchBake("Baking the warp at full size", () => new Promise<string>((r) => { land = r; }));
   await report(1, 6, "Rendering", "bake-keyboard");
   await wait(BAKE_DIALOG_DELAY_MS + 40);
-  const cancel = screen.getByTestId("bake-dialog-cancel");
+  // Waited for: on a loaded machine the wait can end before half a
+  // second by the wall clock, and the dialog then follows on its timer.
+  const cancel = await screen.findByTestId("bake-dialog-cancel", undefined, { timeout: 5000 });
   expect(document.activeElement).toBe(cancel);
   fireEvent.keyDown(cancel, { key: "Tab" });
   expect(document.activeElement).toBe(cancel);

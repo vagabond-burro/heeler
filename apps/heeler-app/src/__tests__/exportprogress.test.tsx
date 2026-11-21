@@ -100,8 +100,8 @@ describe("an export under the progress dialog", () => {
     await report(7999, 8000, "Rendering and writing the file");
     await wait(BAKE_DIALOG_DELAY_MS + 50);
     // No report follows the wait, so the dialog comes up on its own timer,
-    // which a busy machine runs late (a Linux run): wait for it rather
-    // than expect it on the dot.
+    // which a busy machine (the Linux VM) runs late or wakes early: wait
+    // for it rather than expect it on the dot.
     fireEvent.click(await screen.findByTestId("bake-dialog-cancel", undefined, { timeout: 5000 }));
     await act(async () => land("/out/DSC00114.jpg"));
     expect(await done).toBe("/out/DSC00114.jpg");
@@ -145,7 +145,33 @@ describe("an export under the progress dialog", () => {
     await report(0, 8000, "Reading the photograph");
     await wait(BAKE_DIALOG_DELAY_MS + 50);
     await report(10, 8000, "Reading the photograph");
-    expect(screen.getByTestId("bake-dialog-title")).toHaveTextContent("Exporting DSC_04867.jpg, 2 of 3");
+    // Waited for, not expected on the dot: on a loaded machine the wait
+    // above can end a little before half a second by the wall clock.
+    expect(await screen.findByTestId("bake-dialog-title", undefined, { timeout: 5000 })).toHaveTextContent("Exporting DSC_04867.jpg, 2 of 3");
     clearOp(EXPORT_OP);
+  });
+
+  // A timer is due by the event loop's clock, which under load runs
+  // behind Date.now(), so the dialog's half-second timer can wake it a
+  // little early. It used to stay hidden then until another report came,
+  // and forever when none did, the slow Linux run's three failures. The
+  // wall clock is held back here to make that wake early on purpose.
+  it("still comes up when its timer wakes it before half a second by the wall clock", async () => {
+    tauri();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      render(<BakeProgressDialog />);
+      beginOp(EXPORT_OP, "Exporting DSC00114.jpg");
+      await report(0, 8000, "Reading the photograph");
+      vi.setSystemTime(Date.now() - 40);
+      await act(async () => { vi.advanceTimersByTime(BAKE_DIALOG_DELAY_MS); });
+      expect(screen.queryByTestId("bake-dialog-title"), "40 ms short by the wall clock").toBeNull();
+      // No report follows: the dialog has to come up on its own.
+      await act(async () => { vi.advanceTimersByTime(60); });
+      expect(screen.getByTestId("bake-dialog-title")).toHaveTextContent("Exporting DSC00114.jpg");
+      clearOp(EXPORT_OP);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
