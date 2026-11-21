@@ -11,8 +11,8 @@ const imported = vi.hoisted(() => ({ run: vi.fn() }));
 vi.mock("../bridge", async original => ({ ...await original<Record<string, unknown>>(), isTauri: () => true, loadGraphResult: native.load, saveGraph: native.save, loadLastGoodGraph: native.good, renderThumbnail: vi.fn().mockResolvedValue(null), importMissingEdits: imported.run }));
 // The sample library marks some photographs edited, the open one among
 // them. These tests answer "no saved file" for a photograph that starts
-// fresh, and an edited mark with no file is #99's missing edits, so the
-// marks start cleared; the tests for #99 set the mark themselves.
+// fresh, and an edited mark with no file is the missing-edits case, so the
+// marks start cleared; the missing-edits tests set the mark themselves.
 const initialState = (): State => { const s = sampleState(); return { ...s, images: s.images.map((i) => ({ ...i, edited: false })) }; };
 let commands: Command[] = [];
 let send: (c: Command) => void;
@@ -538,7 +538,7 @@ it("closes with no photograph open: an empty collection has nothing being read",
   expect(native.destroy).toHaveBeenCalledTimes(1); view.unmount();
 });
 
-/// #99: a catalog carried to another computer brings its edited marks
+/// A catalog carried to another computer brings its edited marks
 /// and thumbnails but not the graph files. A photograph marked edited
 /// with no graph at all says so, saves no default over the gap and draws
 /// no thumbnail from it, until its edits are found or it starts over.

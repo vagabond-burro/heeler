@@ -287,8 +287,8 @@ fn graphs_under(from: &Path) -> PathBuf {
 }
 
 /// Copies the saved edits of the photographs `ids` from another folder into
-/// `dir`, for a catalog brought from another computer without its graphs
-/// (#99). Only a photograph with no graph here takes one: an existing file,
+/// `dir`, for a catalog brought from another computer without its graphs.
+/// Only a photograph with no graph here takes one: an existing file,
 /// even a reset marker, is never replaced, and a damaged one there is never
 /// copied. Each copy is written atomically under the save gate, so a save
 /// in flight cannot interleave with it, and its revision raises the gate.

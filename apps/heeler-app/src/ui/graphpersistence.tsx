@@ -3,32 +3,23 @@ import type { State, Command } from "../state";
 import { clampAutosaveDelay, needsMergedDefaults, needsProfileDefaults, needsRenderedBypass } from "../state";
 import { armAutosave, flushAutosave, autosaves, saveBeforeClose } from "../autosave";
 import { nextSaveRevision } from "../saverevision";
-import { clearThumbnail, importMissingEdits, isTauri, lensProfileFor, loadGraphResult, loadLastGoodGraph, loadThumbnail, saveGraph, renderThumbnail, type GraphLoadResult, type ImportedEdits } from "../bridge";
+import { clearThumbnail, importMissingEdits, isTauri, lensProfileFor, loadGraphResult, loadLastGoodGraph, loadThumbnail, saveGraph, renderThumbnail, type GraphLoadResult } from "../bridge";
 import { queueQuadMembers } from "../quadedit";
 import { linkedWith } from "../links";
 import { writeGraphKeepingTakes } from "../copyedits";
 import { freshNodesFor, isPano, photoLineWidth } from "../state";
 import { offerPanoCrop } from "../panocrop";
 import { logDebug, logMsg } from "../log";
+import { importedLine } from "./graphpersistenceparts";
 
 /** A save can finish while Reset or a newer edit replaces its graph.
  * Its late thumbnail must not cover the photograph that replaced it. */
 /** A photograph the catalog marks edited whose saved edits are not in this
  * computer's app data: a catalog carried here from another computer
- * brings its edited marks and thumbnails but not the graphs (#99).
+ * brings its edited marks and thumbnails but not the graphs.
  * `edit` is the graph on screen when that was found, so a close can tell
  * whether anything was changed since. */
 type MissingEdits = { status: "missing"; image: string; path: string; edit: string };
-
-/** The line under the missing-edits notice after an import. */
-export function importedLine(r: ImportedEdits, name: (id: string) => string): string {
-  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
-  const parts = [`${n(r.imported.length, "photograph's edits", "photographs' edits")} copied in from ${r.source}.`];
-  if (r.kept.length) parts.push(`${n(r.kept.length, "photograph already has", "photographs already have")} edits on this computer and kept them.`);
-  if (r.unreadable.length) parts.push(`${n(r.unreadable.length, "file there is", "files there are")} damaged and was left out: ${r.unreadable.map(name).join(", ")}.`);
-  if (r.still_missing.length) parts.push(`${n(r.still_missing.length, "edited photograph still has", "edited photographs still have")} no edits here.`);
-  return parts.join(" ");
-}
 
 function graphIsCurrent(state: State, id: string, graph: Pick<State, "nodes" | "wires">): boolean {
   if (state.resetPending.includes(id)) return false;
@@ -185,7 +176,7 @@ export function GraphPersistence({ state, dispatch }: { state: State; dispatch: 
       // a revision): its edits are on another computer. Read as unedited
       // it got a default graph saved over the gap and its thumbnail, the
       // one sign of the edit left, rendered again from that default
-      // (#99). It is held like a damaged file instead: shown from the
+      // It is held like a damaged file instead: shown from the
       // template, nothing saved or rendered, until the edits are found
       // or the user starts over.
       if (result.status === "absent" && !result.revision && entry?.edited && !(linked && !linked.preRead) && !startedOver.current.has(image)) {

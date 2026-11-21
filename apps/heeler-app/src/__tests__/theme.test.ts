@@ -551,7 +551,7 @@ describe("nothing writes in a color you cannot read", () => {
   });
 });
 
-// #100: the Navigator in the top-left corner drew over the menubar's
+// The Navigator in the top-left corner drew over the menubar's
 // menus, since the menus' 40 lost to its 45. The bar is now a layer of its
 // own over everything the workspace floats, and a menu anywhere outranks
 // the canvas's overlays.

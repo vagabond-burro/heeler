@@ -18311,7 +18311,7 @@ async fn load_last_good_graph(app: tauri::AppHandle, image_id: String) -> Result
         .map_err(|e| e.to_string())?
 }
 
-/// Brings a moved catalog's edits across (#99). The catalog holds the
+/// Brings a moved catalog's edits across. The catalog holds the
 /// edited marks and thumbnails, the app data's `graphs` folder the edits,
 /// so a catalog carried to another computer arrives without them. This
 /// asks for the folder that has them (the other computer's app data, its

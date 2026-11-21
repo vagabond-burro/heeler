@@ -4082,7 +4082,7 @@ export type ImportedEdits = { imported: string[]; kept: string[]; unreadable: st
 /** Asks for the folder holding this catalog's edits on another computer
  * (its app data, its graphs folder or a recovery bundle) and copies in
  * those of the edited photographs that have none here, overwriting
- * nothing (#99). Null when the picker is canceled, or in the browser. */
+ * nothing. Null when the picker is canceled, or in the browser. */
 export async function importMissingEdits(): Promise<ImportedEdits | null> {
   return isTauri() ? call<ImportedEdits | null>("import_missing_edits") : null;
 }
