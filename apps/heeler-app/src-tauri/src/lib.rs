@@ -11739,6 +11739,10 @@ static RECENT_CHECKS_RUNNING: std::sync::atomic::AtomicUsize = std::sync::atomic
 
 struct RecentCheckPermit;
 impl RecentCheckPermit {
+    // Newer Rust renames fetch_update to try_update and warns on the old
+    // name, but try_update is not there in 1.89, the oldest Rust this crate
+    // supports (rust-version). Switch once that floor rises past it.
+    #[allow(deprecated)]
     fn take() -> Option<Self> {
         RECENT_CHECKS_RUNNING.fetch_update(std::sync::atomic::Ordering::AcqRel,
             std::sync::atomic::Ordering::Relaxed, |n| (n < RECENT_CHECK_WORKERS).then_some(n + 1))
