@@ -1,5 +1,12 @@
 # What's new
 
+## 2026.7.2
+
+### Fixes
+
+- **Menus open over the Navigator.** With the Navigator in the canvas's top-left corner, the View menu and its neighbors opened under its thumbnail, which hid their rows and took their clicks. Menus from the menu bar, and right-click menus, now open over the Navigator, the Loupe and everything else floating over the canvas, wherever it sits. [Navigator and Loupe](user-guide/image-viewport.md#navigator-and-loupe).
+- **A moved catalog's edits are not lost without a word.** The edits are kept in Heeler's app data folder, not in the catalog, so a catalog carried to another computer arrived with its thumbnails showing the edits but opened every edited photograph unedited, and saved a fresh, unedited version over the gap. Such a photograph now says its edits are not on this computer and saves nothing until you choose. **Find edits…** brings in the edits of the whole catalog from the old computer's app data folder or a recovery bundle, replacing nothing, and **Start over** edits it anew. [Moving a catalog to another computer](user-guide/library.md#moving-a-catalog-to-another-computer).
+
 ## 2026.7.1
 
 ### New
