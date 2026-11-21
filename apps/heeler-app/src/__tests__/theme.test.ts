@@ -550,3 +550,38 @@ describe("nothing writes in a color you cannot read", () => {
     expect(failures).toEqual([]);
   });
 });
+
+// #100: the Navigator in the top-left corner drew over the menubar's
+// menus, since the menus' 40 lost to its 45. The bar is now a layer of its
+// own over everything the workspace floats, and a menu anywhere outranks
+// the canvas's overlays.
+describe("an open menu draws over the canvas's overlays", () => {
+  const rule = (sel: string) => {
+    const at = CSS.search(new RegExp(`^${sel.replace(".", "\\.")} \\{`, "m"));
+    expect(at, sel).toBeGreaterThanOrEqual(0);
+    return CSS.slice(at, CSS.indexOf("}", at));
+  };
+  const z = (block: string) => Number(/z-index:\s*(\d+)/.exec(block)?.[1]);
+  // The highest layer anything floating over the canvas or graph takes.
+  const overlays = () => {
+    const files = ["ui/viewaids.tsx", "ui/viewer.tsx", "ui/canvas.tsx", "ui/graph.tsx", "ui/inspect.tsx"];
+    let top = z(rule(".stack-merge"));
+    for (const f of files) {
+      for (const m of src(f).matchAll(/position: "absolute"[^}]*?zIndex: (\d+)|zIndex: (\d+),[^}]*?position: "absolute"/g)) {
+        top = Math.max(top, Number(m[1] ?? m[2]));
+      }
+    }
+    return top;
+  };
+
+  it("lifts the whole top bar above the workspace's overlays, under the dialogs", () => {
+    const bar = z(rule(".topbar"));
+    expect(bar).toBeGreaterThan(overlays());
+    expect(bar).toBeLessThan(z(rule(".modal-scrim")));
+    expect(bar).toBeLessThan(60);
+  });
+
+  it("puts a menu over the Navigator, the Loupe and the graph's notices", () => {
+    expect(z(rule(".ctx-menu"))).toBeGreaterThan(overlays());
+  });
+});

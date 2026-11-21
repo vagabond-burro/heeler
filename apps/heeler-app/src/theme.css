@@ -210,6 +210,13 @@ img, svg { -webkit-user-drag: none; }
   display: flex; align-items: center; padding: 0 12px; gap: 14px;
   /* The centered title is positioned against the whole bar. */
   position: relative;
+  /* The bar is its own layer, over everything the workspace floats (the
+  Navigator and Loupe at 44-45, the graph's search and notice at 50-55),
+  so a menu dropped from it covers them wherever they sit, and under the
+  popovers and dialogs (60 and up). Without it the menus' 40 lost to a
+  Navigator in the top-left corner, which hid the rows of View under its
+  thumbnail and took their clicks (#100). */
+  z-index: 58;
   /* The bar doubles as the window drag region; labels must not select. */
   user-select: none;
   -webkit-user-select: none;
@@ -677,10 +684,13 @@ where they stop looking switched off.*/
 }
 
 /* 1.15x from the original 11px/9px, with the width breathing to
-match (the owner, from tester feedback rounds).*/
+match (the owner, from tester feedback rounds).
+A menu sits at 60, over the canvas's and graph's floating overlays
+(45-55): a right-click menu pinned to the window could otherwise open
+under the Navigator or the Loupe (#100).*/
 .ctx-menu {
   position: absolute; width: 240px; background: #1e1d1b; border: 1px solid #3a3735;
-  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.6); padding: 4px 0; z-index: 40;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.6); padding: 4px 0; z-index: 60;
   border-radius: var(--radius-btn);
 }
 .ctx-menu .hd { padding: 5px 12px 6px; font-size: 10.4px; letter-spacing: 0.14em; color: var(--text-ghost); }
