@@ -1,5 +1,11 @@
 # What's new
 
+## 2026.7.3
+
+### New
+
+- **Nikon High Efficiency RAW.** High Efficiency and High Efficiency★ NEFs from the Z8, Z9, Zf, Z6III, Z5II, Z50II and ZR now open and develop like any other NEF, at every image area the cameras offer. Until now they showed only the camera's preview. The sensor data Heeler reads from them was checked against a DNG conversion of the same files and matches it exactly. [RAW files Heeler cannot develop yet](user-guide/library.md#raw-files-heeler-cannot-develop-yet).
+
 ## 2026.7.2
 
 ### Fixes

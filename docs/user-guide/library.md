@@ -14,11 +14,12 @@ Open a folder with **File > Open folder…** or the folder icon in the Catalog h
 
 A RAW file Heeler does not read yet still shows in the Library, with the camera's own preview as its thumbnail, but it does not open for editing. The status line names the file and the reason, and the console keeps the same words.
 
-**Nikon High Efficiency and High Efficiency★ NEFs** (the Z8, Z9, Zf, Z6III, Z5II, Z50II and ZR among them) are the common case. Their compression is not documented, and Heeler's work on reading it is backlogged until a later date. Progress is tracked at https://github.com/vagabond-burro/heeler/issues/76. Until then:
+**A format or variant Heeler does not read** is the usual reason. Until an update reads it:
 
-- **For new photographs**, set **RAW recording** in the camera's photo shooting menu to **Lossless compressed**. Those NEFs develop in Heeler like any other.
-- **For High Efficiency NEFs you already have**, convert them to DNG with a converter that reads them, keeping the raw data (not a linear DNG), and open the DNG. Heeler develops the converted file as it develops any camera's DNG. Keep the original NEF.
-- **Or develop them in software that reads them** and export a 16-bit TIFF. Heeler opens it as a finished picture, so the Source section's RAW controls (white balance as shot, highlights) do not apply to it.
+- **Convert the file to DNG** with a converter that reads it, keeping the raw data (not a linear DNG), and open the DNG. Heeler develops the converted file as it develops any camera's DNG. Keep the original.
+- **Or develop it in software that reads it** and export a 16-bit TIFF. Heeler opens it as a finished picture, so the Source section's RAW controls (white balance as shot, highlights) do not apply to it.
+
+**Nikon High Efficiency and High Efficiency★ NEFs** (the Z8, Z9, Zf, Z6III, Z5II, Z50II and ZR) develop like any other NEF from 2026.7.3 on. Heeler reads the kind those cameras write today; a later camera or firmware that writes another kind is turned away with its reason, and the two ways above work for it.
 
 **A camera newer than your version of Heeler** may write a format Heeler reads but not be known to it yet: its frame size or its color calibration is missing. Its files show their thumbnails and say "this camera is not supported yet" on the status line; an update that adds the camera develops them. Converting them to DNG, as above, works in the meantime.
 
