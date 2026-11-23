@@ -182,6 +182,9 @@ pub enum Coding {
     /// Nikon's Huffman coding (nef.rs): one stream, each sample a
     /// prediction and a coded difference.
     NikonHuffman(Box<crate::nef::Huffman>),
+    /// Nikon's High Efficiency coding (nef_he.rs): one codestream, the
+    /// mosaic as four wavelet-coded planes.
+    NikonHe,
     /// Panasonic's 16-byte packets (rw2.rs): one span, row after row.
     Panasonic(crate::rw2::Panasonic),
     /// Olympus's layouts beyond TIFF's (orf.rs): its compression, or 12-bit
