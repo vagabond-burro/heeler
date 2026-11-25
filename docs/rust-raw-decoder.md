@@ -86,7 +86,7 @@ fallback to LibRaw, all of which Phase 16 ended for the shipped app.
   camera taken, 4987 of the 5108 files LibRaw opens develop in Rust; the
   rest are listed under Phase 16.
 
-- Nikon's High Efficiency coding (`nef_he.rs`, 2026.7.3) is outside the
+- Nikon's High Efficiency coding (`nef_he.rs`, 2027.1.0) is outside the
   corpus tests, which have no reference for it. The `mosaicdiff` example
   (heeler-rawdec) unpacks a file and a converter's uncompressed DNG of
   it and compares every site; 43 files from the Z 8, Z 9, Z f, Z6 III,
