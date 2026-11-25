@@ -86,6 +86,16 @@ fallback to LibRaw, all of which Phase 16 ended for the shipped app.
   camera taken, 4987 of the 5108 files LibRaw opens develop in Rust; the
   rest are listed under Phase 16.
 
+- Nikon's High Efficiency coding (`nef_he.rs`, 2026.7.3) is outside the
+  corpus tests, which have no reference for it. The `mosaicdiff` example
+  (heeler-rawdec) unpacks a file and a converter's uncompressed DNG of
+  it and compares every site; 43 files from the Z 8, Z 9, Z f, Z6 III,
+  Z5 II, Z50 II and ZR, both modes and every image area, match to the
+  bit. A frame coded in the module's tests and decoded needs no file. A
+  45 MP frame unpacks in about 60 ms, its slices across the cores. The
+  converter's DNGs state a white level of 15892; the develop takes
+  16383, as it does for the same cameras' lossless files.
+
 ### Known differences from LibRaw
 
 - White balance: the Nikon D2X and D50 (enciphered balance, developed in
@@ -116,8 +126,14 @@ fallback to LibRaw, all of which Phase 16 ended for the shipped app.
   differs by about a pixel and its gain by about 0.1%; the Rust develop
   reads the whole area at both sizes. No corpus file with these maps
   has an odd area (78 files, all even).
-- Formats: Nikon High Efficiency NEFs (parked; LibRaw cannot decode them
-  either) and the rare formats Phase 16's survey lists.
+- Formats: the rare formats Phase 16's survey lists.
+- Nikon's High Efficiency coding: 9912 of its table's 81792 entries
+  were reached by no sample (below the black level, and between the
+  brightest highlights' sparse values) and may be one off; the only
+  reference is one converter's DNGs; a stream of other header fields
+  than the 43 samples', or with raw-coded packets, is declined; its
+  unpack's memory term is counted, not measured, and no corpus test
+  holds it (the samples are in neither corpus).
 - Elsewhere: `heeler-raw --no-default-features --all-targets` does not
   compile; the tests run without overflow checks.
 

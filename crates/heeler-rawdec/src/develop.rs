@@ -99,6 +99,7 @@ impl Plan {
             (1, 0, _) if matches!(&dng.coding, Coding::Crx(_)) && (8..=16).contains(&dng.bits) => {}
             (1, 0, _) if matches!(&dng.coding, Coding::CrxWavelet(_)) && (8..=16).contains(&dng.bits) => {}
             (1, 34713, _) if matches!(&dng.coding, Coding::NikonHuffman(_)) && (12..=14).contains(&dng.bits) => {}
+            (1, 34713, _) if dng.coding == Coding::NikonHe && dng.bits == 14 => {}
             (1, 34316, _) if matches!(&dng.coding, Coding::Panasonic(_)) && (12..=16).contains(&dng.bits) => {}
             (1, 65000, _) if matches!(&dng.coding, Coding::Kodak65000(_)) => {}
             (1, 65535, _) if matches!(&dng.coding, Coding::Pentax(_)) && (12..=14).contains(&dng.bits) => {}
@@ -487,11 +488,14 @@ impl Plan {
     /// sizes) and a quarter more. A Huffman stream read across the cores
     /// keeps each piece's differences once for each of its codes, beside
     /// the differences in order (Nikon's in 16 bits, Pentax's in 32);
-    /// C-RAW's wavelet keeps its bands in 32 bits;
+    /// C-RAW's wavelet keeps its bands in 32 bits; Nikon's High Efficiency
+    /// coding keeps every precinct's rows and the four planes they make
+    /// in 32 bits, 8 bytes a pixel (by count, not yet by measure);
     /// a three-color image is read whole, then copied to its area.
     fn unpack_bytes(&self) -> Result<usize, memory::MemoryError> {
         let per_pixel = match &self.dng.coding {
             Coding::NikonHuffman(_) => 13,
+            Coding::NikonHe => 10,
             Coding::Pentax(_) => 13,
             Coding::CrxWavelet(_) => 20,
             Coding::KodakSmall(..) => 12,
@@ -867,6 +871,14 @@ pub fn unpack(bytes: &[u8], p: &Plan, stop: Option<&AtomicBool>) -> Result<Vec<u
         // Rows below the image area are not decoded: some files' streams
         // stop at its last row.
         crate::nef::decode(&bytes[at..at + len], d.width, d.height.min(p.top + p.height), h, |r, line| put_run(out, p, r, 0, line, lin))?;
+        return Ok(cfa);
+    }
+    if d.coding == Coding::NikonHe {
+        // One codestream, its slices across the cores; rows below the
+        // image area are not handed over.
+        let (at, len) = d.pieces.spans[0];
+        stopped(stop)?;
+        crate::nef_he::decode(&bytes[at..at + len], d.width, d.height, d.height.min(p.top + p.height), stop, |r, line| put_run(out, p, r, 0, line, lin))?;
         return Ok(cfa);
     }
     if let Coding::CanonCrw(c) = &d.coding {

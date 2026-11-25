@@ -53,10 +53,6 @@ export function missingSourcePath(error: string): string | null {
   return tail.length > 0 && /[\\/]/.test(tail) ? tail : null;
 }
 
-/** The issue that tracks Nikon's High Efficiency RAW, backlogged until a
- * later date (2026-10-26). */
-export const HIGH_EFFICIENCY_NEF_ISSUE = "https://github.com/vagabond-burro/heeler/issues/76";
-
 /** True for a photograph the develop turns away for what the file is: a
  * RAW format or variant not read yet, a damaged file, a main image only
  * its thumbnail stands for, a develop that reads as noise. Retrying
@@ -67,20 +63,12 @@ export function isUndevelopable(error: string): boolean {
 }
 
 /** What the app says about an undevelopable photograph: its file name
- * and the decoder's reason, and for a High Efficiency NEF what to do
- * instead (2026-10-26: "list options (like convert to DNG) for users",
- * "link to the issue from the error"). `status` is for the status line,
- * one line that ends in an ellipsis when it runs out of room, so it
- * leads with the options; `log` is the whole of it, the issue's address
- * included, for the console. */
+ * and the decoder's reason. `status` is for the status line; `log` adds
+ * the file's path, for the console. */
 export function undevelopableMessage(error: string): { status: string; log: string } {
   const path = missingSourcePath(error);
   const name = path?.split(/[\\/]/).pop();
   const reason = (path ? error.slice(0, error.lastIndexOf(": ")) : error).replace(/^.*?unsupported: /, "");
   const who = name ?? "This photograph";
-  if (/Nikon High Efficiency NEF/.test(error)) {
-    const status = `${who}: Nikon's High Efficiency RAW is not supported yet. Record Lossless compressed RAW, or convert the file to DNG and open that. See Help > User Documentation > Library.`;
-    return { status, log: `${status} Progress: ${HIGH_EFFICIENCY_NEF_ISSUE}${path ? ` (${path})` : ""}` };
-  }
   return { status: `${who}: ${reason}`, log: `${who}: ${reason}${path ? ` (${path})` : ""}` };
 }

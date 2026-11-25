@@ -20,6 +20,7 @@ pub mod gain_map;
 pub mod geometry;
 pub mod ljpeg;
 pub mod nef;
+pub mod nef_he;
 pub mod rw2;
 pub mod orf;
 pub mod pef;

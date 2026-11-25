@@ -6,8 +6,8 @@
 //! packed most significant bits first; and, marked as Nikon's compression
 //! (34713) but stored whole, 12 and 14-bit samples packed least
 //! significant bits first, a row's bytes sometimes padded to 16. Nikon's
-//! Huffman coding, the High Efficiency coding and the small NEF are
-//! declined and stay LibRaw's.
+//! Huffman coding is read below, the High Efficiency coding in nef_he.rs,
+//! the small NEF in nef_small.rs.
 //!
 //! The white balance as shot is the maker notes' WB_RBLevels (0x000C: red,
 //! then blue, against green), which LibRaw takes as is, else an
@@ -179,12 +179,10 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
             };
             (Coding::PackedLow, bits_tag as u32, pieces)
         }
+        // A High Efficiency (or High Efficiency star) frame: its strip one
+        // codestream (nef_he.rs), 14-bit once decoded.
+        Some(34713) if offsets.len() == 1 && bits_tag == 14 && crate::nef_he::is_stream(&bytes[offsets[0] as usize..]) => (Coding::NikonHe, 14, Pieces { width, height, spans: vec![(offsets[0] as usize, count)] }),
         Some(34713) if offsets.len() == 1 => {
-            // A High Efficiency (or High Efficiency star) frame: its strip a
-            // JPEG XS codestream (SOC then CAP), not read here.
-            if bytes.get(offsets[0] as usize..).is_some_and(|b| b.starts_with(&[0xff, 0x10, 0xff, 0x50])) {
-                return Err(Error::Unsupported("a Nikon High Efficiency NEF"));
-            }
             let (mt, e) = note(0x0096).ok_or(Error::Unsupported("no NEFLinearizationTable"))?;
             let (code, curve) = huffman_code(mt, e, bits_tag)?;
             // The row a lossy frame's second code starts at, after a curve
@@ -299,7 +297,7 @@ pub fn parse(bytes: &[u8]) -> Result<Dng, Error> {
         width,
         height,
         bits,
-        compression: if matches!(coding, Coding::NikonHuffman(_)) { 34713 } else { 1 },
+        compression: if matches!(coding, Coding::NikonHuffman(_) | Coding::NikonHe) { 34713 } else { 1 },
         photometric: 32803,
         samples: 1,
         sample_format: 1,

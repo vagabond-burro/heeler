@@ -21,7 +21,7 @@ import { reduce, trashConfirmAction, type Command, type ImageEntry, type State }
 import { mockRemovalCalls, mockResetRemovalCalls, type FolderImage } from "../bridge";
 import { ConfirmDialog } from "../ui/catalogui";
 import { confirmCopy } from "../ui/cataloguiparts";
-import { HIGH_EFFICIENCY_NEF_ISSUE, isMissingSource, isUndevelopable, undevelopableMessage } from "../previewretry";
+import { isMissingSource, isUndevelopable, undevelopableMessage } from "../previewretry";
 
 const files: FolderImage[] = [
   { id: "img_here", name: "here.NEF", stars: 3, flag: "", edited: true },
@@ -147,17 +147,14 @@ describe("a render that cannot be retried into working", () => {
     expect(plain.log).toContain("/photos/M001.MDC");
   });
 
-  it("gives a High Efficiency NEF its options and the issue that tracks it", () => {
-    // 2026-10-26: "link to the issue from the error", "list options (like
-    // convert to DNG) for users". The options lead, since the status line
-    // ends in an ellipsis; the issue's address goes to the console.
-    const he = "unsupported: this RAW file's format is not supported yet (a Nikon High Efficiency NEF), so it cannot be developed: /photos/DSC_0068.NEF";
+  it("says a declined High Efficiency NEF's reason like any other's", () => {
+    // High Efficiency NEFs develop; one of a layout the decoder has not
+    // seen is turned away with its reason, with no advice of its own.
+    const he = "unsupported: this RAW file's format is not supported yet (a Nikon High Efficiency frame of a layout not read here), so it cannot be developed: /photos/DSC_0068.NEF";
     expect(isUndevelopable(he)).toBe(true);
     const { status, log } = undevelopableMessage(he);
-    expect(status).toMatch(/^DSC_0068\.NEF: Nikon's High Efficiency RAW is not supported yet\. Record Lossless compressed RAW, or convert the file to DNG/);
-    expect(status).toContain("Help > User Documentation > Library");
-    expect(log).toContain(HIGH_EFFICIENCY_NEF_ISSUE);
-    expect(HIGH_EFFICIENCY_NEF_ISSUE).toBe("https://github.com/vagabond-burro/heeler/issues/76");
+    expect(status).toBe("DSC_0068.NEF: this RAW file's format is not supported yet (a Nikon High Efficiency frame of a layout not read here), so it cannot be developed");
+    expect(log).toContain("/photos/DSC_0068.NEF");
   });
 });
 
