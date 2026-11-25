@@ -56,14 +56,21 @@
 //! The table (nef_he_curve.bin, 81792 16-bit little-endian numbers, for
 //! values from -32768 up) was measured: each coded value paired with the
 //! sample a raw converter's uncompressed DNG of the same file holds at
-//! that site, over 1.24 billion sites. 71880 of its entries were seen or
-//! lie between two seen entries of one value; the 9912 others (below the
-//! black level, and between the sparse values of the brightest highlights)
-//! are filled in from their neighbors and may be one off.
+//! that site. Every entry was seen. The cameras' files reach 55589 of
+//! them, over 1.24 billion sites; the rest lie below the black level or
+//! between the sparse values of the brightest highlights. Three frames
+//! made for the purpose reach all 81792: a ramp through every coded value,
+//! written in place of a camera file's stream with nothing truncated and
+//! the modes the cameras use, on files from three bodies, converted like
+//! any other. The three agree with each other at every entry, and with
+//! the cameras' files at every entry those reach. A value below the
+//! table's first takes its first (0) and one past its last its last
+//! (16383), as the converter's DNGs have them.
 //!
 //! Held to that converter's DNGs to the bit, every site, on 43 files from
-//! the seven bodies above, in both modes and every image area. A stream
-//! unlike those (other header fields, raw-coded packets) is declined.
+//! the seven bodies above, in both modes and every image area, and on the
+//! three made frames. A stream unlike those (other header fields,
+//! raw-coded packets) is declined.
 
 use std::sync::atomic::AtomicBool;
 
@@ -968,7 +975,13 @@ mod tests {
         let entry = |i: usize| u16::from_le_bytes([CURVE[2 * i], CURVE[2 * i + 1]]);
         assert_eq!(CURVE.len(), 2 * CURVE_LEN);
         assert!((1..CURVE_LEN).all(|i| entry(i) >= entry(i - 1)));
-        assert!(entry(CURVE_LEN - 1) <= 16383);
+        // From 0 to 14 bits' top, a step at a time: no sensor value is
+        // skipped, so none is out of a file's reach.
+        assert_eq!((entry(0), entry(CURVE_LEN - 1)), (0, 16383));
+        assert!((1..CURVE_LEN).all(|i| entry(i) - entry(i - 1) <= 1));
+        // The black level every file states, where the coded values
+        // reach it.
+        assert_eq!((entry(15851), entry(16384), entry(16498), entry(16499)), (1008, 1008, 1008, 1009));
     }
 
     #[test]

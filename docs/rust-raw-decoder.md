@@ -91,10 +91,18 @@ fallback to LibRaw, all of which Phase 16 ended for the shipped app.
   (heeler-rawdec) unpacks a file and a converter's uncompressed DNG of
   it and compares every site; 43 files from the Z 8, Z 9, Z f, Z6 III,
   Z5 II, Z50 II and ZR, both modes and every image area, match to the
-  bit. A frame coded in the module's tests and decoded needs no file. A
-  45 MP frame unpacks in about 60 ms, its slices across the cores. The
-  converter's DNGs state a white level of 15892; the develop takes
-  16383, as it does for the same cameras' lossless files.
+  bit. Its table from coded values to the sensor's was measured the
+  same way, and every one of its 81792 entries was seen: 55589 in the
+  cameras' files, all of them in three frames made for the purpose (a
+  ramp through every coded value, written in place of a camera file's
+  stream and converted like any other), which agree with each other and
+  with the cameras' files. The first table, filled in where no camera
+  file reached, was one off at 2210 entries, all below the black level
+  (sensor values under 918). A frame coded in the module's tests and
+  decoded needs no file. A 45 MP frame unpacks in about 60 ms, its
+  slices across the cores. The converter's DNGs state a white level of
+  15892; the develop takes 16383, as it does for the same cameras'
+  lossless files.
 
 ### Known differences from LibRaw
 
@@ -127,13 +135,11 @@ fallback to LibRaw, all of which Phase 16 ended for the shipped app.
   reads the whole area at both sizes. No corpus file with these maps
   has an odd area (78 files, all even).
 - Formats: the rare formats Phase 16's survey lists.
-- Nikon's High Efficiency coding: 9912 of its table's 81792 entries
-  were reached by no sample (below the black level, and between the
-  brightest highlights' sparse values) and may be one off; the only
-  reference is one converter's DNGs; a stream of other header fields
-  than the 43 samples', or with raw-coded packets, is declined; its
-  unpack's memory term is counted, not measured, and no corpus test
-  holds it (the samples are in neither corpus).
+- Nikon's High Efficiency coding: the only reference is one converter's
+  DNGs; a stream of other header fields than the 43 samples', or with
+  raw-coded packets, is declined; its unpack's memory term is counted,
+  not measured, and no corpus test holds it (the samples are in neither
+  corpus).
 - Elsewhere: `heeler-raw --no-default-features --all-targets` does not
   compile; the tests run without overflow checks.
 
