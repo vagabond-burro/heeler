@@ -5,6 +5,7 @@
 ### New
 
 - **Nikon High Efficiency RAW.** High Efficiency and High Efficiency★ NEFs from the Z8, Z9, Zf, Z6III, Z5II, Z50II and ZR now open and develop like any other NEF, at every image area the cameras offer. Until now they showed only the camera's preview. The sensor data Heeler reads from them was checked against a DNG conversion of the same files and matches it exactly. [RAW files Heeler cannot develop yet](user-guide/library.md#raw-files-heeler-cannot-develop-yet).
+- **Curve points from the keyboard.** The Curves editor and the Tone Profile's Custom curve can now be edited without a pointer, with the same keys in both. Tab moves between a curve's points and the focused one wears a ring; the arrow keys move it, a larger step with Shift; Enter adds a point on the curve halfway to the next one; Delete or Backspace removes it. Each press is one undo step, and so is a held key's whole run. A screen reader reads each point's place and position.
 
 ## 2026.7.2
 

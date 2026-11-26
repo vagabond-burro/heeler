@@ -11,6 +11,16 @@ Curves maps input tone to output tone. It can adjust all channels together or sh
 - Arm the picker (the eyedropper at the left end of the row, beside the canvas) and click in the photograph to add or select a point at that tone.
 - The per-channel histogram behind the curve shows where image data lies.
 
+### From the keyboard
+
+Every point can be edited without a pointer. The Tone Profile's Custom curve takes the same keys.
+
+- `Tab` moves to the next point and `Shift+Tab` to the one before; the focused point wears a ring.
+- The arrow keys move the focused point: Left and Right change its input, Up and Down its output, a hundredth of the plot at a press. Hold `Shift` for a step five times larger. The end points stay on the plot's edges, so only Up and Down move them. Each press is one undo step, and holding a key down is one step for the whole run.
+- `Enter` adds a point on the curve halfway to the next point (from the last point, halfway back to the one before) and moves the focus to it.
+- `Delete` or `Backspace` removes the focused point. The two end points stay.
+- A screen reader reads each point as its place among the points and its position, such as "Point 2 of 3: input 0.25, output 0.40".
+
 A gentle S-curve increases contrast; the opposite decreases it. Channel curves can remove a color cast or build a creative grade, but small movements are usually sufficient.
 
 ![Curves](../assets/screenshots/section-curves.png)

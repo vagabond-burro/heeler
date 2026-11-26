@@ -19,6 +19,13 @@ behavior that automated DOM tests cannot certify.
   tracks. Hear each full adjustment name, "slider" and a changing numeric value,
   including when the panel shows abbreviated labels. Arrow keys adjust the
   selected band without moving the page.
+- [ ] **Curve points:** open Curves and Tab to the plot. Hear each point's
+  place among the points and its input and output; the focused point wears a
+  ring. Move it with the arrow keys, and further with Shift. Press Enter to add
+  a point halfway to the next one and hear the new point; press Delete to
+  remove it. Undo takes back one press, or one held run of moves. Choose
+  **Custom** in the Tone Profile and do the same on its curve, hearing stops
+  and the display value.
 - [ ] **Preferences tracks and switches:** open Preferences, visit Editing &
   Brush and adjust a step-size track. Hear the track's name and value. Return to
   General and toggle a switch with Space or Enter. Hear its setting name and

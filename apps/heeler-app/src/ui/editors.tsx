@@ -15,6 +15,7 @@ import { CurveClipButtons } from "./curveclipboard";
 import { EyedropperIcon, ResetIcon } from "./panelicons";
 import { modLabel } from "../platform";
 import { inkView, storedFromInk } from "./editorsparts";
+import { CURVE_KEYS_HINT, useCurvePointKeys } from "./curvekeys";
 
 type D = React.Dispatch<Command>;
 
@@ -337,6 +338,11 @@ export function CurveEditor({
   /** Full 2D drag; endpoints stay pinned to x=0/x=1, interior points are
    * clamped between their neighbors so the curve stays a function. */
   const setPoint = (idx: number, clientX: number, clientY: number) => {
+    const [rawX, y] = toCurve(clientX, clientY);
+    placePoint(idx, rawX, y);
+  };
+  /** The point put at a place on the plot, by the pointer or the keys. */
+  const placePoint = (idx: number, rawX: number, y: number) => {
     // Through the ref, never the render: the first move after an add
     // outruns the re-render, and the render-time list is one point
     // short. A double-click removes a point mid-drag too, so the index
@@ -344,7 +350,6 @@ export function CurveEditor({
     // NaN coordinates.
     const cur = ptsRef.current;
     if (idx < 0 || idx >= cur.length) return;
-    const [rawX, y] = toCurve(clientX, clientY);
     const isFirst = idx === 0;
     const isLast = idx === cur.length - 1;
     const x = isFirst
@@ -352,6 +357,9 @@ export function CurveEditor({
       : isLast
         ? 1
         : Math.min(cur[idx + 1][0] - 0.01, Math.max(cur[idx - 1][0] + 0.01, rawX));
+    // A key press against a neighbor or an edge moves nothing, and
+    // writes nothing.
+    if (x === cur[idx][0] && y === cur[idx][1]) return;
     const next = cur.map((p, i) => (i === idx ? ([x, y] as [number, number]) : p));
     commit(next, tangentMode ? tanRef.current : undefined, tangentMode ? handlesRef.current : undefined);
   };
@@ -478,9 +486,15 @@ export function CurveEditor({
 
   /** Click on empty curve area: add a point there and start dragging it. */
   const addPoint = (clientX: number, clientY: number) => {
-    const cur = ptsRef.current;
     const [x, y] = toCurve(clientX, clientY);
     const cx = Math.min(0.99, Math.max(0.01, x));
+    const made = withPointAt(cx, y);
+    beginDrag(made.insert);
+    commit(made.next, made.nextTan, made.nextHandles);
+  };
+  /** The curve with one more point, and where in it the point sits. */
+  const withPointAt = (cx: number, y: number) => {
+    const cur = ptsRef.current;
     // In x order, as a pick is (pickedCurvePoint).
     let insert = cur.findIndex((p) => p[0] > cx);
     if (insert < 0) insert = cur.length;
@@ -504,8 +518,7 @@ export function CurveEditor({
           return h;
         })()
       : undefined;
-    beginDrag(insert);
-    commit(next, nextTan, nextHandles);
+    return { insert, next, nextTan, nextHandles };
   };
 
   /** CTRL+click (or Cmd+click, since macOS spends Ctrl+click on the
@@ -521,6 +534,36 @@ export function CurveEditor({
     );
   };
   const removeClick = (e: { ctrlKey: boolean; metaKey: boolean }) => e.ctrlKey || e.metaKey;
+
+  // The keys of a focused point (curvekeys.ts), in what is shown, as
+  // the pointer's gestures are: a hundredth of the plot a step.
+  const KEY_STEP = 0.01;
+  const hundredth = (v: number) => Math.round(v * 1e4) / 1e4;
+  const keys = useCurvePointKeys({
+    begin: () => dispatch({ type: "begin_gesture", key: `${node.id}.${channel}` }),
+    end: () => dispatch({ type: "end_gesture" }),
+    move: (i, dx, dy) => {
+      const p = ptsRef.current[i];
+      if (!p) return;
+      placePoint(i, hundredth(p[0] + dx * KEY_STEP), Math.min(1, Math.max(0, hundredth(p[1] + dy * KEY_STEP))));
+    },
+    add: (i) => {
+      // Halfway to the next point, on the curve as drawn; from the last
+      // point, halfway back to the one before it. Points closer than
+      // two of the gaps a drag keeps have no room between them.
+      const cur = ptsRef.current;
+      const from = Math.min(i, cur.length - 2);
+      const [a, b] = [cur[from], cur[from + 1]];
+      if (!a || !b || b[0] - a[0] < 0.02) return null;
+      const x = (a[0] + b[0]) / 2;
+      const y = curveShape(cur, mode, tanRef.current, handlesRef.current).valueAt(x);
+      const made = withPointAt(hundredth(x), Math.min(1, Math.max(0, hundredth(y))));
+      commit(made.next, made.nextTan, made.nextHandles);
+      return made.insert;
+    },
+    remove: (i) => removePoint(i),
+  });
+  const two = (v: number) => v.toFixed(2);
 
   return (
     <div data-testid="curve-editor">
@@ -613,6 +656,8 @@ canvas"), then the channels, and the reset on the far end.*/}
         // Its own testid: the toolbar grew icon SVGs, so "the first svg
         // in the editor" stopped meaning "the plot".
         data-testid="curve-plot"
+        role="group"
+        aria-label={`${label} curve`}
         style={{ background: "var(--bg-app)", border: "1px solid var(--line-2)", display: "block", touchAction: "none", maxWidth: "100%" }}
         // The compat mousedown carries the defaults that matter: WebKit
         // starts selection and native drags from IT, and preventing the
@@ -798,6 +843,20 @@ a changed render): the engine carries on at slope 1. A weighted
               </g>
             );
           })}
+        {/* The ring of the point the keyboard has, a shape of its own
+            so it does not rest on color alone. */}
+        {keys.focused !== null && pts[keys.focused] && (
+          <circle
+            data-testid="curve-focus-ring"
+            cx={toSvg(pts[keys.focused])[0]}
+            cy={toSvg(pts[keys.focused])[1]}
+            r={4.5 * m + 4}
+            fill="none"
+            stroke="var(--text-hi)"
+            strokeWidth={1.5}
+            pointerEvents="none"
+          />
+        )}
         {pts.map((p, i) => {
           const [cx, cy] = toSvg(p);
           return (
@@ -810,7 +869,15 @@ a changed render): the engine carries on at slope 1. A weighted
               stroke={color}
               strokeWidth={1.5 * m}
               data-testid={`curve-point-${i}`}
-              style={{ cursor: CURVE_POINT_CURSOR }}
+              style={{ cursor: CURVE_POINT_CURSOR, outline: "none" }}
+              {...keys.props(i)}
+              role="slider"
+              aria-roledescription="curve point"
+              aria-label={`Point ${i + 1} of ${pts.length}: input ${two(p[0])}, output ${two(p[1])}`}
+              aria-valuemin={0}
+              aria-valuemax={1}
+              aria-valuenow={Number(two(p[1]))}
+              aria-valuetext={`output ${two(p[1])}`}
               onPointerDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -867,7 +934,7 @@ pasted on R arrives the way it looked, and is one undo step.*/}
         {/* Just the removal chord. "anyone who has worked with
 curves knows how to add a point", but the remove chord is this
 app's own convention and worth a whisper.*/}
-        <span data-testid="curve-help" style={{ textAlign: "center" }}>{modLabel("ctrl")}+CLICK REMOVES</span>
+        <span data-testid="curve-help" data-hint={CURVE_KEYS_HINT} style={{ textAlign: "center" }}>{modLabel("ctrl")}+CLICK REMOVES</span>
         {/* One button for the three faces, cycled by clicking (2026-09-14):
 the shared InterpCycle, the same the Tone EQ wears. Tangent is one
 mode for the whole curve: on, every point wears its handles; off,

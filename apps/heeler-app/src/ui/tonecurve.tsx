@@ -34,6 +34,7 @@ import { CURVE_POINT_CURSOR, CURVE_TANGENT_CURSOR } from "./cursors";
 import { monotoneTangents } from "../curvesampler";
 import { ResetIcon } from "./panelicons";
 import { SourceMenuRow } from "./sourcemenus";
+import { CURVE_KEYS_HINT, useCurvePointKeys } from "./curvekeys";
 
 type D = React.Dispatch<Command>;
 
@@ -220,6 +221,7 @@ export function ToneCurveBlock({ node, dispatch, width = 260 }: { node: NodeCard
         {` ${modLabel("ctrl")}`}-click one to remove it.
         {curve.interp === "tangent" &&
           ` In Tangent, drag a point's handles to steer and stretch its slope; ${modLabel("alt")}-click a handle to break the pair; ${modLabel("ctrl")}-click a handle or double-click its point to make it automatic again.`}
+        {` ${CURVE_KEYS_HINT}.`}
         {" "}The curve is saved in the document, so it renders the same without the profile file.
         Toe and Highlight roll stand down: the curve is its own.
       </div>
@@ -304,6 +306,52 @@ function ToneCurveEditor({
     const next = pts.map((p, k): [number, number] => (k === i ? [round4(nx), round4(y)] : p));
     return { ...curve, points: next };
   };
+  /** The curve without an inner point; the ends hold its reach. */
+  const removeAt = (i: number) => {
+    if (i <= 0 || i >= pts.length - 1) return;
+    const keep = pts.map((_, k) => k).filter((k) => k !== i);
+    onChange(withPoints(keep.map((k) => pts[k]), keep));
+  };
+  /** One more point, in stop order, and where in the curve it sits; null
+   * where one more would be a curve the engine refuses. */
+  const added = (point: [number, number]): { curve: ToneCurveDoc; at: number } | null => {
+    if (pts.length >= MAX_POINTS) {
+      say(dispatch, `A tone curve may have at most ${MAX_POINTS} points; remove one to add another`);
+      return null;
+    }
+    const keep = [...pts.map((_, k) => k), -1].sort((a, b) => (a < 0 ? point : pts[a])[0] - (b < 0 ? point : pts[b])[0]);
+    return { curve: withPoints(keep.map((k) => (k < 0 ? point : pts[k])), keep), at: keep.indexOf(-1) };
+  };
+
+  // The keys of a focused point (curvekeys.ts): a tenth of a stop and a
+  // hundredth of the display range a step.
+  const keys = useCurvePointKeys({
+    begin: () => dispatch({ type: "begin_gesture", key: `${nodeId}.tone_curve` }),
+    end: () => dispatch({ type: "end_gesture" }),
+    move: (i, dx, dy) => {
+      const p = pts[i];
+      if (!p) return;
+      const next = moved(i, [Math.min(hi, Math.max(lo, p[0] + dx * 0.1)), Math.min(1, Math.max(0, p[1] + dy * 0.01))]);
+      // A press against a neighbor or an edge moves nothing, and writes
+      // nothing.
+      if (next.points[i][0] === p[0] && next.points[i][1] === p[1]) return;
+      onChange(next);
+    },
+    add: (i) => {
+      // Halfway to the next point, on the curve as drawn; from the last
+      // point, halfway back to the one before it. Points keep their
+      // quarter stop apart, so a gap under two of those has no room.
+      const from = Math.min(i, pts.length - 2);
+      const [a, b] = [pts[from], pts[from + 1]];
+      if (!a || !b || b[0] - a[0] < 2 * MIN_GAP) return null;
+      const x = (a[0] + b[0]) / 2;
+      const made = added([round4(x), round4(Math.min(1, Math.max(0, toneCurveAt(curve, x))))]);
+      if (!made) return null;
+      onChange(made.curve);
+      return made.at;
+    },
+    remove: removeAt,
+  });
 
   const line = (from: number, to: number, f: (x: number) => number, n = 64) =>
     Array.from({ length: n + 1 }, (_, k) => {
@@ -381,12 +429,15 @@ function ToneCurveEditor({
     <svg
       ref={svg}
       data-testid="tone-curve-editor"
-      role="img"
+      role="group"
       aria-label="Custom tone curve"
       width={width}
       height={H}
       style={{ background: "var(--bg-app)", borderRadius: "var(--radius-btn)", touchAction: "none", cursor: "crosshair" }}
       onContextMenu={(e) => e.preventDefault()}
+      // As Curves' plot: a press moves or adds a point and leaves the
+      // keyboard's focus where it is.
+      onMouseDown={(e) => e.preventDefault()}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
         e.preventDefault();
@@ -395,10 +446,7 @@ function ToneCurveEditor({
           // Curves' grammar: the chord removes an inner point (the ends
           // hold the curve's reach), a plain press drags it.
           if (removeClick(e)) {
-            if (hit > 0 && hit < pts.length - 1) {
-              const keep = pts.map((_, k) => k).filter((k) => k !== hit);
-              onChange(withPoints(keep.map((k) => pts[k]), keep));
-            }
+            removeAt(hit);
             return;
           }
           drag.current = hit;
@@ -411,18 +459,12 @@ function ToneCurveEditor({
         // A click off the points adds one there and drags it.
         const [x, y] = at(e);
         if (pts.some(([px]) => Math.abs(px - x) < MIN_GAP)) return;
-        // One more would be a curve the engine refuses.
-        if (pts.length >= MAX_POINTS) {
-          say(dispatch, `A tone curve may have at most ${MAX_POINTS} points; remove one to add another`);
-          return;
-        }
-        const added: [number, number] = [round4(x), round4(y)];
-        const keep = [...pts.map((_, k) => k), -1].sort((a, b) => (a < 0 ? added : pts[a])[0] - (b < 0 ? added : pts[b])[0]);
-        const next = keep.map((k) => (k < 0 ? added : pts[k]));
-        drag.current = keep.indexOf(-1);
+        const made = added([round4(x), round4(y)]);
+        if (!made) return;
+        drag.current = made.at;
         dispatch({ type: "begin_gesture", key: `${nodeId}.tone_curve` });
         svg.current?.setPointerCapture(e.pointerId);
-        onChange(withPoints(next, keep));
+        onChange(made.curve);
       }}
       onPointerMove={(e) => {
         const t = tanDrag.current;
@@ -522,6 +564,20 @@ function ToneCurveEditor({
             </g>
           );
         })}
+      {/* The ring of the point the keyboard has, a shape of its own so
+          it does not rest on color alone. */}
+      {keys.focused !== null && pts[keys.focused] && (
+        <circle
+          data-testid="tone-curve-focus-ring"
+          cx={xPx(pts[keys.focused][0])}
+          cy={yPx(pts[keys.focused][1])}
+          r={8}
+          fill="none"
+          stroke="var(--text-hi)"
+          strokeWidth={1.5}
+          pointerEvents="none"
+        />
+      )}
       {pts.map(([x, y], i) => (
         <circle
           key={i}
@@ -532,7 +588,15 @@ function ToneCurveEditor({
           fill="#131211"
           stroke="var(--accent)"
           strokeWidth={1.5}
-          style={{ cursor: CURVE_POINT_CURSOR }}
+          style={{ cursor: CURVE_POINT_CURSOR, outline: "none" }}
+          {...keys.props(i)}
+          role="slider"
+          aria-roledescription="curve point"
+          aria-label={`Point ${i + 1} of ${pts.length}: ${x >= 0 ? "+" : ""}${x.toFixed(2)} stops, display ${y.toFixed(3)}`}
+          aria-valuemin={0}
+          aria-valuemax={1}
+          aria-valuenow={Number(y.toFixed(3))}
+          aria-valuetext={`display ${y.toFixed(3)}`}
           onDoubleClick={(e) => {
             // Curves' way back: a point's handles to automatic.
             e.preventDefault();
